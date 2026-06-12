@@ -23,6 +23,7 @@ import { createThreadSelectorByRef } from "../storeSelectors";
 import { resolveThreadRouteRef, buildThreadRouteParams } from "../threadRoutes";
 import { RightPanelSheet } from "../components/RightPanelSheet";
 import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "~/components/ui/sidebar";
+import { isDiffViewerVisible, useProductSurfaceConfig } from "../productSurfaces";
 
 const DiffPanel = lazy(() => import("../components/DiffPanel"));
 const DIFF_INLINE_SIDEBAR_WIDTH_STORAGE_KEY = "chat_diff_sidebar_width";
@@ -140,6 +141,8 @@ const DiffPanelInlineSidebar = (props: {
 
 function ChatThreadRouteView() {
   const navigate = useNavigate();
+  const surface = useProductSurfaceConfig();
+  const showDiffViewer = isDiffViewerVisible(surface);
   const threadRef = Route.useParams({
     select: (params) => resolveThreadRouteRef(params),
   });
@@ -167,18 +170,23 @@ function ChatThreadRouteView() {
   const routeThreadExists = threadExists || draftThreadExists;
   const serverThreadStarted = threadHasStarted(serverThread);
   const environmentHasAnyThreads = environmentHasServerThreads || environmentHasDraftThreads;
-  const diffOpen = search.diff === "1";
+  const hasDiffSearchParams =
+    search.diff === "1" || search.diffTurnId !== undefined || search.diffFilePath !== undefined;
+  const diffOpen = showDiffViewer && search.diff === "1";
   const shouldUseDiffSheet = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
   const currentThreadKey = threadRef ? `${threadRef.environmentId}:${threadRef.threadId}` : null;
   const [diffPanelMountState, setDiffPanelMountState] = useState(() => ({
     threadKey: currentThreadKey,
-    hasOpenedDiff: diffOpen,
+    hasOpenedDiff: showDiffViewer && diffOpen,
   }));
   const hasOpenedDiff =
     diffPanelMountState.threadKey === currentThreadKey
-      ? diffPanelMountState.hasOpenedDiff
-      : diffOpen;
+      ? showDiffViewer && diffPanelMountState.hasOpenedDiff
+      : showDiffViewer && diffOpen;
   const markDiffOpened = useCallback(() => {
+    if (!showDiffViewer) {
+      return;
+    }
     setDiffPanelMountState((previous) => {
       if (previous.threadKey === currentThreadKey && previous.hasOpenedDiff) {
         return previous;
@@ -188,7 +196,7 @@ function ChatThreadRouteView() {
         hasOpenedDiff: true,
       };
     });
-  }, [currentThreadKey]);
+  }, [currentThreadKey, showDiffViewer]);
   const closeDiff = useCallback(() => {
     if (!threadRef) {
       return;
@@ -200,7 +208,7 @@ function ChatThreadRouteView() {
     });
   }, [navigate, threadRef]);
   const openDiff = useCallback(() => {
-    if (!threadRef) {
+    if (!showDiffViewer || !threadRef) {
       return;
     }
     markDiffOpened();
@@ -212,7 +220,19 @@ function ChatThreadRouteView() {
         return { ...rest, diff: "1" };
       },
     });
-  }, [markDiffOpened, navigate, threadRef]);
+  }, [markDiffOpened, navigate, showDiffViewer, threadRef]);
+
+  useEffect(() => {
+    if (showDiffViewer || !threadRef || !hasDiffSearchParams) {
+      return;
+    }
+    void navigate({
+      to: "/$environmentId/$threadId",
+      params: buildThreadRouteParams(threadRef),
+      search: (previous) => stripDiffSearchParams(previous),
+      replace: true,
+    });
+  }, [hasDiffSearchParams, navigate, showDiffViewer, threadRef]);
 
   useEffect(() => {
     if (!threadRef || !bootstrapComplete) {
@@ -235,9 +255,9 @@ function ChatThreadRouteView() {
     return null;
   }
 
-  const shouldRenderDiffContent = diffOpen || hasOpenedDiff;
+  const shouldRenderDiffContent = showDiffViewer && (diffOpen || hasOpenedDiff);
 
-  if (!shouldUseDiffSheet) {
+  if (!showDiffViewer || !shouldUseDiffSheet) {
     return (
       <>
         <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground md:h-dvh">
@@ -249,12 +269,14 @@ function ChatThreadRouteView() {
             routeKind="server"
           />
         </SidebarInset>
-        <DiffPanelInlineSidebar
-          diffOpen={diffOpen}
-          onCloseDiff={closeDiff}
-          onOpenDiff={openDiff}
-          renderDiffContent={shouldRenderDiffContent}
-        />
+        {showDiffViewer ? (
+          <DiffPanelInlineSidebar
+            diffOpen={diffOpen}
+            onCloseDiff={closeDiff}
+            onOpenDiff={openDiff}
+            renderDiffContent={shouldRenderDiffContent}
+          />
+        ) : null}
       </>
     );
   }

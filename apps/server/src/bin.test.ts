@@ -6,7 +6,10 @@ import { join } from "node:path";
 
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { EnvironmentOrchestrationHttpApi } from "@t3tools/contracts";
+import {
+  DEFAULT_PRODUCT_SURFACE_CONFIG,
+  EnvironmentOrchestrationHttpApi,
+} from "@t3tools/contracts";
 import * as NetService from "@t3tools/shared/Net";
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -84,6 +87,7 @@ const makeCliTestServerConfig = (baseDir: string) =>
       logWebSocketEvents: false,
       tailscaleServeEnabled: false,
       tailscaleServePort: 443,
+      surface: DEFAULT_PRODUCT_SURFACE_CONFIG,
     } satisfies ServerConfigShape;
   });
 

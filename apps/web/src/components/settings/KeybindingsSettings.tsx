@@ -61,6 +61,12 @@ import {
 } from "./KeybindingsSettings.logic";
 import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import {
+  areDeveloperKeybindingsVisible,
+  isDiffViewerVisible,
+  isTerminalEnabled,
+  useProductSurfaceConfig,
+} from "../../productSurfaces";
 
 function KeybindingPill({ value }: { value: string }) {
   const parts = value.split("+");
@@ -157,6 +163,23 @@ function ExpandableHeaderSearch({
 }
 
 type BooleanOperator = "and" | "or";
+
+function isVisibleKeybindingCommand(
+  command: KeybindingCommand,
+  input: {
+    readonly showDeveloperKeybindings: boolean;
+    readonly showDiffViewer: boolean;
+    readonly showTerminal: boolean;
+  },
+): boolean {
+  if (String(command).startsWith("terminal.")) {
+    return input.showTerminal;
+  }
+  if (command === "diff.toggle") {
+    return input.showDiffViewer;
+  }
+  return input.showDeveloperKeybindings || !String(command).startsWith("script.");
+}
 
 function flattenWhenChildren(
   node: KeybindingWhenNode,
@@ -1071,14 +1094,48 @@ function NewKeybindingTableRow({
 export function KeybindingsSettingsPanel() {
   const keybindings = useServerKeybindings();
   const keybindingsConfigPath = useServerKeybindingsConfigPath();
+  const surface = useProductSurfaceConfig();
+  const showDeveloperKeybindings = areDeveloperKeybindingsVisible(surface);
+  const showDiffViewer = isDiffViewerVisible(surface);
+  const showTerminal = isTerminalEnabled(surface);
   const [query, setQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [savingCommand, setSavingCommand] = useState<KeybindingCommand | null>(null);
   const [isAddingBinding, setIsAddingBinding] = useState(false);
-  const rows = useMemo(() => buildKeybindingRows(keybindings, query), [keybindings, query]);
-  const commandOptions = useMemo(() => buildKeybindingCommandOptions(keybindings), [keybindings]);
-  const whenVariables = useMemo(() => buildWhenVariableOptions(), []);
+  const visibleKeybindings = useMemo(
+    () =>
+      keybindings.filter((binding) =>
+        isVisibleKeybindingCommand(binding.command, {
+          showDeveloperKeybindings,
+          showDiffViewer,
+          showTerminal,
+        }),
+      ),
+    [keybindings, showDeveloperKeybindings, showDiffViewer, showTerminal],
+  );
+  const rows = useMemo(
+    () => buildKeybindingRows(visibleKeybindings, query),
+    [query, visibleKeybindings],
+  );
+  const commandOptions = useMemo(
+    () =>
+      buildKeybindingCommandOptions(visibleKeybindings).filter((command) =>
+        isVisibleKeybindingCommand(command, {
+          showDeveloperKeybindings,
+          showDiffViewer,
+          showTerminal,
+        }),
+      ),
+    [showDeveloperKeybindings, showDiffViewer, showTerminal, visibleKeybindings],
+  );
+  const whenVariables = useMemo(
+    () =>
+      buildWhenVariableOptions().filter(
+        (variable) => showTerminal || !["terminalFocus", "terminalOpen"].includes(variable),
+      ),
+    [showTerminal],
+  );
 
   useEffect(() => {
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {

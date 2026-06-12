@@ -18,7 +18,7 @@ type WhenToken =
   | { type: "lparen" }
   | { type: "rparen" };
 
-export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
+export const DEVELOPER_DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+j", command: "terminal.toggle" },
   { key: "mod+d", command: "terminal.split", when: "terminalFocus" },
   { key: "mod+n", command: "terminal.new", when: "terminalFocus" },
@@ -42,6 +42,20 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
     when: "modelPickerOpen",
   })),
 ];
+
+export const NON_TECHNICAL_AI_KEYBINDINGS: ReadonlyArray<KeybindingRule> =
+  DEVELOPER_DEFAULT_KEYBINDINGS.flatMap((binding) => {
+    if (binding.command.startsWith("terminal.") || binding.command === "diff.toggle") {
+      return [];
+    }
+    if (binding.when === "!terminalFocus") {
+      const { when: _when, ...withoutTerminalCondition } = binding;
+      return [withoutTerminalCondition];
+    }
+    return [binding];
+  });
+
+export const DEFAULT_KEYBINDINGS = NON_TECHNICAL_AI_KEYBINDINGS;
 
 function normalizeKeyToken(token: string): string {
   if (token === "space") return " ";

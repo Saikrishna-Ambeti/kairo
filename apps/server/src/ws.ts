@@ -45,6 +45,8 @@ import {
   type TerminalError,
   type TerminalEvent,
   type TerminalMetadataStreamEvent,
+  SurfaceUnavailableError,
+  type ProductSurfaceKey,
   WS_METHODS,
   WsRpcGroup,
 } from "@t3tools/contracts";
@@ -185,6 +187,37 @@ const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [WS_METHODS.subscribeAuthAccess, AuthAccessReadScope],
 ]);
 
+const RPC_REQUIRED_SURFACE = new Map<string, ProductSurfaceKey>([
+  [ORCHESTRATION_WS_METHODS.getTurnDiff, "diffViewer"],
+  [ORCHESTRATION_WS_METHODS.getFullThreadDiff, "diffViewer"],
+  [WS_METHODS.serverDiscoverSourceControl, "sourceControlProviders"],
+  [WS_METHODS.sourceControlLookupRepository, "sourceControl"],
+  [WS_METHODS.sourceControlCloneRepository, "sourceControl"],
+  [WS_METHODS.sourceControlPublishRepository, "sourceControl"],
+  [WS_METHODS.subscribeVcsStatus, "sourceControl"],
+  [WS_METHODS.vcsRefreshStatus, "sourceControl"],
+  [WS_METHODS.vcsPull, "sourceControl"],
+  [WS_METHODS.gitRunStackedAction, "sourceControl"],
+  [WS_METHODS.gitResolvePullRequest, "sourceControl"],
+  [WS_METHODS.gitPreparePullRequestThread, "sourceControl"],
+  [WS_METHODS.vcsListRefs, "sourceControl"],
+  [WS_METHODS.vcsCreateWorktree, "sourceControl"],
+  [WS_METHODS.vcsRemoveWorktree, "sourceControl"],
+  [WS_METHODS.vcsCreateRef, "sourceControl"],
+  [WS_METHODS.vcsSwitchRef, "sourceControl"],
+  [WS_METHODS.vcsInit, "sourceControl"],
+  [WS_METHODS.reviewGetDiffPreview, "diffViewer"],
+  [WS_METHODS.terminalOpen, "terminal"],
+  [WS_METHODS.terminalAttach, "terminal"],
+  [WS_METHODS.terminalWrite, "terminal"],
+  [WS_METHODS.terminalResize, "terminal"],
+  [WS_METHODS.terminalClear, "terminal"],
+  [WS_METHODS.terminalRestart, "terminal"],
+  [WS_METHODS.terminalClose, "terminal"],
+  [WS_METHODS.subscribeTerminalEvents, "terminal"],
+  [WS_METHODS.subscribeTerminalMetadata, "terminal"],
+]);
+
 function toAuthAccessStreamEvent(
   change: PairingGrantStore.BootstrapCredentialChange | SessionStore.SessionCredentialChange,
   revision: number,
@@ -272,6 +305,46 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
           message: `The authenticated token is missing required scope: ${requiredScope}.`,
           requiredScope,
         });
+      const isSurfaceEnabled = (surface: ProductSurfaceKey) => {
+        switch (surface) {
+          case "sourceControl":
+            return config.surface.sourceControl === "enabled";
+          case "sourceControlProviders":
+            return config.surface.sourceControlProviders === "enabled";
+          case "diffViewer":
+            return config.surface.diffViewer === "enabled";
+          case "checkpointRollback":
+            return config.surface.checkpointRollback === "enabled";
+          case "terminal":
+            return config.surface.terminal === "enabled";
+          case "developerKeybindings":
+            return config.surface.developerKeybindings === "enabled";
+        }
+      };
+      const surfaceUnavailableError = (surface: ProductSurfaceKey) =>
+        new SurfaceUnavailableError({
+          code: "SURFACE_DISABLED",
+          surface,
+          message: `The ${surface} product surface is not available in this profile.`,
+        });
+      const authorizeSurfaceEffect = <A, E, R>(
+        method: string,
+        effect: Effect.Effect<A, E, R>,
+      ): Effect.Effect<A, E | SurfaceUnavailableError, R> => {
+        const requiredSurface = RPC_REQUIRED_SURFACE.get(method);
+        return requiredSurface === undefined || isSurfaceEnabled(requiredSurface)
+          ? effect
+          : Effect.fail(surfaceUnavailableError(requiredSurface));
+      };
+      const authorizeSurfaceStream = <A, E, R>(
+        method: string,
+        stream: Stream.Stream<A, E, R>,
+      ): Stream.Stream<A, E | SurfaceUnavailableError, R> => {
+        const requiredSurface = RPC_REQUIRED_SURFACE.get(method);
+        return requiredSurface === undefined || isSurfaceEnabled(requiredSurface)
+          ? stream
+          : Stream.fail(surfaceUnavailableError(requiredSurface));
+      };
       const authorizeEffect = <A, E, R>(
         requiredScope: AuthEnvironmentScope,
         effect: Effect.Effect<A, E, R>,
@@ -751,6 +824,7 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
             otlpMetricsEnabled: config.otlpMetricsUrl !== undefined,
           },
           settings,
+          surface: config.surface,
         };
       });
 
@@ -829,13 +903,16 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
         [ORCHESTRATION_WS_METHODS.getTurnDiff]: (input) =>
           observeRpcEffect(
             ORCHESTRATION_WS_METHODS.getTurnDiff,
-            checkpointDiffQuery.getTurnDiff(input).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new OrchestrationGetTurnDiffError({
-                    message: "Failed to load turn diff",
-                    cause,
-                  }),
+            authorizeSurfaceEffect(
+              ORCHESTRATION_WS_METHODS.getTurnDiff,
+              checkpointDiffQuery.getTurnDiff(input).pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new OrchestrationGetTurnDiffError({
+                      message: "Failed to load turn diff",
+                      cause,
+                    }),
+                ),
               ),
             ),
             { "rpc.aggregate": "orchestration" },
@@ -843,13 +920,16 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
         [ORCHESTRATION_WS_METHODS.getFullThreadDiff]: (input) =>
           observeRpcEffect(
             ORCHESTRATION_WS_METHODS.getFullThreadDiff,
-            checkpointDiffQuery.getFullThreadDiff(input).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new OrchestrationGetFullThreadDiffError({
-                    message: "Failed to load full thread diff",
-                    cause,
-                  }),
+            authorizeSurfaceEffect(
+              ORCHESTRATION_WS_METHODS.getFullThreadDiff,
+              checkpointDiffQuery.getFullThreadDiff(input).pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new OrchestrationGetFullThreadDiffError({
+                      message: "Failed to load full thread diff",
+                      cause,
+                    }),
+                ),
               ),
             ),
             { "rpc.aggregate": "orchestration" },
@@ -1045,7 +1125,10 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
         [WS_METHODS.serverDiscoverSourceControl]: (_input) =>
           observeRpcEffect(
             WS_METHODS.serverDiscoverSourceControl,
-            sourceControlDiscovery.discover,
+            authorizeSurfaceEffect(
+              WS_METHODS.serverDiscoverSourceControl,
+              sourceControlDiscovery.discover,
+            ),
             {
               "rpc.aggregate": "server",
             },
@@ -1113,7 +1196,10 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
         [WS_METHODS.sourceControlLookupRepository]: (input) =>
           observeRpcEffect(
             WS_METHODS.sourceControlLookupRepository,
-            sourceControlRepositories.lookupRepository(input),
+            authorizeSurfaceEffect(
+              WS_METHODS.sourceControlLookupRepository,
+              sourceControlRepositories.lookupRepository(input),
+            ),
             {
               "rpc.aggregate": "source-control",
             },
@@ -1121,7 +1207,10 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
         [WS_METHODS.sourceControlCloneRepository]: (input) =>
           observeRpcEffect(
             WS_METHODS.sourceControlCloneRepository,
-            sourceControlRepositories.cloneRepository(input),
+            authorizeSurfaceEffect(
+              WS_METHODS.sourceControlCloneRepository,
+              sourceControlRepositories.cloneRepository(input),
+            ),
             {
               "rpc.aggregate": "source-control",
             },
@@ -1129,9 +1218,12 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
         [WS_METHODS.sourceControlPublishRepository]: (input) =>
           observeRpcEffect(
             WS_METHODS.sourceControlPublishRepository,
-            sourceControlRepositories
-              .publishRepository(input)
-              .pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            authorizeSurfaceEffect(
+              WS_METHODS.sourceControlPublishRepository,
+              sourceControlRepositories
+                .publishRepository(input)
+                .pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            ),
             {
               "rpc.aggregate": "source-control",
             },
@@ -1187,9 +1279,12 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
         [WS_METHODS.subscribeVcsStatus]: (input) =>
           observeRpcStream(
             WS_METHODS.subscribeVcsStatus,
-            vcsStatusBroadcaster.streamStatus(input, {
-              automaticRemoteRefreshInterval: automaticGitFetchInterval,
-            }),
+            authorizeSurfaceStream(
+              WS_METHODS.subscribeVcsStatus,
+              vcsStatusBroadcaster.streamStatus(input, {
+                automaticRemoteRefreshInterval: automaticGitFetchInterval,
+              }),
+            ),
             {
               "rpc.aggregate": "vcs",
             },
@@ -1197,7 +1292,10 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
         [WS_METHODS.vcsRefreshStatus]: (input) =>
           observeRpcEffect(
             WS_METHODS.vcsRefreshStatus,
-            vcsStatusBroadcaster.refreshStatus(input.cwd),
+            authorizeSurfaceEffect(
+              WS_METHODS.vcsRefreshStatus,
+              vcsStatusBroadcaster.refreshStatus(input.cwd),
+            ),
             {
               "rpc.aggregate": "vcs",
             },
@@ -1205,42 +1303,54 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
         [WS_METHODS.vcsPull]: (input) =>
           observeRpcEffect(
             WS_METHODS.vcsPull,
-            gitWorkflow.pullCurrentBranch(input.cwd).pipe(
-              Effect.matchCauseEffect({
-                onFailure: (cause) => Effect.failCause(cause),
-                onSuccess: (result) =>
-                  refreshGitStatus(input.cwd).pipe(Effect.ignore({ log: true }), Effect.as(result)),
-              }),
+            authorizeSurfaceEffect(
+              WS_METHODS.vcsPull,
+              gitWorkflow.pullCurrentBranch(input.cwd).pipe(
+                Effect.matchCauseEffect({
+                  onFailure: (cause) => Effect.failCause(cause),
+                  onSuccess: (result) =>
+                    refreshGitStatus(input.cwd).pipe(
+                      Effect.ignore({ log: true }),
+                      Effect.as(result),
+                    ),
+                }),
+              ),
             ),
             { "rpc.aggregate": "git" },
           ),
         [WS_METHODS.gitRunStackedAction]: (input) =>
           observeRpcStream(
             WS_METHODS.gitRunStackedAction,
-            Stream.callback<GitActionProgressEvent, GitManagerServiceError>((queue) =>
-              gitWorkflow
-                .runStackedAction(input, {
-                  actionId: input.actionId,
-                  progressReporter: {
-                    publish: (event) => Queue.offer(queue, event).pipe(Effect.asVoid),
-                  },
-                })
-                .pipe(
-                  Effect.matchCauseEffect({
-                    onFailure: (cause) => Queue.failCause(queue, cause),
-                    onSuccess: () =>
-                      refreshGitStatus(input.cwd).pipe(
-                        Effect.andThen(Queue.end(queue).pipe(Effect.asVoid)),
-                      ),
-                  }),
-                ),
+            authorizeSurfaceStream(
+              WS_METHODS.gitRunStackedAction,
+              Stream.callback<GitActionProgressEvent, GitManagerServiceError>((queue) =>
+                gitWorkflow
+                  .runStackedAction(input, {
+                    actionId: input.actionId,
+                    progressReporter: {
+                      publish: (event) => Queue.offer(queue, event).pipe(Effect.asVoid),
+                    },
+                  })
+                  .pipe(
+                    Effect.matchCauseEffect({
+                      onFailure: (cause) => Queue.failCause(queue, cause),
+                      onSuccess: () =>
+                        refreshGitStatus(input.cwd).pipe(
+                          Effect.andThen(Queue.end(queue).pipe(Effect.asVoid)),
+                        ),
+                    }),
+                  ),
+              ),
             ),
             { "rpc.aggregate": "vcs" },
           ),
         [WS_METHODS.gitResolvePullRequest]: (input) =>
           observeRpcEffect(
             WS_METHODS.gitResolvePullRequest,
-            gitWorkflow.resolvePullRequest(input),
+            authorizeSurfaceEffect(
+              WS_METHODS.gitResolvePullRequest,
+              gitWorkflow.resolvePullRequest(input),
+            ),
             {
               "rpc.aggregate": "git",
             },
@@ -1248,93 +1358,149 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
         [WS_METHODS.gitPreparePullRequestThread]: (input) =>
           observeRpcEffect(
             WS_METHODS.gitPreparePullRequestThread,
-            gitWorkflow
-              .preparePullRequestThread(input)
-              .pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            authorizeSurfaceEffect(
+              WS_METHODS.gitPreparePullRequestThread,
+              gitWorkflow
+                .preparePullRequestThread(input)
+                .pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            ),
             { "rpc.aggregate": "git" },
           ),
         [WS_METHODS.vcsListRefs]: (input) =>
-          observeRpcEffect(WS_METHODS.vcsListRefs, gitWorkflow.listRefs(input), {
-            "rpc.aggregate": "vcs",
-          }),
+          observeRpcEffect(
+            WS_METHODS.vcsListRefs,
+            authorizeSurfaceEffect(WS_METHODS.vcsListRefs, gitWorkflow.listRefs(input)),
+            {
+              "rpc.aggregate": "vcs",
+            },
+          ),
         [WS_METHODS.vcsCreateWorktree]: (input) =>
           observeRpcEffect(
             WS_METHODS.vcsCreateWorktree,
-            gitWorkflow.createWorktree(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            authorizeSurfaceEffect(
+              WS_METHODS.vcsCreateWorktree,
+              gitWorkflow.createWorktree(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            ),
             { "rpc.aggregate": "vcs" },
           ),
         [WS_METHODS.vcsRemoveWorktree]: (input) =>
           observeRpcEffect(
             WS_METHODS.vcsRemoveWorktree,
-            gitWorkflow.removeWorktree(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            authorizeSurfaceEffect(
+              WS_METHODS.vcsRemoveWorktree,
+              gitWorkflow.removeWorktree(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            ),
             { "rpc.aggregate": "vcs" },
           ),
         [WS_METHODS.vcsCreateRef]: (input) =>
           observeRpcEffect(
             WS_METHODS.vcsCreateRef,
-            gitWorkflow.createRef(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            authorizeSurfaceEffect(
+              WS_METHODS.vcsCreateRef,
+              gitWorkflow.createRef(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            ),
             { "rpc.aggregate": "vcs" },
           ),
         [WS_METHODS.vcsSwitchRef]: (input) =>
           observeRpcEffect(
             WS_METHODS.vcsSwitchRef,
-            gitWorkflow.switchRef(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            authorizeSurfaceEffect(
+              WS_METHODS.vcsSwitchRef,
+              gitWorkflow.switchRef(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            ),
             { "rpc.aggregate": "vcs" },
           ),
         [WS_METHODS.vcsInit]: (input) =>
           observeRpcEffect(
             WS_METHODS.vcsInit,
-            vcsProvisioning
-              .initRepository(input)
-              .pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            authorizeSurfaceEffect(
+              WS_METHODS.vcsInit,
+              vcsProvisioning
+                .initRepository(input)
+                .pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            ),
             { "rpc.aggregate": "vcs" },
           ),
         [WS_METHODS.reviewGetDiffPreview]: (input) =>
-          observeRpcEffect(WS_METHODS.reviewGetDiffPreview, review.getDiffPreview(input), {
-            "rpc.aggregate": "review",
-          }),
+          observeRpcEffect(
+            WS_METHODS.reviewGetDiffPreview,
+            authorizeSurfaceEffect(WS_METHODS.reviewGetDiffPreview, review.getDiffPreview(input)),
+            {
+              "rpc.aggregate": "review",
+            },
+          ),
         [WS_METHODS.terminalOpen]: (input) =>
-          observeRpcEffect(WS_METHODS.terminalOpen, terminalManager.open(input), {
-            "rpc.aggregate": "terminal",
-          }),
+          observeRpcEffect(
+            WS_METHODS.terminalOpen,
+            authorizeSurfaceEffect(WS_METHODS.terminalOpen, terminalManager.open(input)),
+            {
+              "rpc.aggregate": "terminal",
+            },
+          ),
         [WS_METHODS.terminalAttach]: (input) =>
           observeRpcStream(
             WS_METHODS.terminalAttach,
-            Stream.callback<TerminalAttachStreamEvent, TerminalError>((queue) =>
-              Effect.acquireRelease(
-                terminalManager.attachStream(input, (event) => Queue.offer(queue, event)),
-                (unsubscribe) => Effect.sync(unsubscribe),
+            authorizeSurfaceStream(
+              WS_METHODS.terminalAttach,
+              Stream.callback<TerminalAttachStreamEvent, TerminalError>((queue) =>
+                Effect.acquireRelease(
+                  terminalManager.attachStream(input, (event) => Queue.offer(queue, event)),
+                  (unsubscribe) => Effect.sync(unsubscribe),
+                ),
               ),
             ),
             { "rpc.aggregate": "terminal" },
           ),
         [WS_METHODS.terminalWrite]: (input) =>
-          observeRpcEffect(WS_METHODS.terminalWrite, terminalManager.write(input), {
-            "rpc.aggregate": "terminal",
-          }),
+          observeRpcEffect(
+            WS_METHODS.terminalWrite,
+            authorizeSurfaceEffect(WS_METHODS.terminalWrite, terminalManager.write(input)),
+            {
+              "rpc.aggregate": "terminal",
+            },
+          ),
         [WS_METHODS.terminalResize]: (input) =>
-          observeRpcEffect(WS_METHODS.terminalResize, terminalManager.resize(input), {
-            "rpc.aggregate": "terminal",
-          }),
+          observeRpcEffect(
+            WS_METHODS.terminalResize,
+            authorizeSurfaceEffect(WS_METHODS.terminalResize, terminalManager.resize(input)),
+            {
+              "rpc.aggregate": "terminal",
+            },
+          ),
         [WS_METHODS.terminalClear]: (input) =>
-          observeRpcEffect(WS_METHODS.terminalClear, terminalManager.clear(input), {
-            "rpc.aggregate": "terminal",
-          }),
+          observeRpcEffect(
+            WS_METHODS.terminalClear,
+            authorizeSurfaceEffect(WS_METHODS.terminalClear, terminalManager.clear(input)),
+            {
+              "rpc.aggregate": "terminal",
+            },
+          ),
         [WS_METHODS.terminalRestart]: (input) =>
-          observeRpcEffect(WS_METHODS.terminalRestart, terminalManager.restart(input), {
-            "rpc.aggregate": "terminal",
-          }),
+          observeRpcEffect(
+            WS_METHODS.terminalRestart,
+            authorizeSurfaceEffect(WS_METHODS.terminalRestart, terminalManager.restart(input)),
+            {
+              "rpc.aggregate": "terminal",
+            },
+          ),
         [WS_METHODS.terminalClose]: (input) =>
-          observeRpcEffect(WS_METHODS.terminalClose, terminalManager.close(input), {
-            "rpc.aggregate": "terminal",
-          }),
+          observeRpcEffect(
+            WS_METHODS.terminalClose,
+            authorizeSurfaceEffect(WS_METHODS.terminalClose, terminalManager.close(input)),
+            {
+              "rpc.aggregate": "terminal",
+            },
+          ),
         [WS_METHODS.subscribeTerminalEvents]: (_input) =>
           observeRpcStream(
             WS_METHODS.subscribeTerminalEvents,
-            Stream.callback<TerminalEvent>((queue) =>
-              Effect.acquireRelease(
-                terminalManager.subscribe((event) => Queue.offer(queue, event)),
-                (unsubscribe) => Effect.sync(unsubscribe),
+            authorizeSurfaceStream(
+              WS_METHODS.subscribeTerminalEvents,
+              Stream.callback<TerminalEvent>((queue) =>
+                Effect.acquireRelease(
+                  terminalManager.subscribe((event) => Queue.offer(queue, event)),
+                  (unsubscribe) => Effect.sync(unsubscribe),
+                ),
               ),
             ),
             { "rpc.aggregate": "terminal" },
@@ -1342,10 +1508,13 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
         [WS_METHODS.subscribeTerminalMetadata]: (_input) =>
           observeRpcStream(
             WS_METHODS.subscribeTerminalMetadata,
-            Stream.callback<TerminalMetadataStreamEvent>((queue) =>
-              Effect.acquireRelease(
-                terminalManager.subscribeMetadata((event) => Queue.offer(queue, event)),
-                (unsubscribe) => Effect.sync(unsubscribe),
+            authorizeSurfaceStream(
+              WS_METHODS.subscribeTerminalMetadata,
+              Stream.callback<TerminalMetadataStreamEvent>((queue) =>
+                Effect.acquireRelease(
+                  terminalManager.subscribeMetadata((event) => Queue.offer(queue, event)),
+                  (unsubscribe) => Effect.sync(unsubscribe),
+                ),
               ),
             ),
             { "rpc.aggregate": "terminal" },

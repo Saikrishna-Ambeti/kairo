@@ -1,4 +1,5 @@
 import {
+  DEFAULT_PRODUCT_SURFACE_CONFIG,
   DEFAULT_SERVER_SETTINGS,
   EnvironmentId,
   ProviderDriverKind,
@@ -83,6 +84,7 @@ const baseServerConfig: ServerConfig = {
   keybindingsConfigPath: "/tmp/workspace/.config/keybindings.json",
   keybindings: [],
   issues: [],
+  surface: DEFAULT_PRODUCT_SURFACE_CONFIG,
   providers: defaultProviders,
   availableEditors: ["cursor"],
   observability: {

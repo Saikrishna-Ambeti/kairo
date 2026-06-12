@@ -1,6 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off
 import * as nodePath from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { DEFAULT_PRODUCT_SURFACE_CONFIG } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -44,6 +45,7 @@ const makeServerConfig = Effect.fn(function* (baseDir: string) {
     devUrl: undefined,
     noBrowser: false,
     startupPresentation: "browser",
+    surface: DEFAULT_PRODUCT_SURFACE_CONFIG,
   } satisfies ServerConfigShape;
 });
 

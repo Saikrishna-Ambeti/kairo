@@ -105,6 +105,11 @@ import { ThreadRowLeadingStatus, ThreadRowTrailingStatus } from "./ThreadStatusI
 import { useServerKeybindings } from "../rpc/serverState";
 import { resolveShortcutCommand } from "../keybindings";
 import {
+  areSourceControlProvidersVisible,
+  isTerminalEnabled,
+  useProductSurfaceConfig,
+} from "../productSurfaces";
+import {
   Command,
   CommandDialog,
   CommandDialogPopup,
@@ -331,6 +336,8 @@ export function CommandPalette({ children }: { children: ReactNode }) {
   const setOpen = useCommandPaletteStore((store) => store.setOpen);
   const toggleOpen = useCommandPaletteStore((store) => store.toggleOpen);
   const keybindings = useServerKeybindings();
+  const surface = useProductSurfaceConfig();
+  const showTerminal = isTerminalEnabled(surface);
   const composerHandleRef = useRef<ChatComposerHandle | null>(null);
   const routeTarget = useParams({
     strict: false,
@@ -348,8 +355,8 @@ export function CommandPalette({ children }: { children: ReactNode }) {
       if (event.defaultPrevented) return;
       const command = resolveShortcutCommand(event, keybindings, {
         context: {
-          terminalFocus: isTerminalFocused(),
-          terminalOpen,
+          terminalFocus: showTerminal && isTerminalFocused(),
+          terminalOpen: showTerminal && terminalOpen,
         },
       });
       if (command !== "commandPalette.toggle") {
@@ -361,7 +368,7 @@ export function CommandPalette({ children }: { children: ReactNode }) {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [keybindings, terminalOpen, toggleOpen]);
+  }, [keybindings, showTerminal, terminalOpen, toggleOpen]);
 
   return (
     <ComposerHandleContext value={composerHandleRef}>
@@ -407,6 +414,8 @@ function OpenCommandPaletteDialog() {
   const projects = useStore(useShallow(selectProjectsAcrossEnvironments));
   const threads = useStore(useShallow(selectSidebarThreadsAcrossEnvironments));
   const keybindings = useServerKeybindings();
+  const surface = useProductSurfaceConfig();
+  const showSourceControlProviders = areSourceControlProvidersVisible(surface);
   const [viewStack, setViewStack] = useState<CommandPaletteView[]>([]);
   const currentView = viewStack.at(-1) ?? null;
   const [browseGeneration, setBrowseGeneration] = useState(0);
@@ -789,10 +798,9 @@ function OpenCommandPaletteDialog() {
         },
       ];
 
-      const orderedSources: ReadonlyArray<AddProjectRemoteSource> = [
-        "url",
-        ...sortAddProjectProviderSources(readinessBySource),
-      ];
+      const orderedSources: ReadonlyArray<AddProjectRemoteSource> = showSourceControlProviders
+        ? ["url", ...sortAddProjectProviderSources(readinessBySource)]
+        : [];
 
       for (const source of orderedSources) {
         const label = remoteProjectSourceLabel(source);
@@ -860,7 +868,12 @@ function OpenCommandPaletteDialog() {
 
       return [{ value: `sources:${environmentId}`, label: "Sources", items: sourceItems }];
     },
-    [openSourceControlSettings, startAddProjectBrowse, startAddProjectClone],
+    [
+      openSourceControlSettings,
+      showSourceControlProviders,
+      startAddProjectBrowse,
+      startAddProjectClone,
+    ],
   );
 
   const startAddProjectSourceSelection = useCallback(
@@ -1011,24 +1024,26 @@ function OpenCommandPaletteDialog() {
   actionItems.push({
     kind: "action",
     value: "action:add-project",
-    searchTerms: [
-      "add project",
-      "folder",
-      "directory",
-      "browse",
-      "clone",
-      "remote",
-      "repository",
-      "repo",
-      "git",
-      "github",
-      "gitlab",
-      "bitbucket",
-      "azure",
-      "devops",
-      "url",
-      "environment",
-    ],
+    searchTerms: showSourceControlProviders
+      ? [
+          "add project",
+          "folder",
+          "directory",
+          "browse",
+          "clone",
+          "remote",
+          "repository",
+          "repo",
+          "git",
+          "github",
+          "gitlab",
+          "bitbucket",
+          "azure",
+          "devops",
+          "url",
+          "environment",
+        ]
+      : ["add project", "folder", "directory", "browse", "workspace", "documents", "environment"],
     title: "Add project",
     icon: <FolderPlusIcon className={ITEM_ICON_CLASS} />,
     keepOpen: true,

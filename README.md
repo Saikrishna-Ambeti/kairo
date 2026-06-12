@@ -55,6 +55,7 @@ There's no public docs site yet, checkout the miscellaneous markdown files in [d
 
 - [Getting started](./docs/getting-started/quick-start.md)
 - [Architecture overview](./docs/architecture/overview.md)
+- [Non-technical AI cleanup plan](./docs/project/non-technical-ai-cleanup-plan.md)
 - [Provider guides](./docs/providers/codex.md)
 - [Operations](./docs/operations/ci.md)
 - [Reference](./docs/reference/encyclopedia.md)

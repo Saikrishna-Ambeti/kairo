@@ -5,6 +5,7 @@ import {
   type AuthAccessSnapshot,
   type AuthEnvironmentScope,
   AuthSessionId,
+  DEFAULT_PRODUCT_SURFACE_CONFIG,
   DEFAULT_SERVER_SETTINGS,
   EnvironmentId,
   type DesktopBridge,
@@ -238,6 +239,7 @@ function createBaseServerConfig(): ServerConfig {
     keybindingsConfigPath: "/repo/project/.t3code-keybindings.json",
     keybindings: [],
     issues: [],
+    surface: DEFAULT_PRODUCT_SURFACE_CONFIG,
     providers: [],
     availableEditors: ["cursor"],
     observability: {

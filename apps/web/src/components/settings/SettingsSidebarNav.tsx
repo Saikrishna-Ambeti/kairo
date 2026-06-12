@@ -21,6 +21,7 @@ import {
   useSidebar,
 } from "../ui/sidebar";
 import { T3ConnectSidebarAvatar, T3ConnectSidebarSignIn } from "../clerk/T3ConnectSidebarSignIn";
+import { isSourceControlVisible, useProductSurfaceConfig } from "../../productSurfaces";
 
 export type SettingsSectionPath =
   | "/settings/general"
@@ -47,6 +48,11 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
   const navigate = useNavigate();
   const canGoBack = useCanGoBack();
   const { isMobile, setOpenMobile } = useSidebar();
+  const surface = useProductSurfaceConfig();
+  const showSourceControl = isSourceControlVisible(surface);
+  const visibleNavItems = SETTINGS_NAV_ITEMS.filter(
+    (item) => showSourceControl || item.to !== "/settings/source-control",
+  );
   const handleSectionClick = useCallback(
     (to: SettingsSectionPath) => {
       if (isMobile) {
@@ -72,7 +78,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
       <SidebarContent className="overflow-x-hidden">
         <SidebarGroup className="px-2 py-3">
           <SidebarMenu>
-            {SETTINGS_NAV_ITEMS.map((item) => {
+            {visibleNavItems.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.to;
               return (

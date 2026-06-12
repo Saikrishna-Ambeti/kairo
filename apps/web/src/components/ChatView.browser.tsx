@@ -4,6 +4,7 @@ import "../index.css";
 import {
   EventId,
   ORCHESTRATION_WS_METHODS,
+  DEFAULT_PRODUCT_SURFACE_CONFIG,
   EnvironmentId,
   type EnvironmentApi,
   type MessageId,
@@ -210,6 +211,7 @@ function createBaseServerConfig(): ServerConfig {
     keybindingsConfigPath: "/repo/project/.t3code-keybindings.json",
     keybindings: [],
     issues: [],
+    surface: DEFAULT_PRODUCT_SURFACE_CONFIG,
     providers: [
       {
         driver: ProviderDriverKind.make("codex"),

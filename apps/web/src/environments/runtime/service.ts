@@ -1,4 +1,5 @@
 import {
+  DEFAULT_PRODUCT_SURFACE_CONFIG,
   AuthEnvironmentScope,
   type DesktopSshEnvironmentBootstrap,
   type DesktopSshEnvironmentTarget,
@@ -1390,16 +1391,27 @@ function registerConnection(connection: EnvironmentConnection): EnvironmentConne
   }
   environmentConnections.set(connection.environmentId, connection);
   terminalMetadataSubscriptions.get(connection.environmentId)?.();
-  terminalMetadataSubscriptions.set(
-    connection.environmentId,
-    subscribeTerminalMetadata({
-      environmentId: connection.environmentId,
-      client: connection.client,
-    }),
-  );
+  terminalMetadataSubscriptions.delete(connection.environmentId);
+  if (readProductSurfaceConfig(connection.environmentId).terminal === "enabled") {
+    terminalMetadataSubscriptions.set(
+      connection.environmentId,
+      subscribeTerminalMetadata({
+        environmentId: connection.environmentId,
+        client: connection.client,
+      }),
+    );
+  }
   attachThreadDetailSubscriptionsForEnvironment(connection.environmentId);
   emitEnvironmentConnectionRegistryChange();
   return connection;
+}
+
+function readProductSurfaceConfig(environmentId: EnvironmentId) {
+  return (
+    useSavedEnvironmentRuntimeStore.getState().byId[environmentId]?.serverConfig?.surface ??
+    getServerConfig()?.surface ??
+    DEFAULT_PRODUCT_SURFACE_CONFIG
+  );
 }
 
 async function removeConnection(environmentId: EnvironmentId): Promise<boolean> {

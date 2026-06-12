@@ -1,6 +1,7 @@
 import "../index.css";
 
 import {
+  DEFAULT_PRODUCT_SURFACE_CONFIG,
   DEFAULT_SERVER_SETTINGS,
   EnvironmentId,
   ORCHESTRATION_WS_METHODS,
@@ -112,6 +113,7 @@ function createBaseServerConfig(): ServerConfig {
     keybindingsConfigPath: "/repo/project/.t3code-keybindings.json",
     keybindings: [],
     issues: [],
+    surface: DEFAULT_PRODUCT_SURFACE_CONFIG,
     providers: [
       {
         driver: ProviderDriverKind.make("codex"),

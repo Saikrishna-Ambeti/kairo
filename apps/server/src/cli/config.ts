@@ -1,6 +1,10 @@
 import * as NetService from "@t3tools/shared/Net";
 import { parsePersistedServerObservabilitySettings } from "@t3tools/shared/serverSettings";
-import { DesktopBackendBootstrap, PortSchema } from "@t3tools/contracts";
+import {
+  DEFAULT_PRODUCT_SURFACE_CONFIG,
+  DesktopBackendBootstrap,
+  PortSchema,
+} from "@t3tools/contracts";
 import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -374,6 +378,7 @@ export const resolveServerConfig = (
       logWebSocketEvents,
       tailscaleServeEnabled,
       tailscaleServePort,
+      surface: DEFAULT_PRODUCT_SURFACE_CONFIG,
     };
 
     return config;

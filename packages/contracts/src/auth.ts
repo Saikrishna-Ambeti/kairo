@@ -98,8 +98,6 @@ export type AuthEnvironmentScopes = typeof AuthEnvironmentScopes.Type;
 export const AuthStandardClientScopes = [
   AuthOrchestrationReadScope,
   AuthOrchestrationOperateScope,
-  AuthTerminalOperateScope,
-  AuthReviewWriteScope,
   AuthRelayReadScope,
 ] as const;
 export const AuthAdministrativeScopes = [
