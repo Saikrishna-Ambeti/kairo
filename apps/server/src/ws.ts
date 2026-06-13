@@ -78,6 +78,7 @@ import { WorkspacePathOutsideRootError } from "./workspace/Services/WorkspacePat
 import { VcsStatusBroadcaster } from "./vcs/VcsStatusBroadcaster.ts";
 import { VcsProvisioningService } from "./vcs/VcsProvisioningService.ts";
 import { GitWorkflowService } from "./git/GitWorkflowService.ts";
+import { SupermemoryService } from "./memory/SupermemoryService.ts";
 import { ReviewService } from "./review/ReviewService.ts";
 import { ProjectSetupScriptRunner } from "./project/Services/ProjectSetupScriptRunner.ts";
 import { RepositoryIdentityResolver } from "./project/Services/RepositoryIdentityResolver.ts";
@@ -151,6 +152,11 @@ const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [WS_METHODS.serverGetProcessDiagnostics, AuthOrchestrationReadScope],
   [WS_METHODS.serverGetProcessResourceHistory, AuthOrchestrationReadScope],
   [WS_METHODS.serverSignalProcess, AuthOrchestrationOperateScope],
+  [WS_METHODS.serverGetMemoryStatus, AuthOrchestrationReadScope],
+  [WS_METHODS.serverConfigureMemory, AuthOrchestrationOperateScope],
+  [WS_METHODS.serverTestMemoryConnection, AuthOrchestrationOperateScope],
+  [WS_METHODS.serverInstallMemoryProviders, AuthOrchestrationOperateScope],
+  [WS_METHODS.serverDisableMemory, AuthOrchestrationOperateScope],
   [WS_METHODS.cloudGetRelayClientStatus, AuthRelayWriteScope],
   [WS_METHODS.cloudInstallRelayClient, AuthRelayWriteScope],
   [WS_METHODS.sourceControlLookupRepository, AuthOrchestrationReadScope],
@@ -295,6 +301,7 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
         ),
       );
       const sourceControlRepositories = yield* SourceControlRepositoryService;
+      const supermemory = yield* SupermemoryService;
       const bootstrapCredentials = yield* PairingGrantStore.PairingGrantStore;
       const sessions = yield* SessionStore.SessionStore;
       const processDiagnostics = yield* ProcessDiagnostics.ProcessDiagnostics;
@@ -1159,6 +1166,34 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
         [WS_METHODS.serverSignalProcess]: (input) =>
           observeRpcEffect(WS_METHODS.serverSignalProcess, processDiagnostics.signal(input), {
             "rpc.aggregate": "server",
+          }),
+        [WS_METHODS.serverGetMemoryStatus]: (_input) =>
+          observeRpcEffect(WS_METHODS.serverGetMemoryStatus, supermemory.getStatus, {
+            "rpc.aggregate": "server.memory",
+          }),
+        [WS_METHODS.serverConfigureMemory]: (input) =>
+          observeRpcEffect(WS_METHODS.serverConfigureMemory, supermemory.configure(input), {
+            "rpc.aggregate": "server.memory",
+          }),
+        [WS_METHODS.serverTestMemoryConnection]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.serverTestMemoryConnection,
+            supermemory.testConnection(input),
+            {
+              "rpc.aggregate": "server.memory",
+            },
+          ),
+        [WS_METHODS.serverInstallMemoryProviders]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.serverInstallMemoryProviders,
+            supermemory.installProviders(input),
+            {
+              "rpc.aggregate": "server.memory",
+            },
+          ),
+        [WS_METHODS.serverDisableMemory]: (_input) =>
+          observeRpcEffect(WS_METHODS.serverDisableMemory, supermemory.disable, {
+            "rpc.aggregate": "server.memory",
           }),
         [WS_METHODS.cloudGetRelayClientStatus]: (_input) =>
           observeRpcEffect(WS_METHODS.cloudGetRelayClientStatus, relayClient.resolve, {

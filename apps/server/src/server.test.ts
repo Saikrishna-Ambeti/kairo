@@ -8,7 +8,7 @@ import {
   AuthEnvironmentBootstrapTokenType,
   AuthTokenExchangeGrantType,
   CommandId,
-  DEFAULT_PRODUCT_SURFACE_CONFIG,
+  DEVELOPER_PRODUCT_SURFACES,
   DEFAULT_SERVER_SETTINGS,
   EnvironmentId,
   EventId,
@@ -26,6 +26,7 @@ import {
   ProviderInstanceId,
   ResolvedKeybindingRule,
   ThreadId,
+  type SupermemoryStatus,
   WS_METHODS,
   WsRpcGroup,
   EditorId,
@@ -97,6 +98,7 @@ import { makeManualOnlyProviderMaintenanceCapabilities } from "./provider/provid
 import { ServerLifecycleEvents, type ServerLifecycleEventsShape } from "./serverLifecycleEvents.ts";
 import { ServerRuntimeStartup, type ServerRuntimeStartupShape } from "./serverRuntimeStartup.ts";
 import { ServerSettingsService, type ServerSettingsShape } from "./serverSettings.ts";
+import { SupermemoryService, type SupermemoryServiceShape } from "./memory/SupermemoryService.ts";
 import { TerminalManager, type TerminalManagerShape } from "./terminal/Services/Manager.ts";
 import {
   BrowserTraceCollector,
@@ -238,6 +240,16 @@ const makeAuthTestLayer = () =>
     Layer.provide(ServerSecretStore.layer),
   );
 
+const defaultSupermemoryStatus: SupermemoryStatus = {
+  enabled: false,
+  mode: "hosted",
+  scope: "user",
+  auth: {
+    hasApiKey: false,
+  },
+  providers: [],
+};
+
 const makeBrowserOtlpPayload = (spanName: string) =>
   Effect.gen(function* () {
     const collector = yield* Effect.acquireRelease(
@@ -343,6 +355,7 @@ const buildAppUnderTest = (options?: {
     keybindings?: Partial<KeybindingsShape>;
     providerRegistry?: Partial<ProviderRegistryShape>;
     serverSettings?: Partial<ServerSettingsShape>;
+    supermemory?: Partial<SupermemoryServiceShape>;
     externalLauncher?: Partial<ExternalLauncher.ExternalLauncherShape>;
     vcsDriver?: Partial<VcsDriver.VcsDriverShape>;
     vcsDriverRegistry?: Partial<VcsDriverRegistry.VcsDriverRegistryShape>;
@@ -398,7 +411,7 @@ const buildAppUnderTest = (options?: {
       logWebSocketEvents: false,
       tailscaleServeEnabled: false,
       tailscaleServePort: 443,
-      surface: DEFAULT_PRODUCT_SURFACE_CONFIG,
+      surface: DEVELOPER_PRODUCT_SURFACES,
       ...options?.config,
     };
     const layerConfig = Layer.succeed(ServerConfig, config);
@@ -574,6 +587,16 @@ const buildAppUnderTest = (options?: {
           updateSettings: () => Effect.succeed(DEFAULT_SERVER_SETTINGS),
           streamChanges: Stream.empty,
           ...options?.layers?.serverSettings,
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(SupermemoryService)({
+          getStatus: Effect.succeed(defaultSupermemoryStatus),
+          configure: () => Effect.succeed(defaultSupermemoryStatus),
+          testConnection: () => Effect.succeed(defaultSupermemoryStatus),
+          installProviders: () => Effect.succeed(defaultSupermemoryStatus),
+          disable: Effect.succeed(defaultSupermemoryStatus),
+          ...options?.layers?.supermemory,
         }),
       ),
       Layer.provide(

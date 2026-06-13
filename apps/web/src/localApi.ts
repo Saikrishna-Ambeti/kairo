@@ -143,6 +143,26 @@ function createBrowserLocalApi(rpcClient?: WsRpcClient): LocalApi {
         rpcClient
           ? rpcClient.server.updateSettings(patch)
           : Promise.reject(unavailableLocalBackendError()),
+      getMemoryStatus: () =>
+        rpcClient
+          ? rpcClient.server.getMemoryStatus()
+          : Promise.reject(unavailableLocalBackendError()),
+      configureMemory: (input) =>
+        rpcClient
+          ? rpcClient.server.configureMemory(input)
+          : Promise.reject(unavailableLocalBackendError()),
+      testMemoryConnection: (input) =>
+        rpcClient
+          ? rpcClient.server.testMemoryConnection(input)
+          : Promise.reject(unavailableLocalBackendError()),
+      installMemoryProviders: (input) =>
+        rpcClient
+          ? rpcClient.server.installMemoryProviders(input)
+          : Promise.reject(unavailableLocalBackendError()),
+      disableMemory: () =>
+        rpcClient
+          ? rpcClient.server.disableMemory()
+          : Promise.reject(unavailableLocalBackendError()),
       discoverSourceControl: () =>
         rpcClient
           ? rpcClient.server.discoverSourceControl()

@@ -11,6 +11,7 @@ export * from "./provider.ts";
 export * from "./providerInstance.ts";
 export * from "./providerRuntime.ts";
 export * from "./model.ts";
+export * from "./memory.ts";
 export * from "./keybindings.ts";
 export * from "./productSurface.ts";
 export * from "./server.ts";

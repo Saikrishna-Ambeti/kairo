@@ -1,12 +1,23 @@
 import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 
+import {
+  ConfigureMemoryInput,
+  DEFAULT_MEMORY_SETTINGS,
+  InstallMemoryProvidersInput,
+  SupermemoryStatus,
+  TestMemoryConnectionInput,
+} from "./memory.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
 import { DEFAULT_SERVER_SETTINGS, ServerSettings, ServerSettingsPatch } from "./settings.ts";
 
 const decodeServerSettings = Schema.decodeUnknownSync(ServerSettings);
 const decodeServerSettingsPatch = Schema.decodeUnknownSync(ServerSettingsPatch);
 const encodeServerSettings = Schema.encodeSync(ServerSettings);
+const decodeConfigureMemoryInput = Schema.decodeUnknownSync(ConfigureMemoryInput);
+const decodeTestMemoryConnectionInput = Schema.decodeUnknownSync(TestMemoryConnectionInput);
+const decodeInstallMemoryProvidersInput = Schema.decodeUnknownSync(InstallMemoryProvidersInput);
+const decodeSupermemoryStatus = Schema.decodeUnknownSync(SupermemoryStatus);
 
 describe("ServerSettings.providerInstances (slice-2 invariant)", () => {
   it("defaults to an empty record so legacy configs without the key still decode", () => {
@@ -149,5 +160,108 @@ describe("ServerSettingsPatch string normalization", () => {
 
     expect(encoded.addProjectBaseDirectory).toBe("~/Development");
     expect(encoded.providers?.codex?.binaryPath).toBe("/opt/homebrew/bin/codex");
+  });
+});
+
+describe("ServerSettings.memory", () => {
+  it("defaults Supermemory to disabled hosted user-scoped memory", () => {
+    expect(DEFAULT_MEMORY_SETTINGS.supermemory).toEqual({
+      enabled: false,
+      mode: "hosted",
+      scope: "user",
+      providerInstanceIds: [],
+      hosted: {
+        apiUrl: "https://api.supermemory.ai",
+      },
+    });
+    expect(DEFAULT_SERVER_SETTINGS.memory).toEqual(DEFAULT_MEMORY_SETTINGS);
+  });
+
+  it("decodes legacy settings without a memory key", () => {
+    const decoded = decodeServerSettings({});
+
+    expect(decoded.memory).toEqual(DEFAULT_MEMORY_SETTINGS);
+  });
+
+  it("decodes removed local Supermemory mode as hosted", () => {
+    const decoded = decodeServerSettings({
+      memory: {
+        supermemory: {
+          enabled: true,
+          mode: "local",
+          providerInstanceIds: ["codex"],
+        },
+      },
+    });
+
+    expect(decoded.memory.supermemory.mode).toBe("hosted");
+    expect(decoded.memory.supermemory.providerInstanceIds).toEqual([
+      ProviderInstanceId.make("codex"),
+    ]);
+  });
+
+  it("decodes memory patches without requiring secrets in settings JSON", () => {
+    const patch = decodeServerSettingsPatch({
+      memory: {
+        supermemory: {
+          enabled: true,
+          providerInstanceIds: ["codex", "claudeAgent"],
+        },
+      },
+    });
+
+    expect(patch.memory?.supermemory?.providerInstanceIds).toEqual([
+      ProviderInstanceId.make("codex"),
+      ProviderInstanceId.make("claudeAgent"),
+    ]);
+    expect(patch.memory?.supermemory).not.toHaveProperty("apiKey");
+  });
+});
+
+describe("memory RPC schemas", () => {
+  it("decodes configure/test/install payloads", () => {
+    expect(
+      decodeConfigureMemoryInput({
+        apiKey: "sm_test",
+        providerInstanceIds: ["codex"],
+      }),
+    ).toEqual({
+      apiKey: "sm_test",
+      providerInstanceIds: [ProviderInstanceId.make("codex")],
+    });
+
+    expect(decodeTestMemoryConnectionInput({ apiKey: "sm_test" })).toEqual({
+      apiKey: "sm_test",
+    });
+
+    expect(decodeInstallMemoryProvidersInput({ providerInstanceIds: ["codex"] })).toEqual({
+      providerInstanceIds: [ProviderInstanceId.make("codex")],
+    });
+  });
+
+  it("decodes redacted Supermemory status without API key material", () => {
+    const decoded = decodeSupermemoryStatus({
+      enabled: true,
+      mode: "hosted",
+      scope: "user",
+      auth: {
+        hasApiKey: true,
+        lastTestedAt: "2026-06-13T00:00:00.000Z",
+      },
+      providers: [
+        {
+          instanceId: "codex",
+          driver: "codex",
+          displayName: "Codex",
+          selected: true,
+          supported: true,
+          status: "ready",
+        },
+      ],
+    });
+
+    expect(decoded.auth.hasApiKey).toBe(true);
+    expect(decoded.providers[0]?.instanceId).toBe(ProviderInstanceId.make("codex"));
+    expect(decoded).not.toHaveProperty("apiKey");
   });
 });

@@ -317,7 +317,11 @@ export const authHttpApiLayer = HttpApiBuilder.group(
           function* (args) {
             yield* annotateEnvironmentRequest(args.endpoint.name);
             const session = yield* requireEnvironmentScope(AuthAccessWriteScope);
-            const delegatedScopes = args.payload.scopes ?? AuthStandardClientScopes;
+            const delegatedScopes = args.payload.scopes ?? [
+              ...AuthStandardClientScopes,
+              AuthTerminalOperateScope,
+              AuthReviewWriteScope,
+            ];
             if (
               delegatedScopes.length === 0 ||
               new Set<AuthEnvironmentScope>(delegatedScopes).size !== delegatedScopes.length
@@ -329,7 +333,10 @@ export const authHttpApiLayer = HttpApiBuilder.group(
                 return yield* failEnvironmentScopeRequired(delegatedScope);
               }
             }
-            return yield* serverAuth.issuePairingCredential(args.payload);
+            return yield* serverAuth.issuePairingCredential({
+              ...args.payload,
+              scopes: delegatedScopes,
+            });
           },
           Effect.catchTag("ServerAuthInternalError", (error) =>
             failEnvironmentInternal("pairing_credential_issuance_failed", error),

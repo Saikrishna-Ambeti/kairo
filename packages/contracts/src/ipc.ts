@@ -72,6 +72,12 @@ import { EditorId } from "./editor.ts";
 import { ExecutionEnvironmentDescriptor } from "./environment.ts";
 import type { ClientSettings, ServerSettings, ServerSettingsPatch } from "./settings.ts";
 import type {
+  ConfigureMemoryInput,
+  InstallMemoryProvidersInput,
+  SupermemoryStatus,
+  TestMemoryConnectionInput,
+} from "./memory.ts";
+import type {
   SourceControlCloneRepositoryInput,
   SourceControlCloneRepositoryResult,
   SourceControlDiscoveryResult,
@@ -513,6 +519,11 @@ export interface LocalApi {
     removeKeybinding: (input: ServerRemoveKeybindingInput) => Promise<ServerRemoveKeybindingResult>;
     getSettings: () => Promise<ServerSettings>;
     updateSettings: (patch: ServerSettingsPatch) => Promise<ServerSettings>;
+    getMemoryStatus: () => Promise<SupermemoryStatus>;
+    configureMemory: (input: ConfigureMemoryInput) => Promise<SupermemoryStatus>;
+    testMemoryConnection: (input?: TestMemoryConnectionInput) => Promise<SupermemoryStatus>;
+    installMemoryProviders: (input: InstallMemoryProvidersInput) => Promise<SupermemoryStatus>;
+    disableMemory: () => Promise<SupermemoryStatus>;
     discoverSourceControl: () => Promise<SourceControlDiscoveryResult>;
     getTraceDiagnostics: () => Promise<ServerTraceDiagnosticsResult>;
     getProcessDiagnostics: () => Promise<ServerProcessDiagnosticsResult>;

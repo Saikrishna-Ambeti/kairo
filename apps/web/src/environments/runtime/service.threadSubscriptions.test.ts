@@ -154,6 +154,11 @@ vi.mock("@t3tools/client-runtime", async (importOriginal) => {
       getProcessDiagnostics: vi.fn(),
       getProcessResourceHistory: vi.fn(),
       signalProcess: vi.fn(),
+      getMemoryStatus: vi.fn(),
+      configureMemory: vi.fn(),
+      testMemoryConnection: vi.fn(),
+      installMemoryProviders: vi.fn(),
+      disableMemory: vi.fn(),
     },
   };
   return {

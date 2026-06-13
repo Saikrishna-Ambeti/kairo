@@ -41,6 +41,17 @@ import {
   CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
   CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
 } from "../CodexDeveloperInstructions.ts";
+
+export const CODEX_SUPERMEMORY_DEVELOPER_INSTRUCTIONS = `## Persistent Memory
+
+Supermemory is enabled for this provider. Any memory-related task must be handled by invoking the Supermemory skill/tooling path, not by local Codex memory files.
+
+- For remember/save/store/update requests, invoke the \`supermemory-save\` skill or its installed save command.
+- For recall/search/read-memory/"do you remember" requests, invoke the \`supermemory-search\` skill or its installed search command. While searching keep the keywords broad.
+- For forget/delete-memory requests, invoke the \`supermemory-forget\` skill or its installed forget command.
+
+Do not write memories to ~/.codex/memories or other local Codex memory files. If the Supermemory skills/tools are unavailable, say memory is not currently available rather than using local memory files.`;
+
 const decodeV2TurnStartResponse = Schema.decodeUnknownEffect(EffectCodexSchema.V2TurnStartResponse);
 
 const PROVIDER = ProviderDriverKind.make("codex");
@@ -103,6 +114,7 @@ export interface CodexSessionRuntimeOptions {
   readonly model?: string;
   readonly serviceTier?: CodexServiceTier | undefined;
   readonly resumeCursor?: CodexResumeCursor;
+  readonly supermemoryMemoryEnabled?: boolean;
 }
 
 export interface CodexSessionRuntimeSendTurnInput {
@@ -322,20 +334,25 @@ function buildCodexCollaborationMode(input: {
   readonly interactionMode?: ProviderInteractionMode;
   readonly model?: string;
   readonly effort?: EffectCodexSchema.V2TurnStartParams__ReasoningEffort;
+  readonly supermemoryMemoryEnabled?: boolean;
 }): EffectCodexSchema.V2TurnStartParams__CollaborationMode | undefined {
   if (input.interactionMode === undefined) {
     return undefined;
   }
   const model = normalizeCodexModelSlug(input.model) ?? DEFAULT_MODEL;
+  const baseDeveloperInstructions =
+    input.interactionMode === "plan"
+      ? CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS
+      : CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS;
+  const developerInstructions = input.supermemoryMemoryEnabled
+    ? `${baseDeveloperInstructions}\n\n${CODEX_SUPERMEMORY_DEVELOPER_INSTRUCTIONS}`
+    : baseDeveloperInstructions;
   return {
     mode: input.interactionMode,
     settings: {
       model,
       reasoning_effort: input.effort ?? "medium",
-      developer_instructions:
-        input.interactionMode === "plan"
-          ? CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS
-          : CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
+      developer_instructions: developerInstructions,
     },
   };
 }
@@ -352,6 +369,7 @@ export function buildTurnStartParams(input: {
   readonly serviceTier?: CodexServiceTier;
   readonly effort?: EffectCodexSchema.V2TurnStartParams__ReasoningEffort;
   readonly interactionMode?: ProviderInteractionMode;
+  readonly supermemoryMemoryEnabled?: boolean;
 }): Effect.Effect<
   CodexTurnStartParamsWithCollaborationMode,
   CodexErrors.CodexAppServerProtocolParseError
@@ -372,6 +390,7 @@ export function buildTurnStartParams(input: {
     ...(input.interactionMode ? { interactionMode: input.interactionMode } : {}),
     ...(input.model ? { model: input.model } : {}),
     ...(input.effort ? { effort: input.effort } : {}),
+    ...(input.supermemoryMemoryEnabled ? { supermemoryMemoryEnabled: true } : {}),
   });
 
   return decodeCodexTurnStartParamsWithCollaborationMode({
@@ -1267,6 +1286,7 @@ export const makeCodexSessionRuntime = (
             ...(input.serviceTier ? { serviceTier: input.serviceTier } : {}),
             ...(input.effort ? { effort: input.effort } : {}),
             ...(input.interactionMode ? { interactionMode: input.interactionMode } : {}),
+            ...(options.supermemoryMemoryEnabled ? { supermemoryMemoryEnabled: true } : {}),
           });
           const rawResponse = yield* client.raw.request("turn/start", params);
           const response = yield* decodeV2TurnStartResponse(rawResponse).pipe(

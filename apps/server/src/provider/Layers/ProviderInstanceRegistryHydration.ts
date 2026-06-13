@@ -49,13 +49,15 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 
+import * as ServerSecretStore from "../../auth/ServerSecretStore.ts";
+import { applySupermemoryProviderBindings } from "../../memory/SupermemoryProviderBindings.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { BUILT_IN_DRIVERS, type BuiltInDriversEnv } from "../builtInDrivers.ts";
 import { ProviderInstanceRegistry } from "../Services/ProviderInstanceRegistry.ts";
-import { ProviderInstanceRegistryMutator } from "../Services/ProviderInstanceRegistryMutator.ts";
-import { ProviderInstanceRegistryMutableLayer } from "./ProviderInstanceRegistryLive.ts";
+import { makeProviderInstanceRegistry } from "./ProviderInstanceRegistryLive.ts";
 
 /**
  * Synthesize a `ProviderInstanceConfigMap` from a `ServerSettings` snapshot.
@@ -103,39 +105,24 @@ export const deriveProviderInstanceConfigMap = (
   return merged as ProviderInstanceConfigMap;
 };
 
-/**
- * Layer that consumes `ProviderInstanceRegistryMutator` and forks a
- * settings-watcher fiber. The fiber's lifetime is tied to the enclosing
- * layer scope (process lifetime in production), so it is interrupted on
- * shutdown without leaking.
- *
- * Errors inside the watcher are logged and swallowed — the registry's own
- * "unavailable" bucket already absorbs unknown drivers and invalid
- * configs, so the only way the watcher could fail is a settings stream
- * tear-down, which logs and exits cleanly.
- */
-const SettingsWatcherLive: Layer.Layer<
-  never,
-  never,
-  ProviderInstanceRegistryMutator | ServerSettingsService
-> = Layer.effectDiscard(
+const deriveEffectiveProviderInstanceConfigMap = (
+  settings: ServerSettings,
+): Effect.Effect<ProviderInstanceConfigMap, never> =>
   Effect.gen(function* () {
-    const mutator = yield* ProviderInstanceRegistryMutator;
-    const serverSettings = yield* ServerSettingsService;
-    yield* serverSettings.streamChanges.pipe(
-      Stream.runForEach((next) =>
-        mutator
-          .reconcile(deriveProviderInstanceConfigMap(next))
-          .pipe(
-            Effect.catchCause((cause) =>
-              Effect.logError("ProviderInstanceRegistry reconcile failed", cause),
-            ),
-          ),
-      ),
-      Effect.forkScoped,
+    const baseConfigMap = deriveProviderInstanceConfigMap(settings);
+    if (!settings.memory.supermemory.enabled) {
+      return baseConfigMap;
+    }
+
+    const secretStoreOption = yield* Effect.serviceOption(ServerSecretStore.ServerSecretStore);
+    if (Option.isNone(secretStoreOption)) {
+      return baseConfigMap;
+    }
+
+    return yield* applySupermemoryProviderBindings(settings, baseConfigMap).pipe(
+      Effect.provideService(ServerSecretStore.ServerSecretStore, secretStoreOption.value),
     );
-  }),
-);
+  });
 
 /**
  * Hydrate `ProviderInstanceRegistry` from `ServerSettings` and keep it in
@@ -157,7 +144,8 @@ export const ProviderInstanceRegistryHydrationLive: Layer.Layer<
   ProviderInstanceRegistry,
   never,
   BuiltInDriversEnv | ServerSettingsService
-> = Layer.unwrap(
+> = Layer.effect(
+  ProviderInstanceRegistry,
   Effect.gen(function* () {
     const serverSettings = yield* ServerSettingsService;
     const initialSettings: ServerSettings | undefined = yield* serverSettings.getSettings.pipe(
@@ -166,13 +154,25 @@ export const ProviderInstanceRegistryHydrationLive: Layer.Layer<
     const initialConfigMap =
       initialSettings === undefined
         ? ({} as ProviderInstanceConfigMap)
-        : deriveProviderInstanceConfigMap(initialSettings);
+        : yield* deriveEffectiveProviderInstanceConfigMap(initialSettings);
 
-    const mutableLayer = ProviderInstanceRegistryMutableLayer({
+    const built = yield* makeProviderInstanceRegistry({
       drivers: BUILT_IN_DRIVERS,
       configMap: initialConfigMap,
     });
 
-    return SettingsWatcherLive.pipe(Layer.provideMerge(mutableLayer));
+    yield* serverSettings.streamChanges.pipe(
+      Stream.runForEach((next) =>
+        deriveEffectiveProviderInstanceConfigMap(next).pipe(
+          Effect.flatMap((configMap) => built.mutator.reconcile(configMap)),
+          Effect.catchCause((cause) =>
+            Effect.logError("ProviderInstanceRegistry reconcile failed", cause),
+          ),
+        ),
+      ),
+      Effect.forkScoped,
+    );
+
+    return built.registry;
   }),
-) as Layer.Layer<ProviderInstanceRegistry, never, BuiltInDriversEnv | ServerSettingsService>;
+);

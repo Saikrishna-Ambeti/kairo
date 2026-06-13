@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { describe, it } from "vite-plus/test";
+import { describe, it } from "@effect/vitest";
 import { ThreadId } from "@t3tools/contracts";
 import * as CodexErrors from "effect-codex-app-server/errors";
 import * as CodexRpc from "effect-codex-app-server/rpc";
@@ -13,6 +14,7 @@ import {
 } from "../CodexDeveloperInstructions.ts";
 import {
   buildTurnStartParams,
+  CODEX_SUPERMEMORY_DEVELOPER_INSTRUCTIONS,
   isRecoverableThreadResumeError,
   openCodexThread,
 } from "./CodexSessionRuntime.ts";
@@ -122,6 +124,36 @@ describe("buildTurnStartParams", () => {
         },
       },
     });
+  });
+
+  it("instructs Supermemory-enabled Codex turns to avoid local Codex memory files", () => {
+    const params = Effect.runSync(
+      buildTurnStartParams({
+        threadId: "provider-thread-1",
+        runtimeMode: "full-access",
+        prompt: "Remember my preferred name",
+        model: "gpt-5.3-codex",
+        interactionMode: "default",
+        supermemoryMemoryEnabled: true,
+      }),
+    );
+
+    assert.equal(
+      params.collaborationMode?.settings.developer_instructions,
+      `${CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS}\n\n${CODEX_SUPERMEMORY_DEVELOPER_INSTRUCTIONS}`,
+    );
+    assert.match(
+      params.collaborationMode?.settings.developer_instructions ?? "",
+      /Do not write memories to ~\/\.codex\/memories/,
+    );
+    assert.match(
+      params.collaborationMode?.settings.developer_instructions ?? "",
+      /supermemory-save/,
+    );
+    assert.match(
+      params.collaborationMode?.settings.developer_instructions ?? "",
+      /supermemory-search/,
+    );
   });
 
   it("omits collaboration mode when interaction mode is absent", () => {
@@ -237,28 +269,28 @@ describe("openCodexThread", () => {
     );
   });
 
-  it("propagates non-recoverable resume failures", async () => {
-    const client = {
-      request: <M extends "thread/start" | "thread/resume">(
-        method: M,
-        _payload: CodexRpc.ClientRequestParamsByMethod[M],
-      ) => {
-        if (method === "thread/resume") {
-          return Effect.fail(
-            new CodexErrors.CodexAppServerRequestError({
-              code: -32603,
-              errorMessage: "timed out waiting for server",
-            }),
+  it.effect("propagates non-recoverable resume failures", () =>
+    Effect.gen(function* () {
+      const client = {
+        request: <M extends "thread/start" | "thread/resume">(
+          method: M,
+          _payload: CodexRpc.ClientRequestParamsByMethod[M],
+        ) => {
+          if (method === "thread/resume") {
+            return Effect.fail(
+              new CodexErrors.CodexAppServerRequestError({
+                code: -32603,
+                errorMessage: "timed out waiting for server",
+              }),
+            );
+          }
+          return Effect.succeed(
+            makeThreadOpenResponse("fresh-thread") as CodexRpc.ClientRequestResponsesByMethod[M],
           );
-        }
-        return Effect.succeed(
-          makeThreadOpenResponse("fresh-thread") as CodexRpc.ClientRequestResponsesByMethod[M],
-        );
-      },
-    };
+        },
+      };
 
-    await assert.rejects(
-      Effect.runPromise(
+      const result = yield* Effect.exit(
         openCodexThread({
           client,
           threadId: ThreadId.make("thread-1"),
@@ -268,10 +300,13 @@ describe("openCodexThread", () => {
           serviceTier: undefined,
           resumeThreadId: "stale-thread",
         }),
-      ),
-      (error: unknown) =>
-        isCodexAppServerRequestError(error) &&
-        error.errorMessage === "timed out waiting for server",
-    );
-  });
+      );
+      assert.equal(result._tag, "Failure");
+      const error = Cause.squash(result.cause);
+      assert.equal(isCodexAppServerRequestError(error), true);
+      if (isCodexAppServerRequestError(error)) {
+        assert.equal(error.errorMessage, "timed out waiting for server");
+      }
+    }),
+  );
 });

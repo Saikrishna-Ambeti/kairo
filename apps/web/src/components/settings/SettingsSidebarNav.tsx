@@ -3,6 +3,7 @@ import {
   ArchiveIcon,
   ArrowLeftIcon,
   BotIcon,
+  BrainCircuitIcon,
   GitBranchIcon,
   KeyboardIcon,
   Link2Icon,
@@ -26,6 +27,7 @@ import { isSourceControlVisible, useProductSurfaceConfig } from "../../productSu
 export type SettingsSectionPath =
   | "/settings/general"
   | "/settings/keybindings"
+  | "/settings/memory"
   | "/settings/providers"
   | "/settings/source-control"
   | "/settings/connections"
@@ -38,6 +40,7 @@ export const SETTINGS_NAV_ITEMS: ReadonlyArray<{
 }> = [
   { label: "General", to: "/settings/general", icon: Settings2Icon },
   { label: "Keybindings", to: "/settings/keybindings", icon: KeyboardIcon },
+  { label: "Memory", to: "/settings/memory", icon: BrainCircuitIcon },
   { label: "Providers", to: "/settings/providers", icon: BotIcon },
   { label: "Source Control", to: "/settings/source-control", icon: GitBranchIcon },
   { label: "Connections", to: "/settings/connections", icon: Link2Icon },

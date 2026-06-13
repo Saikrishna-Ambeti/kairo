@@ -140,6 +140,13 @@ export interface WsRpcClient {
     readonly updateSettings: (
       patch: ServerSettingsPatch,
     ) => ReturnType<RpcUnaryMethod<typeof WS_METHODS.serverUpdateSettings>>;
+    readonly getMemoryStatus: RpcUnaryNoArgMethod<typeof WS_METHODS.serverGetMemoryStatus>;
+    readonly configureMemory: RpcUnaryMethod<typeof WS_METHODS.serverConfigureMemory>;
+    readonly testMemoryConnection: (
+      input?: RpcInput<typeof WS_METHODS.serverTestMemoryConnection>,
+    ) => ReturnType<RpcUnaryMethod<typeof WS_METHODS.serverTestMemoryConnection>>;
+    readonly installMemoryProviders: RpcUnaryMethod<typeof WS_METHODS.serverInstallMemoryProviders>;
+    readonly disableMemory: RpcUnaryNoArgMethod<typeof WS_METHODS.serverDisableMemory>;
     readonly subscribeConfig: RpcStreamMethod<typeof WS_METHODS.subscribeServerConfig>;
     readonly subscribeLifecycle: RpcStreamMethod<typeof WS_METHODS.subscribeServerLifecycle>;
     readonly subscribeAuthAccess: RpcStreamMethod<typeof WS_METHODS.subscribeAuthAccess>;
@@ -301,6 +308,16 @@ export function createWsRpcClient(
       getSettings: () => transport.request((client) => client[WS_METHODS.serverGetSettings]({})),
       updateSettings: (patch) =>
         transport.request((client) => client[WS_METHODS.serverUpdateSettings]({ patch })),
+      getMemoryStatus: () =>
+        transport.request((client) => client[WS_METHODS.serverGetMemoryStatus]({})),
+      configureMemory: (input) =>
+        transport.request((client) => client[WS_METHODS.serverConfigureMemory](input)),
+      testMemoryConnection: (input) =>
+        transport.request((client) => client[WS_METHODS.serverTestMemoryConnection](input ?? {})),
+      installMemoryProviders: (input) =>
+        transport.request((client) => client[WS_METHODS.serverInstallMemoryProviders](input)),
+      disableMemory: () =>
+        transport.request((client) => client[WS_METHODS.serverDisableMemory]({})),
       subscribeConfig: (listener, options) =>
         transport.subscribe(
           (client) => client[WS_METHODS.subscribeServerConfig]({}),

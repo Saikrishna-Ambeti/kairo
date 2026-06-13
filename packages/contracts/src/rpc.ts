@@ -45,6 +45,13 @@ import {
 } from "./review.ts";
 import { KeybindingsConfigError } from "./keybindings.ts";
 import {
+  ConfigureMemoryInput,
+  InstallMemoryProvidersInput,
+  SupermemoryError,
+  SupermemoryStatus,
+  TestMemoryConnectionInput,
+} from "./memory.ts";
+import {
   ClientOrchestrationCommand,
   ORCHESTRATION_WS_METHODS,
   OrchestrationDispatchCommandError,
@@ -195,6 +202,11 @@ export const WS_METHODS = {
   serverGetProcessDiagnostics: "server.getProcessDiagnostics",
   serverGetProcessResourceHistory: "server.getProcessResourceHistory",
   serverSignalProcess: "server.signalProcess",
+  serverGetMemoryStatus: "server.getMemoryStatus",
+  serverConfigureMemory: "server.configureMemory",
+  serverTestMemoryConnection: "server.testMemoryConnection",
+  serverInstallMemoryProviders: "server.installMemoryProviders",
+  serverDisableMemory: "server.disableMemory",
 
   // Cloud environment methods
   cloudGetRelayClientStatus: "cloud.getRelayClientStatus",
@@ -295,6 +307,42 @@ export const WsServerSignalProcessRpc = Rpc.make(WS_METHODS.serverSignalProcess,
   payload: ServerSignalProcessInput,
   success: ServerSignalProcessResult,
   error: EnvironmentAuthorizationError,
+});
+
+const SupermemoryRpcError = Schema.Union([
+  SupermemoryError,
+  ServerSettingsError,
+  EnvironmentAuthorizationError,
+]);
+
+export const WsServerGetMemoryStatusRpc = Rpc.make(WS_METHODS.serverGetMemoryStatus, {
+  payload: Schema.Struct({}),
+  success: SupermemoryStatus,
+  error: SupermemoryRpcError,
+});
+
+export const WsServerConfigureMemoryRpc = Rpc.make(WS_METHODS.serverConfigureMemory, {
+  payload: ConfigureMemoryInput,
+  success: SupermemoryStatus,
+  error: SupermemoryRpcError,
+});
+
+export const WsServerTestMemoryConnectionRpc = Rpc.make(WS_METHODS.serverTestMemoryConnection, {
+  payload: TestMemoryConnectionInput,
+  success: SupermemoryStatus,
+  error: SupermemoryRpcError,
+});
+
+export const WsServerInstallMemoryProvidersRpc = Rpc.make(WS_METHODS.serverInstallMemoryProviders, {
+  payload: InstallMemoryProvidersInput,
+  success: SupermemoryStatus,
+  error: SupermemoryRpcError,
+});
+
+export const WsServerDisableMemoryRpc = Rpc.make(WS_METHODS.serverDisableMemory, {
+  payload: Schema.Struct({}),
+  success: SupermemoryStatus,
+  error: SupermemoryRpcError,
 });
 
 export const WsCloudGetRelayClientStatusRpc = Rpc.make(WS_METHODS.cloudGetRelayClientStatus, {
@@ -595,6 +643,11 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetProcessDiagnosticsRpc,
   WsServerGetProcessResourceHistoryRpc,
   WsServerSignalProcessRpc,
+  WsServerGetMemoryStatusRpc,
+  WsServerConfigureMemoryRpc,
+  WsServerTestMemoryConnectionRpc,
+  WsServerInstallMemoryProvidersRpc,
+  WsServerDisableMemoryRpc,
   WsCloudGetRelayClientStatusRpc,
   WsCloudInstallRelayClientRpc,
   WsSourceControlLookupRepositoryRpc,

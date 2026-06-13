@@ -68,6 +68,7 @@ const isCodexSessionRuntimeThreadIdMissingError = Schema.is(
 const isCodexResumeCursorSchema = Schema.is(CodexResumeCursorSchema);
 
 const PROVIDER = ProviderDriverKind.make("codex");
+const SUPERMEMORY_CODEX_API_KEY_ENV = "SUPERMEMORY_CODEX_API_KEY";
 
 export interface CodexAdapterLiveOptions {
   readonly instanceId?: ProviderInstanceId;
@@ -1397,6 +1398,9 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             ? { model: input.modelSelection.model }
             : {}),
           ...(serviceTier ? { serviceTier } : {}),
+          ...(options?.environment?.[SUPERMEMORY_CODEX_API_KEY_ENV]
+            ? { supermemoryMemoryEnabled: true }
+            : {}),
         };
         const sessionScope = yield* Scope.make("sequential");
         let sessionScopeTransferred = false;
