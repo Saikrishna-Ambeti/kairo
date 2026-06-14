@@ -14,6 +14,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type ElementType } from "react";
 import {
   ProviderDriverKind as ProviderDriverKindSchema,
+  isProviderAvailable,
   type ProviderDriverKind,
   type ProviderInstanceId,
   type ServerProvider,
@@ -80,6 +81,16 @@ export function canNavigateBackToOnboardingStep(activeStep: StepKey, targetStep:
   return onboardingStepIndex(targetStep) < onboardingStepIndex(activeStep);
 }
 
+export function isUsableOnboardingAgent(provider: ServerProvider): boolean {
+  return (
+    CODING_AGENT_DRIVERS.has(provider.driver) &&
+    provider.enabled &&
+    provider.installed &&
+    isProviderAvailable(provider) &&
+    provider.status === "ready"
+  );
+}
+
 function showOnboardingError(title: string, error: unknown) {
   toastManager.add(
     stackedThreadToast({
@@ -97,9 +108,9 @@ function statusText(value: string): string {
 function agentBadgeVariant(provider: ServerProvider | undefined) {
   if (!provider) return "outline";
   if (!provider.enabled) return "outline";
-  if (provider.installed && provider.auth.status === "authenticated") return "success";
-  if (provider.installed) return "warning";
+  if (isUsableOnboardingAgent(provider)) return "success";
   if (provider.status === "error") return "error";
+  if (provider.installed) return "warning";
   return "outline";
 }
 
@@ -204,20 +215,20 @@ function ProviderLogo({ option }: { option: AgentOption }) {
 
 function AgentStep({
   options,
-  installedAgents,
+  usableAgents,
   busy,
   onInstall,
   onRefresh,
   onContinue,
 }: {
   options: ReadonlyArray<AgentOption>;
-  installedAgents: ReadonlyArray<ServerProvider>;
+  usableAgents: ReadonlyArray<ServerProvider>;
   busy: BusyAction;
   onInstall: (option: AgentOption) => void;
   onRefresh: () => void;
   onContinue: () => void;
 }) {
-  const hasInstalledAgent = installedAgents.length > 0;
+  const hasUsableAgent = usableAgents.length > 0;
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <section className="space-y-4">
@@ -231,7 +242,7 @@ function AgentStep({
           {options.map((option) => {
             const provider = option.provider;
             const canInstall = Boolean(provider?.versionAdvisory?.canUpdate);
-            const installed = Boolean(provider?.installed && provider.enabled);
+            const detected = provider ? isUsableOnboardingAgent(provider) : false;
             return (
               <div
                 className="grid gap-3 rounded-lg border bg-card p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center"
@@ -254,7 +265,7 @@ function AgentStep({
                   </p>
                 </div>
                 <div className="flex gap-2 sm:justify-end">
-                  {installed ? (
+                  {detected ? (
                     <Button size="sm" variant="outline" disabled>
                       <CheckCircle2Icon className="size-3.5" />
                       Detected
@@ -284,9 +295,9 @@ function AgentStep({
           <AppWindowIcon className="size-4 text-muted-foreground" />
           Detection
         </div>
-        {hasInstalledAgent ? (
+        {hasUsableAgent ? (
           <div className="space-y-2 text-sm">
-            {installedAgents.map((provider) => (
+            {usableAgents.map((provider) => (
               <div className="flex items-center justify-between gap-3" key={provider.instanceId}>
                 <span className="truncate">{provider.displayName ?? provider.instanceId}</span>
                 <Badge size="sm" variant="success">
@@ -309,7 +320,7 @@ function AgentStep({
             )}
             Refresh
           </Button>
-          <Button size="sm" disabled={!hasInstalledAgent || busy !== null} onClick={onContinue}>
+          <Button size="sm" disabled={!hasUsableAgent || busy !== null} onClick={onContinue}>
             Continue
             <ArrowRightIcon className="size-3.5" />
           </Button>
@@ -745,21 +756,11 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
     [providers],
   );
 
-  const installedAgents = useMemo(
-    () =>
-      providers.filter(
-        (provider) =>
-          CODING_AGENT_DRIVERS.has(provider.driver) &&
-          provider.enabled &&
-          provider.installed &&
-          provider.availability !== "unavailable",
-      ),
-    [providers],
-  );
+  const usableAgents = useMemo(() => providers.filter(isUsableOnboardingAgent), [providers]);
 
   const memoryProviders = useMemo<ReadonlyArray<SupermemoryProviderStatus>>(() => {
     if (memoryStatus?.providers.length) return memoryStatus.providers;
-    return installedAgents.map((provider) => ({
+    return usableAgents.map((provider) => ({
       instanceId: provider.instanceId,
       driver: provider.driver,
       displayName: provider.displayName ?? String(provider.instanceId),
@@ -767,18 +768,18 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
       supported: MEMORY_AGENT_DRIVERS.has(provider.driver),
       status: MEMORY_AGENT_DRIVERS.has(provider.driver) ? "not_selected" : "unsupported",
     }));
-  }, [installedAgents, memoryStatus?.providers]);
+  }, [usableAgents, memoryStatus?.providers]);
 
   const selectedComposioProviderIds = useMemo(
     () =>
       composioStatus?.agentSupport
         .filter((entry) => entry.selected)
         .map((entry) => entry.providerInstanceId) ??
-      installedAgents.map((provider) => provider.instanceId),
-    [composioStatus?.agentSupport, installedAgents],
+      usableAgents.map((provider) => provider.instanceId),
+    [composioStatus?.agentSupport, usableAgents],
   );
 
-  const agentComplete = installedAgents.length > 0;
+  const agentComplete = usableAgents.length > 0;
   const memoryComplete = Boolean(memoryStatus?.enabled && memoryStatus.auth.hasApiKey);
   const composioComplete = composioStatus?.auth.status === "authenticated";
   const completed = useMemo(() => {
@@ -823,10 +824,10 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
       memoryStatus?.enabled
         ? provider.selected
         : provider.supported &&
-          installedAgents.some((agent) => agent.instanceId === provider.instanceId),
+          usableAgents.some((agent) => agent.instanceId === provider.instanceId),
     );
     setSelectedMemoryProviderIds(new Set(selected.map((provider) => provider.instanceId)));
-  }, [installedAgents, memoryProviders, memoryStatus?.enabled, selectedMemoryProviderIds.size]);
+  }, [usableAgents, memoryProviders, memoryStatus?.enabled, selectedMemoryProviderIds.size]);
 
   useEffect(() => {
     if (userSelectedStepRef.current) return;
@@ -983,7 +984,7 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
           {activeStep === "agents" ? (
             <AgentStep
               options={agentOptions}
-              installedAgents={installedAgents}
+              usableAgents={usableAgents}
               busy={busy}
               onInstall={(option) => void installAgent(option)}
               onRefresh={() =>
