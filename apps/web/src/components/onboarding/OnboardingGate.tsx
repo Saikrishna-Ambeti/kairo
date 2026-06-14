@@ -49,7 +49,7 @@ const CODING_AGENT_DRIVERS = new Set<ProviderDriverKind>([
 ]);
 
 const MEMORY_AGENT_DRIVERS = CODING_AGENT_DRIVERS;
-const SUPERMEMORY_CONSOLE_URL = "https://console.supermemory.ai";
+const SUPERMEMORY_CONSOLE_URL = "https://app.supermemory.ai";
 
 type StepKey = "agents" | "memory" | "composio" | "finish";
 type BusyAction =
