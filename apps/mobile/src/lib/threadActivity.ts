@@ -1,4 +1,4 @@
-import { ApprovalRequestId, isToolLifecycleItemType } from "@t3tools/contracts";
+import { ApprovalRequestId, isToolLifecycleItemType } from "@kairo/contracts";
 import type {
   CommandId,
   EnvironmentId,
@@ -9,7 +9,7 @@ import type {
   ToolLifecycleItemType,
   ThreadId,
   UserInputQuestion,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 
 import type { DraftComposerImageAttachment } from "./composerImages";
 import * as Arr from "effect/Array";

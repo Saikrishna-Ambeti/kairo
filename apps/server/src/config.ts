@@ -13,7 +13,7 @@ import * as LogLevel from "effect/LogLevel";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Context from "effect/Context";
-import { DEFAULT_PRODUCT_SURFACE_CONFIG, type ProductSurfaceConfig } from "@t3tools/contracts";
+import { DEFAULT_PRODUCT_SURFACE_CONFIG, type ProductSurfaceConfig } from "@kairo/contracts";
 
 export const DEFAULT_PORT = 3773;
 
@@ -135,7 +135,7 @@ export const ensureServerDirectories = Effect.fn(function* (derivedPaths: Server
  * ServerConfig - Service tag for server runtime configuration.
  */
 export class ServerConfig extends Context.Service<ServerConfig, ServerConfigShape>()(
-  "t3/config/ServerConfig",
+  "kairo/config/ServerConfig",
 ) {
   static readonly layerTest = (cwd: string, baseDirOrPrefix: string | { prefix: string }) =>
     Layer.effect(
@@ -161,7 +161,7 @@ export class ServerConfig extends Context.Service<ServerConfig, ServerConfigShap
           otlpTracesUrl: undefined,
           otlpMetricsUrl: undefined,
           otlpExportIntervalMs: 10_000,
-          otlpServiceName: "t3-server",
+          otlpServiceName: "kairo-server",
           cwd,
           baseDir,
           ...derivedPaths,

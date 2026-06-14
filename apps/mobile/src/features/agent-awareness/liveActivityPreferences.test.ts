@@ -1,8 +1,8 @@
 import { beforeEach, vi } from "vite-plus/test";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import type { EnvironmentId } from "@t3tools/contracts";
-import { ManagedRelayClient } from "@t3tools/client-runtime";
+import type { EnvironmentId } from "@kairo/contracts";
+import { ManagedRelayClient } from "@kairo/client-runtime";
 import { HttpClient } from "effect/unstable/http";
 
 import type { SavedRemoteConnection } from "../../lib/connection";

@@ -3,8 +3,8 @@ import {
   buildMenuItems,
   getGitActionDisabledReason,
   requiresDefaultBranchConfirmation,
-} from "@t3tools/client-runtime";
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+} from "@kairo/client-runtime";
+import type { EnvironmentId, ThreadId } from "@kairo/contracts";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useMemo } from "react";
@@ -170,12 +170,12 @@ export function GitOverviewSheet() {
           />
         </Pressable>
         <Text
-          className="text-[12px] font-t3-bold uppercase text-foreground-muted"
+          className="text-[12px] font-kairo-bold uppercase text-foreground-muted"
           style={{ letterSpacing: 1 }}
         >
           Branch
         </Text>
-        <Text className="text-[28px] font-t3-bold">{currentBranchLabel}</Text>
+        <Text className="text-[28px] font-kairo-bold">{currentBranchLabel}</Text>
         <Text className="text-foreground-secondary text-[13px] font-medium leading-[19px]">
           {statusSummary(gitStatus.data)}
         </Text>

@@ -8,7 +8,7 @@ import {
   createComposerPathSearchManager,
   getComposerPathSearchTargetKey,
   normalizeComposerPathSearchQuery,
-} from "@t3tools/client-runtime";
+} from "@kairo/client-runtime";
 import { useEffect, useMemo } from "react";
 
 import { appAtomRegistry } from "./atom-registry";

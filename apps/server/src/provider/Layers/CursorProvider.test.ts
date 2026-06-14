@@ -6,8 +6,8 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { describe, expect, it } from "vite-plus/test";
 import type * as EffectAcpSchema from "effect-acp/schema";
-import type { CursorSettings } from "@t3tools/contracts";
-import { createModelCapabilities } from "@t3tools/shared/model";
+import type { CursorSettings } from "@kairo/contracts";
+import { createModelCapabilities } from "@kairo/shared/model";
 
 import {
   buildCursorProviderSnapshot,
@@ -147,7 +147,7 @@ const makeExitLogFixture = Effect.fn("makeExitLogFixture")(function* (prefix: st
   return {
     exitLogPath,
     wrapperPath: yield* makeMockAgentWrapper({
-      T3_ACP_EXIT_LOG_PATH: exitLogPath,
+      Kairo_ACP_EXIT_LOG_PATH: exitLogPath,
     }),
   };
 });
@@ -424,7 +424,7 @@ describe("checkCursorProviderStatus", () => {
         },
         {
           ...process.env,
-          T3_ACP_REQUEST_LOG_PATH: requestLogPath,
+          Kairo_ACP_REQUEST_LOG_PATH: requestLogPath,
         },
       ).pipe(Effect.provide(NodeServices.layer)),
     );

@@ -2,7 +2,7 @@ import type { ComponentType } from "react";
 import type { NativeSyntheticEvent, ViewProps } from "react-native";
 import { requireNativeView } from "expo";
 
-const NATIVE_REVIEW_DIFF_MODULE_NAME = "T3ReviewDiffSurface";
+const NATIVE_REVIEW_DIFF_MODULE_NAME = "KairoReviewDiffSurface";
 
 interface ExpoGlobalWithViewConfig {
   readonly expo?: {

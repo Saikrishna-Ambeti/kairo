@@ -10,8 +10,8 @@ import {
   type ServerConfigStreamEvent,
   type ServerLifecycleStreamEvent,
   type ServerProvider,
-} from "@t3tools/contracts";
-import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
+} from "@kairo/contracts";
+import { DEFAULT_RESOLVED_KEYBINDINGS } from "@kairo/shared/keybindings";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
@@ -78,7 +78,7 @@ const baseServerConfig: ServerConfig = {
     policy: "loopback-browser",
     bootstrapMethods: ["one-time-token"],
     sessionMethods: ["browser-session-cookie", "bearer-access-token"],
-    sessionCookieName: "t3_session",
+    sessionCookieName: "kairo_session",
   },
   cwd: "/tmp/workspace",
   keybindingsConfigPath: "/tmp/workspace/.config/keybindings.json",
@@ -230,7 +230,7 @@ describe("serverState", () => {
       payload: {
         environment: baseEnvironment,
         cwd: "/tmp/workspace",
-        projectName: "t3-code",
+        projectName: "kairo",
         bootstrapProjectId: ProjectId.make("project-1"),
         bootstrapThreadId: ThreadId.make("thread-1"),
       },
@@ -239,7 +239,7 @@ describe("serverState", () => {
     expect(listener).toHaveBeenCalledWith({
       environment: baseEnvironment,
       cwd: "/tmp/workspace",
-      projectName: "t3-code",
+      projectName: "kairo",
       bootstrapProjectId: ProjectId.make("project-1"),
       bootstrapThreadId: ThreadId.make("thread-1"),
     });
@@ -249,7 +249,7 @@ describe("serverState", () => {
     expect(lateListener).toHaveBeenCalledWith({
       environment: baseEnvironment,
       cwd: "/tmp/workspace",
-      projectName: "t3-code",
+      projectName: "kairo",
       bootstrapProjectId: ProjectId.make("project-1"),
       bootstrapThreadId: ThreadId.make("thread-1"),
     });

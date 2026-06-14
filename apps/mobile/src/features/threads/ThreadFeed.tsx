@@ -2,7 +2,7 @@ import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { KeyboardAvoidingLegendList } from "@legendapp/list/keyboard";
 import { type LegendListRef } from "@legendapp/list/react-native";
-import type { ThreadId } from "@t3tools/contracts";
+import type { ThreadId } from "@kairo/contracts";
 import { SymbolView } from "expo-symbols";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -459,7 +459,7 @@ function renderFeedEntry(
               );
             })}
           </View>
-          <Text className="mt-1.5 px-1 text-right font-t3-medium text-xs text-neutral-600 dark:text-neutral-400">
+          <Text className="mt-1.5 px-1 text-right font-kairo-medium text-xs text-neutral-600 dark:text-neutral-400">
             {timestampLabel}
           </Text>
         </View>
@@ -508,7 +508,7 @@ function renderFeedEntry(
             </TouchableOpacity>
           );
         })}
-        <Text className="mt-1.5 font-t3-medium text-xs text-neutral-600 dark:text-neutral-400">
+        <Text className="mt-1.5 font-kairo-medium text-xs text-neutral-600 dark:text-neutral-400">
           {timestampLabel}
         </Text>
       </View>
@@ -526,13 +526,13 @@ function renderFeedEntry(
             {entry.queuedMessage.text}
           </Text>
           {entry.queuedMessage.attachments.length > 0 ? (
-            <Text className="font-t3-medium text-xs text-white/75">
+            <Text className="font-kairo-medium text-xs text-white/75">
               {entry.queuedMessage.attachments.length} image
               {entry.queuedMessage.attachments.length === 1 ? "" : "s"} attached
             </Text>
           ) : null}
         </View>
-        <Text className="mt-1.5 px-1 text-right font-t3-medium text-xs text-neutral-600 dark:text-neutral-400">
+        <Text className="mt-1.5 px-1 text-right font-kairo-medium text-xs text-neutral-600 dark:text-neutral-400">
           {entry.sending ? "dispatching" : `${relativeTime(entry.createdAt)} • pending`}
         </Text>
       </View>
@@ -550,11 +550,11 @@ function renderFeedEntry(
     <View className="mb-3 rounded-[20px] border border-neutral-200/80 bg-neutral-50/85 px-3 py-2 dark:border-white/[0.06] dark:bg-white/[0.025]">
       {showHeader ? (
         <View className="mb-1.5 flex-row items-center justify-between gap-3 px-0.5">
-          <Text className="font-t3-bold text-[10px] uppercase tracking-[0.8px] text-neutral-500 dark:text-neutral-500">
+          <Text className="font-kairo-bold text-[10px] uppercase tracking-[0.8px] text-neutral-500 dark:text-neutral-500">
             Tool calls ({rows.length})
           </Text>
           <Pressable onPress={() => props.onToggleWorkGroup(entry.id)}>
-            <Text className="font-t3-medium text-[10px] uppercase tracking-[0.8px] text-neutral-500 dark:text-neutral-500">
+            <Text className="font-kairo-medium text-[10px] uppercase tracking-[0.8px] text-neutral-500 dark:text-neutral-500">
               {isExpanded ? "Show less" : `Show ${hiddenCount} more`}
             </Text>
           </Pressable>
@@ -595,7 +595,7 @@ function renderFeedEntry(
             </Text>
           </ScrollView>
           {props.copiedRowId === row.id ? (
-            <Text className="shrink-0 font-t3-medium text-[10px] uppercase tracking-[0.8px] text-emerald-600 dark:text-emerald-400">
+            <Text className="shrink-0 font-kairo-medium text-[10px] uppercase tracking-[0.8px] text-emerald-600 dark:text-emerald-400">
               Copied
             </Text>
           ) : null}

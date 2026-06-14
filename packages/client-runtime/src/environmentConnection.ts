@@ -5,7 +5,7 @@ import type {
   ServerConfig,
   ServerLifecycleWelcomePayload,
   TerminalEvent,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 
 import type { KnownEnvironment } from "./knownEnvironment.ts";
 import type { WsRpcClient } from "./wsRpcClient.ts";

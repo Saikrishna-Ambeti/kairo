@@ -1,5 +1,5 @@
 {
-  "name": "@t3tools/tailscale",
+  "name": "@kairo/tailscale",
   "private": true,
   "type": "module",
   "exports": {

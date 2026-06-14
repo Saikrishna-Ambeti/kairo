@@ -75,7 +75,7 @@ export function GitCommitSheet() {
       <View className="gap-3 rounded-[22px] border border-border bg-card px-4 py-4">
         <View className="flex-row items-center justify-between gap-3">
           <Text className="text-foreground-muted text-[13px] font-medium">Branch</Text>
-          <Text className="text-foreground text-[15px] font-t3-bold">
+          <Text className="text-foreground text-[15px] font-kairo-bold">
             {gitStatus.data?.refName ?? "(detached HEAD)"}
           </Text>
         </View>
@@ -92,7 +92,7 @@ export function GitCommitSheet() {
       <View className="gap-3 rounded-[22px] border border-border bg-card px-4 py-4">
         <View className="flex-row items-center justify-between gap-3">
           <View className="gap-1">
-            <Text className="text-foreground text-[16px] font-t3-bold">Files</Text>
+            <Text className="text-foreground text-[16px] font-kairo-bold">Files</Text>
             <Text className="text-foreground-muted text-[12px] leading-[18px]">
               {selectedFiles.length} selected · +{selectedInsertions} / -{selectedDeletions}
             </Text>
@@ -103,14 +103,14 @@ export function GitCommitSheet() {
                 className="bg-subtle rounded-full px-3 py-2"
                 onPress={() => setExcludedFiles(new Set())}
               >
-                <Text className="text-foreground text-[11px] font-t3-bold uppercase">Reset</Text>
+                <Text className="text-foreground text-[11px] font-kairo-bold uppercase">Reset</Text>
               </Pressable>
             ) : null}
             <Pressable
               className="bg-subtle rounded-full px-3 py-2"
               onPress={() => setIsEditingFiles((current) => !current)}
             >
-              <Text className="text-foreground text-[11px] font-t3-bold uppercase">
+              <Text className="text-foreground text-[11px] font-kairo-bold uppercase">
                 {isEditingFiles ? "Done" : "Edit"}
               </Text>
             </Pressable>
@@ -128,10 +128,10 @@ export function GitCommitSheet() {
                 <Text className="text-foreground flex-1 text-[13px] font-medium" numberOfLines={1}>
                   {file.path}
                 </Text>
-                <Text className="text-[12px] font-t3-bold" style={{ color: "#10b981" }}>
+                <Text className="text-[12px] font-kairo-bold" style={{ color: "#10b981" }}>
                   +{file.insertions}
                 </Text>
-                <Text className="text-[12px] font-t3-bold" style={{ color: "#f43f5e" }}>
+                <Text className="text-[12px] font-kairo-bold" style={{ color: "#f43f5e" }}>
                   -{file.deletions}
                 </Text>
               </View>
@@ -172,7 +172,7 @@ export function GitCommitSheet() {
                     <View className="flex-1 gap-1">
                       <Text
                         selectable
-                        className={`text-[13px] font-t3-bold ${included ? "text-foreground" : "text-foreground-muted"}`}
+                        className={`text-[13px] font-kairo-bold ${included ? "text-foreground" : "text-foreground-muted"}`}
                       >
                         {file.path}
                       </Text>
@@ -183,10 +183,10 @@ export function GitCommitSheet() {
                       ) : null}
                     </View>
                     <View className="items-end gap-1">
-                      <Text className="text-[12px] font-t3-bold" style={{ color: "#10b981" }}>
+                      <Text className="text-[12px] font-kairo-bold" style={{ color: "#10b981" }}>
                         +{file.insertions}
                       </Text>
-                      <Text className="text-[12px] font-t3-bold" style={{ color: "#f43f5e" }}>
+                      <Text className="text-[12px] font-kairo-bold" style={{ color: "#f43f5e" }}>
                         -{file.deletions}
                       </Text>
                     </View>
@@ -199,7 +199,7 @@ export function GitCommitSheet() {
       </View>
 
       <View className="gap-2">
-        <Text className="text-foreground text-[13px] font-t3-bold">Commit message</Text>
+        <Text className="text-foreground text-[13px] font-kairo-bold">Commit message</Text>
         <TextInput
           multiline
           value={dialogCommitMessage}

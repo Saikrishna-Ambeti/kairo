@@ -1,6 +1,6 @@
 import { Stack, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId } from "@kairo/contracts";
 import { useCallback, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -87,7 +87,7 @@ export default function ConnectionsRouteScreen() {
             </View>
             <Text className="text-center text-[14px] leading-[20px] text-foreground-muted">
               No environments connected yet.{"\n"}Tap{" "}
-              <Text className="font-t3-bold text-foreground">+</Text> to add one.
+              <Text className="font-kairo-bold text-foreground">+</Text> to add one.
             </Text>
           </View>
         )}

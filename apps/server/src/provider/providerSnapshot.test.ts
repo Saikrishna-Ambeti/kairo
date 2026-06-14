@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
-import { ProviderDriverKind, type ModelCapabilities } from "@t3tools/contracts";
-import { createModelCapabilities } from "@t3tools/shared/model";
+import { ProviderDriverKind, type ModelCapabilities } from "@kairo/contracts";
+import { createModelCapabilities } from "@kairo/shared/model";
 
 import { providerModelsFromSettings } from "./providerSnapshot.ts";
 

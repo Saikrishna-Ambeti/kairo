@@ -1,0 +1,17 @@
+{
+  "name": "@kairo/mobile-terminal-native",
+  "version": "0.0.0",
+  "private": true,
+  "expo-module": {
+    "ios": {
+      "modules": [
+        "KairoTerminalModule"
+      ]
+    },
+    "android": {
+      "modules": [
+        "expo.modules.kairoterminal.KairoTerminalModule"
+      ]
+    }
+  }
+}

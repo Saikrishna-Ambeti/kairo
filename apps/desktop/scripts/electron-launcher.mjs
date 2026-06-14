@@ -1,4 +1,4 @@
-// This file mostly exists because we want dev mode to say "T3 Code (Dev)" instead of "electron"
+// This file mostly exists because we want dev mode to say "Kairo (Dev)" instead of "electron"
 
 import { spawnSync } from "node:child_process";
 import {
@@ -25,17 +25,17 @@ const repoRoot = resolve(desktopDir, "..", "..");
 const devBundleIdSuffix = basename(repoRoot)
   .toLowerCase()
   .replaceAll(/[^a-z0-9]+/g, "");
-export const APP_DISPLAY_NAME = isDevelopment ? "T3 Code (Dev)" : "T3 Code (Alpha)";
+export const APP_DISPLAY_NAME = isDevelopment ? "Kairo (Dev)" : "Kairo (Alpha)";
 export const APP_BUNDLE_ID = isDevelopment
-  ? `com.t3tools.t3code.dev.${devBundleIdSuffix || "local"}`
-  : "com.t3tools.t3code";
-const APP_PROTOCOL_SCHEMES = isDevelopment ? ["t3code-dev"] : ["t3code"];
+  ? `com.kairo.app.dev.${devBundleIdSuffix || "local"}`
+  : "com.kairo.app";
+const APP_PROTOCOL_SCHEMES = isDevelopment ? ["kairo-dev"] : ["kairo"];
 const LAUNCHER_VERSION = 10;
 const defaultIconPath = join(desktopDir, "resources", "icon.icns");
 const developmentMacIconPngPath = join(repoRoot, "assets", "dev", "blueprint-macos-1024.png");
 
 function resolveDevelopmentProtocolCallbackPort() {
-  const configuredPort = Number.parseInt(process.env.T3CODE_PORT ?? "", 10);
+  const configuredPort = Number.parseInt(process.env.KAIRO_PORT ?? "", 10);
   if (Number.isInteger(configuredPort) && configuredPort > 0 && configuredPort < 65535) {
     return configuredPort + 1;
   }
@@ -100,14 +100,14 @@ function writeDevelopmentLauncherScript(targetBinaryPath, electronBinaryPath) {
   const protocolCallbackUrl = `http://127.0.0.1:${resolveDevelopmentProtocolCallbackPort()}/auth/callback`;
   const envEntries = [
     ["VITE_DEV_SERVER_URL", process.env.VITE_DEV_SERVER_URL],
-    ["T3CODE_PORT", process.env.T3CODE_PORT],
-    ["T3CODE_HOME", process.env.T3CODE_HOME],
-    ["T3CODE_COMMIT_HASH", process.env.T3CODE_COMMIT_HASH],
-    ["T3CODE_OTLP_TRACES_URL", process.env.T3CODE_OTLP_TRACES_URL],
-    ["T3CODE_OTLP_EXPORT_INTERVAL_MS", process.env.T3CODE_OTLP_EXPORT_INTERVAL_MS],
-    ["T3CODE_DESKTOP_APP_USER_MODEL_ID", APP_BUNDLE_ID],
-    ["T3CODE_DESKTOP_PROTOCOL_REGISTRATION_MANAGED", "1"],
-    ["T3CODE_DESKTOP_PROTOCOL_CALLBACK_URL", protocolCallbackUrl],
+    ["KAIRO_PORT", process.env.KAIRO_PORT],
+    ["KAIRO_HOME", process.env.KAIRO_HOME],
+    ["KAIRO_COMMIT_HASH", process.env.KAIRO_COMMIT_HASH],
+    ["KAIRO_OTLP_TRACES_URL", process.env.KAIRO_OTLP_TRACES_URL],
+    ["KAIRO_OTLP_EXPORT_INTERVAL_MS", process.env.KAIRO_OTLP_EXPORT_INTERVAL_MS],
+    ["KAIRO_DESKTOP_APP_USER_MODEL_ID", APP_BUNDLE_ID],
+    ["KAIRO_DESKTOP_PROTOCOL_REGISTRATION_MANAGED", "1"],
+    ["KAIRO_DESKTOP_PROTOCOL_CALLBACK_URL", protocolCallbackUrl],
   ].filter((entry) => typeof entry[1] === "string" && entry[1].trim().length > 0);
   writeFileSync(
     targetBinaryPath,
@@ -116,14 +116,14 @@ function writeDevelopmentLauncherScript(targetBinaryPath, electronBinaryPath) {
       ...envEntries.map(([name, value]) => `export ${name}=${shellSingleQuote(value)}`),
       'for arg in "$@"; do',
       '  case "$arg" in',
-      "    t3code-dev://auth/callback*)",
-      '      if [ -n "$T3CODE_DESKTOP_PROTOCOL_CALLBACK_URL" ]; then',
-      '        /usr/bin/curl -fsS --max-time 2 -X POST --data-binary "$arg" "$T3CODE_DESKTOP_PROTOCOL_CALLBACK_URL" >/dev/null 2>&1 && exit 0',
+      "    kairo-dev://auth/callback*)",
+      '      if [ -n "$KAIRO_DESKTOP_PROTOCOL_CALLBACK_URL" ]; then',
+      '        /usr/bin/curl -fsS --max-time 2 -X POST --data-binary "$arg" "$KAIRO_DESKTOP_PROTOCOL_CALLBACK_URL" >/dev/null 2>&1 && exit 0',
       "      fi",
       "      ;;",
       "  esac",
       "done",
-      `exec ${shellSingleQuote(electronBinaryPath)} --t3code-dev-root=${shellSingleQuote(desktopDir)} ${shellSingleQuote(mainEntryPath)} "$@"`,
+      `exec ${shellSingleQuote(electronBinaryPath)} --kairo-dev-root=${shellSingleQuote(desktopDir)} ${shellSingleQuote(mainEntryPath)} "$@"`,
       "",
     ].join("\n"),
   );

@@ -1,5 +1,5 @@
-import { EnvironmentId } from "@t3tools/contracts";
-import { RelayWebClientId } from "@t3tools/contracts/relay";
+import { EnvironmentId } from "@kairo/contracts";
+import { RelayWebClientId } from "@kairo/contracts/relay";
 import { afterEach, beforeEach, vi } from "vite-plus/test";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -10,7 +10,7 @@ import {
   ManagedRelayClient,
   ManagedRelayDpopSigner,
   remoteHttpClientLayer,
-} from "@t3tools/client-runtime";
+} from "@kairo/client-runtime";
 
 import type { SavedEnvironmentRecord } from "../environments/runtime";
 import {
@@ -120,7 +120,7 @@ function validChallenge() {
 function availableRelayClient() {
   return {
     status: "available",
-    executablePath: "/Users/test/.t3/tools/cloudflared/cloudflared",
+    executablePath: "/Users/test/.kairo/tools/cloudflared/cloudflared",
     source: "managed",
     version: "2026.5.2",
   };
@@ -142,7 +142,7 @@ describe("web cloud link environment client", () => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
     createProofMock.mockClear();
-    vi.stubEnv("VITE_T3CODE_RELAY_URL", "https://relay.example.test");
+    vi.stubEnv("VITE_KAIRO_RELAY_URL", "https://relay.example.test");
     getSavedEnvironmentSecretMock.mockResolvedValue("local-bearer");
     relayClientInstallDialogHarness.requestConfirmation.mockResolvedValue(true);
     getRelayClientStatusMock.mockResolvedValue(availableRelayClient());
@@ -310,7 +310,7 @@ describe("web cloud link environment client", () => {
       });
 
       const tokenBody = requestBodyText(fetchMock.mock.calls[0]?.[1]?.body);
-      expect(new URLSearchParams(tokenBody).get("client_id")).toBe("t3-web");
+      expect(new URLSearchParams(tokenBody).get("client_id")).toBe("kairo-web");
       expect(new URLSearchParams(tokenBody).get("scope")).toBe("environment:connect");
       expect(fetchMock.mock.calls[1]?.[1]?.headers.authorization).toBe("DPoP relay-access-token");
       expect(fetchMock.mock.calls[1]?.[1]?.headers.dpop).toBe("web-dpop-proof");
@@ -490,7 +490,7 @@ describe("web cloud link environment client", () => {
               },
               relayIssuer: "https://issuer.example.test",
               cloudUserId: "user_123",
-              environmentCredential: "t3env_test_credential",
+              environmentCredential: "kairoenv_test_credential",
               cloudMintPublicKey: "cloud-mint-public-key",
             }),
           )
@@ -567,7 +567,7 @@ describe("web cloud link environment client", () => {
           relayUrl: "https://relay.example.test",
           relayIssuer: "https://issuer.example.test",
           cloudUserId: "user_123",
-          environmentCredential: "t3env_test_credential",
+          environmentCredential: "kairoenv_test_credential",
           cloudMintPublicKey: "cloud-mint-public-key",
           endpointRuntime: {
             providerKind: "cloudflare_tunnel",
@@ -800,7 +800,7 @@ describe("web cloud link environment client", () => {
             endpointRuntime: null,
             relayIssuer: "https://issuer.example.test",
             cloudUserId: "user_123",
-            environmentCredential: "t3env_test_credential",
+            environmentCredential: "kairoenv_test_credential",
             cloudMintPublicKey: "cloud-mint-public-key",
           }),
         );
@@ -838,7 +838,7 @@ describe("web cloud link environment client", () => {
             endpointRuntime: null,
             relayIssuer: "https://issuer.example.test",
             cloudUserId: "user_123",
-            environmentCredential: "t3env_test_credential",
+            environmentCredential: "kairoenv_test_credential",
             cloudMintPublicKey: "cloud-mint-public-key",
           }),
         );
@@ -876,7 +876,7 @@ describe("web cloud link environment client", () => {
             endpointRuntime: null,
             relayIssuer: "https://issuer.example.test",
             cloudUserId: "user_123",
-            environmentCredential: "t3env_test_credential",
+            environmentCredential: "kairoenv_test_credential",
             cloudMintPublicKey: "cloud-mint-public-key",
           }),
         )

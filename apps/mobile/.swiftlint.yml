@@ -1,12 +1,12 @@
 included:
-  - ios/T3Code
-  - modules/t3-terminal/ios
-  - modules/t3-review-diff/ios
+  - ios/KairoCode
+  - modules/kairo-terminal/ios
+  - modules/kairo-review-diff/ios
 
 excluded:
   - ios/Pods
   - ios/build
-  - modules/t3-terminal/Vendor
+  - modules/kairo-terminal/Vendor
 
 reporter: xcode
 

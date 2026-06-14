@@ -1,7 +1,7 @@
 import * as NodeCrypto from "node:crypto";
 
-import { RelayAgentActivityAggregateState, type RelayDeliveryKind } from "@t3tools/contracts/relay";
-import { stableStringify } from "@t3tools/shared/relaySigning";
+import { RelayAgentActivityAggregateState, type RelayDeliveryKind } from "@kairo/contracts/relay";
+import { stableStringify } from "@kairo/shared/relaySigning";
 import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";

@@ -5,7 +5,7 @@ import {
   type ModelSelection,
   type ProviderInteractionMode,
   type RuntimeMode,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 
 import { uuidv4 } from "../lib/uuid";
 import { environmentRuntimeManager } from "./use-environment-runtime";

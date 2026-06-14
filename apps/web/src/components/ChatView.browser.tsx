@@ -22,9 +22,9 @@ import {
   DEFAULT_SERVER_SETTINGS,
   DEFAULT_TERMINAL_ID,
   ServerConfig as ServerConfigSchema,
-} from "@t3tools/contracts";
-import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime";
-import { createModelCapabilities, createModelSelection } from "@t3tools/shared/model";
+} from "@kairo/contracts";
+import { scopedThreadKey, scopeThreadRef } from "@kairo/client-runtime";
+import { createModelCapabilities, createModelSelection } from "@kairo/shared/model";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -73,7 +73,7 @@ import { useUiStateStore } from "../uiStateStore";
 import { createAuthenticatedSessionHandlers } from "../../test/authHttpHandlers";
 import { BrowserWsRpcHarness, type NormalizedWsRpcRequestBody } from "../../test/wsRpcHarness";
 
-import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts/settings";
+import { DEFAULT_CLIENT_SETTINGS } from "@kairo/contracts/settings";
 
 vi.mock("../lib/vcsStatusState", () => {
   const status = {
@@ -205,10 +205,10 @@ function createBaseServerConfig(): ServerConfig {
       policy: "loopback-browser",
       bootstrapMethods: ["one-time-token"],
       sessionMethods: ["browser-session-cookie", "bearer-access-token"],
-      sessionCookieName: "t3_session",
+      sessionCookieName: "kairo_session",
     },
     cwd: "/repo/project",
-    keybindingsConfigPath: "/repo/project/.t3code-keybindings.json",
+    keybindingsConfigPath: "/repo/project/.kairo-keybindings.json",
     keybindings: [],
     issues: [],
     surface: DEFAULT_PRODUCT_SURFACE_CONFIG,
@@ -229,7 +229,7 @@ function createBaseServerConfig(): ServerConfig {
     ],
     availableEditors: [],
     observability: {
-      logsDirectoryPath: "/repo/project/.t3/logs",
+      logsDirectoryPath: "/repo/project/.kairo/logs",
       localTracingEnabled: true,
       otlpTracesEnabled: false,
       otlpMetricsEnabled: false,
@@ -1017,7 +1017,7 @@ function resolveWsRpc(body: NormalizedWsRpcRequestBody): unknown {
           detail: Option.none(),
           auth: {
             status: "authenticated",
-            account: Option.some("t3-oss"),
+            account: Option.some("kairo-oss"),
             host: Option.some("github.com"),
             detail: Option.none(),
           },
@@ -1032,7 +1032,7 @@ function resolveWsRpc(body: NormalizedWsRpcRequestBody): unknown {
           detail: Option.none(),
           auth: {
             status: "authenticated",
-            account: Option.some("t3-oss"),
+            account: Option.some("kairo-oss"),
             host: Option.some("gitlab.com"),
             detail: Option.none(),
           },
@@ -1047,7 +1047,7 @@ function resolveWsRpc(body: NormalizedWsRpcRequestBody): unknown {
           detail: Option.none(),
           auth: {
             status: "authenticated",
-            account: Option.some("t3-oss"),
+            account: Option.some("kairo-oss"),
             host: Option.some("bitbucket.org"),
             detail: Option.none(),
           },
@@ -1062,7 +1062,7 @@ function resolveWsRpc(body: NormalizedWsRpcRequestBody): unknown {
           detail: Option.none(),
           auth: {
             status: "authenticated",
-            account: Option.some("t3-oss"),
+            account: Option.some("kairo-oss"),
             host: Option.some("dev.azure.com"),
             detail: Option.none(),
           },
@@ -2008,10 +2008,10 @@ describe("ChatView timeline estimator parity (full app)", () => {
             cwd: "/repo/project",
             worktreePath: null,
             env: {
-              T3CODE_PROJECT_ROOT: "/repo/project",
+              KAIRO_PROJECT_ROOT: "/repo/project",
             },
           });
-          expect(attachRequest?.env?.T3CODE_WORKTREE_PATH).toBeUndefined();
+          expect(attachRequest?.env?.KAIRO_WORKTREE_PATH).toBeUndefined();
         },
         { timeout: 8_000, interval: 16 },
       );
@@ -2261,7 +2261,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
   });
 
   it("falls back to the first installed editor when the stored favorite is unavailable", async () => {
-    localStorage.setItem("t3code:last-editor", JSON.stringify("vscodium"));
+    localStorage.setItem("kairo:last-editor", JSON.stringify("vscodium"));
     setDraftThreadWithoutWorktree();
 
     const mounted = await mountChatView({
@@ -2361,7 +2361,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
             threadId: THREAD_ID,
             cwd: "/repo/project",
             env: {
-              T3CODE_PROJECT_ROOT: "/repo/project",
+              KAIRO_PROJECT_ROOT: "/repo/project",
             },
           });
         },
@@ -2440,8 +2440,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
             threadId: THREAD_ID,
             cwd: "/repo/worktrees/feature-draft",
             env: {
-              T3CODE_PROJECT_ROOT: "/repo/project",
-              T3CODE_WORKTREE_PATH: "/repo/worktrees/feature-draft",
+              KAIRO_PROJECT_ROOT: "/repo/project",
+              KAIRO_WORKTREE_PATH: "/repo/worktrees/feature-draft",
             },
           });
         },
@@ -2490,7 +2490,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
             pullRequest: {
               number: 1359,
               title: "Add thread archiving and settings navigation",
-              url: "https://github.com/pingdotgg/t3code/pull/1359",
+              url: "https://github.com/pingdotgg/kairo/pull/1359",
               baseBranch: "main",
               headBranch: "archive-settings-overhaul",
               state: "open",
@@ -2502,7 +2502,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
             pullRequest: {
               number: 1359,
               title: "Add thread archiving and settings navigation",
-              url: "https://github.com/pingdotgg/t3code/pull/1359",
+              url: "https://github.com/pingdotgg/kairo/pull/1359",
               baseBranch: "main",
               headBranch: "archive-settings-overhaul",
               state: "open",
@@ -2655,7 +2655,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
               prepareWorktree: {
                 projectCwd: "/repo/project",
                 baseBranch: "main",
-                branch: expect.stringMatching(/^t3code\/[0-9a-f]{8}$/),
+                branch: expect.stringMatching(/^kairo\/[0-9a-f]{8}$/),
               },
               runSetupScript: true,
             },
@@ -2879,7 +2879,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
               prepareWorktree: {
                 projectCwd: "/repo/project",
                 baseBranch: "main",
-                branch: expect.stringMatching(/^t3code\/[0-9a-f]{8}$/),
+                branch: expect.stringMatching(/^kairo\/[0-9a-f]{8}$/),
               },
               runSetupScript: true,
             },
@@ -4099,7 +4099,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
   it("shows the confirm archive action after clicking the archive button", async () => {
     localStorage.setItem(
-      "t3code:client-settings:v1",
+      "kairo:client-settings:v1",
       JSON.stringify({
         ...DEFAULT_CLIENT_SETTINGS,
         confirmThreadArchive: true,
@@ -4128,7 +4128,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await expect.element(confirmButton).toBeInTheDocument();
       await expect.element(confirmButton).toBeVisible();
     } finally {
-      localStorage.removeItem("t3code:client-settings:v1");
+      localStorage.removeItem("kairo:client-settings:v1");
       await mounted.cleanup();
     }
   });
@@ -4251,7 +4251,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           thread.id === THREAD_ID
             ? Object.assign({}, thread, {
                 branch: "feature/existing",
-                worktreePath: "/repo/.t3/worktrees/existing",
+                worktreePath: "/repo/.kairo/worktrees/existing",
               })
             : thread,
         ),
@@ -4904,9 +4904,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
         if (body._tag === WS_METHODS.sourceControlLookupRepository) {
           return {
             provider: "github",
-            nameWithOwner: "t3-oss/t3-env",
-            url: "https://github.com/t3-oss/t3-env",
-            sshUrl: "git@github.com:t3-oss/t3-env.git",
+            nameWithOwner: "kairo-oss/kairo-env",
+            url: "https://github.com/kairo-oss/kairo-env",
+            sshUrl: "git@github.com:kairo-oss/kairo-env.git",
           };
         }
 
@@ -4940,7 +4940,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
       const repositoryInput = await waitForCommandPaletteInput(
         "Enter GitHub repository (owner/repo)",
       );
-      await page.getByPlaceholder("Enter GitHub repository (owner/repo)").fill("t3-oss/t3-env");
+      await page
+        .getByPlaceholder("Enter GitHub repository (owner/repo)")
+        .fill("kairo-oss/kairo-env");
       await dispatchInputKey(repositoryInput, { key: "Enter" });
 
       await vi.waitFor(
@@ -4950,8 +4952,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
           );
           expect(clonePathInput?.value).toBe("~/");
           expect(document.body.textContent).toContain("Repository");
-          expect(document.body.textContent).toContain("t3-oss/t3-env");
-          expect(document.body.textContent).toContain("https://github.com/t3-oss/t3-env");
+          expect(document.body.textContent).toContain("kairo-oss/kairo-env");
+          expect(document.body.textContent).toContain("https://github.com/kairo-oss/kairo-env");
           expect(document.body.textContent).toContain("Select where to clone");
           expect(document.body.textContent).toContain("Development");
           expect(document.body.textContent).toContain("Clone");
@@ -4961,7 +4963,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
       await page
         .getByPlaceholder("Enter path (e.g. ~/projects/my-app)")
-        .fill("~/Development/t3env");
+        .fill("~/Development/kairoenv");
       const clonePathInput = await waitForCommandPaletteInput(
         "Enter path (e.g. ~/projects/my-app)",
       );
@@ -4973,8 +4975,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
             (request) => request._tag === WS_METHODS.sourceControlCloneRepository,
           ) as { destinationPath?: string; remoteUrl?: string } | undefined;
           expect(cloneRequest).toMatchObject({
-            remoteUrl: "git@github.com:t3-oss/t3-env.git",
-            destinationPath: "~/Development/t3env",
+            remoteUrl: "git@github.com:kairo-oss/kairo-env.git",
+            destinationPath: "~/Development/kairoenv",
           });
         },
         { timeout: 8_000, interval: 16 },
@@ -6134,7 +6136,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           model: "gpt-5.3-codex-spark",
         },
         planMarkdown:
-          "# Imaginary Long-Range Plan: T3 Code Adaptive Orchestration and Safe-Delay Execution Initiative",
+          "# Imaginary Long-Range Plan: Kairo Adaptive Orchestration and Safe-Delay Execution Initiative",
       }),
     });
 
@@ -6167,7 +6169,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           model: "gpt-5.3-codex-spark",
         },
         planMarkdown:
-          "# Imaginary Long-Range Plan: T3 Code Adaptive Orchestration and Safe-Delay Execution Initiative",
+          "# Imaginary Long-Range Plan: Kairo Adaptive Orchestration and Safe-Delay Execution Initiative",
       }),
     });
 

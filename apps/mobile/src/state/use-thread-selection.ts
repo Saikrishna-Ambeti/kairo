@@ -1,9 +1,9 @@
 import { useLocalSearchParams } from "expo-router";
 import { useMemo } from "react";
-import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { EnvironmentId, ThreadId } from "@kairo/contracts";
 
-import { EnvironmentScopedThreadShell } from "@t3tools/client-runtime";
-import { EnvironmentScopedProjectShell } from "@t3tools/client-runtime";
+import { EnvironmentScopedThreadShell } from "@kairo/client-runtime";
+import { EnvironmentScopedProjectShell } from "@kairo/client-runtime";
 import { useRemoteCatalog } from "./use-remote-catalog";
 import { useRemoteEnvironmentState } from "./use-remote-environment-registry";
 

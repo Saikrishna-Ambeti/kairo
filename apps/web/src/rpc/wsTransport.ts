@@ -3,8 +3,8 @@ import {
   type WsProtocolLifecycleHandlers,
   type WsRpcProtocolSocketUrlProvider,
   type WsTransportOptions,
-} from "@t3tools/client-runtime";
-import { createWsRpcProtocolLayer as createSharedWsRpcProtocolLayer } from "@t3tools/client-runtime";
+} from "@kairo/client-runtime";
+import { createWsRpcProtocolLayer as createSharedWsRpcProtocolLayer } from "@kairo/client-runtime";
 
 import { ClientTracingLive } from "../observability/clientTracing";
 import {

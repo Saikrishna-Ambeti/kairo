@@ -10,7 +10,7 @@ export function EmptyState(props: {
 }) {
   return (
     <View className="rounded-[22px] border border-border bg-card p-5">
-      <Text className="font-t3-bold text-lg text-foreground">{props.title}</Text>
+      <Text className="font-kairo-bold text-lg text-foreground">{props.title}</Text>
       <Text className="mt-2 font-sans text-sm leading-[21px] text-foreground-muted">
         {props.detail}
       </Text>
@@ -19,7 +19,7 @@ export function EmptyState(props: {
           className="mt-4 self-start rounded-full bg-primary px-4 py-2.5 active:opacity-70"
           onPress={props.onAction}
         >
-          <Text className="text-[13px] font-t3-bold text-primary-foreground">
+          <Text className="text-[13px] font-kairo-bold text-primary-foreground">
             {props.actionLabel}
           </Text>
         </Pressable>

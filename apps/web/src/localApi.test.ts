@@ -14,10 +14,10 @@ import {
   type TerminalAttachStreamEvent,
   type TerminalMetadataStreamEvent,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import type { ContextMenuItem } from "@t3tools/contracts";
+import type { ContextMenuItem } from "@kairo/contracts";
 
 const showContextMenuFallbackMock =
   vi.fn<
@@ -235,7 +235,7 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
     setTheme: async () => undefined,
     showContextMenu: async () => null,
     openExternal: async () => true,
-    createCloudAuthRequest: async () => "t3code-dev://auth/callback?t3_state=test",
+    createCloudAuthRequest: async () => "kairo-dev://auth/callback?kairo_state=test",
     getCloudAuthToken: async () => null,
     setCloudAuthToken: async () => true,
     clearCloudAuthToken: async () => undefined,
@@ -303,7 +303,7 @@ const baseServerConfig: ServerConfig = {
     policy: "loopback-browser",
     bootstrapMethods: ["one-time-token"],
     sessionMethods: ["browser-session-cookie", "bearer-access-token"],
-    sessionCookieName: "t3_session",
+    sessionCookieName: "kairo_session",
   },
   cwd: "/tmp/workspace",
   keybindingsConfigPath: "/tmp/workspace/.config/keybindings.json",

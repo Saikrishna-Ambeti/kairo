@@ -1,4 +1,4 @@
-import type { ModelSelection, ServerConfig as T3ServerConfig } from "@t3tools/contracts";
+import type { ModelSelection, ServerConfig as KairoServerConfig } from "@kairo/contracts";
 
 export type ModelOption = {
   readonly key: string;
@@ -28,7 +28,7 @@ function providerDisplayLabel(provider: {
 }
 
 export function buildModelOptions(
-  config: T3ServerConfig | null | undefined,
+  config: KairoServerConfig | null | undefined,
   fallbackModelSelection: ModelSelection | null,
 ): ReadonlyArray<ModelOption> {
   const options = new Map<string, ModelOption>();

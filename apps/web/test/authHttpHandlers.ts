@@ -8,7 +8,7 @@ import {
   type AuthEnvironmentScope,
   type ExecutionEnvironmentDescriptor,
   type ServerAuthDescriptor,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -97,7 +97,7 @@ export function createAuthenticatedSessionHandlers(getAuthDescriptor: () => Serv
   );
 
   return [
-    http.all("*/.well-known/t3/environment", ({ request }) => handler(request)),
+    http.all("*/.well-known/kairo/environment", ({ request }) => handler(request)),
     http.all("*/api/auth/*", ({ request }) => handler(request)),
   ] as const;
 }

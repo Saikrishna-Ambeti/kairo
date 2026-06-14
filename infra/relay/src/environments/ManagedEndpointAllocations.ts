@@ -1,4 +1,4 @@
-import type { RelayManagedEndpoint } from "@t3tools/contracts/relay";
+import type { RelayManagedEndpoint } from "@kairo/contracts/relay";
 import { and, eq } from "drizzle-orm";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
@@ -201,6 +201,6 @@ const make = Effect.gen(function* () {
 export class ManagedEndpointAllocations extends Context.Service<
   ManagedEndpointAllocations,
   ManagedEndpointAllocationsShape
->()("t3code-relay/environments/ManagedEndpointAllocations") {
+>()("kairo-relay/environments/ManagedEndpointAllocations") {
   static readonly layer = Layer.effect(this, make);
 }

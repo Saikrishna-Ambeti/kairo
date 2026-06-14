@@ -12,7 +12,7 @@ import * as Electron from "electron";
 
 import { DesktopEnvironment, type DesktopEnvironmentShape } from "../app/DesktopEnvironment.ts";
 
-export const DESKTOP_SCHEME = "t3";
+export const DESKTOP_SCHEME = "kairo";
 
 export class ElectronProtocolRegistrationError extends Data.TaggedError(
   "ElectronProtocolRegistrationError",
@@ -52,7 +52,7 @@ export interface ElectronProtocolShape {
 }
 
 export class ElectronProtocol extends Context.Service<ElectronProtocol, ElectronProtocolShape>()(
-  "@t3tools/desktop/electron/ElectronProtocol",
+  "@kairo/desktop/electron/ElectronProtocol",
 ) {}
 
 export function normalizeDesktopProtocolPathname(rawPath: string): Option.Option<string> {

@@ -5,14 +5,14 @@ import type {
   OrchestrationThread,
   ProviderInteractionMode,
   RuntimeMode,
-  ServerConfig as T3ServerConfig,
-} from "@t3tools/contracts";
+  ServerConfig as KairoServerConfig,
+} from "@kairo/contracts";
 import {
   detectComposerTrigger,
   replaceTextRange,
   serializeComposerFileLink,
   type ComposerTrigger,
-} from "@t3tools/shared/composerTrigger";
+} from "@kairo/shared/composerTrigger";
 import { TextInputWrapper } from "expo-paste-input";
 import type { ReactNode } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -47,11 +47,11 @@ import {
   insertRankedSearchResult,
   normalizeSearchQuery,
   scoreQueryMatch,
-} from "@t3tools/shared/searchRanking";
+} from "@kairo/shared/searchRanking";
 import {
   getModelSelectionBooleanOptionValue,
   getModelSelectionStringOptionValue,
-} from "@t3tools/shared/model";
+} from "@kairo/shared/model";
 import { useComposerPathSearch } from "../../state/use-composer-path-search";
 import { CLAUDE_AGENT_EFFORT_OPTIONS } from "./claudeEffortOptions";
 import { ComposerCommandPopover, type ComposerCommandItem } from "./ComposerCommandPopover";
@@ -82,7 +82,7 @@ export interface ThreadComposerProps {
   readonly bottomInset?: number;
   readonly connectionState: RemoteClientConnectionState;
   readonly selectedThread: OrchestrationThread;
-  readonly serverConfig: T3ServerConfig | null;
+  readonly serverConfig: KairoServerConfig | null;
   readonly queueCount: number;
   readonly activeThreadBusy: boolean;
   readonly environmentId: EnvironmentId;
@@ -749,7 +749,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
                     justifyContent: "center",
                   }}
                 >
-                  <Text className="text-foreground-muted text-[11px] font-t3-bold">
+                  <Text className="text-foreground-muted text-[11px] font-kairo-bold">
                     +{props.draftAttachments.length - 3}
                   </Text>
                 </View>

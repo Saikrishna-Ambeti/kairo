@@ -12,7 +12,7 @@ import type {
   ProviderInstanceId,
   SupermemoryProviderStatus,
   SupermemoryStatus,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 
 import { ensureLocalApi } from "../../localApi";
 import { useServerProviders, useServerSettings } from "../../rpc/serverState";

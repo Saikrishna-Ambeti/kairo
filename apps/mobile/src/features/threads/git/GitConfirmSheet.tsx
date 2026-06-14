@@ -1,5 +1,5 @@
-import { resolveDefaultBranchActionDialogCopy } from "@t3tools/client-runtime";
-import { resolveAutoFeatureBranchName } from "@t3tools/shared/git";
+import { resolveDefaultBranchActionDialogCopy } from "@kairo/client-runtime";
+import { resolveAutoFeatureBranchName } from "@kairo/shared/git";
 import * as Arr from "effect/Array";
 import * as Result from "effect/Result";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -90,12 +90,12 @@ export function GitConfirmSheet() {
 
       <View className="items-center gap-1 px-5 pb-3 pt-4">
         <Text
-          className="text-[12px] font-t3-bold uppercase text-foreground-muted"
+          className="text-[12px] font-kairo-bold uppercase text-foreground-muted"
           style={{ letterSpacing: 1 }}
         >
           Confirm
         </Text>
-        <Text className="text-center text-[28px] font-t3-bold">
+        <Text className="text-center text-[28px] font-kairo-bold">
           {copy?.title ?? "Run action on default branch?"}
         </Text>
         <Text className="text-center text-foreground-secondary text-[13px] font-medium leading-[19px]">

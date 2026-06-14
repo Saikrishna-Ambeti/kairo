@@ -28,7 +28,7 @@ const watchedDirectories = [
 const forcedShutdownTimeoutMs = 1_500;
 const restartDebounceMs = 120;
 const childTreeGracePeriodMs = 1_200;
-const remoteDebuggingPort = process.env.T3CODE_DESKTOP_REMOTE_DEBUGGING_PORT?.trim();
+const remoteDebuggingPort = process.env.KAIRO_DESKTOP_REMOTE_DEBUGGING_PORT?.trim();
 
 await waitForResources({
   baseDir: desktopDir,
@@ -41,8 +41,8 @@ const childEnv = { ...process.env };
 delete childEnv.ELECTRON_RUN_AS_NODE;
 const devProtocolClient = resolveDevProtocolClient();
 if (devProtocolClient) {
-  childEnv.T3CODE_DESKTOP_APP_USER_MODEL_ID = devProtocolClient.appBundleId;
-  childEnv.T3CODE_DESKTOP_PROTOCOL_REGISTRATION_MANAGED = "1";
+  childEnv.KAIRO_DESKTOP_APP_USER_MODEL_ID = devProtocolClient.appBundleId;
+  childEnv.KAIRO_DESKTOP_PROTOCOL_REGISTRATION_MANAGED = "1";
 }
 
 let shuttingDown = false;
@@ -65,7 +65,7 @@ function cleanupStaleDevApps() {
     return;
   }
 
-  spawnSync("pkill", ["-f", "--", `--t3code-dev-root=${desktopDir}`], { stdio: "ignore" });
+  spawnSync("pkill", ["-f", "--", `--kairo-dev-root=${desktopDir}`], { stdio: "ignore" });
 }
 
 function startApp() {
@@ -78,7 +78,7 @@ function startApp() {
     : [];
   const launchArgs = devProtocolClient
     ? electronArgs
-    : [...electronArgs, `--t3code-dev-root=${desktopDir}`, "dist-electron/main.cjs"];
+    : [...electronArgs, `--kairo-dev-root=${desktopDir}`, "dist-electron/main.cjs"];
   const app = spawn(resolveElectronPath(), launchArgs, {
     cwd: desktopDir,
     env: childEnv,

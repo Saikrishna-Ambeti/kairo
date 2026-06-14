@@ -2,10 +2,10 @@ import type {
   EnvironmentConnection,
   EnvironmentConnectionState,
   WsRpcClient,
-} from "@t3tools/client-runtime";
-import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+} from "@kairo/client-runtime";
+import { EnvironmentId, ThreadId } from "@kairo/contracts";
 
-export type { EnvironmentRuntimeState } from "@t3tools/client-runtime";
+export type { EnvironmentRuntimeState } from "@kairo/client-runtime";
 
 export interface ConnectedEnvironmentSummary {
   readonly environmentId: EnvironmentId;

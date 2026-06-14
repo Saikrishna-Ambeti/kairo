@@ -8,10 +8,10 @@ import Constants from "expo-constants";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { FetchHttpClient } from "effect/unstable/http";
-import type { ManagedRelayClient } from "@t3tools/client-runtime";
+import type { ManagedRelayClient } from "@kairo/client-runtime";
 
-import type { EnvironmentId } from "@t3tools/contracts";
-import { verifyDpopProof } from "@t3tools/shared/dpop";
+import type { EnvironmentId } from "@kairo/contracts";
+import { verifyDpopProof } from "@kairo/shared/dpop";
 import type { SavedRemoteConnection } from "../../lib/connection";
 import { mobileCryptoLayer } from "../cloud/dpop";
 import { mobileManagedRelayClientLayer } from "../cloud/managedRelayLayer";

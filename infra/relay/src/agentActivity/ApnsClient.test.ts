@@ -4,8 +4,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpClient } from "effect/unstable/http";
 
-import type { RelayAgentActivityAggregateState } from "@t3tools/contracts/relay";
-import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import type { RelayAgentActivityAggregateState } from "@kairo/contracts/relay";
+import { EnvironmentId, ThreadId } from "@kairo/contracts";
 import * as ApnsClient from "./ApnsClient.ts";
 
 const TestLayer = ApnsClient.layer.pipe(
@@ -20,7 +20,7 @@ const TestLayer = ApnsClient.layer.pipe(
 describe("ApnsClient", () => {
   const now = DateTime.makeUnsafe(0);
   const state: RelayAgentActivityAggregateState = {
-    title: "T3 Code",
+    title: "Kairo",
     subtitle: "Agent work in progress",
     activeCount: 1,
     updatedAt: DateTime.formatIso(now),

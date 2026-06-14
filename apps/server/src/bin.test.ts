@@ -6,11 +6,8 @@ import { join } from "node:path";
 
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import {
-  DEFAULT_PRODUCT_SURFACE_CONFIG,
-  EnvironmentOrchestrationHttpApi,
-} from "@t3tools/contracts";
-import * as NetService from "@t3tools/shared/Net";
+import { DEFAULT_PRODUCT_SURFACE_CONFIG, EnvironmentOrchestrationHttpApi } from "@kairo/contracts";
+import * as NetService from "@kairo/shared/Net";
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -71,7 +68,7 @@ const makeCliTestServerConfig = (baseDir: string) =>
       otlpTracesUrl: undefined,
       otlpMetricsUrl: undefined,
       otlpExportIntervalMs: 10_000,
-      otlpServiceName: "t3-server",
+      otlpServiceName: "kairo-server",
       mode: "web",
       port: 0,
       host: "127.0.0.1",
@@ -193,18 +190,18 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
       if (error._tag !== "ShowHelp") {
         assert.fail(`Expected ShowHelp, got ${error._tag}`);
       }
-      assert.deepEqual(error.commandPath, ["t3", "connect"]);
-      assert.include(error.errors[0]?.message ?? "", "missing T3 Connect public configuration");
+      assert.deepEqual(error.commandPath, ["kairo", "connect"]);
+      assert.include(error.errors[0]?.message ?? "", "missing Kairo Connect public configuration");
 
       const output = (yield* TestConsole.errorLines).join("\n");
       assert.include(output, "ERROR");
-      assert.include(output, "missing T3 Connect public configuration");
+      assert.include(output, "missing Kairo Connect public configuration");
     }).pipe(Effect.provide(Layer.mergeAll(CliRuntimeLayer, TestConsole.layer))),
   );
 
   it.effect("reports fresh headless connect state without requiring local configuration", () =>
     Effect.gen(function* () {
-      const baseDir = mkdtempSync(join(tmpdir(), "t3-cli-cloud-status-test-"));
+      const baseDir = mkdtempSync(join(tmpdir(), "kairo-cli-cloud-status-test-"));
       const { output } = yield* captureStdout(
         runConnectCli(["connect", "status", "--base-dir", baseDir, "--json"]),
       );
@@ -227,21 +224,24 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
 
   it.effect("reports actionable human-readable headless connect state", () =>
     Effect.gen(function* () {
-      const baseDir = mkdtempSync(join(tmpdir(), "t3-cli-cloud-status-human-test-"));
+      const baseDir = mkdtempSync(join(tmpdir(), "kairo-cli-cloud-status-human-test-"));
       const { output } = yield* captureStdout(
         runConnectCli(["connect", "status", "--base-dir", baseDir]),
       );
 
-      assert.include(output, "T3 Connect\n  Exposure: disabled");
+      assert.include(output, "Kairo Connect\n  Exposure: disabled");
       assert.include(output, "  Authorization: missing");
       assert.include(output, "  Environment link: not provisioned");
-      assert.include(output, "Next: Run `t3 connect link` to authorize and enable T3 Connect.");
+      assert.include(
+        output,
+        "Next: Run `kairo connect link` to authorize and enable Kairo Connect.",
+      );
     }),
   );
 
   it.effect("logs in to headless connect without enabling access", () =>
     Effect.gen(function* () {
-      const baseDir = mkdtempSync(join(tmpdir(), "t3-cli-cloud-login-test-"));
+      const baseDir = mkdtempSync(join(tmpdir(), "kairo-cli-cloud-login-test-"));
       const { secretsDir } = yield* deriveServerPaths(baseDir, undefined);
       mkdirSync(secretsDir, { recursive: true });
       writeFileSync(
@@ -266,7 +266,7 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
         readonly authenticated: boolean;
       };
 
-      assert.equal(login.output, "Signed in to T3 Connect.");
+      assert.equal(login.output, "Signed in to Kairo Connect.");
       assert.isFalse(decoded.desired);
       assert.isTrue(decoded.authenticated);
     }),
@@ -274,18 +274,18 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
 
   it.effect("disables headless connect without a running server", () =>
     Effect.gen(function* () {
-      const baseDir = mkdtempSync(join(tmpdir(), "t3-cli-cloud-unlink-test-"));
+      const baseDir = mkdtempSync(join(tmpdir(), "kairo-cli-cloud-unlink-test-"));
       const { output } = yield* captureStdout(
         runConnectCli(["connect", "unlink", "--base-dir", baseDir]),
       );
 
-      assert.equal(output, "T3 Connect is disabled locally.");
+      assert.equal(output, "Kairo Connect is disabled locally.");
     }),
   );
 
   it.effect("logs out of headless connect and removes the stored CLI authorization", () =>
     Effect.gen(function* () {
-      const baseDir = mkdtempSync(join(tmpdir(), "t3-cli-cloud-logout-test-"));
+      const baseDir = mkdtempSync(join(tmpdir(), "kairo-cli-cloud-logout-test-"));
       const { secretsDir } = yield* deriveServerPaths(baseDir, undefined);
       const tokenPath = join(secretsDir, "cloud-cli-oauth-token.bin");
       mkdirSync(secretsDir, { recursive: true });
@@ -295,14 +295,14 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
         runConnectCli(["connect", "logout", "--base-dir", baseDir]),
       );
 
-      assert.equal(output, "Signed out of T3 Connect locally.");
+      assert.equal(output, "Signed out of Kairo Connect locally.");
       assert.isFalse(existsSync(tokenPath));
     }),
   );
 
   it.effect("executes auth pairing subcommands and redacts secrets from list output", () =>
     Effect.gen(function* () {
-      const baseDir = mkdtempSync(join(tmpdir(), "t3-cli-auth-pairing-test-"));
+      const baseDir = mkdtempSync(join(tmpdir(), "kairo-cli-auth-pairing-test-"));
 
       const createdOutput = yield* captureStdout(
         runCli(["auth", "pairing", "create", "--base-dir", baseDir, "--json"]),
@@ -332,7 +332,7 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
 
   it.effect("executes auth session subcommands and redacts secrets from list output", () =>
     Effect.gen(function* () {
-      const baseDir = mkdtempSync(join(tmpdir(), "t3-cli-auth-session-test-"));
+      const baseDir = mkdtempSync(join(tmpdir(), "kairo-cli-auth-session-test-"));
 
       const issuedOutput = yield* captureStdout(
         runCli(["auth", "session", "issue", "--base-dir", baseDir, "--json"]),
@@ -393,7 +393,7 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
       if (error._tag !== "ShowHelp") {
         assert.fail(`Expected ShowHelp, got ${error._tag}`);
       }
-      assert.deepEqual(error.commandPath, ["t3", "auth", "pairing", "create"]);
+      assert.deepEqual(error.commandPath, ["kairo", "auth", "pairing", "create"]);
       const ttlError = error.errors[0] as CliError.CliError | undefined;
       if (!ttlError || ttlError._tag !== "InvalidValue") {
         assert.fail(`Expected InvalidValue, got ${String(ttlError?._tag)}`);
@@ -407,8 +407,8 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
 
   it.effect("adds, renames, and removes projects offline through the orchestration engine", () =>
     Effect.gen(function* () {
-      const baseDir = mkdtempSync(join(tmpdir(), "t3-cli-projects-offline-test-"));
-      const workspaceRoot = mkdtempSync(join(tmpdir(), "t3-cli-projects-workspace-"));
+      const baseDir = mkdtempSync(join(tmpdir(), "kairo-cli-projects-offline-test-"));
+      const workspaceRoot = mkdtempSync(join(tmpdir(), "kairo-cli-projects-workspace-"));
 
       yield* runCliWithRuntime([
         "project",
@@ -451,8 +451,8 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
 
   it.effect("routes project commands through a running server when runtime state is present", () =>
     Effect.gen(function* () {
-      const baseDir = mkdtempSync(join(tmpdir(), "t3-cli-projects-live-test-"));
-      const workspaceRoot = mkdtempSync(join(tmpdir(), "t3-cli-projects-live-workspace-"));
+      const baseDir = mkdtempSync(join(tmpdir(), "kairo-cli-projects-live-test-"));
+      const workspaceRoot = mkdtempSync(join(tmpdir(), "kairo-cli-projects-live-workspace-"));
 
       yield* withLiveProjectCliServer(baseDir, () =>
         Effect.gen(function* () {
@@ -480,7 +480,7 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
   it.effect("rejects dev-url on project commands", () =>
     Effect.gen(function* () {
       const workspaceRoot = mkdtempSync(
-        join(tmpdir(), "t3-cli-projects-unknown-option-workspace-"),
+        join(tmpdir(), "kairo-cli-projects-unknown-option-workspace-"),
       );
       const error = yield* runCliWithRuntime([
         "project",
@@ -496,7 +496,7 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
       if (error._tag !== "ShowHelp") {
         assert.fail(`Expected ShowHelp, got ${error._tag}`);
       }
-      assert.deepEqual(error.commandPath, ["t3", "project", "add"]);
+      assert.deepEqual(error.commandPath, ["kairo", "project", "add"]);
       const optionError = error.errors[0] as CliError.CliError | undefined;
       if (!optionError || optionError._tag !== "UnrecognizedOption") {
         assert.fail(`Expected UnrecognizedOption, got ${String(optionError?._tag)}`);

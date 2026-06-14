@@ -6,16 +6,16 @@ import {
   type AuthEnvironmentScope,
   EnvironmentHttpApi,
   EnvironmentHttpCommonError,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 import type {
   EnvironmentAuthInvalidError,
   EnvironmentInternalError,
   EnvironmentOperationForbiddenError,
   EnvironmentRequestInvalidError,
   EnvironmentScopeRequiredError,
-} from "@t3tools/contracts";
-import { encodeOAuthScope } from "@t3tools/shared/oauthScope";
-import { httpHeaderRedactionLayer } from "@t3tools/shared/httpObservability";
+} from "@kairo/contracts";
+import { encodeOAuthScope } from "@kairo/shared/oauthScope";
+import { httpHeaderRedactionLayer } from "@kairo/shared/httpObservability";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -279,7 +279,7 @@ export const fetchRemoteEnvironmentDescriptor = Effect.fn(
 )(function* (input: { readonly httpBaseUrl: string; readonly timeoutMs?: number }) {
   const client = yield* makeEnvironmentHttpApiClient(input.httpBaseUrl);
   return yield* executeRemoteRequest(
-    remoteEndpointUrl(input.httpBaseUrl, "/.well-known/t3/environment"),
+    remoteEndpointUrl(input.httpBaseUrl, "/.well-known/kairo/environment"),
     input.timeoutMs ?? DEFAULT_REMOTE_REQUEST_TIMEOUT_MS,
     client.metadata.descriptor(),
   );

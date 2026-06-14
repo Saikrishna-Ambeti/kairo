@@ -52,10 +52,10 @@ export interface RelayPublicConfig {
 
 const publicConfigEnvEntries = (config: RelayPublicConfig) =>
   ({
-    T3CODE_RELAY_URL: config.relayUrl,
-    T3CODE_MOBILE_OTLP_TRACES_URL: config.mobileTracingUrl,
-    T3CODE_MOBILE_OTLP_TRACES_DATASET: config.mobileTracingDataset,
-    T3CODE_MOBILE_OTLP_TRACES_TOKEN: config.mobileTracingToken,
+    KAIRO_RELAY_URL: config.relayUrl,
+    KAIRO_MOBILE_OTLP_TRACES_URL: config.mobileTracingUrl,
+    KAIRO_MOBILE_OTLP_TRACES_DATASET: config.mobileTracingDataset,
+    KAIRO_MOBILE_OTLP_TRACES_TOKEN: config.mobileTracingToken,
   }) as const;
 
 export function reconcileRootEnvPublicConfig(contents: string, config: RelayPublicConfig): string {
@@ -84,7 +84,7 @@ export function reconcileRootEnvRelayUrl(contents: string, relayUrl: string): st
     mobileTracingToken: "",
   })
     .split("\n")
-    .filter((line) => !line.startsWith("T3CODE_MOBILE_OTLP_TRACES_"))
+    .filter((line) => !line.startsWith("KAIRO_MOBILE_OTLP_TRACES_"))
     .join("\n");
 }
 
@@ -308,7 +308,7 @@ export const relayDeployCommand = Command.make(
     ),
   },
   deploy,
-).pipe(Command.withDescription("Deploy the T3 Code relay through Alchemy."));
+).pipe(Command.withDescription("Deploy the Kairo relay through Alchemy."));
 
 if (import.meta.main) {
   Command.run(relayDeployCommand, { version: "0.0.0" }).pipe(

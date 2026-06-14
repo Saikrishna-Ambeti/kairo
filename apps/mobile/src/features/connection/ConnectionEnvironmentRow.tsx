@@ -1,5 +1,5 @@
 import { SymbolView } from "expo-symbols";
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId } from "@kairo/contracts";
 import { useCallback, useState } from "react";
 import { Pressable, View } from "react-native";
 import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
@@ -73,7 +73,7 @@ export function ConnectionEnvironmentRow(props: {
 
         <View className="flex-1 gap-0.5">
           <Text
-            className="text-[16px] font-t3-bold leading-[21px] text-foreground"
+            className="text-[16px] font-kairo-bold leading-[21px] text-foreground"
             numberOfLines={1}
           >
             {props.environment.environmentLabel}
@@ -115,13 +115,13 @@ export function ConnectionEnvironmentRow(props: {
         >
           {props.environment.isRelayManaged ? (
             <Text className="text-[13px] leading-[18px] text-foreground-muted">
-              Managed by T3 Cloud. Tunnel details update automatically.
+              Managed by Kairo Cloud. Tunnel details update automatically.
             </Text>
           ) : (
             <>
               <View className="gap-1.5">
                 <Text
-                  className="text-[11px] font-t3-bold uppercase text-foreground-muted"
+                  className="text-[11px] font-kairo-bold uppercase text-foreground-muted"
                   style={{ letterSpacing: 0.8 }}
                 >
                   Label
@@ -139,7 +139,7 @@ export function ConnectionEnvironmentRow(props: {
 
               <View className="gap-1.5">
                 <Text
-                  className="text-[11px] font-t3-bold uppercase text-foreground-muted"
+                  className="text-[11px] font-kairo-bold uppercase text-foreground-muted"
                   style={{ letterSpacing: 0.8 }}
                 >
                   URL
@@ -166,7 +166,7 @@ export function ConnectionEnvironmentRow(props: {
               >
                 <SymbolView name="checkmark" size={13} tintColor={primaryFg} type="monochrome" />
                 <Text
-                  className="text-[12px] font-t3-bold uppercase text-primary-foreground"
+                  className="text-[12px] font-kairo-bold uppercase text-primary-foreground"
                   style={{ letterSpacing: 0.8 }}
                 >
                   Save

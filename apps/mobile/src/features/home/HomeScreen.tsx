@@ -2,7 +2,7 @@ import type {
   EnvironmentScopedProjectShell,
   EnvironmentScopedThreadShell,
   VcsStatusState,
-} from "@t3tools/client-runtime";
+} from "@kairo/client-runtime";
 import { SymbolView } from "expo-symbols";
 import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
@@ -146,7 +146,7 @@ function ProjectGroupLabel(props: {
         bearerToken={props.bearerToken}
       />
       <Text
-        className="flex-1 text-[13px] font-t3-bold uppercase text-foreground-muted"
+        className="flex-1 text-[13px] font-kairo-bold uppercase text-foreground-muted"
         style={{ letterSpacing: 0.6 }}
         numberOfLines={1}
       >
@@ -156,7 +156,7 @@ function ProjectGroupLabel(props: {
       {hiddenCount > 0 ? (
         <Pressable onPress={props.onToggleExpand} hitSlop={8}>
           <Text
-            className="text-[13px] font-t3-bold text-foreground-muted"
+            className="text-[13px] font-kairo-bold text-foreground-muted"
             style={{ letterSpacing: 0.6 }}
           >
             {props.isExpanded ? "Show less" : `${hiddenCount} more`}
@@ -238,7 +238,7 @@ function ThreadRow(props: {
           {/* Title + Status + Timestamp */}
           <View className="flex-row items-center justify-between gap-2">
             <Text
-              className="flex-1 text-[15px] font-t3-bold leading-[20px] text-foreground"
+              className="flex-1 text-[15px] font-kairo-bold leading-[20px] text-foreground"
               numberOfLines={1}
             >
               {props.thread.title}
@@ -248,7 +248,7 @@ function ThreadRow(props: {
                 className={tone.pillClassName}
                 style={{ borderRadius: 99, paddingHorizontal: 6, paddingVertical: 2 }}
               >
-                <Text className={`text-[10px] font-t3-bold ${tone.textClassName}`}>
+                <Text className={`text-[10px] font-kairo-bold ${tone.textClassName}`}>
                   {tone.label}
                 </Text>
               </View>

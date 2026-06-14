@@ -1,5 +1,5 @@
-import type { DesktopEnvironmentBootstrap } from "@t3tools/contracts";
-import type { KnownEnvironment } from "@t3tools/client-runtime";
+import type { DesktopEnvironmentBootstrap } from "@kairo/contracts";
+import type { KnownEnvironment } from "@kairo/client-runtime";
 
 export interface PrimaryEnvironmentTarget {
   readonly source: KnownEnvironment["source"];

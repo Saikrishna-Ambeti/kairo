@@ -7,14 +7,14 @@ import {
   RelayWebClientId,
   type RelayPublicClientId,
   type RelayEnvironmentLinkChallengeRequest,
-} from "@t3tools/contracts/relay";
-import { encodeOAuthScope, parseAllowedOAuthScope } from "@t3tools/shared/oauthScope";
+} from "@kairo/contracts/relay";
+import { encodeOAuthScope, parseAllowedOAuthScope } from "@kairo/shared/oauthScope";
 import {
   normalizeRelayIssuer,
   signRelayJwt,
   verifyRelayJwt,
   type RelayJwtError,
-} from "@t3tools/shared/relayJwt";
+} from "@kairo/shared/relayJwt";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -23,8 +23,8 @@ import * as Schema from "effect/Schema";
 
 import * as RelayConfiguration from "../Config.ts";
 
-const LINK_CHALLENGE_TYP = "t3-link-challenge+jwt";
-const ACCESS_TOKEN_TYP = "t3-relay-dpop-access+jwt";
+const LINK_CHALLENGE_TYP = "kairo-link-challenge+jwt";
+const ACCESS_TOKEN_TYP = "kairo-relay-dpop-access+jwt";
 const LINK_CHALLENGE_KIND = "environment_link_challenge";
 
 const LinkChallengeClaims = Schema.Struct({
@@ -112,7 +112,7 @@ export interface RelayTokensShape {
 }
 
 export class RelayTokens extends Context.Service<RelayTokens, RelayTokensShape>()(
-  "t3code-relay/auth/RelayTokens",
+  "kairo-relay/auth/RelayTokens",
 ) {}
 
 const make = Effect.gen(function* () {

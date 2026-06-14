@@ -57,7 +57,7 @@ describe("EnvironmentCredentials", () => {
         });
         const [, credentialId, secret] = token.split("_");
 
-        expect(token).toMatch(/^t3env_[0-9a-f]{64}_[0-9a-f]{96}$/);
+        expect(token).toMatch(/^kairoenv_[0-9a-f]{64}_[0-9a-f]{96}$/);
         expect(credentialId).toHaveLength(64);
         expect(secret).toHaveLength(96);
         expect(insertedValues).toHaveLength(1);

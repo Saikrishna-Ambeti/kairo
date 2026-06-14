@@ -6,10 +6,10 @@ import type {
   ProviderApprovalDecision,
   ProviderInteractionMode,
   RuntimeMode,
-  ServerConfig as T3ServerConfig,
+  ServerConfig as KairoServerConfig,
   ThreadId,
-} from "@t3tools/contracts";
-import { formatElapsed } from "@t3tools/shared/orchestrationTiming";
+} from "@kairo/contracts";
+import { formatElapsed } from "@kairo/shared/orchestrationTiming";
 import * as Haptics from "expo-haptics";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, type LayoutChangeEvent } from "react-native";
@@ -59,7 +59,7 @@ export interface ThreadDetailScreenProps {
   readonly environmentId: EnvironmentId;
   readonly projectWorkspaceRoot: string | null;
   readonly selectedThreadQueueCount: number;
-  readonly serverConfig: T3ServerConfig | null;
+  readonly serverConfig: KairoServerConfig | null;
   readonly layoutVariant?: MobileLayoutVariant;
   readonly onOpenDrawer: () => void;
   readonly onOpenConnectionEditor: () => void;
@@ -187,7 +187,7 @@ const WorkingDurationPill = memo(function WorkingDurationPill(props: {
             <View className="h-1.5 w-1.5 rounded-full bg-neutral-400/80 dark:bg-neutral-500/80" />
             <View className="h-1.5 w-1.5 rounded-full bg-neutral-400/60 dark:bg-neutral-500/60" />
           </View>
-          <Text className="font-t3-medium text-xs text-neutral-600 dark:text-neutral-400">
+          <Text className="font-kairo-medium text-xs text-neutral-600 dark:text-neutral-400">
             Working for {durationLabel}
           </Text>
         </View>

@@ -1,4 +1,4 @@
-import { AuthEnvironmentScopes, AuthSessionId, ServerAuthSessionMethod } from "@t3tools/contracts";
+import { AuthEnvironmentScopes, AuthSessionId, ServerAuthSessionMethod } from "@kairo/contracts";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import * as Effect from "effect/Effect";

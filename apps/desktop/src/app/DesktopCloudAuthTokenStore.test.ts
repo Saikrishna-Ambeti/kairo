@@ -44,7 +44,7 @@ function makeLayer(baseDir: string, input?: { readonly encryptionAvailable?: boo
     runningUnderArm64Translation: false,
   }).pipe(
     Layer.provide(
-      Layer.mergeAll(NodeServices.layer, DesktopConfig.layerTest({ T3CODE_HOME: baseDir })),
+      Layer.mergeAll(NodeServices.layer, DesktopConfig.layerTest({ KAIRO_HOME: baseDir })),
     ),
   );
 
@@ -62,7 +62,7 @@ const withTokenStore = <A, E, R>(
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const baseDir = yield* fileSystem.makeTempDirectoryScoped({
-      prefix: "t3-desktop-cloud-auth-token-test-",
+      prefix: "kairo-desktop-cloud-auth-token-test-",
     });
     return yield* effect.pipe(Effect.provide(makeLayer(baseDir, input)));
   }).pipe(Effect.provide(NodeServices.layer), Effect.scoped);

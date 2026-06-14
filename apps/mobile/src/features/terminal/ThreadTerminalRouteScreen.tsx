@@ -3,8 +3,8 @@ import {
   EnvironmentId,
   type TerminalAttachStreamEvent,
   ThreadId,
-} from "@t3tools/contracts";
-import type { KnownTerminalSession } from "@t3tools/client-runtime";
+} from "@kairo/contracts";
+import type { KnownTerminalSession } from "@kairo/client-runtime";
 import { SymbolView } from "expo-symbols";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";

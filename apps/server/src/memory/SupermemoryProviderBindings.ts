@@ -5,7 +5,7 @@ import {
   type ProviderInstanceEnvironmentVariable,
   type ProviderInstanceId,
   type ServerSettings,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 import * as Effect from "effect/Effect";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";

@@ -1,7 +1,7 @@
 import "../index.css";
 
-import { scopeThreadRef } from "@t3tools/client-runtime";
-import { ThreadId, type TerminalAttachStreamEvent } from "@t3tools/contracts";
+import { scopeThreadRef } from "@kairo/client-runtime";
+import { ThreadId, type TerminalAttachStreamEvent } from "@kairo/contracts";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { render } from "vitest-browser-react";
 
@@ -366,7 +366,7 @@ describe("TerminalViewport", () => {
 
     const mounted = await mountTerminalViewport({
       threadRef: scopeThreadRef("environment-a" as never, THREAD_ID),
-      runtimeEnv: { PATH: "/usr/bin", T3: "1" },
+      runtimeEnv: { PATH: "/usr/bin", Kairo: "1" },
     });
 
     try {
@@ -376,7 +376,7 @@ describe("TerminalViewport", () => {
 
       await mounted.rerender({
         threadRef: scopeThreadRef("environment-a" as never, THREAD_ID),
-        runtimeEnv: { T3: "1", PATH: "/usr/bin" },
+        runtimeEnv: { Kairo: "1", PATH: "/usr/bin" },
       });
 
       await vi.waitFor(() => {

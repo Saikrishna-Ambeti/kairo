@@ -101,7 +101,7 @@ export const ClientRequest__AppsListParams = Schema.Struct({
     Schema.Union([
       Schema.Number.annotate({
         description: "Optional page size; defaults to a reasonable server-side value.",
-        format: "uint32",
+        format: "uinkairo2",
       })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
@@ -288,7 +288,7 @@ export const ClientRequest__ExperimentalFeatureListParams = Schema.Struct({
     Schema.Union([
       Schema.Number.annotate({
         description: "Optional page size; defaults to a reasonable server-side value.",
-        format: "uint32",
+        format: "uinkairo2",
       })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
@@ -754,7 +754,7 @@ export const ClientRequest__ModelListParams = Schema.Struct({
     Schema.Union([
       Schema.Number.annotate({
         description: "Optional page size; defaults to a reasonable server-side value.",
-        format: "uint32",
+        format: "uinkairo2",
       })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
@@ -792,7 +792,7 @@ export const ClientRequest__PermissionProfileListParams = Schema.Struct({
     Schema.Union([
       Schema.Number.annotate({
         description: "Optional page size; defaults to the full result set.",
-        format: "uint32",
+        format: "uinkairo2",
       })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
@@ -1166,7 +1166,7 @@ export const ClientRequest__ThreadLoadedListParams = Schema.Struct({
     Schema.Union([
       Schema.Number.annotate({
         description: "Optional page size; defaults to no limit.",
-        format: "uint32",
+        format: "uinkairo2",
       })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
@@ -1231,7 +1231,7 @@ export const ClientRequest__ThreadRollbackParams = Schema.Struct({
   numTurns: Schema.Number.annotate({
     description:
       "The number of turns to drop from the end of the thread. Must be >= 1.\n\nThis only modifies the thread's history and does not revert local file changes that have been made by the agent. Clients are responsible for reverting these changes.",
-    format: "uint32",
+    format: "uinkairo2",
   })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
@@ -2257,10 +2257,10 @@ export type ServerNotification__MemoryCitationEntry = {
   readonly path: string;
 };
 export const ServerNotification__MemoryCitationEntry = Schema.Struct({
-  lineEnd: Schema.Number.annotate({ format: "uint32" })
+  lineEnd: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
-  lineStart: Schema.Number.annotate({ format: "uint32" })
+  lineStart: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
   note: Schema.String,
@@ -2390,7 +2390,7 @@ export type ServerNotification__ProcessExitedNotification = {
   readonly stdoutCapReached: boolean;
 };
 export const ServerNotification__ProcessExitedNotification = Schema.Struct({
-  exitCode: Schema.Number.annotate({ description: "Process exit code.", format: "int32" }).check(
+  exitCode: Schema.Number.annotate({ description: "Process exit code.", format: "inkairo2" }).check(
     Schema.isInt(),
   ),
   processHandle: Schema.String.annotate({
@@ -2459,7 +2459,7 @@ export const ServerNotification__RateLimitWindow = Schema.Struct({
   resetsAt: Schema.optionalKey(
     Schema.Union([Schema.Number.annotate({ format: "int64" }).check(Schema.isInt()), Schema.Null]),
   ),
-  usedPercent: Schema.Number.annotate({ format: "int32" }).check(Schema.isInt()),
+  usedPercent: Schema.Number.annotate({ format: "inkairo2" }).check(Schema.isInt()),
   windowDurationMins: Schema.optionalKey(
     Schema.Union([Schema.Number.annotate({ format: "int64" }).check(Schema.isInt()), Schema.Null]),
   ),
@@ -2560,7 +2560,7 @@ export type ServerNotification__SpendControlLimitSnapshot = {
 };
 export const ServerNotification__SpendControlLimitSnapshot = Schema.Struct({
   limit: Schema.String,
-  remainingPercent: Schema.Number.annotate({ format: "int32" }).check(Schema.isInt()),
+  remainingPercent: Schema.Number.annotate({ format: "inkairo2" }).check(Schema.isInt()),
   resetsAt: Schema.Number.annotate({ format: "int64" }).check(Schema.isInt()),
   used: Schema.String,
 });
@@ -2692,12 +2692,12 @@ export const ServerNotification__ThreadRealtimeAudioChunk = Schema.Struct({
   numChannels: Schema.Number.annotate({ format: "uint16" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
-  sampleRate: Schema.Number.annotate({ format: "uint32" })
+  sampleRate: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
   samplesPerChannel: Schema.optionalKey(
     Schema.Union([
-      Schema.Number.annotate({ format: "uint32" })
+      Schema.Number.annotate({ format: "uinkairo2" })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
       Schema.Null,
@@ -3257,7 +3257,7 @@ export const V2AccountRateLimitsUpdatedNotification__RateLimitWindow = Schema.St
   resetsAt: Schema.optionalKey(
     Schema.Union([Schema.Number.annotate({ format: "int64" }).check(Schema.isInt()), Schema.Null]),
   ),
-  usedPercent: Schema.Number.annotate({ format: "int32" }).check(Schema.isInt()),
+  usedPercent: Schema.Number.annotate({ format: "inkairo2" }).check(Schema.isInt()),
   windowDurationMins: Schema.optionalKey(
     Schema.Union([Schema.Number.annotate({ format: "int64" }).check(Schema.isInt()), Schema.Null]),
   ),
@@ -3271,7 +3271,7 @@ export type V2AccountRateLimitsUpdatedNotification__SpendControlLimitSnapshot = 
 };
 export const V2AccountRateLimitsUpdatedNotification__SpendControlLimitSnapshot = Schema.Struct({
   limit: Schema.String,
-  remainingPercent: Schema.Number.annotate({ format: "int32" }).check(Schema.isInt()),
+  remainingPercent: Schema.Number.annotate({ format: "inkairo2" }).check(Schema.isInt()),
   resetsAt: Schema.Number.annotate({ format: "int64" }).check(Schema.isInt()),
   used: Schema.String,
 });
@@ -4001,7 +4001,7 @@ export const V2GetAccountRateLimitsResponse__RateLimitWindow = Schema.Struct({
   resetsAt: Schema.optionalKey(
     Schema.Union([Schema.Number.annotate({ format: "int64" }).check(Schema.isInt()), Schema.Null]),
   ),
-  usedPercent: Schema.Number.annotate({ format: "int32" }).check(Schema.isInt()),
+  usedPercent: Schema.Number.annotate({ format: "inkairo2" }).check(Schema.isInt()),
   windowDurationMins: Schema.optionalKey(
     Schema.Union([Schema.Number.annotate({ format: "int64" }).check(Schema.isInt()), Schema.Null]),
   ),
@@ -4015,7 +4015,7 @@ export type V2GetAccountRateLimitsResponse__SpendControlLimitSnapshot = {
 };
 export const V2GetAccountRateLimitsResponse__SpendControlLimitSnapshot = Schema.Struct({
   limit: Schema.String,
-  remainingPercent: Schema.Number.annotate({ format: "int32" }).check(Schema.isInt()),
+  remainingPercent: Schema.Number.annotate({ format: "inkairo2" }).check(Schema.isInt()),
   resetsAt: Schema.Number.annotate({ format: "int64" }).check(Schema.isInt()),
   used: Schema.String,
 });
@@ -4414,10 +4414,10 @@ export type V2ItemCompletedNotification__MemoryCitationEntry = {
   readonly path: string;
 };
 export const V2ItemCompletedNotification__MemoryCitationEntry = Schema.Struct({
-  lineEnd: Schema.Number.annotate({ format: "uint32" })
+  lineEnd: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
-  lineStart: Schema.Number.annotate({ format: "uint32" })
+  lineStart: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
   note: Schema.String,
@@ -4857,10 +4857,10 @@ export type V2ItemStartedNotification__MemoryCitationEntry = {
   readonly path: string;
 };
 export const V2ItemStartedNotification__MemoryCitationEntry = Schema.Struct({
-  lineEnd: Schema.Number.annotate({ format: "uint32" })
+  lineEnd: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
-  lineStart: Schema.Number.annotate({ format: "uint32" })
+  lineStart: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
   note: Schema.String,
@@ -5895,10 +5895,10 @@ export type V2ReviewStartResponse__MemoryCitationEntry = {
   readonly path: string;
 };
 export const V2ReviewStartResponse__MemoryCitationEntry = Schema.Struct({
-  lineEnd: Schema.Number.annotate({ format: "uint32" })
+  lineEnd: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
-  lineStart: Schema.Number.annotate({ format: "uint32" })
+  lineStart: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
   note: Schema.String,
@@ -6308,10 +6308,10 @@ export type V2ThreadForkResponse__MemoryCitationEntry = {
   readonly path: string;
 };
 export const V2ThreadForkResponse__MemoryCitationEntry = Schema.Struct({
-  lineEnd: Schema.Number.annotate({ format: "uint32" })
+  lineEnd: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
-  lineStart: Schema.Number.annotate({ format: "uint32" })
+  lineStart: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
   note: Schema.String,
@@ -6678,10 +6678,10 @@ export type V2ThreadListResponse__MemoryCitationEntry = {
   readonly path: string;
 };
 export const V2ThreadListResponse__MemoryCitationEntry = Schema.Struct({
-  lineEnd: Schema.Number.annotate({ format: "uint32" })
+  lineEnd: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
-  lineStart: Schema.Number.annotate({ format: "uint32" })
+  lineStart: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
   note: Schema.String,
@@ -6991,10 +6991,10 @@ export type V2ThreadMetadataUpdateResponse__MemoryCitationEntry = {
   readonly path: string;
 };
 export const V2ThreadMetadataUpdateResponse__MemoryCitationEntry = Schema.Struct({
-  lineEnd: Schema.Number.annotate({ format: "uint32" })
+  lineEnd: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
-  lineStart: Schema.Number.annotate({ format: "uint32" })
+  lineStart: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
   note: Schema.String,
@@ -7269,10 +7269,10 @@ export type V2ThreadReadResponse__MemoryCitationEntry = {
   readonly path: string;
 };
 export const V2ThreadReadResponse__MemoryCitationEntry = Schema.Struct({
-  lineEnd: Schema.Number.annotate({ format: "uint32" })
+  lineEnd: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
-  lineStart: Schema.Number.annotate({ format: "uint32" })
+  lineStart: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
   note: Schema.String,
@@ -7430,12 +7430,12 @@ export const V2ThreadRealtimeOutputAudioDeltaNotification__ThreadRealtimeAudioCh
     numChannels: Schema.Number.annotate({ format: "uint16" })
       .check(Schema.isInt())
       .check(Schema.isGreaterThanOrEqualTo(0)),
-    sampleRate: Schema.Number.annotate({ format: "uint32" })
+    sampleRate: Schema.Number.annotate({ format: "uinkairo2" })
       .check(Schema.isInt())
       .check(Schema.isGreaterThanOrEqualTo(0)),
     samplesPerChannel: Schema.optionalKey(
       Schema.Union([
-        Schema.Number.annotate({ format: "uint32" })
+        Schema.Number.annotate({ format: "uinkairo2" })
           .check(Schema.isInt())
           .check(Schema.isGreaterThanOrEqualTo(0)),
         Schema.Null,
@@ -7812,10 +7812,10 @@ export type V2ThreadResumeResponse__MemoryCitationEntry = {
   readonly path: string;
 };
 export const V2ThreadResumeResponse__MemoryCitationEntry = Schema.Struct({
-  lineEnd: Schema.Number.annotate({ format: "uint32" })
+  lineEnd: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
-  lineStart: Schema.Number.annotate({ format: "uint32" })
+  lineStart: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
   note: Schema.String,
@@ -8082,10 +8082,10 @@ export type V2ThreadRollbackResponse__MemoryCitationEntry = {
   readonly path: string;
 };
 export const V2ThreadRollbackResponse__MemoryCitationEntry = Schema.Struct({
-  lineEnd: Schema.Number.annotate({ format: "uint32" })
+  lineEnd: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
-  lineStart: Schema.Number.annotate({ format: "uint32" })
+  lineStart: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
   note: Schema.String,
@@ -8466,10 +8466,10 @@ export type V2ThreadStartedNotification__MemoryCitationEntry = {
   readonly path: string;
 };
 export const V2ThreadStartedNotification__MemoryCitationEntry = Schema.Struct({
-  lineEnd: Schema.Number.annotate({ format: "uint32" })
+  lineEnd: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
-  lineStart: Schema.Number.annotate({ format: "uint32" })
+  lineStart: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
   note: Schema.String,
@@ -8839,10 +8839,10 @@ export type V2ThreadStartResponse__MemoryCitationEntry = {
   readonly path: string;
 };
 export const V2ThreadStartResponse__MemoryCitationEntry = Schema.Struct({
-  lineEnd: Schema.Number.annotate({ format: "uint32" })
+  lineEnd: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
-  lineStart: Schema.Number.annotate({ format: "uint32" })
+  lineStart: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
   note: Schema.String,
@@ -9137,10 +9137,10 @@ export type V2ThreadUnarchiveResponse__MemoryCitationEntry = {
   readonly path: string;
 };
 export const V2ThreadUnarchiveResponse__MemoryCitationEntry = Schema.Struct({
-  lineEnd: Schema.Number.annotate({ format: "uint32" })
+  lineEnd: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
-  lineStart: Schema.Number.annotate({ format: "uint32" })
+  lineStart: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
   note: Schema.String,
@@ -9416,10 +9416,10 @@ export type V2TurnCompletedNotification__MemoryCitationEntry = {
   readonly path: string;
 };
 export const V2TurnCompletedNotification__MemoryCitationEntry = Schema.Struct({
-  lineEnd: Schema.Number.annotate({ format: "uint32" })
+  lineEnd: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
-  lineStart: Schema.Number.annotate({ format: "uint32" })
+  lineStart: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
   note: Schema.String,
@@ -9681,10 +9681,10 @@ export type V2TurnStartedNotification__MemoryCitationEntry = {
   readonly path: string;
 };
 export const V2TurnStartedNotification__MemoryCitationEntry = Schema.Struct({
-  lineEnd: Schema.Number.annotate({ format: "uint32" })
+  lineEnd: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
-  lineStart: Schema.Number.annotate({ format: "uint32" })
+  lineStart: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
   note: Schema.String,
@@ -10036,10 +10036,10 @@ export type V2TurnStartResponse__MemoryCitationEntry = {
   readonly path: string;
 };
 export const V2TurnStartResponse__MemoryCitationEntry = Schema.Struct({
-  lineEnd: Schema.Number.annotate({ format: "uint32" })
+  lineEnd: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
-  lineStart: Schema.Number.annotate({ format: "uint32" })
+  lineStart: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
   note: Schema.String,
@@ -10459,7 +10459,7 @@ export const ClientRequest__ListMcpServerStatusParams = Schema.Struct({
     Schema.Union([
       Schema.Number.annotate({
         description: "Optional page size; defaults to a server-defined value.",
-        format: "uint32",
+        format: "uinkairo2",
       })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
@@ -10815,7 +10815,7 @@ export const ClientRequest__ThreadListParams = Schema.Struct({
     Schema.Union([
       Schema.Number.annotate({
         description: "Optional page size; defaults to a reasonable server-side value.",
-        format: "uint32",
+        format: "uinkairo2",
       })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
@@ -11039,7 +11039,7 @@ export const FuzzyFileSearchResponse__FuzzyFileSearchResult = Schema.Struct({
   indices: Schema.optionalKey(
     Schema.Union([
       Schema.Array(
-        Schema.Number.annotate({ format: "uint32" })
+        Schema.Number.annotate({ format: "uinkairo2" })
           .check(Schema.isInt())
           .check(Schema.isGreaterThanOrEqualTo(0)),
       ),
@@ -11049,7 +11049,7 @@ export const FuzzyFileSearchResponse__FuzzyFileSearchResult = Schema.Struct({
   match_type: FuzzyFileSearchResponse__FuzzyFileSearchMatchType,
   path: Schema.String,
   root: Schema.String,
-  score: Schema.Number.annotate({ format: "uint32" })
+  score: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
 }).annotate({ description: "Superset of [`codex_file_search::FileMatch`]" });
@@ -11067,7 +11067,7 @@ export const FuzzyFileSearchSessionUpdatedNotification__FuzzyFileSearchResult = 
   indices: Schema.optionalKey(
     Schema.Union([
       Schema.Array(
-        Schema.Number.annotate({ format: "uint32" })
+        Schema.Number.annotate({ format: "uinkairo2" })
           .check(Schema.isInt())
           .check(Schema.isGreaterThanOrEqualTo(0)),
       ),
@@ -11077,7 +11077,7 @@ export const FuzzyFileSearchSessionUpdatedNotification__FuzzyFileSearchResult = 
   match_type: FuzzyFileSearchSessionUpdatedNotification__FuzzyFileSearchMatchType,
   path: Schema.String,
   root: Schema.String,
-  score: Schema.Number.annotate({ format: "uint32" })
+  score: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
 }).annotate({ description: "Superset of [`codex_file_search::FileMatch`]" });
@@ -11204,7 +11204,7 @@ export const McpServerElicitationRequestParams__McpElicitationStringSchema = Sch
   ),
   maxLength: Schema.optionalKey(
     Schema.Union([
-      Schema.Number.annotate({ format: "uint32" })
+      Schema.Number.annotate({ format: "uinkairo2" })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
       Schema.Null,
@@ -11212,7 +11212,7 @@ export const McpServerElicitationRequestParams__McpElicitationStringSchema = Sch
   ),
   minLength: Schema.optionalKey(
     Schema.Union([
-      Schema.Number.annotate({ format: "uint32" })
+      Schema.Number.annotate({ format: "uinkairo2" })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
       Schema.Null,
@@ -11486,7 +11486,7 @@ export const ServerNotification__FuzzyFileSearchResult = Schema.Struct({
   indices: Schema.optionalKey(
     Schema.Union([
       Schema.Array(
-        Schema.Number.annotate({ format: "uint32" })
+        Schema.Number.annotate({ format: "uinkairo2" })
           .check(Schema.isInt())
           .check(Schema.isGreaterThanOrEqualTo(0)),
       ),
@@ -11496,7 +11496,7 @@ export const ServerNotification__FuzzyFileSearchResult = Schema.Struct({
   match_type: ServerNotification__FuzzyFileSearchMatchType,
   path: Schema.String,
   root: Schema.String,
-  score: Schema.Number.annotate({ format: "uint32" })
+  score: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
 }).annotate({ description: "Superset of [`codex_file_search::FileMatch`]" });
@@ -11910,7 +11910,7 @@ export const ServerNotification__SubAgentSource = Schema.Union(
         agent_nickname: Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
         agent_path: Schema.optionalKey(Schema.Union([ServerNotification__AgentPath, Schema.Null])),
         agent_role: Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
-        depth: Schema.Number.annotate({ format: "int32" }).check(Schema.isInt()),
+        depth: Schema.Number.annotate({ format: "inkairo2" }).check(Schema.isInt()),
         parent_thread_id: ServerNotification__ThreadId,
       }),
     }).annotate({ title: "ThreadSpawnSubAgentSource" }),
@@ -12128,7 +12128,7 @@ export const ServerRequest__McpElicitationStringSchema = Schema.Struct({
   ),
   maxLength: Schema.optionalKey(
     Schema.Union([
-      Schema.Number.annotate({ format: "uint32" })
+      Schema.Number.annotate({ format: "uinkairo2" })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
       Schema.Null,
@@ -12136,7 +12136,7 @@ export const ServerRequest__McpElicitationStringSchema = Schema.Struct({
   ),
   minLength: Schema.optionalKey(
     Schema.Union([
-      Schema.Number.annotate({ format: "uint32" })
+      Schema.Number.annotate({ format: "uinkairo2" })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
       Schema.Null,
@@ -14565,7 +14565,7 @@ export const V2ThreadForkResponse__SubAgentSource = Schema.Union(
           Schema.Union([V2ThreadForkResponse__AgentPath, Schema.Null]),
         ),
         agent_role: Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
-        depth: Schema.Number.annotate({ format: "int32" }).check(Schema.isInt()),
+        depth: Schema.Number.annotate({ format: "inkairo2" }).check(Schema.isInt()),
         parent_thread_id: V2ThreadForkResponse__ThreadId,
       }),
     }).annotate({ title: "ThreadSpawnSubAgentSource" }),
@@ -14900,7 +14900,7 @@ export const V2ThreadListResponse__SubAgentSource = Schema.Union(
           Schema.Union([V2ThreadListResponse__AgentPath, Schema.Null]),
         ),
         agent_role: Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
-        depth: Schema.Number.annotate({ format: "int32" }).check(Schema.isInt()),
+        depth: Schema.Number.annotate({ format: "inkairo2" }).check(Schema.isInt()),
         parent_thread_id: V2ThreadListResponse__ThreadId,
       }),
     }).annotate({ title: "ThreadSpawnSubAgentSource" }),
@@ -15170,7 +15170,7 @@ export const V2ThreadMetadataUpdateResponse__SubAgentSource = Schema.Union(
           Schema.Union([V2ThreadMetadataUpdateResponse__AgentPath, Schema.Null]),
         ),
         agent_role: Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
-        depth: Schema.Number.annotate({ format: "int32" }).check(Schema.isInt()),
+        depth: Schema.Number.annotate({ format: "inkairo2" }).check(Schema.isInt()),
         parent_thread_id: V2ThreadMetadataUpdateResponse__ThreadId,
       }),
     }).annotate({ title: "ThreadSpawnSubAgentSource" }),
@@ -15436,7 +15436,7 @@ export const V2ThreadReadResponse__SubAgentSource = Schema.Union(
           Schema.Union([V2ThreadReadResponse__AgentPath, Schema.Null]),
         ),
         agent_role: Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
-        depth: Schema.Number.annotate({ format: "int32" }).check(Schema.isInt()),
+        depth: Schema.Number.annotate({ format: "inkairo2" }).check(Schema.isInt()),
         parent_thread_id: V2ThreadReadResponse__ThreadId,
       }),
     }).annotate({ title: "ThreadSpawnSubAgentSource" }),
@@ -15765,7 +15765,7 @@ export const V2ThreadResumeResponse__SubAgentSource = Schema.Union(
           Schema.Union([V2ThreadResumeResponse__AgentPath, Schema.Null]),
         ),
         agent_role: Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
-        depth: Schema.Number.annotate({ format: "int32" }).check(Schema.isInt()),
+        depth: Schema.Number.annotate({ format: "inkairo2" }).check(Schema.isInt()),
         parent_thread_id: V2ThreadResumeResponse__ThreadId,
       }),
     }).annotate({ title: "ThreadSpawnSubAgentSource" }),
@@ -16035,7 +16035,7 @@ export const V2ThreadRollbackResponse__SubAgentSource = Schema.Union(
           Schema.Union([V2ThreadRollbackResponse__AgentPath, Schema.Null]),
         ),
         agent_role: Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
-        depth: Schema.Number.annotate({ format: "int32" }).check(Schema.isInt()),
+        depth: Schema.Number.annotate({ format: "inkairo2" }).check(Schema.isInt()),
         parent_thread_id: V2ThreadRollbackResponse__ThreadId,
       }),
     }).annotate({ title: "ThreadSpawnSubAgentSource" }),
@@ -16363,7 +16363,7 @@ export const V2ThreadStartedNotification__SubAgentSource = Schema.Union(
           Schema.Union([V2ThreadStartedNotification__AgentPath, Schema.Null]),
         ),
         agent_role: Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
-        depth: Schema.Number.annotate({ format: "int32" }).check(Schema.isInt()),
+        depth: Schema.Number.annotate({ format: "inkairo2" }).check(Schema.isInt()),
         parent_thread_id: V2ThreadStartedNotification__ThreadId,
       }),
     }).annotate({ title: "ThreadSpawnSubAgentSource" }),
@@ -16629,7 +16629,7 @@ export const V2ThreadStartResponse__SubAgentSource = Schema.Union(
           Schema.Union([V2ThreadStartResponse__AgentPath, Schema.Null]),
         ),
         agent_role: Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
-        depth: Schema.Number.annotate({ format: "int32" }).check(Schema.isInt()),
+        depth: Schema.Number.annotate({ format: "inkairo2" }).check(Schema.isInt()),
         parent_thread_id: V2ThreadStartResponse__ThreadId,
       }),
     }).annotate({ title: "ThreadSpawnSubAgentSource" }),
@@ -16939,7 +16939,7 @@ export const V2ThreadUnarchiveResponse__SubAgentSource = Schema.Union(
           Schema.Union([V2ThreadUnarchiveResponse__AgentPath, Schema.Null]),
         ),
         agent_role: Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
-        depth: Schema.Number.annotate({ format: "int32" }).check(Schema.isInt()),
+        depth: Schema.Number.annotate({ format: "inkairo2" }).check(Schema.isInt()),
         parent_thread_id: V2ThreadUnarchiveResponse__ThreadId,
       }),
     }).annotate({ title: "ThreadSpawnSubAgentSource" }),
@@ -18736,7 +18736,7 @@ export const ServerNotification__ThreadItem = Schema.Union(
         Schema.Union([
           Schema.Number.annotate({
             description: "The command's exit code.",
-            format: "int32",
+            format: "inkairo2",
           }).check(Schema.isInt()),
           Schema.Null,
         ]),
@@ -19669,7 +19669,7 @@ export const V2ItemCompletedNotification__ThreadItem = Schema.Union(
         Schema.Union([
           Schema.Number.annotate({
             description: "The command's exit code.",
-            format: "int32",
+            format: "inkairo2",
           }).check(Schema.isInt()),
           Schema.Null,
         ]),
@@ -20055,7 +20055,7 @@ export const V2ItemStartedNotification__ThreadItem = Schema.Union(
         Schema.Union([
           Schema.Number.annotate({
             description: "The command's exit code.",
-            format: "int32",
+            format: "inkairo2",
           }).check(Schema.isInt()),
           Schema.Null,
         ]),
@@ -20634,7 +20634,7 @@ export const V2ReviewStartResponse__ThreadItem = Schema.Union(
         Schema.Union([
           Schema.Number.annotate({
             description: "The command's exit code.",
-            format: "int32",
+            format: "inkairo2",
           }).check(Schema.isInt()),
           Schema.Null,
         ]),
@@ -21041,7 +21041,7 @@ export const V2ThreadForkResponse__ThreadItem = Schema.Union(
         Schema.Union([
           Schema.Number.annotate({
             description: "The command's exit code.",
-            format: "int32",
+            format: "inkairo2",
           }).check(Schema.isInt()),
           Schema.Null,
         ]),
@@ -21417,7 +21417,7 @@ export const V2ThreadListResponse__ThreadItem = Schema.Union(
         Schema.Union([
           Schema.Number.annotate({
             description: "The command's exit code.",
-            format: "int32",
+            format: "inkairo2",
           }).check(Schema.isInt()),
           Schema.Null,
         ]),
@@ -21797,7 +21797,7 @@ export const V2ThreadMetadataUpdateResponse__ThreadItem = Schema.Union(
         Schema.Union([
           Schema.Number.annotate({
             description: "The command's exit code.",
-            format: "int32",
+            format: "inkairo2",
           }).check(Schema.isInt()),
           Schema.Null,
         ]),
@@ -22174,7 +22174,7 @@ export const V2ThreadReadResponse__ThreadItem = Schema.Union(
         Schema.Union([
           Schema.Number.annotate({
             description: "The command's exit code.",
-            format: "int32",
+            format: "inkairo2",
           }).check(Schema.isInt()),
           Schema.Null,
         ]),
@@ -22558,7 +22558,7 @@ export const V2ThreadResumeResponse__ThreadItem = Schema.Union(
         Schema.Union([
           Schema.Number.annotate({
             description: "The command's exit code.",
-            format: "int32",
+            format: "inkairo2",
           }).check(Schema.isInt()),
           Schema.Null,
         ]),
@@ -22936,7 +22936,7 @@ export const V2ThreadRollbackResponse__ThreadItem = Schema.Union(
         Schema.Union([
           Schema.Number.annotate({
             description: "The command's exit code.",
-            format: "int32",
+            format: "inkairo2",
           }).check(Schema.isInt()),
           Schema.Null,
         ]),
@@ -23326,7 +23326,7 @@ export const V2ThreadStartedNotification__ThreadItem = Schema.Union(
         Schema.Union([
           Schema.Number.annotate({
             description: "The command's exit code.",
-            format: "int32",
+            format: "inkairo2",
           }).check(Schema.isInt()),
           Schema.Null,
         ]),
@@ -23703,7 +23703,7 @@ export const V2ThreadStartResponse__ThreadItem = Schema.Union(
         Schema.Union([
           Schema.Number.annotate({
             description: "The command's exit code.",
-            format: "int32",
+            format: "inkairo2",
           }).check(Schema.isInt()),
           Schema.Null,
         ]),
@@ -24081,7 +24081,7 @@ export const V2ThreadUnarchiveResponse__ThreadItem = Schema.Union(
         Schema.Union([
           Schema.Number.annotate({
             description: "The command's exit code.",
-            format: "int32",
+            format: "inkairo2",
           }).check(Schema.isInt()),
           Schema.Null,
         ]),
@@ -24462,7 +24462,7 @@ export const V2TurnCompletedNotification__ThreadItem = Schema.Union(
         Schema.Union([
           Schema.Number.annotate({
             description: "The command's exit code.",
-            format: "int32",
+            format: "inkairo2",
           }).check(Schema.isInt()),
           Schema.Null,
         ]),
@@ -24841,7 +24841,7 @@ export const V2TurnStartedNotification__ThreadItem = Schema.Union(
         Schema.Union([
           Schema.Number.annotate({
             description: "The command's exit code.",
-            format: "int32",
+            format: "inkairo2",
           }).check(Schema.isInt()),
           Schema.Null,
         ]),
@@ -25218,7 +25218,7 @@ export const V2TurnStartResponse__ThreadItem = Schema.Union(
         Schema.Union([
           Schema.Number.annotate({
             description: "The command's exit code.",
-            format: "int32",
+            format: "inkairo2",
           }).check(Schema.isInt()),
           Schema.Null,
         ]),
@@ -30791,12 +30791,12 @@ export const ClientRequest__ThreadRealtimeAudioChunk = Schema.Struct({
   numChannels: Schema.Number.annotate({ format: "uint16" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
-  sampleRate: Schema.Number.annotate({ format: "uint32" })
+  sampleRate: Schema.Number.annotate({ format: "uinkairo2" })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),
   samplesPerChannel: Schema.optionalKey(
     Schema.Union([
-      Schema.Number.annotate({ format: "uint32" })
+      Schema.Number.annotate({ format: "uinkairo2" })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
       Schema.Null,
@@ -30838,7 +30838,7 @@ export const ClientRequest__ThreadResumeInitialTurnsPageParams = Schema.Struct({
   ),
   limit: Schema.optionalKey(
     Schema.Union([
-      Schema.Number.annotate({ description: "Optional turn page size.", format: "uint32" })
+      Schema.Number.annotate({ description: "Optional turn page size.", format: "uinkairo2" })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
       Schema.Null,
@@ -32556,7 +32556,7 @@ export const V2AppsListParams = Schema.Struct({
     Schema.Union([
       Schema.Number.annotate({
         description: "Optional page size; defaults to a reasonable server-side value.",
-        format: "uint32",
+        format: "uinkairo2",
       })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
@@ -32812,7 +32812,7 @@ export type V2CommandExecResponse = {
   readonly stdout: string;
 };
 export const V2CommandExecResponse = Schema.Struct({
-  exitCode: Schema.Number.annotate({ description: "Process exit code.", format: "int32" }).check(
+  exitCode: Schema.Number.annotate({ description: "Process exit code.", format: "inkairo2" }).check(
     Schema.isInt(),
   ),
   stderr: Schema.String.annotate({
@@ -33281,7 +33281,7 @@ export const V2ExperimentalFeatureListParams = Schema.Struct({
     Schema.Union([
       Schema.Number.annotate({
         description: "Optional page size; defaults to a reasonable server-side value.",
-        format: "uint32",
+        format: "uinkairo2",
       })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
@@ -34132,7 +34132,7 @@ export const V2ListMcpServerStatusParams = Schema.Struct({
     Schema.Union([
       Schema.Number.annotate({
         description: "Optional page size; defaults to a server-defined value.",
-        format: "uint32",
+        format: "uinkairo2",
       })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
@@ -34448,7 +34448,7 @@ export const V2ModelListParams = Schema.Struct({
     Schema.Union([
       Schema.Number.annotate({
         description: "Optional page size; defaults to a reasonable server-side value.",
-        format: "uint32",
+        format: "uinkairo2",
       })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
@@ -34542,7 +34542,7 @@ export const V2PermissionProfileListParams = Schema.Struct({
     Schema.Union([
       Schema.Number.annotate({
         description: "Optional page size; defaults to the full result set.",
-        format: "uint32",
+        format: "uinkairo2",
       })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
@@ -34849,7 +34849,7 @@ export type V2ProcessExitedNotification = {
   readonly stdoutCapReached: boolean;
 };
 export const V2ProcessExitedNotification = Schema.Struct({
-  exitCode: Schema.Number.annotate({ description: "Process exit code.", format: "int32" }).check(
+  exitCode: Schema.Number.annotate({ description: "Process exit code.", format: "inkairo2" }).check(
     Schema.isInt(),
   ),
   processHandle: Schema.String.annotate({
@@ -35646,7 +35646,7 @@ export const V2ThreadListParams = Schema.Struct({
     Schema.Union([
       Schema.Number.annotate({
         description: "Optional page size; defaults to a reasonable server-side value.",
-        format: "uint32",
+        format: "uinkairo2",
       })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
@@ -35837,7 +35837,7 @@ export const V2ThreadLoadedListParams = Schema.Struct({
     Schema.Union([
       Schema.Number.annotate({
         description: "Optional page size; defaults to no limit.",
-        format: "uint32",
+        format: "uinkairo2",
       })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
@@ -36512,7 +36512,7 @@ export const V2ThreadResumeParams__ThreadResumeInitialTurnsPageParams = Schema.S
   ),
   limit: Schema.optionalKey(
     Schema.Union([
-      Schema.Number.annotate({ description: "Optional turn page size.", format: "uint32" })
+      Schema.Number.annotate({ description: "Optional turn page size.", format: "uinkairo2" })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
       Schema.Null,
@@ -36799,7 +36799,7 @@ export const V2ThreadRollbackParams = Schema.Struct({
   numTurns: Schema.Number.annotate({
     description:
       "The number of turns to drop from the end of the thread. Must be >= 1.\n\nThis only modifies the thread's history and does not revert local file changes that have been made by the agent. Clients are responsible for reverting these changes.",
-    format: "uint32",
+    format: "uinkairo2",
   })
     .check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(0)),

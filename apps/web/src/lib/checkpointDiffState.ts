@@ -7,7 +7,7 @@ import {
   EMPTY_CHECKPOINT_DIFF_ATOM,
   EMPTY_CHECKPOINT_DIFF_STATE,
   getCheckpointDiffTargetKey,
-} from "@t3tools/client-runtime";
+} from "@kairo/client-runtime";
 import { useEffect, useMemo } from "react";
 
 import { readEnvironmentApi } from "../environmentApi";

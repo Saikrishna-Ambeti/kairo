@@ -110,7 +110,7 @@ function runChecked(command, args) {
 }
 
 function installElectronRuntime(electronDir, version) {
-  const tempDir = mkdtempSync(join(tmpdir(), "t3-electron-"));
+  const tempDir = mkdtempSync(join(tmpdir(), "kairo-electron-"));
   const zipPath = join(tempDir, `electron-v${version}-${process.platform}-${process.arch}.zip`);
 
   try {

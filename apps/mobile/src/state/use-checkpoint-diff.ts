@@ -1,4 +1,4 @@
-import { createCheckpointDiffManager, type CheckpointDiffTarget } from "@t3tools/client-runtime";
+import { createCheckpointDiffManager, type CheckpointDiffTarget } from "@kairo/client-runtime";
 
 import { appAtomRegistry } from "./atom-registry";
 import { getEnvironmentClient } from "./environment-session-registry";

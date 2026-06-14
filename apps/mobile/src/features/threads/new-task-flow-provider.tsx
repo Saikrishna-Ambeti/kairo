@@ -5,8 +5,8 @@ import type {
   ModelSelection,
   ProviderInteractionMode,
   RuntimeMode,
-} from "@t3tools/contracts";
-import { DEFAULT_PROVIDER_INTERACTION_MODE, DEFAULT_RUNTIME_MODE } from "@t3tools/contracts";
+} from "@kairo/contracts";
+import { DEFAULT_PROVIDER_INTERACTION_MODE, DEFAULT_RUNTIME_MODE } from "@kairo/contracts";
 import * as Arr from "effect/Array";
 import { pipe } from "effect/Function";
 
@@ -28,7 +28,7 @@ import {
   setPendingConnectionError,
   useRemoteEnvironmentState,
 } from "../../state/use-remote-environment-registry";
-import { EnvironmentScopedProjectShell, type VcsRef } from "@t3tools/client-runtime";
+import { EnvironmentScopedProjectShell, type VcsRef } from "@kairo/client-runtime";
 import type { ClaudeAgentEffort } from "./claudeEffortOptions";
 
 type WorkspaceMode = "local" | "worktree";

@@ -8,7 +8,7 @@ import {
   SupermemoryError,
   type SupermemoryStatus,
   type TestMemoryConnectionInput,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -64,7 +64,7 @@ export interface SupermemoryServiceShape {
 export class SupermemoryService extends Context.Service<
   SupermemoryService,
   SupermemoryServiceShape
->()("t3/memory/SupermemoryService") {}
+>()("kairo/memory/SupermemoryService") {}
 
 const probeSupermemory = (input: {
   readonly apiUrl: string;

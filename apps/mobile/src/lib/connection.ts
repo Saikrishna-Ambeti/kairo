@@ -1,9 +1,9 @@
-import { EnvironmentId } from "@t3tools/contracts";
+import { EnvironmentId } from "@kairo/contracts";
 import {
   bootstrapRemoteBearerSession,
   fetchRemoteEnvironmentDescriptor,
-} from "@t3tools/client-runtime";
-import { resolveRemotePairingTarget, stripPairingTokenFromUrl } from "@t3tools/shared/remote";
+} from "@kairo/client-runtime";
+import { resolveRemotePairingTarget, stripPairingTokenFromUrl } from "@kairo/shared/remote";
 import * as Effect from "effect/Effect";
 import { mobileAuthClientMetadata } from "./authClientMetadata";
 import { mobileRuntime } from "./runtime";

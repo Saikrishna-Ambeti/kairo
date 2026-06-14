@@ -2,7 +2,7 @@ import type { ComponentType } from "react";
 import type { NativeSyntheticEvent, ViewProps } from "react-native";
 import { requireNativeView } from "expo";
 
-const NATIVE_TERMINAL_MODULE_NAME = "T3TerminalSurface";
+const NATIVE_TERMINAL_MODULE_NAME = "KairoTerminalSurface";
 
 interface ExpoGlobalWithViewConfig {
   readonly expo?: {

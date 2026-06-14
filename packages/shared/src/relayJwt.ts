@@ -3,12 +3,12 @@ import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 
-export const RELAY_LINK_PROOF_TYP = "t3-env-link+jwt";
-export const RELAY_MINT_REQUEST_TYP = "t3-cloud-mint+jwt";
-export const RELAY_HEALTH_REQUEST_TYP = "t3-cloud-health+jwt";
-export const RELAY_MINT_RESPONSE_TYP = "t3-env-mint+jwt";
-export const RELAY_HEALTH_RESPONSE_TYP = "t3-env-health+jwt";
-export const RELAY_ACTIVITY_PUBLISH_TYP = "t3-env-activity+jwt";
+export const RELAY_LINK_PROOF_TYP = "kairo-env-link+jwt";
+export const RELAY_MINT_REQUEST_TYP = "kairo-cloud-mint+jwt";
+export const RELAY_HEALTH_REQUEST_TYP = "kairo-cloud-health+jwt";
+export const RELAY_MINT_RESPONSE_TYP = "kairo-env-mint+jwt";
+export const RELAY_HEALTH_RESPONSE_TYP = "kairo-env-health+jwt";
+export const RELAY_ACTIVITY_PUBLISH_TYP = "kairo-env-activity+jwt";
 
 export class RelayJwtError extends Data.TaggedError("RelayJwtError")<{
   readonly cause: unknown;
