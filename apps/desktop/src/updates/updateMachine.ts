@@ -2,7 +2,7 @@ import type {
   DesktopRuntimeInfo,
   DesktopUpdateChannel,
   DesktopUpdateState,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 
 export function nextStatusAfterDownloadFailure(
   currentState: DesktopUpdateState,

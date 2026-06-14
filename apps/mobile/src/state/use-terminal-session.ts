@@ -9,14 +9,14 @@ import {
   terminalSessionStateAtom,
   type TerminalSessionTarget,
   type TerminalSessionState,
-} from "@t3tools/client-runtime";
+} from "@kairo/client-runtime";
 import type {
   EnvironmentId,
   TerminalAttachInput,
   TerminalAttachStreamEvent,
   TerminalMetadataStreamEvent,
   TerminalSessionSnapshot,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 import { useMemo } from "react";
 
 import { appAtomRegistry } from "./atom-registry";

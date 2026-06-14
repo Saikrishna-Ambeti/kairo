@@ -1,6 +1,6 @@
 import * as NodeOS from "node:os";
 
-import type { CodexSettings } from "@t3tools/contracts";
+import type { CodexSettings } from "@kairo/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -10,7 +10,7 @@ import * as Schema from "effect/Schema";
 import { expandHomePath } from "../pathExpansion.ts";
 import { redactSupermemorySecrets } from "./SupermemorySecrets.ts";
 
-export const T3_SUPERMEMORY_CONTAINER_TAG = "t3code_user_memory";
+export const Kairo_SUPERMEMORY_CONTAINER_TAG = "kairo_user_memory";
 
 const CODEX_DIR_NAME = ".codex";
 const SUPERMEMORY_DIR_NAME = "supermemory";
@@ -121,9 +121,9 @@ const readConfigSynced = Effect.fn("readConfigSynced")(function* (
     !!config &&
     typeof config === "object" &&
     (config as { readonly userContainerTag?: unknown }).userContainerTag ===
-      T3_SUPERMEMORY_CONTAINER_TAG &&
+      Kairo_SUPERMEMORY_CONTAINER_TAG &&
     (config as { readonly projectContainerTag?: unknown }).projectContainerTag ===
-      T3_SUPERMEMORY_CONTAINER_TAG
+      Kairo_SUPERMEMORY_CONTAINER_TAG
   );
 });
 
@@ -198,9 +198,9 @@ export const syncCodexSupermemoryIntegration = Effect.fn("syncCodexSupermemoryIn
     const next =
       existing && typeof existing === "object" && !Array.isArray(existing) ? { ...existing } : {};
     Object.assign(next, {
-      containerTagPrefix: "t3code",
-      userContainerTag: T3_SUPERMEMORY_CONTAINER_TAG,
-      projectContainerTag: T3_SUPERMEMORY_CONTAINER_TAG,
+      containerTagPrefix: "kairo",
+      userContainerTag: Kairo_SUPERMEMORY_CONTAINER_TAG,
+      projectContainerTag: Kairo_SUPERMEMORY_CONTAINER_TAG,
     });
     const configJson = yield* encodeJsonString(next).pipe(Effect.orDie);
     yield* fs.writeFileString(configPath, `${configJson}\n`).pipe(

@@ -104,8 +104,8 @@ describe("ChatMarkdown", () => {
   });
 
   it("disambiguates duplicate file basenames inline", async () => {
-    const firstPath = "/Users/yashsingh/p/t3code/apps/web/src/components/chat/MessagesTimeline.tsx";
-    const secondPath = "/Users/yashsingh/p/t3code/apps/web/src/components/MessagesTimeline.tsx";
+    const firstPath = "/Users/yashsingh/p/kairo/apps/web/src/components/chat/MessagesTimeline.tsx";
+    const secondPath = "/Users/yashsingh/p/kairo/apps/web/src/components/MessagesTimeline.tsx";
     const screen = await render(
       <ChatMarkdown
         text={`See [MessagesTimeline.tsx](file://${firstPath}) and [MessagesTimeline.tsx](file://${secondPath}).`}
@@ -156,7 +156,7 @@ describe("ChatMarkdown", () => {
   });
 
   it("keeps a favicon with the leading segment of a wrapping URL", async () => {
-    const url = "https://github.com/pingdotgg/t3code/pull/3017/changes";
+    const url = "https://github.com/pingdotgg/kairo/pull/3017/changes";
     const screen = await render(
       <div style={{ width: 180 }}>
         <ChatMarkdown text={`[${url}](${url})`} cwd="/repo/project" />
@@ -629,7 +629,7 @@ describe("ChatMarkdown", () => {
     });
 
     it("copies file links as markdown and skips UI affordances", async () => {
-      const filePath = "/Users/yashsingh/p/t3code/src/utils/permissions/PermissionRule.ts";
+      const filePath = "/Users/yashsingh/p/kairo/src/utils/permissions/PermissionRule.ts";
       const screen = await render(
         <ChatMarkdown
           text={`See [PermissionRule.ts](file://${filePath}) for details.`}
@@ -640,7 +640,7 @@ describe("ChatMarkdown", () => {
       try {
         const { text, html } = copySelectedMarkdown();
         expect(text).toBe(
-          `See [PermissionRule.ts](/Users/yashsingh/p/t3code/src/utils/permissions/PermissionRule.ts) for details.`,
+          `See [PermissionRule.ts](/Users/yashsingh/p/kairo/src/utils/permissions/PermissionRule.ts) for details.`,
         );
         expect(html).toContain("PermissionRule.ts");
         expect(html).not.toContain("<img");

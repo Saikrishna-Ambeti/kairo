@@ -1,4 +1,4 @@
-import { EnvironmentId, type ExecutionEnvironmentDescriptor } from "@t3tools/contracts";
+import { EnvironmentId, type ExecutionEnvironmentDescriptor } from "@kairo/contracts";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -109,8 +109,8 @@ describe("environmentBootstrap", () => {
     await installDescriptorApi();
 
     await expect(resolveInitialPrimaryEnvironmentDescriptor()).resolves.toEqual(BASE_ENVIRONMENT);
-    expect(resolvePrimaryEnvironmentHttpUrl("/.well-known/t3/environment")).toBe(
-      "https://remote.example.com/.well-known/t3/environment",
+    expect(resolvePrimaryEnvironmentHttpUrl("/.well-known/kairo/environment")).toBe(
+      "https://remote.example.com/.well-known/kairo/environment",
     );
   });
 
@@ -119,8 +119,8 @@ describe("environmentBootstrap", () => {
     await installDescriptorApi();
 
     await expect(resolveInitialPrimaryEnvironmentDescriptor()).resolves.toEqual(BASE_ENVIRONMENT);
-    expect(resolvePrimaryEnvironmentHttpUrl("/.well-known/t3/environment")).toBe(
-      "https://remote.example.com/.well-known/t3/environment",
+    expect(resolvePrimaryEnvironmentHttpUrl("/.well-known/kairo/environment")).toBe(
+      "https://remote.example.com/.well-known/kairo/environment",
     );
     expect(getPrimaryKnownEnvironment()?.target).toEqual({
       httpBaseUrl: "https://remote.example.com/",
@@ -133,8 +133,8 @@ describe("environmentBootstrap", () => {
     await installDescriptorApi();
 
     await expect(resolveInitialPrimaryEnvironmentDescriptor()).resolves.toEqual(BASE_ENVIRONMENT);
-    expect(resolvePrimaryEnvironmentHttpUrl("/.well-known/t3/environment")).toBe(
-      "https://remote.example.com/.well-known/t3/environment",
+    expect(resolvePrimaryEnvironmentHttpUrl("/.well-known/kairo/environment")).toBe(
+      "https://remote.example.com/.well-known/kairo/environment",
     );
     expect(getPrimaryKnownEnvironment()?.target).toEqual({
       httpBaseUrl: "https://remote.example.com/",
@@ -147,8 +147,8 @@ describe("environmentBootstrap", () => {
     await installDescriptorApi();
 
     await expect(resolveInitialPrimaryEnvironmentDescriptor()).resolves.toEqual(BASE_ENVIRONMENT);
-    expect(resolvePrimaryEnvironmentHttpUrl("/.well-known/t3/environment")).toBe(
-      "http://localhost:5735/.well-known/t3/environment",
+    expect(resolvePrimaryEnvironmentHttpUrl("/.well-known/kairo/environment")).toBe(
+      "http://localhost:5735/.well-known/kairo/environment",
     );
   });
 
@@ -171,8 +171,8 @@ describe("environmentBootstrap", () => {
     await installDescriptorApi();
 
     await expect(resolveInitialPrimaryEnvironmentDescriptor()).resolves.toEqual(BASE_ENVIRONMENT);
-    expect(resolvePrimaryEnvironmentHttpUrl("/.well-known/t3/environment")).toBe(
-      "http://127.0.0.1:5733/.well-known/t3/environment",
+    expect(resolvePrimaryEnvironmentHttpUrl("/.well-known/kairo/environment")).toBe(
+      "http://127.0.0.1:5733/.well-known/kairo/environment",
     );
   });
 });

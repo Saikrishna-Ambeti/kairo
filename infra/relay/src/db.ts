@@ -14,7 +14,7 @@ export interface RelayDatabase extends EffectPgDatabase {
   readonly $client: PgClient;
 }
 
-export class RelayDb extends Context.Service<RelayDb, RelayDatabase>()("t3code-relay/db/RelayDb") {}
+export class RelayDb extends Context.Service<RelayDb, RelayDatabase>()("kairo-relay/db/RelayDb") {}
 
 export const PlanetscaleDatabase = Effect.gen(function* () {
   const { stage } = yield* Alchemy.Stack;
@@ -28,7 +28,7 @@ export const PlanetscaleDatabase = Effect.gen(function* () {
   const database =
     mode === "shared-database"
       ? yield* Planetscale.PostgresDatabase("RelayPostgresDatabase", {
-          name: "t3coderelay",
+          name: "kairorelay",
           region: { slug: "us-west" },
           clusterSize: "PS_5",
           migrationsDir: schema.out,

@@ -190,15 +190,15 @@
 }
 
 /* ─── Custom utilities ──────────────────────────────────────────────── */
-@utility font-t3-medium {
+@utility font-kairo-medium {
   font-family: "DMSans_500Medium";
 }
 
-@utility font-t3-bold {
+@utility font-kairo-bold {
   font-family: "DMSans_700Bold";
 }
 
-@utility font-t3-extrabold {
+@utility font-kairo-extrabold {
   font-family: "DMSans_700Bold";
   font-weight: 800;
 }

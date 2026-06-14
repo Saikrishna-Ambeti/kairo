@@ -1,4 +1,4 @@
-import { ProjectId, ThreadId } from "@t3tools/contracts";
+import { ProjectId, ThreadId } from "@kairo/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
@@ -82,14 +82,14 @@ describe("uiStateStore pure functions", () => {
   it("reorderProjects moves a project to a target index", () => {
     const project1 = ProjectId.make("project-1");
     const project2 = ProjectId.make("project-2");
-    const project3 = ProjectId.make("project-3");
+    const projeckairo = ProjectId.make("project-3");
     const initialState = makeUiState({
-      projectOrder: [project1, project2, project3],
+      projectOrder: [project1, project2, projeckairo],
     });
 
-    const next = reorderProjects(initialState, [project1], [project3]);
+    const next = reorderProjects(initialState, [project1], [projeckairo]);
 
-    expect(next.projectOrder).toEqual([project2, project3, project1]);
+    expect(next.projectOrder).toEqual([project2, projeckairo, project1]);
   });
 
   it("reorderProjects is a no-op when dragged key is not in projectOrder", () => {
@@ -214,7 +214,7 @@ describe("uiStateStore pure functions", () => {
   it("syncProjects preserves current project order during snapshot recovery", () => {
     const project1 = ProjectId.make("project-1");
     const project2 = ProjectId.make("project-2");
-    const project3 = ProjectId.make("project-3");
+    const projeckairo = ProjectId.make("project-3");
     const initialState = makeUiState({
       projectExpandedById: {
         [project1]: true,
@@ -226,10 +226,10 @@ describe("uiStateStore pure functions", () => {
     const next = syncProjects(initialState, [
       { key: project1, logicalKey: project1, cwd: "/tmp/project-1" },
       { key: project2, logicalKey: project2, cwd: "/tmp/project-2" },
-      { key: project3, logicalKey: project3, cwd: "/tmp/project-3" },
+      { key: projeckairo, logicalKey: projeckairo, cwd: "/tmp/project-3" },
     ]);
 
-    expect(next.projectOrder).toEqual([project2, project1, project3]);
+    expect(next.projectOrder).toEqual([project2, project1, projeckairo]);
     expect(next.projectExpandedById[project2]).toBe(false);
   });
 

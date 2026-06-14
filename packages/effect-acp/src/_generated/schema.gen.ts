@@ -220,56 +220,56 @@ export const Error = Schema.Struct({
       title: "Parse error",
       description:
         "**Parse error**: Invalid JSON was received by the server.\nAn error occurred on the server while parsing the JSON text.",
-      format: "int32",
+      format: "inkairo2",
     }),
     Schema.Literal(-32600).annotate({
       title: "Invalid request",
       description: "**Invalid request**: The JSON sent is not a valid Request object.",
-      format: "int32",
+      format: "inkairo2",
     }),
     Schema.Literal(-32601).annotate({
       title: "Method not found",
       description: "**Method not found**: The method does not exist or is not available.",
-      format: "int32",
+      format: "inkairo2",
     }),
     Schema.Literal(-32602).annotate({
       title: "Invalid params",
       description: "**Invalid params**: Invalid method parameter(s).",
-      format: "int32",
+      format: "inkairo2",
     }),
     Schema.Literal(-32603).annotate({
       title: "Internal error",
       description:
         "**Internal error**: Internal JSON-RPC error.\nReserved for implementation-defined server errors.",
-      format: "int32",
+      format: "inkairo2",
     }),
     Schema.Literal(-32800).annotate({
       title: "Request cancelled",
       description:
         "**Request cancelled**: **UNSTABLE**\n\nThis capability is not part of the spec yet, and may be removed or changed at any point.\n\nExecution of the method was aborted either due to a cancellation request from the caller or\nbecause of resource constraints or shutdown.",
-      format: "int32",
+      format: "inkairo2",
     }),
     Schema.Literal(-32000).annotate({
       title: "Authentication required",
       description:
         "**Authentication required**: Authentication is required before this operation can be performed.",
-      format: "int32",
+      format: "inkairo2",
     }),
     Schema.Literal(-32002).annotate({
       title: "Resource not found",
       description: "**Resource not found**: A given resource, such as a file, was not found.",
-      format: "int32",
+      format: "inkairo2",
     }),
     Schema.Literal(-32042).annotate({
       title: "URL elicitation required",
       description:
         "**URL elicitation required**: **UNSTABLE**\n\nThis capability is not part of the spec yet, and may be removed or changed at any point.\n\nThe agent requires user input via a URL-based elicitation before it can proceed.",
-      format: "int32",
+      format: "inkairo2",
     }),
     Schema.Number.annotate({
       title: "Other",
       description: "Other undefined error code.",
-      format: "int32",
+      format: "inkairo2",
     }).check(Schema.isInt()),
   ]).annotate({
     description:
@@ -640,7 +640,7 @@ export const TerminalExitStatus = Schema.Struct({
     Schema.Union([
       Schema.Number.annotate({
         description: "The process exit code (may be null if terminated by signal).",
-        format: "uint32",
+        format: "uinkairo2",
       })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
@@ -676,7 +676,7 @@ export const ToolCallLocation = Schema.Struct({
     Schema.Union([
       Schema.Number.annotate({
         description: "Optional line number within the file.",
-        format: "uint32",
+        format: "uinkairo2",
       })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
@@ -1250,7 +1250,7 @@ export const ElicitationPropertySchema = Schema.Union(
       ),
       maxLength: Schema.optionalKey(
         Schema.Union([
-          Schema.Number.annotate({ description: "Maximum string length.", format: "uint32" })
+          Schema.Number.annotate({ description: "Maximum string length.", format: "uinkairo2" })
             .check(Schema.isInt())
             .check(Schema.isGreaterThanOrEqualTo(0)),
           Schema.Null,
@@ -1258,7 +1258,7 @@ export const ElicitationPropertySchema = Schema.Union(
       ),
       minLength: Schema.optionalKey(
         Schema.Union([
-          Schema.Number.annotate({ description: "Minimum string length.", format: "uint32" })
+          Schema.Number.annotate({ description: "Minimum string length.", format: "uinkairo2" })
             .check(Schema.isInt())
             .check(Schema.isGreaterThanOrEqualTo(0)),
           Schema.Null,
@@ -3134,7 +3134,7 @@ export const AgentRequest = Schema.Struct({
             Schema.Union([
               Schema.Number.annotate({
                 description: "Maximum number of lines to read.",
-                format: "uint32",
+                format: "uinkairo2",
               })
                 .check(Schema.isInt())
                 .check(Schema.isGreaterThanOrEqualTo(0)),
@@ -3145,7 +3145,7 @@ export const AgentRequest = Schema.Struct({
             Schema.Union([
               Schema.Number.annotate({
                 description: "Line number to start reading from (1-based).",
-                format: "uint32",
+                format: "uinkairo2",
               })
                 .check(Schema.isInt())
                 .check(Schema.isGreaterThanOrEqualTo(0)),
@@ -5249,7 +5249,7 @@ export const ClientResponse = Schema.Union([
           Schema.Union([
             Schema.Number.annotate({
               description: "The process exit code (may be null if terminated by signal).",
-              format: "uint32",
+              format: "uinkairo2",
             })
               .check(Schema.isInt())
               .check(Schema.isGreaterThanOrEqualTo(0)),
@@ -6231,56 +6231,56 @@ export const ErrorCode = Schema.Union([
     title: "Parse error",
     description:
       "**Parse error**: Invalid JSON was received by the server.\nAn error occurred on the server while parsing the JSON text.",
-    format: "int32",
+    format: "inkairo2",
   }),
   Schema.Literal(-32600).annotate({
     title: "Invalid request",
     description: "**Invalid request**: The JSON sent is not a valid Request object.",
-    format: "int32",
+    format: "inkairo2",
   }),
   Schema.Literal(-32601).annotate({
     title: "Method not found",
     description: "**Method not found**: The method does not exist or is not available.",
-    format: "int32",
+    format: "inkairo2",
   }),
   Schema.Literal(-32602).annotate({
     title: "Invalid params",
     description: "**Invalid params**: Invalid method parameter(s).",
-    format: "int32",
+    format: "inkairo2",
   }),
   Schema.Literal(-32603).annotate({
     title: "Internal error",
     description:
       "**Internal error**: Internal JSON-RPC error.\nReserved for implementation-defined server errors.",
-    format: "int32",
+    format: "inkairo2",
   }),
   Schema.Literal(-32800).annotate({
     title: "Request cancelled",
     description:
       "**Request cancelled**: **UNSTABLE**\n\nThis capability is not part of the spec yet, and may be removed or changed at any point.\n\nExecution of the method was aborted either due to a cancellation request from the caller or\nbecause of resource constraints or shutdown.",
-    format: "int32",
+    format: "inkairo2",
   }),
   Schema.Literal(-32000).annotate({
     title: "Authentication required",
     description:
       "**Authentication required**: Authentication is required before this operation can be performed.",
-    format: "int32",
+    format: "inkairo2",
   }),
   Schema.Literal(-32002).annotate({
     title: "Resource not found",
     description: "**Resource not found**: A given resource, such as a file, was not found.",
-    format: "int32",
+    format: "inkairo2",
   }),
   Schema.Literal(-32042).annotate({
     title: "URL elicitation required",
     description:
       "**URL elicitation required**: **UNSTABLE**\n\nThis capability is not part of the spec yet, and may be removed or changed at any point.\n\nThe agent requires user input via a URL-based elicitation before it can proceed.",
-    format: "int32",
+    format: "inkairo2",
   }),
   Schema.Number.annotate({
     title: "Other",
     description: "Other undefined error code.",
-    format: "int32",
+    format: "inkairo2",
   }).check(Schema.isInt()),
 ]).annotate({
   description:
@@ -7557,7 +7557,10 @@ export const ReadTextFileRequest = Schema.Struct({
   ),
   limit: Schema.optionalKey(
     Schema.Union([
-      Schema.Number.annotate({ description: "Maximum number of lines to read.", format: "uint32" })
+      Schema.Number.annotate({
+        description: "Maximum number of lines to read.",
+        format: "uinkairo2",
+      })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
       Schema.Null,
@@ -7567,7 +7570,7 @@ export const ReadTextFileRequest = Schema.Struct({
     Schema.Union([
       Schema.Number.annotate({
         description: "Line number to start reading from (1-based).",
-        format: "uint32",
+        format: "uinkairo2",
       })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
@@ -9914,7 +9917,7 @@ export const StringPropertySchema = Schema.Struct({
   ),
   maxLength: Schema.optionalKey(
     Schema.Union([
-      Schema.Number.annotate({ description: "Maximum string length.", format: "uint32" })
+      Schema.Number.annotate({ description: "Maximum string length.", format: "uinkairo2" })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
       Schema.Null,
@@ -9922,7 +9925,7 @@ export const StringPropertySchema = Schema.Struct({
   ),
   minLength: Schema.optionalKey(
     Schema.Union([
-      Schema.Number.annotate({ description: "Minimum string length.", format: "uint32" })
+      Schema.Number.annotate({ description: "Minimum string length.", format: "uinkairo2" })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),
       Schema.Null,
@@ -10317,7 +10320,7 @@ export const WaitForTerminalExitResponse = Schema.Struct({
     Schema.Union([
       Schema.Number.annotate({
         description: "The process exit code (may be null if terminated by signal).",
-        format: "uint32",
+        format: "uinkairo2",
       })
         .check(Schema.isInt())
         .check(Schema.isGreaterThanOrEqualTo(0)),

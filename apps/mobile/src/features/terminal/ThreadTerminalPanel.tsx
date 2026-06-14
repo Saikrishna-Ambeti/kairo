@@ -1,4 +1,4 @@
-import { DEFAULT_TERMINAL_ID, type EnvironmentId, type ThreadId } from "@t3tools/contracts";
+import { DEFAULT_TERMINAL_ID, type EnvironmentId, type ThreadId } from "@kairo/contracts";
 import { SymbolView } from "expo-symbols";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
@@ -141,7 +141,7 @@ export const ThreadTerminalPanel = memo(function ThreadTerminalPanel(
     <View className="absolute inset-x-3 bottom-28 top-28 overflow-hidden rounded-[8px] border border-white/10 bg-neutral-950 shadow-2xl">
       <View className="flex-row items-center justify-between border-b border-white/10 px-3 py-2">
         <View className="min-w-0 flex-1">
-          <Text className="font-t3-bold text-[13px] text-neutral-100" numberOfLines={1}>
+          <Text className="font-kairo-bold text-[13px] text-neutral-100" numberOfLines={1}>
             Terminal
           </Text>
           <Text className="text-[11px] text-neutral-500" numberOfLines={1}>

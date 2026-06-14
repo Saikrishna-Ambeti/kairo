@@ -1,5 +1,5 @@
-import { relayClerkTokenOptions } from "@t3tools/shared/relayAuth";
-import { normalizeSecureRelayUrl } from "@t3tools/shared/relayUrl";
+import { relayClerkTokenOptions } from "@kairo/shared/relayAuth";
+import { normalizeSecureRelayUrl } from "@kairo/shared/relayUrl";
 
 export interface CloudPublicConfig {
   readonly clerkPublishableKey: string | null;
@@ -18,7 +18,7 @@ export function resolveCloudPublicConfig(): CloudPublicConfig {
     ),
     clerkJwtTemplate: trimNonEmpty(import.meta.env.VITE_CLERK_JWT_TEMPLATE as string | undefined),
     relayUrl: normalizeSecureRelayUrl(
-      (import.meta.env.VITE_T3CODE_RELAY_URL as string | undefined) ?? "",
+      (import.meta.env.VITE_KAIRO_RELAY_URL as string | undefined) ?? "",
     ),
   };
 }
@@ -31,7 +31,7 @@ export function hasCloudPublicConfig(): boolean {
 export function resolveRelayClerkTokenOptions() {
   const { clerkJwtTemplate } = resolveCloudPublicConfig();
   if (!clerkJwtTemplate) {
-    throw new Error("T3CODE_CLERK_JWT_TEMPLATE is not configured.");
+    throw new Error("KAIRO_CLERK_JWT_TEMPLATE is not configured.");
   }
   return relayClerkTokenOptions(clerkJwtTemplate);
 }

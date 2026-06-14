@@ -23,14 +23,14 @@ export function BrandMark(props: { readonly compact?: boolean; readonly stageLab
       <View className="gap-1">
         <View className="flex-row items-center gap-2">
           <Text
-            className="text-[17px] font-t3-bold text-foreground"
+            className="text-[17px] font-kairo-bold text-foreground"
             style={{ letterSpacing: -0.4 }}
           >
-            T3 Code
+            Kairo
           </Text>
           <View className="rounded-full bg-subtle px-2 py-1">
             <Text
-              className="text-[10px] font-t3-bold uppercase text-foreground-muted"
+              className="text-[10px] font-kairo-bold uppercase text-foreground-muted"
               style={{ letterSpacing: 1.1 }}
             >
               {stageLabel}

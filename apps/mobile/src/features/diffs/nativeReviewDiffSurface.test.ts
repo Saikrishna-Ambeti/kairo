@@ -38,13 +38,13 @@ describe("resolveNativeReviewDiffView", () => {
     expoMocks.requireNativeView.mockReturnValue(nativeView);
     const { resolveNativeReviewDiffView } = await import("./nativeReviewDiffSurface");
     expect(resolveNativeReviewDiffView()).toBe(nativeView);
-    expect(expoMocks.requireNativeView).toHaveBeenCalledWith("T3ReviewDiffSurface");
+    expect(expoMocks.requireNativeView).toHaveBeenCalledWith("KairoReviewDiffSurface");
   });
 
   it("does not fall back to stale legacy native review diff view names", async () => {
     globalThis.expo = {
       getViewConfig: vi.fn().mockImplementation((moduleName: string) => {
-        if (moduleName === "T3ReviewDiffView") {
+        if (moduleName === "KairoReviewDiffView") {
           return { validAttributes: {}, directEventTypes: {} };
         }
         return null;

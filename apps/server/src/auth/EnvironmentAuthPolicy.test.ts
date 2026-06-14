@@ -20,7 +20,7 @@ const makeEnvironmentAuthPolicyLayer = (overrides?: Partial<ServerConfigShape>) 
           } satisfies ServerConfigShape;
         }),
       ).pipe(
-        Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-auth-policy-test-" })),
+        Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "kairo-auth-policy-test-" })),
       ),
     ),
   );
@@ -33,7 +33,7 @@ it.layer(NodeServices.layer)("EnvironmentAuthPolicy.layer", (it) => {
 
       expect(descriptor.policy).toBe("desktop-managed-local");
       expect(descriptor.bootstrapMethods).toEqual(["desktop-bootstrap"]);
-      expect(descriptor.sessionCookieName).toBe("t3_session_3773");
+      expect(descriptor.sessionCookieName).toBe("kairo_session_3773");
     }).pipe(
       Effect.provide(
         makeEnvironmentAuthPolicyLayer({
@@ -68,7 +68,7 @@ it.layer(NodeServices.layer)("EnvironmentAuthPolicy.layer", (it) => {
 
       expect(descriptor.policy).toBe("loopback-browser");
       expect(descriptor.bootstrapMethods).toEqual(["one-time-token"]);
-      expect(descriptor.sessionCookieName).toBe("t3_session");
+      expect(descriptor.sessionCookieName).toBe("kairo_session");
     }).pipe(
       Effect.provide(
         makeEnvironmentAuthPolicyLayer({

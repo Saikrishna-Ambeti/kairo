@@ -1,6 +1,6 @@
 import { getPairingTokenFromUrl, setPairingTokenOnUrl } from "./pairingUrl";
 
-const DEFAULT_HOSTED_APP_URL = "https://app.t3.codes";
+const DEFAULT_HOSTED_APP_URL = "https://app.kairo.codes";
 
 export interface HostedPairingRequest {
   readonly host: string;
@@ -83,7 +83,7 @@ export function buildHostedPairingUrl(input: {
 export function buildHostedChannelSelectionUrl(input: {
   readonly channel: HostedAppChannel;
 }): string {
-  const url = new URL("/__t3code/channel", configuredHostedAppUrl());
+  const url = new URL("/__kairo/channel", configuredHostedAppUrl());
   url.searchParams.set("channel", input.channel);
   return url.toString();
 }

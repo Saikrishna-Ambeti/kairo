@@ -1,4 +1,4 @@
-import type { EnvironmentId, ServerConfig as T3ServerConfig } from "@t3tools/contracts";
+import type { EnvironmentId, ServerConfig as KairoServerConfig } from "@kairo/contracts";
 import { Atom, type AtomRegistry } from "effect/unstable/reactivity";
 
 export type EnvironmentConnectionState =
@@ -11,7 +11,7 @@ export type EnvironmentConnectionState =
 export interface EnvironmentRuntimeState {
   readonly connectionState: EnvironmentConnectionState;
   readonly connectionError: string | null;
-  readonly serverConfig: T3ServerConfig | null;
+  readonly serverConfig: KairoServerConfig | null;
 }
 
 export interface EnvironmentRuntimeTarget {

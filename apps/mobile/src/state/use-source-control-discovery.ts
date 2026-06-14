@@ -8,8 +8,8 @@ import {
   createSourceControlDiscoveryManager,
   getSourceControlDiscoveryTargetKey,
   sourceControlDiscoveryStateAtom,
-} from "@t3tools/client-runtime";
-import type { EnvironmentId, SourceControlDiscoveryResult } from "@t3tools/contracts";
+} from "@kairo/client-runtime";
+import type { EnvironmentId, SourceControlDiscoveryResult } from "@kairo/contracts";
 import { useEffect, useMemo } from "react";
 
 import { appAtomRegistry } from "./atom-registry";

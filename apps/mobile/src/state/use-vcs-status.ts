@@ -7,7 +7,7 @@ import {
   createVcsStatusManager,
   getVcsStatusTargetKey,
   vcsStatusStateAtom,
-} from "@t3tools/client-runtime";
+} from "@kairo/client-runtime";
 import { useEffect } from "react";
 
 import { appAtomRegistry } from "./atom-registry";

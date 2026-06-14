@@ -3,7 +3,7 @@ import type {
   VcsListRefsInput,
   VcsListRefsResult,
   VcsRef as ContractVcsRef,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import { Atom, type AtomRegistry, type AsyncResult } from "effect/unstable/reactivity";

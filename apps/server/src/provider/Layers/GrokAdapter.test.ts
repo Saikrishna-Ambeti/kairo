@@ -20,7 +20,7 @@ import {
   ThreadId,
   ProviderInstanceId,
   type ProviderRuntimeEvent,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 
 import { ServerConfig } from "../../config.ts";
 import { makeGrokAdapter } from "./GrokAdapter.ts";
@@ -73,7 +73,7 @@ async function readJsonLines(filePath: string) {
 }
 
 const grokAdapterTestLayer = ServerConfig.layerTest(process.cwd(), {
-  prefix: "t3code-grok-adapter-test-",
+  prefix: "kairo-grok-adapter-test-",
 }).pipe(Layer.provideMerge(NodeServices.layer));
 
 const makeTestAdapter = (binaryPath: string, options?: Parameters<typeof makeGrokAdapter>[1]) =>
@@ -155,7 +155,7 @@ it.layer(grokAdapterTestLayer)("GrokAdapterLive", (it) => {
 
       const wrapperPath = yield* Effect.promise(() =>
         makeMockGrokWrapper({
-          T3_ACP_EXIT_LOG_PATH: exitLogPath,
+          Kairo_ACP_EXIT_LOG_PATH: exitLogPath,
         }),
       );
       const adapter = yield* makeTestAdapter(wrapperPath);
@@ -231,9 +231,9 @@ it.layer(grokAdapterTestLayer)("GrokAdapterLive", (it) => {
       const requestLogPath = path.join(tempDir, "requests.ndjson");
       const wrapperPath = yield* Effect.promise(() =>
         makeMockGrokWrapper({
-          T3_ACP_REQUEST_LOG_PATH: requestLogPath,
-          T3_ACP_EMIT_TOOL_CALLS: "1",
-          T3_ACP_ALLOW_ONCE_OPTION_ID: "agent-defined-approval-id",
+          Kairo_ACP_REQUEST_LOG_PATH: requestLogPath,
+          Kairo_ACP_EMIT_TOOL_CALLS: "1",
+          Kairo_ACP_ALLOW_ONCE_OPTION_ID: "agent-defined-approval-id",
         }),
       );
       const adapter = yield* makeTestAdapter(wrapperPath);
@@ -279,7 +279,7 @@ it.layer(grokAdapterTestLayer)("GrokAdapterLive", (it) => {
     Effect.gen(function* () {
       const threadId = ThreadId.make("grok-xai-ask-user-question");
       const wrapperPath = yield* Effect.promise(() =>
-        makeMockGrokWrapper({ T3_ACP_EMIT_XAI_ASK_USER_QUESTION: "1" }),
+        makeMockGrokWrapper({ Kairo_ACP_EMIT_XAI_ASK_USER_QUESTION: "1" }),
       );
       const adapter = yield* makeTestAdapter(wrapperPath);
       const requested =

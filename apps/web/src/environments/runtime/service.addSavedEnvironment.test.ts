@@ -1,4 +1,4 @@
-import { EnvironmentAuthInvalidError, EnvironmentId } from "@t3tools/contracts";
+import { EnvironmentAuthInvalidError, EnvironmentId } from "@kairo/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -13,7 +13,7 @@ const mockBootstrapRemoteBearerSession = vi.fn();
 const mockFetchRemoteSessionState = vi.fn();
 const mockFetchRemoteDpopSessionState = vi.fn();
 const mockResolveRemoteWebSocketConnectionUrl = vi.fn();
-let managedRelayDpopSigner: typeof import("@t3tools/client-runtime").ManagedRelayDpopSigner;
+let managedRelayDpopSigner: typeof import("@kairo/client-runtime").ManagedRelayDpopSigner;
 const mockRemoteHttpRunPromise = vi.fn(<A, E>(effect: Effect.Effect<A, E>) =>
   Effect.runPromise(
     effect.pipe(
@@ -78,8 +78,8 @@ const mockClientGetConfig = vi.fn(async () => ({
 const mockConnectManagedCloudEnvironment = vi.fn();
 const mockReadManagedRelayClerkToken = vi.fn();
 
-vi.mock("@t3tools/shared/remote", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@t3tools/shared/remote")>()),
+vi.mock("@kairo/shared/remote", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@kairo/shared/remote")>()),
   resolveRemotePairingTarget: mockResolveRemotePairingTarget,
 }));
 
@@ -141,8 +141,8 @@ vi.mock("./connection", async (importOriginal) => ({
   createEnvironmentConnection: mockCreateEnvironmentConnection,
 }));
 
-vi.mock("@t3tools/client-runtime", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@t3tools/client-runtime")>();
+vi.mock("@kairo/client-runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@kairo/client-runtime")>();
   managedRelayDpopSigner = actual.ManagedRelayDpopSigner;
   return {
     ...actual,

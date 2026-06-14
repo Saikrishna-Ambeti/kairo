@@ -1,4 +1,4 @@
-import { SupermemoryError } from "@t3tools/contracts";
+import { SupermemoryError } from "@kairo/contracts";
 import * as Effect from "effect/Effect";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";

@@ -1,5 +1,5 @@
-import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime";
-import { ThreadId } from "@t3tools/contracts";
+import { scopeThreadRef, scopedThreadKey } from "@kairo/client-runtime";
+import { ThreadId } from "@kairo/contracts";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import {

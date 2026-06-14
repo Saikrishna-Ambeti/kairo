@@ -20,7 +20,7 @@ import {
   type ServerProvider,
   type ServerProviderModel,
   type ServerProviderState,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 
 import { formatProviderDriverKindLabel } from "./providerModels";
 

@@ -18,7 +18,7 @@ import {
   type ServerProcessResourceHistoryResult,
   type ServerProvider,
   type SourceControlDiscoveryResult,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
 import { page } from "vite-plus/test/browser";
@@ -233,17 +233,17 @@ function createBaseServerConfig(): ServerConfig {
       policy: "loopback-browser",
       bootstrapMethods: ["one-time-token"],
       sessionMethods: ["browser-session-cookie", "bearer-access-token"],
-      sessionCookieName: "t3_session",
+      sessionCookieName: "kairo_session",
     },
     cwd: "/repo/project",
-    keybindingsConfigPath: "/repo/project/.t3code-keybindings.json",
+    keybindingsConfigPath: "/repo/project/.kairo-keybindings.json",
     keybindings: [],
     issues: [],
     surface: DEFAULT_PRODUCT_SURFACE_CONFIG,
     providers: [],
     availableEditors: ["cursor"],
     observability: {
-      logsDirectoryPath: "/repo/project/.t3/logs",
+      logsDirectoryPath: "/repo/project/.kairo/logs",
       localTracingEnabled: true,
       otlpTracesUrl: "http://localhost:4318/v1/traces",
       otlpTracesEnabled: true,
@@ -422,7 +422,7 @@ const createDesktopBridgeStub = (overrides?: {
         policy: "remote-reachable",
         bootstrapMethods: ["one-time-token"],
         sessionMethods: ["browser-session-cookie", "bearer-access-token"],
-        sessionCookieName: "t3_session",
+        sessionCookieName: "kairo_session",
       },
       scopes: ["orchestration:read", "access:write"],
       sessionMethod: "bearer-access-token",
@@ -465,7 +465,7 @@ const createDesktopBridgeStub = (overrides?: {
     setTheme: vi.fn().mockResolvedValue(undefined),
     showContextMenu: vi.fn().mockResolvedValue(null),
     openExternal: vi.fn().mockResolvedValue(true),
-    createCloudAuthRequest: vi.fn().mockResolvedValue("t3code-dev://auth/callback?t3_state=test"),
+    createCloudAuthRequest: vi.fn().mockResolvedValue("kairo-dev://auth/callback?kairo_state=test"),
     getCloudAuthToken: vi.fn().mockResolvedValue(null),
     setCloudAuthToken: vi.fn().mockResolvedValue(true),
     clearCloudAuthToken: vi.fn().mockResolvedValue(undefined),
@@ -1021,7 +1021,7 @@ describe("GeneralSettingsPanel observability", () => {
     await networkAccessToggle.click();
     await expect.element(page.getByText("Enable network access?")).toBeInTheDocument();
     await expect
-      .element(page.getByText("T3 Code will restart to expose this environment over the network."))
+      .element(page.getByText("Kairo will restart to expose this environment over the network."))
       .toBeInTheDocument();
     await page.getByRole("button", { name: "Restart and enable", exact: true }).click();
     await vi.waitFor(() => {
@@ -1124,8 +1124,8 @@ describe("GeneralSettingsPanel observability", () => {
           .fn()
           .mockResolvedValue(createEmptyProcessResourceHistoryResult()),
         getTraceDiagnostics: vi.fn().mockResolvedValue({
-          traceFilePath: "/repo/project/.t3/traces.jsonl",
-          scannedFilePaths: ["/repo/project/.t3/traces.jsonl"],
+          traceFilePath: "/repo/project/.kairo/traces.jsonl",
+          scannedFilePaths: ["/repo/project/.kairo/traces.jsonl"],
           readAt: makeUtc("2036-04-07T00:00:00.000Z"),
           recordCount: 0,
           parseErrorCount: 0,
@@ -1158,7 +1158,7 @@ describe("GeneralSettingsPanel observability", () => {
     const openLogsButton = page.getByLabelText("Open logs folder");
     await openLogsButton.click();
 
-    expect(openInEditor).toHaveBeenCalledWith("/repo/project/.t3/logs", "cursor");
+    expect(openInEditor).toHaveBeenCalledWith("/repo/project/.kairo/logs", "cursor");
   });
 
   it("shows an OpenCode server URL field in provider settings", async () => {
@@ -1219,7 +1219,7 @@ describe("GeneralSettingsPanel observability", () => {
 
   it("keeps long provider update commands inside the fixed-width popover", async () => {
     const longUpdateCommand =
-      "npm install -g @anthropic-ai/claude-code@latest --registry=https://registry.npmjs.org --cache=/tmp/t3code-provider-update-cache";
+      "npm install -g @anthropic-ai/claude-code@latest --registry=https://registry.npmjs.org --cache=/tmp/kairo-provider-update-cache";
 
     setServerConfigSnapshot({
       ...createBaseServerConfig(),

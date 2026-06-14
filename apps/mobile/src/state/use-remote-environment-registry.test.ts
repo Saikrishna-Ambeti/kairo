@@ -1,10 +1,10 @@
 import { describe, expect, it } from "@effect/vitest";
-import { EnvironmentId } from "@t3tools/contracts";
+import { EnvironmentId } from "@kairo/contracts";
 import {
   createManagedRelaySession,
   ManagedRelayDpopSigner,
   setManagedRelaySession,
-} from "@t3tools/client-runtime";
+} from "@kairo/client-runtime";
 import * as Effect from "effect/Effect";
 import { beforeEach, vi } from "vite-plus/test";
 
@@ -72,8 +72,8 @@ vi.mock("react-native", () => ({
   },
 }));
 
-vi.mock("@t3tools/client-runtime", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@t3tools/client-runtime")>();
+vi.mock("@kairo/client-runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@kairo/client-runtime")>();
   return {
     ...actual,
     WsTransport: mocks.WsTransport,

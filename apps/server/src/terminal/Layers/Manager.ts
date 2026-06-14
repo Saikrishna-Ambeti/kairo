@@ -8,9 +8,9 @@ import {
   type TerminalSessionSnapshot,
   type TerminalSessionStatus,
   type TerminalSummary,
-} from "@t3tools/contracts";
-import { makeKeyedCoalescingWorker } from "@t3tools/shared/KeyedCoalescingWorker";
-import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
+} from "@kairo/contracts";
+import { makeKeyedCoalescingWorker } from "@kairo/shared/KeyedCoalescingWorker";
+import { getTerminalLabel } from "@kairo/shared/terminalLabels";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Encoding from "effect/Encoding";
@@ -885,7 +885,7 @@ function toSessionKey(threadId: string, terminalId: string): string {
 
 function shouldExcludeTerminalEnvKey(key: string): boolean {
   const normalizedKey = key.toUpperCase();
-  if (normalizedKey.startsWith("T3CODE_")) {
+  if (normalizedKey.startsWith("KAIRO_")) {
     return true;
   }
   if (normalizedKey.startsWith("VITE_")) {

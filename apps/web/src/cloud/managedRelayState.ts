@@ -4,11 +4,8 @@ import {
   ManagedRelayClient,
   managedRelaySessionAtom,
   readManagedRelaySnapshotState,
-} from "@t3tools/client-runtime";
-import type {
-  RelayClientDeviceRecord,
-  RelayClientEnvironmentRecord,
-} from "@t3tools/contracts/relay";
+} from "@kairo/client-runtime";
+import type { RelayClientDeviceRecord, RelayClientEnvironmentRecord } from "@kairo/contracts/relay";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

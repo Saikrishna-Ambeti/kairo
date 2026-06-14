@@ -7,7 +7,7 @@ import {
   ProviderInstanceId,
   ThreadId,
   type OrchestrationShellSnapshot,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 
 import { createShellSnapshotManager } from "./shellSnapshotState.ts";
 

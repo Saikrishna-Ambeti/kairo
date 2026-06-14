@@ -3,7 +3,7 @@ import {
   type MessageId,
   type ServerProviderSkill,
   type TurnId,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 import {
   createContext,
   Fragment,
@@ -78,7 +78,7 @@ import {
 } from "~/lib/terminalContext";
 import { cn } from "~/lib/utils";
 import { useUiStateStore } from "~/uiStateStore";
-import { type TimestampFormat } from "@t3tools/contracts/settings";
+import { type TimestampFormat } from "@kairo/contracts/settings";
 import { formatChatTimestampTooltip, formatShortTimestamp } from "../../timestampFormat";
 
 import {

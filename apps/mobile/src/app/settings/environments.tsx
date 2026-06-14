@@ -1,8 +1,8 @@
 import { useAuth } from "@clerk/expo";
 import { Stack, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
-import type { EnvironmentId } from "@t3tools/contracts";
-import type { RelayClientEnvironmentRecord } from "@t3tools/contracts/relay";
+import type { EnvironmentId } from "@kairo/contracts";
+import type { RelayClientEnvironmentRecord } from "@kairo/contracts/relay";
 import * as Effect from "effect/Effect";
 import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, View } from "react-native";
@@ -103,7 +103,7 @@ export default function SettingsEnvironmentsRouteScreen() {
             </View>
             <Text className="text-center text-[14px] leading-[20px] text-foreground-muted">
               No environments connected yet.{"\n"}Tap{" "}
-              <Text className="font-t3-bold text-foreground">+</Text> to add one.
+              <Text className="font-kairo-bold text-foreground">+</Text> to add one.
             </Text>
           </View>
         )}
@@ -136,7 +136,7 @@ function ConfiguredCloudEnvironmentRows() {
       try {
         const token = await getToken(resolveRelayClerkTokenOptions());
         if (!token) {
-          throw new Error("Sign in to T3 Cloud before connecting.");
+          throw new Error("Sign in to Kairo Cloud before connecting.");
         }
         await mobileRuntime.runPromise(
           connectCloudEnvironment({
@@ -161,7 +161,9 @@ function ConfiguredCloudEnvironmentRows() {
   return (
     <View collapsable={false} className="mt-5 gap-3">
       <View className="flex-row items-center justify-between px-1">
-        <Text className="text-[13px] font-t3-bold uppercase text-foreground-muted">T3 Cloud</Text>
+        <Text className="text-[13px] font-kairo-bold uppercase text-foreground-muted">
+          Kairo Cloud
+        </Text>
         <Pressable
           accessibilityRole="button"
           disabled={cloudEnvironmentsState.isPending}
@@ -197,8 +199,8 @@ function ConfiguredCloudEnvironmentRows() {
         </View>
       ) : cloudEnvironmentsState.error ? (
         <View collapsable={false} className="gap-3 rounded-[24px] bg-card p-5">
-          <Text className="text-[15px] font-t3-bold text-foreground">
-            Could not load T3 Cloud environments
+          <Text className="text-[15px] font-kairo-bold text-foreground">
+            Could not load Kairo Cloud environments
           </Text>
           <Text className="text-[13px] leading-[18px] text-foreground-muted">
             {cloudEnvironmentsState.error}
@@ -250,7 +252,10 @@ function CloudEnvironmentRow(props: {
         />
       </View>
       <View className="min-w-0 flex-1 gap-0.5">
-        <Text className="text-[16px] font-t3-bold leading-[21px] text-foreground" numberOfLines={1}>
+        <Text
+          className="text-[16px] font-kairo-bold leading-[21px] text-foreground"
+          numberOfLines={1}
+        >
           {props.environment.label}
         </Text>
         <Text className="text-[12px] leading-[16px] text-foreground-muted" numberOfLines={1}>
@@ -266,7 +271,7 @@ function CloudEnvironmentRow(props: {
         onPress={props.onConnect}
         className="min-h-[40px] min-w-[88px] items-center justify-center rounded-[14px] bg-primary px-4 active:opacity-70 disabled:opacity-50"
       >
-        <Text className="text-[13px] font-t3-bold text-primary-foreground">
+        <Text className="text-[13px] font-kairo-bold text-primary-foreground">
           {props.isConnecting ? "Connecting" : "Connect"}
         </Text>
       </Pressable>

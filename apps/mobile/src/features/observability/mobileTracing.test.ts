@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { vi } from "vite-plus/test";
 
-import { remoteHttpClientLayer } from "@t3tools/client-runtime";
+import { remoteHttpClientLayer } from "@kairo/client-runtime";
 
 import { makeMobileTracingLayer } from "./mobileTracing";
 

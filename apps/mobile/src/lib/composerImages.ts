@@ -2,7 +2,7 @@ import {
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
   type UploadChatImageAttachment,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 import { uuidv4 } from "./uuid";
 
 export interface DraftComposerImageAttachment extends UploadChatImageAttachment {

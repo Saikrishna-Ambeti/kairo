@@ -1,5 +1,5 @@
 import { assert, beforeEach, it } from "vite-plus/test";
-import type { FilesystemBrowseResult } from "@t3tools/contracts";
+import type { FilesystemBrowseResult } from "@kairo/contracts";
 import { AtomRegistry } from "effect/unstable/reactivity";
 
 import {

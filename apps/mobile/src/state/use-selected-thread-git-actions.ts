@@ -5,12 +5,9 @@ import {
   EnvironmentScopedThreadShell,
   type VcsRef,
   type GitActionRequestInput,
-} from "@t3tools/client-runtime";
-import { CommandId, type GitRunStackedActionResult } from "@t3tools/contracts";
-import {
-  dedupeRemoteBranchesWithLocalMatches,
-  sanitizeFeatureBranchName,
-} from "@t3tools/shared/git";
+} from "@kairo/client-runtime";
+import { CommandId, type GitRunStackedActionResult } from "@kairo/contracts";
+import { dedupeRemoteBranchesWithLocalMatches, sanitizeFeatureBranchName } from "@kairo/shared/git";
 
 import { uuidv4 } from "../lib/uuid";
 import { getEnvironmentClient } from "./environment-session-registry";

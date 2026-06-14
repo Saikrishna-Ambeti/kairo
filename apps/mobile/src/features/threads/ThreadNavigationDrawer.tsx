@@ -19,10 +19,7 @@ import { groupProjectsByRepository } from "../../lib/repositoryGroups";
 import { scopedThreadKey } from "../../lib/scopedEntities";
 import { relativeTime } from "../../lib/time";
 import { threadStatusTone } from "./threadPresentation";
-import {
-  EnvironmentScopedProjectShell,
-  EnvironmentScopedThreadShell,
-} from "@t3tools/client-runtime";
+import { EnvironmentScopedProjectShell, EnvironmentScopedThreadShell } from "@kairo/client-runtime";
 
 const threadActivityOrder = Order.mapInput(
   Order.Struct({
@@ -169,7 +166,7 @@ export function ThreadNavigationDrawer(props: {
             ]}
           >
             <View className="flex-row items-center justify-between px-4 pb-5">
-              <Text className="text-[26px] font-t3-bold">Threads</Text>
+              <Text className="text-[26px] font-kairo-bold">Threads</Text>
               <Pressable
                 onPress={() => {
                   props.onClose();
@@ -197,7 +194,7 @@ export function ThreadNavigationDrawer(props: {
               {groupedThreads.map((group) => (
                 <View key={group.key} className="gap-3">
                   <Text
-                    className="px-1 text-[15px] font-t3-bold text-foreground-muted"
+                    className="px-1 text-[15px] font-kairo-bold text-foreground-muted"
                     style={{ letterSpacing: -0.2 }}
                   >
                     {group.title}
@@ -233,7 +230,7 @@ export function ThreadNavigationDrawer(props: {
                           >
                             <View className="flex-row items-start justify-between gap-3">
                               <View className="flex-1 gap-1">
-                                <Text className="text-[16px] font-t3-bold" numberOfLines={1}>
+                                <Text className="text-[16px] font-kairo-bold" numberOfLines={1}>
                                   {thread.title}
                                 </Text>
                                 <Text

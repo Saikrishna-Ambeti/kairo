@@ -1,5 +1,5 @@
-import { EnvironmentId, type PersistedSavedEnvironmentRecord } from "@t3tools/contracts";
-import { fromLenientJson } from "@t3tools/shared/schemaJson";
+import { EnvironmentId, type PersistedSavedEnvironmentRecord } from "@kairo/contracts";
+import { fromLenientJson } from "@kairo/shared/schemaJson";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as Data from "effect/Data";
@@ -122,7 +122,7 @@ export interface DesktopSavedEnvironmentsShape {
 export class DesktopSavedEnvironments extends Context.Service<
   DesktopSavedEnvironments,
   DesktopSavedEnvironmentsShape
->()("@t3tools/desktop/settings/DesktopSavedEnvironments") {}
+>()("@kairo/desktop/settings/DesktopSavedEnvironments") {}
 
 function toPersistedSavedEnvironmentRecord(
   record: PersistedSavedEnvironmentStorageRecord,

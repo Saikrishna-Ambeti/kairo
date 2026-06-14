@@ -1,4 +1,4 @@
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import type { EnvironmentId, ThreadId } from "@kairo/contracts";
 import { useLocalSearchParams } from "expo-router";
 import Stack from "expo-router/stack";
 import { SymbolView } from "expo-symbols";
@@ -36,7 +36,7 @@ const REVIEW_HEADER_SPACING = 0;
 const ReviewNotice = memo(function ReviewNotice(props: { readonly notice: string }) {
   return (
     <View className="border-b border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/60 dark:bg-amber-950/40">
-      <Text className="text-[12px] font-t3-bold uppercase text-amber-700 dark:text-amber-300">
+      <Text className="text-[12px] font-kairo-bold uppercase text-amber-700 dark:text-amber-300">
         Partial diff
       </Text>
       <Text className="text-[12px] leading-[18px] text-amber-800 dark:text-amber-200">
@@ -64,7 +64,7 @@ function ReviewSelectionActionBar(props: {
         tintColor="#ffffff"
         type="monochrome"
       />
-      <Text className="text-[15px] font-t3-bold text-white">{props.title}</Text>
+      <Text className="text-[15px] font-kairo-bold text-white">{props.title}</Text>
     </>
   );
 
@@ -194,7 +194,7 @@ export function ReviewSheet() {
     if (error) {
       children.push(
         <View key="review-error" className="border-b border-border bg-card px-4 py-3">
-          <Text className="text-[13px] font-t3-bold text-foreground">Review unavailable</Text>
+          <Text className="text-[13px] font-kairo-bold text-foreground">Review unavailable</Text>
           <Text className="text-[12px] leading-[18px] text-foreground-muted">{error}</Text>
         </View>,
       );
@@ -389,7 +389,7 @@ export function ReviewSheet() {
             {listHeader}
             {!selectedSection ? (
               <View className="border-b border-border bg-card px-4 py-5">
-                <Text className="text-[14px] font-t3-bold text-foreground">No review diffs</Text>
+                <Text className="text-[14px] font-kairo-bold text-foreground">No review diffs</Text>
                 <Text className="text-[12px] leading-[18px] text-foreground-muted">
                   This thread has no ready turn diffs and the worktree diff is empty.
                 </Text>
@@ -401,7 +401,7 @@ export function ReviewSheet() {
               </View>
             ) : parsedDiff.kind === "empty" ? (
               <View className="border-b border-border bg-card px-4 py-5">
-                <Text className="text-[14px] font-t3-bold text-foreground">No changes</Text>
+                <Text className="text-[14px] font-kairo-bold text-foreground">No changes</Text>
                 <Text className="text-[12px] leading-[18px] text-foreground-muted">
                   {selectedSection.subtitle ?? "This diff is empty."}
                 </Text>

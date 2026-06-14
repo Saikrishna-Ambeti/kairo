@@ -8,7 +8,7 @@ import {
   Minimize2Icon,
   WrapTextIcon,
 } from "lucide-react";
-import type { ServerProviderSkill } from "@t3tools/contracts";
+import type { ServerProviderSkill } from "@kairo/contracts";
 import React, {
   Children,
   Suspense,

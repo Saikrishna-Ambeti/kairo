@@ -22,7 +22,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import {
   DesktopBackendBootstrap,
   type DesktopBackendBootstrap as DesktopBackendBootstrapValue,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 
 import * as DesktopBackendConfiguration from "./DesktopBackendConfiguration.ts";
 import * as DesktopObservability from "../app/DesktopObservability.ts";
@@ -35,7 +35,7 @@ const DEFAULT_BACKEND_READINESS_TIMEOUT = Duration.minutes(1);
 const DEFAULT_BACKEND_READINESS_INTERVAL = Duration.millis(100);
 const DEFAULT_BACKEND_READINESS_REQUEST_TIMEOUT = Duration.seconds(1);
 const DEFAULT_BACKEND_TERMINATE_GRACE = Duration.seconds(2);
-const BACKEND_READINESS_PATH = "/.well-known/t3/environment";
+const BACKEND_READINESS_PATH = "/.well-known/kairo/environment";
 
 type BackendProcessLayerServices = ChildProcessSpawner.ChildProcessSpawner | HttpClient.HttpClient;
 
@@ -116,7 +116,7 @@ export interface DesktopBackendManagerShape {
 export class DesktopBackendManager extends Context.Service<
   DesktopBackendManager,
   DesktopBackendManagerShape
->()("@t3tools/desktop/backend/DesktopBackendManager") {}
+>()("@kairo/desktop/backend/DesktopBackendManager") {}
 
 const { logWarning: logBackendManagerWarning, logError: logBackendManagerError } =
   DesktopObservability.makeComponentLogger("desktop-backend-manager");

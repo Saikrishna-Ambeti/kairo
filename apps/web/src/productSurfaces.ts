@@ -2,7 +2,7 @@ import {
   DEFAULT_PRODUCT_SURFACE_CONFIG,
   type ProductSurfaceConfig,
   type ServerConfig,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 
 import { useServerConfig } from "./rpc/serverState";
 

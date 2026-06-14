@@ -5,7 +5,7 @@ import {
   ProviderInstanceId,
   type ProviderInstanceConfigMap,
   type ServerSettings,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -18,7 +18,7 @@ import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import {
   getCodexSupermemoryIntegrationState,
   syncCodexSupermemoryIntegration,
-  T3_SUPERMEMORY_CONTAINER_TAG,
+  Kairo_SUPERMEMORY_CONTAINER_TAG,
 } from "./SupermemoryCodexIntegration.ts";
 import {
   applySupermemoryProviderBindings,
@@ -50,7 +50,7 @@ const makeTempCodexHome = Effect.fn("makeTempCodexHome")(function* (): Effect.fn
   FileSystem.FileSystem | Scope.Scope
 > {
   const fs = yield* FileSystem.FileSystem;
-  return yield* fs.makeTempDirectoryScoped({ prefix: "t3codex-supermemory-" }).pipe(Effect.orDie);
+  return yield* fs.makeTempDirectoryScoped({ prefix: "kairox-supermemory-" }).pipe(Effect.orDie);
 });
 
 const writeCodexSupermemoryHooks = Effect.fn("writeCodexSupermemoryHooks")(function* (
@@ -222,7 +222,7 @@ describe("Supermemory provider bindings", () => {
 
 describe("Supermemory provider installer status", () => {
   it.layer(NodeServicesTestLayer)("Codex integration files", (it) => {
-    it.effect("syncs Codex credentials and T3's shared memory container config", () =>
+    it.effect("syncs Codex credentials and Kairo's shared memory container config", () =>
       Effect.gen(function* () {
         const path = yield* Path.Path;
         const homePath = yield* makeTempCodexHome();
@@ -239,8 +239,8 @@ describe("Supermemory provider installer status", () => {
         expect(state.configSynced).toBe(true);
 
         const config = yield* readJsonFile(path.join(homePath, "supermemory.json"));
-        expect(objectField(config, "userContainerTag")).toBe(T3_SUPERMEMORY_CONTAINER_TAG);
-        expect(objectField(config, "projectContainerTag")).toBe(T3_SUPERMEMORY_CONTAINER_TAG);
+        expect(objectField(config, "userContainerTag")).toBe(Kairo_SUPERMEMORY_CONTAINER_TAG);
+        expect(objectField(config, "projectContainerTag")).toBe(Kairo_SUPERMEMORY_CONTAINER_TAG);
 
         const credentials = yield* readJsonFile(
           path.join(homePath, "supermemory", "credentials.json"),
@@ -249,43 +249,45 @@ describe("Supermemory provider installer status", () => {
       }),
     );
 
-    it.effect("does not report Codex ready until hooks and T3 integration files are present", () =>
-      Effect.gen(function* () {
-        const homePath = yield* makeTempCodexHome();
-        expect(
-          computeProviderMemoryStatus({
-            instanceId: codexId,
-            driver: codexDriver,
-            displayName: "Codex",
-            selected: true,
-            hasApiKey: true,
-            codexIntegration: yield* getCodexSupermemoryIntegrationState({
-              config: { homePath },
-              apiKey: "sm_hosted",
+    it.effect(
+      "does not report Codex ready until hooks and Kairo integration files are present",
+      () =>
+        Effect.gen(function* () {
+          const homePath = yield* makeTempCodexHome();
+          expect(
+            computeProviderMemoryStatus({
+              instanceId: codexId,
+              driver: codexDriver,
+              displayName: "Codex",
+              selected: true,
+              hasApiKey: true,
+              codexIntegration: yield* getCodexSupermemoryIntegrationState({
+                config: { homePath },
+                apiKey: "sm_hosted",
+              }),
             }),
-          }),
-        ).toMatchObject({ status: "needs_install" });
+          ).toMatchObject({ status: "needs_install" });
 
-        yield* writeCodexSupermemoryHooks(homePath);
-        yield* syncCodexSupermemoryIntegration({
-          config: { homePath },
-          apiKey: "sm_hosted",
-        });
+          yield* writeCodexSupermemoryHooks(homePath);
+          yield* syncCodexSupermemoryIntegration({
+            config: { homePath },
+            apiKey: "sm_hosted",
+          });
 
-        expect(
-          computeProviderMemoryStatus({
-            instanceId: codexId,
-            driver: codexDriver,
-            displayName: "Codex",
-            selected: true,
-            hasApiKey: true,
-            codexIntegration: yield* getCodexSupermemoryIntegrationState({
-              config: { homePath },
-              apiKey: "sm_hosted",
+          expect(
+            computeProviderMemoryStatus({
+              instanceId: codexId,
+              driver: codexDriver,
+              displayName: "Codex",
+              selected: true,
+              hasApiKey: true,
+              codexIntegration: yield* getCodexSupermemoryIntegrationState({
+                config: { homePath },
+                apiKey: "sm_hosted",
+              }),
             }),
-          }),
-        ).toMatchObject({ status: "ready" });
-      }),
+          ).toMatchObject({ status: "ready" });
+        }),
     );
   });
 

@@ -7,7 +7,7 @@ import {
   type VcsPullResult,
   type VcsStatusResult,
   type VcsSwitchRefResult,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 import { AtomRegistry } from "effect/unstable/reactivity";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 

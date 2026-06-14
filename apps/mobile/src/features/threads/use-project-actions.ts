@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 
-import { EnvironmentScopedProjectShell, type VcsRef } from "@t3tools/client-runtime";
+import { EnvironmentScopedProjectShell, type VcsRef } from "@kairo/client-runtime";
 import {
   CommandId,
   DEFAULT_PROVIDER_INTERACTION_MODE,
@@ -11,8 +11,8 @@ import {
   type ModelSelection,
   type ProviderInteractionMode,
   type RuntimeMode,
-} from "@t3tools/contracts";
-import { buildTemporaryWorktreeBranchName, sanitizeFeatureBranchName } from "@t3tools/shared/git";
+} from "@kairo/contracts";
+import { buildTemporaryWorktreeBranchName, sanitizeFeatureBranchName } from "@kairo/shared/git";
 import { uuidv4 } from "../../lib/uuid";
 
 import type { DraftComposerImageAttachment } from "../../lib/composerImages";

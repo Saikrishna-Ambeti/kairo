@@ -277,7 +277,7 @@ export class QrCode {
   // based on the given mask and this object's error correction level field.
   private drawFormatBits(mask: int): void {
     // Calculate error correction code and pack bits
-    const data: int = (this.errorCorrectionLevel.formatBits << 3) | mask; // errCorrLvl is uint2, mask is uint3
+    const data: int = (this.errorCorrectionLevel.formatBits << 3) | mask; // errCorrLvl is uint2, mask is uinkairo
     let rem: int = data;
     for (let i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
     const bits = ((data << 10) | rem) ^ 0x5412; // uint15

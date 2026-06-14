@@ -11,7 +11,7 @@ import {
   EnvironmentHttpInternalServerError,
   EnvironmentHttpUnauthorizedError,
   EnvironmentId,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 import {
   RelayEnvironmentConnectScope,
   type RelayClientDeviceRecord,
@@ -20,7 +20,7 @@ import {
   type RelayClientEnvironmentRecord,
   type RelayProtectedError as RelayProtectedErrorType,
   type RelayManagedEndpointProviderKind,
-} from "@t3tools/contracts/relay";
+} from "@kairo/contracts/relay";
 import {
   exchangeRemoteDpopAccessToken,
   fetchRemoteEnvironmentDescriptor,
@@ -28,7 +28,7 @@ import {
   ManagedRelayClient,
   ManagedRelayDpopSigner,
   type WsRpcClient,
-} from "@t3tools/client-runtime";
+} from "@kairo/client-runtime";
 
 import { ensureLocalApi } from "../localApi";
 import {
@@ -83,7 +83,7 @@ function ensureRelayClientAvailable(
     if (status.status === "available") return;
     if (status.status === "unsupported") {
       return yield* new CloudEnvironmentLinkError({
-        message: `T3 Code cannot install the relay client automatically on ${status.platform}-${status.arch}.`,
+        message: `Kairo cannot install the relay client automatically on ${status.platform}-${status.arch}.`,
       });
     }
 
@@ -105,7 +105,7 @@ function ensureRelayClientAvailable(
       return yield* new CloudEnvironmentLinkError({
         message:
           installed.status === "unsupported"
-            ? `T3 Code cannot install the relay client automatically on ${installed.platform}-${installed.arch}.`
+            ? `Kairo cannot install the relay client automatically on ${installed.platform}-${installed.arch}.`
             : "The relay client is still unavailable after installation.",
       });
     }
@@ -288,7 +288,7 @@ export function listManagedCloudEnvironments(input: {
     const configuredRelayUrl = relayUrl();
     if (!configuredRelayUrl) {
       return yield* new CloudEnvironmentLinkError({
-        message: "T3CODE_RELAY_URL is not configured.",
+        message: "KAIRO_RELAY_URL is not configured.",
       });
     }
     const relayClient = yield* ManagedRelayClient;
@@ -318,7 +318,7 @@ export function listCloudDevices(input: {
   return Effect.gen(function* () {
     if (!relayUrl()) {
       return yield* new CloudEnvironmentLinkError({
-        message: "T3CODE_RELAY_URL is not configured.",
+        message: "KAIRO_RELAY_URL is not configured.",
       });
     }
     const relayClient = yield* ManagedRelayClient;
@@ -347,7 +347,7 @@ export function connectManagedCloudEnvironment(input: {
     const configuredRelayUrl = relayUrl();
     if (!configuredRelayUrl) {
       return yield* new CloudEnvironmentLinkError({
-        message: "T3CODE_RELAY_URL is not configured.",
+        message: "KAIRO_RELAY_URL is not configured.",
       });
     }
     const persistedRelayUrl = normalizeRelayBaseUrl(input.relayUrl);
@@ -522,7 +522,7 @@ export function linkEnvironmentToCloud(input: {
     const configuredRelayUrl = relayUrl();
     if (!configuredRelayUrl) {
       return yield* new CloudEnvironmentLinkError({
-        message: "T3CODE_RELAY_URL is not configured.",
+        message: "KAIRO_RELAY_URL is not configured.",
       });
     }
     const relayClient = yield* ManagedRelayClient;
@@ -627,7 +627,7 @@ export function linkPrimaryEnvironmentToCloud(input: {
     const configuredRelayUrl = relayUrl();
     if (!configuredRelayUrl) {
       return yield* new CloudEnvironmentLinkError({
-        message: "T3CODE_RELAY_URL is not configured.",
+        message: "KAIRO_RELAY_URL is not configured.",
       });
     }
     const relayClient = yield* ManagedRelayClient;

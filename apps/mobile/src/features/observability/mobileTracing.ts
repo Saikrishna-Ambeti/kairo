@@ -40,7 +40,7 @@ export function makeMobileTracingLayer(
       "X-Axiom-Dataset": config.tracesDataset,
     },
     resource: {
-      serviceName: "t3-mobile",
+      serviceName: "kairo-mobile",
       serviceVersion: resource.serviceVersion,
       attributes: {
         "service.runtime": "react-native",

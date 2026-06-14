@@ -8,7 +8,7 @@ import {
   TurnId,
   type OrchestrationThread,
   type OrchestrationThreadActivity,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 
 import { buildThreadFeed } from "./threadActivity";
 

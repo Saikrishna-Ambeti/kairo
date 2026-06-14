@@ -3,8 +3,8 @@ import type * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { FetchHttpClient } from "effect/unstable/http";
 
-import { remoteHttpClientLayer } from "@t3tools/client-runtime";
-import { httpHeaderRedactionLayer } from "@t3tools/shared/httpObservability";
+import { remoteHttpClientLayer } from "@kairo/client-runtime";
+import { httpHeaderRedactionLayer } from "@kairo/shared/httpObservability";
 import {
   PrimaryEnvironmentHttpClient,
   primaryEnvironmentHttpClientLive,

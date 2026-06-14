@@ -2,14 +2,14 @@ import { beforeEach, vi } from "vite-plus/test";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { EnvironmentId } from "@t3tools/contracts";
-import { RelayMobileClientId } from "@t3tools/contracts/relay";
+import { EnvironmentId } from "@kairo/contracts";
+import { RelayMobileClientId } from "@kairo/contracts/relay";
 import {
   managedRelayClientLayer,
   ManagedRelayClient,
   ManagedRelayDpopSigner,
   remoteHttpClientLayer,
-} from "@t3tools/client-runtime";
+} from "@kairo/client-runtime";
 import { HttpClient } from "effect/unstable/http";
 
 import {
@@ -400,7 +400,7 @@ describe("mobile cloud link environment client", () => {
             }),
           );
         }
-        if (String(url).endsWith("/.well-known/t3/environment")) {
+        if (String(url).endsWith("/.well-known/kairo/environment")) {
           return Promise.resolve(
             Response.json({
               environmentId: "env-1",
@@ -448,7 +448,7 @@ describe("mobile cloud link environment client", () => {
       const environmentTokenBody = new URLSearchParams(
         requestBodyText(environmentTokenRequest?.body),
       );
-      expect(environmentTokenBody.get("client_label")).toBe("T3 Code Mobile");
+      expect(environmentTokenBody.get("client_label")).toBe("Kairo Mobile");
       expect(environmentTokenBody.get("client_device_type")).toBe("mobile");
       expect(environmentTokenBody.get("client_os")).toBe("iOS");
     }),
@@ -767,7 +767,7 @@ describe("mobile cloud link environment client", () => {
               Response.json(validDpopAccessTokenResponse("environment:connect")),
             );
           }
-          if (String(url).endsWith("/.well-known/t3/environment")) {
+          if (String(url).endsWith("/.well-known/kairo/environment")) {
             return Promise.resolve(
               Response.json({
                 environmentId: "env-1",
@@ -854,7 +854,7 @@ describe("mobile cloud link environment client", () => {
               Response.json(validDpopAccessTokenResponse("environment:connect")),
             );
           }
-          if (String(url).endsWith("/.well-known/t3/environment")) {
+          if (String(url).endsWith("/.well-known/kairo/environment")) {
             return Promise.resolve(
               Response.json({
                 environmentId: "env-1",
@@ -1061,7 +1061,7 @@ describe("mobile cloud link environment client", () => {
             Promise.resolve(
               String(url).endsWith("/v1/client/dpop-token")
                 ? Response.json(validDpopAccessTokenResponse("environment:connect"))
-                : String(url).endsWith("/.well-known/t3/environment")
+                : String(url).endsWith("/.well-known/kairo/environment")
                   ? Response.json({
                       environmentId: "env-other",
                       label: "Other Desktop",

@@ -1,5 +1,5 @@
 {
-  "name": "@t3tools/shared",
+  "name": "@kairo/shared",
   "private": true,
   "type": "module",
   "exports": {
@@ -157,9 +157,9 @@
     "test": "vp test run"
   },
   "dependencies": {
+    "@kairo/contracts": "workspace:*",
     "@noble/curves": "catalog:",
     "@noble/hashes": "catalog:",
-    "@t3tools/contracts": "workspace:*",
     "effect": "catalog:",
     "jose": "catalog:",
     "yaml": "catalog:"

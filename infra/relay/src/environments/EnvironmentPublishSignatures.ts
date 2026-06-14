@@ -1,14 +1,14 @@
 import {
   RelayAgentActivityPublishProofPayload,
   type RelayAgentActivityPublishRequest,
-} from "@t3tools/contracts/relay";
+} from "@kairo/contracts/relay";
 import {
   decodeRelayJwt,
   normalizeRelayIssuer,
   RELAY_ACTIVITY_PUBLISH_TYP,
   verifyRelayJwt,
-} from "@t3tools/shared/relayJwt";
-import { stableStringify } from "@t3tools/shared/relaySigning";
+} from "@kairo/shared/relayJwt";
+import { stableStringify } from "@kairo/shared/relaySigning";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -71,7 +71,7 @@ export interface EnvironmentPublishSignaturesShape {
 export class EnvironmentPublishSignatures extends Context.Service<
   EnvironmentPublishSignatures,
   EnvironmentPublishSignaturesShape
->()("t3code-relay/environments/EnvironmentPublishSignatures") {}
+>()("kairo-relay/environments/EnvironmentPublishSignatures") {}
 
 const decodeProof = Schema.decodeUnknownEffect(RelayAgentActivityPublishProofPayload);
 
@@ -118,7 +118,7 @@ const make = Effect.gen(function* () {
         publicKey: input.environmentPublicKey,
         token: input.request.proof,
         typ: RELAY_ACTIVITY_PUBLISH_TYP,
-        issuer: `t3-env:${input.environmentId}`,
+        issuer: `kairo-env:${input.environmentId}`,
         audience: normalizeRelayIssuer(config.relayIssuer),
         nowEpochSeconds: Math.floor(now.epochMilliseconds / 1_000),
       }).pipe(

@@ -8,12 +8,12 @@ import {
   createFilesystemBrowseManager,
   filesystemBrowseStateAtom,
   getFilesystemBrowseTargetKey,
-} from "@t3tools/client-runtime";
+} from "@kairo/client-runtime";
 import type {
   EnvironmentId,
   FilesystemBrowseInput,
   FilesystemBrowseResult,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 import { useEffect, useMemo } from "react";
 
 import { appAtomRegistry } from "./atom-registry";

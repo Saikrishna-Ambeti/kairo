@@ -3,7 +3,7 @@ import {
   type ProviderInstanceConfigMap,
   type ProviderInstanceId,
   type SupermemoryProviderStatus,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 import * as Effect from "effect/Effect";
 import * as Duration from "effect/Duration";
 
@@ -100,7 +100,7 @@ export function computeProviderMemoryStatus(input: {
         supported: true,
         status: "needs_action",
         message:
-          "Install providers to connect the saved Supermemory key and T3's shared memory space to Codex.",
+          "Install providers to connect the saved Supermemory key and Kairo's shared memory space to Codex.",
       };
     }
     return {
@@ -110,7 +110,7 @@ export function computeProviderMemoryStatus(input: {
       selected: true,
       supported: true,
       status: "ready",
-      message: "Codex hooks, credentials, and T3's shared Supermemory space are connected.",
+      message: "Codex hooks, credentials, and Kairo's shared Supermemory space are connected.",
     };
   }
 

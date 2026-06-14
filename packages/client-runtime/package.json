@@ -1,5 +1,5 @@
 {
-  "name": "@t3tools/client-runtime",
+  "name": "@kairo/client-runtime",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
@@ -18,8 +18,8 @@
     "test": "vp test run"
   },
   "dependencies": {
-    "@t3tools/contracts": "workspace:*",
-    "@t3tools/shared": "workspace:*",
+    "@kairo/contracts": "workspace:*",
+    "@kairo/shared": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
