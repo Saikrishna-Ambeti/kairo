@@ -102,6 +102,18 @@ export function getOnboardingAgentAction(
   return "install";
 }
 
+export function getOnboardingAgentDescription(provider: ServerProvider | undefined): string {
+  const action = getOnboardingAgentAction(provider);
+  if (action === "login") {
+    return "Sign in to this provider to finish detection.";
+  }
+  return (
+    provider?.versionAdvisory?.updateCommand ??
+    provider?.message ??
+    "Install the CLI and refresh detection."
+  );
+}
+
 function showOnboardingError(title: string, error: unknown) {
   toastManager.add(
     stackedThreadToast({
@@ -276,9 +288,7 @@ function AgentStep({
                     </Badge>
                   </div>
                   <p className="truncate text-xs text-muted-foreground">
-                    {provider?.versionAdvisory?.updateCommand ??
-                      provider?.message ??
-                      "Install the CLI and refresh detection."}
+                    {getOnboardingAgentDescription(provider)}
                   </p>
                 </div>
                 <div className="flex gap-2 sm:justify-end">

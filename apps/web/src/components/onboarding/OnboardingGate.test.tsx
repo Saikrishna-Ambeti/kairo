@@ -4,6 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   canNavigateBackToOnboardingStep,
   getOnboardingAgentAction,
+  getOnboardingAgentDescription,
   isUsableOnboardingAgent,
 } from "./OnboardingGate";
 
@@ -56,15 +57,15 @@ describe("onboarding agent detection", () => {
   });
 
   it("shows login for installed providers that require authentication", () => {
-    expect(
-      getOnboardingAgentAction(
-        provider({
-          status: "error",
-          auth: { status: "unauthenticated" },
-          message: "Codex CLI is not authenticated. Run `codex login` and try again.",
-        }),
-      ),
-    ).toBe("login");
+    const unauthenticatedProvider = provider({
+      status: "error",
+      auth: { status: "unauthenticated" },
+      message: "Codex CLI is not authenticated. Run `codex login` and try again.",
+    });
+    expect(getOnboardingAgentAction(unauthenticatedProvider)).toBe("login");
+    expect(getOnboardingAgentDescription(unauthenticatedProvider)).toBe(
+      "Sign in to this provider to finish detection.",
+    );
   });
 
   it("keeps failed unauthenticated providers on install when they are missing", () => {

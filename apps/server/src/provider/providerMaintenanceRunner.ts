@@ -17,6 +17,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import { HttpClient } from "effect/unstable/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
@@ -24,11 +25,12 @@ import { ProviderRegistry } from "./Services/ProviderRegistry.ts";
 import { makeProviderMaintenanceCommandCoordinator } from "./providerMaintenanceCommandCoordinator.ts";
 import { enrichProviderSnapshotWithVersionAdvisory } from "./providerMaintenance.ts";
 import type { ProviderMaintenanceCapabilities } from "./providerMaintenance.ts";
-import { collectUint8StreamText } from "../stream/collectUint8StreamText.ts";
+import * as ExternalLauncher from "../process/externalLauncher.ts";
 const isServerProviderUpdateError = Schema.is(ServerProviderUpdateError);
 
 const UPDATE_TIMEOUT_MS = 5 * 60_000;
 const UPDATE_OUTPUT_MAX_BYTES = 10_000;
+const AUTH_URL_PATTERN = /https:\/\/[^\s"'<>]+/;
 
 export interface ProviderMaintenanceCommandResult {
   readonly stdout: string;
@@ -75,11 +77,89 @@ interface VerifiedProviderRefresh {
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 
+function authUrlFromOutput(output: string): string | null {
+  const match = AUTH_URL_PATTERN.exec(output);
+  if (!match) return null;
+  let candidate = match[0];
+  while (/[),.;:!?]$/.test(candidate)) {
+    candidate = candidate.slice(0, -1);
+  }
+  try {
+    const url = new URL(candidate);
+    return url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+const collectUint8StreamTextWithTap = Effect.fnUntraced(function* <E, E2>(input: {
+  readonly stream: Stream.Stream<Uint8Array, E>;
+  readonly maxBytes?: number | undefined;
+  readonly onText?: ((text: string) => Effect.Effect<void, E2>) | undefined;
+}): Effect.fn.Return<
+  {
+    readonly text: string;
+    readonly truncated: boolean;
+    readonly bytes: number;
+  },
+  E | E2
+> {
+  const maxBytes = input.maxBytes ?? Number.POSITIVE_INFINITY;
+  const decoder = new TextDecoder();
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
+  let truncated = false;
+
+  const processChunk = Effect.fnUntraced(function* (chunk: Uint8Array) {
+    if (truncated) {
+      const decoded = decoder.decode(chunk, { stream: true });
+      if (decoded.length > 0 && input.onText) {
+        yield* input.onText(decoded);
+      }
+      return;
+    }
+
+    const remainingBytes = maxBytes - bytes;
+    if (remainingBytes <= 0) {
+      truncated = true;
+      const decoded = decoder.decode(chunk, { stream: true });
+      if (decoded.length > 0 && input.onText) {
+        yield* input.onText(decoded);
+      }
+      return;
+    }
+
+    const nextChunk = chunk.byteLength > remainingBytes ? chunk.slice(0, remainingBytes) : chunk;
+    chunks.push(nextChunk);
+    bytes += nextChunk.byteLength;
+    truncated = chunk.byteLength > remainingBytes;
+
+    const decoded = decoder.decode(nextChunk, { stream: !truncated });
+    if (decoded.length > 0 && input.onText) {
+      yield* input.onText(decoded);
+    }
+  });
+
+  yield* Stream.runForEach(input.stream, processChunk);
+  const remainder = truncated ? "" : decoder.decode();
+  if (remainder.length > 0 && input.onText) {
+    yield* input.onText(remainder);
+  }
+  return {
+    text: Buffer.concat(chunks, bytes).toString("utf8"),
+    bytes,
+    truncated,
+  };
+});
+
 const runProviderMaintenanceCommandWithSpawner = Effect.fn("ProviderMaintenanceRunner.runCommand")(
   function* (input: {
     readonly spawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
     readonly command: string;
     readonly args: ReadonlyArray<string>;
+    readonly onOutputText?:
+      | ((text: string) => Effect.Effect<void, ProviderMaintenanceCommandError>)
+      | undefined;
   }) {
     const collectCommandResult = Effect.fn("ProviderMaintenanceRunner.collectCommandResult")(
       function* () {
@@ -98,13 +178,15 @@ const runProviderMaintenanceCommandWithSpawner = Effect.fn("ProviderMaintenanceR
 
         const [stdout, stderr, exitCode] = yield* Effect.all(
           [
-            collectUint8StreamText({
+            collectUint8StreamTextWithTap({
               stream: child.stdout,
               maxBytes: UPDATE_OUTPUT_MAX_BYTES,
+              onText: input.onOutputText,
             }),
-            collectUint8StreamText({
+            collectUint8StreamTextWithTap({
               stream: child.stderr,
               maxBytes: UPDATE_OUTPUT_MAX_BYTES,
+              onText: input.onOutputText,
             }),
             child.exitCode,
           ],
@@ -200,13 +282,23 @@ function makeUpdateState(input: {
 
 export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
   const providerRegistry = yield* ProviderRegistry;
+  const externalLauncher = yield* ExternalLauncher.ExternalLauncher;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const httpClient = yield* HttpClient.HttpClient;
-  const runMaintenanceCommand = (command: string, args: ReadonlyArray<string>) =>
+  const runMaintenanceCommand = (
+    command: string,
+    args: ReadonlyArray<string>,
+    options?: {
+      readonly onOutputText?:
+        | ((text: string) => Effect.Effect<void, ProviderMaintenanceCommandError>)
+        | undefined;
+    },
+  ) =>
     runProviderMaintenanceCommandWithSpawner({
       spawner,
       command,
       args,
+      onOutputText: options?.onOutputText,
     });
   const commandCoordinator = yield* makeProviderMaintenanceCommandCoordinator({
     makeAlreadyRunningError: () =>
@@ -331,6 +423,29 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
           Effect.map((providers) => ({ providers })),
         );
       const startedAtRef = yield* Ref.make<string | null>(null);
+      const authUrlOpenedRef = yield* Ref.make(false);
+      const authOutputBufferRef = yield* Ref.make("");
+      const openAuthUrlFromOutput = Effect.fn("ProviderMaintenanceRunner.openAuthUrlFromOutput")(
+        function* (text: string) {
+          const alreadyOpened = yield* Ref.get(authUrlOpenedRef);
+          if (alreadyOpened) return;
+          const output = yield* Ref.updateAndGet(authOutputBufferRef, (previous) =>
+            `${previous}${text}`.slice(-4_096),
+          );
+          const authUrl = authUrlFromOutput(output);
+          if (!authUrl) return;
+          yield* Ref.set(authUrlOpenedRef, true);
+          yield* externalLauncher.launchBrowser(authUrl).pipe(
+            Effect.mapError(
+              (cause) =>
+                new ProviderMaintenanceCommandError({
+                  message: `Failed to open provider login URL: ${cause.message}`,
+                  cause,
+                }),
+            ),
+          );
+        },
+      );
 
       const runCommand = Effect.fn("ProviderMaintenanceRunner.runProviderLoginCommand")(
         function* () {
@@ -345,7 +460,9 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
             }),
           );
 
-          const result = yield* runMaintenanceCommand(login.executable, login.args);
+          const result = yield* runMaintenanceCommand(login.executable, login.args, {
+            onOutputText: openAuthUrlFromOutput,
+          });
           const finishedAt = yield* nowIso;
           if (result.timedOut || result.exitCode !== 0) {
             return yield* finish(
@@ -364,7 +481,7 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
               status: "succeeded",
               startedAt,
               finishedAt,
-              message: "Provider login completed.",
+              message: "Provider sign-in opened in your browser.",
               output: commandOutput(result),
             }),
           );

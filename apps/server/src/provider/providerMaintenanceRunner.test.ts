@@ -26,6 +26,7 @@ import {
   makeProviderMaintenanceCapabilities,
   type ProviderMaintenanceCapabilities,
 } from "./providerMaintenance.ts";
+import * as ExternalLauncher from "../process/externalLauncher.ts";
 const isServerProviderUpdateError = Schema.is(ServerProviderUpdateError);
 
 const CODEX_DRIVER = ProviderDriverKind.make("codex");
@@ -148,6 +149,15 @@ function mockSpawnerLayer(
   );
 }
 
+function mockExternalLauncherLayer(
+  launchBrowser: (target: string) => Effect.Effect<void> = () => Effect.void,
+) {
+  return Layer.succeed(ExternalLauncher.ExternalLauncher, {
+    launchBrowser,
+    launchEditor: () => Effect.void,
+  });
+}
+
 function makeRegistry(
   initialProviders: ServerProvider | ReadonlyArray<ServerProvider> = baseProvider,
 ) {
@@ -202,28 +212,44 @@ function makeRegistry(
   });
 }
 
-const makeTestRunner = (registry: ProviderRegistryShape) =>
+const makeTestRunner = (
+  registry: ProviderRegistryShape,
+  externalLauncherLayer: Layer.Layer<ExternalLauncher.ExternalLauncher> = mockExternalLauncherLayer(),
+) =>
   Effect.service(ProviderMaintenanceRunner.ProviderMaintenanceRunner).pipe(
     Effect.provide(
       ProviderMaintenanceRunner.layer.pipe(
-        Layer.provide(Layer.succeed(ProviderRegistry, registry)),
+        Layer.provide(
+          Layer.mergeAll(Layer.succeed(ProviderRegistry, registry), externalLauncherLayer),
+        ),
       ),
     ),
   );
 
 describe("providerMaintenanceRunner", () => {
-  it.effect("runs the allowlisted provider login command and refreshes the instance", () => {
-    const calls: Array<{ command: string; args: ReadonlyArray<string> }> = [];
+  it.effect("opens the provider login URL from command output in the browser", () => {
+    const commandCalls: Array<{ command: string; args: ReadonlyArray<string> }> = [];
+    const browserTargets: string[] = [];
     return Effect.gen(function* () {
       const { registry } = yield* makeRegistry(baseProvider);
-      const updater = yield* makeTestRunner(registry);
+      const updater = yield* makeTestRunner(
+        registry,
+        mockExternalLauncherLayer((target) =>
+          Effect.sync(() => {
+            browserTargets.push(target);
+          }),
+        ),
+      );
 
       const result = yield* updater.loginProvider(CODEX_DRIVER);
-      assert.deepStrictEqual(calls, [
+      assert.deepStrictEqual(commandCalls, [
         {
           command: "codex",
           args: ["login"],
         },
+      ]);
+      assert.deepStrictEqual(browserTargets, [
+        "https://auth.openai.com/oauth/authorize?device=abc",
       ]);
       assert.deepStrictEqual(result.providers, [baseProvider]);
     }).pipe(
@@ -231,8 +257,11 @@ describe("providerMaintenanceRunner", () => {
         Layer.mergeAll(
           latestVersionHttpClient("1.2.3"),
           mockSpawnerLayer((command, args) => {
-            calls.push({ command, args });
-            return { stdout: "logged in" };
+            commandCalls.push({ command, args });
+            return {
+              stdout:
+                "Open this URL to authenticate: https://auth.openai.com/oauth/authorize?device=abc\n",
+            };
           }),
         ),
       ),
