@@ -79,6 +79,7 @@ import { VcsStatusBroadcaster } from "./vcs/VcsStatusBroadcaster.ts";
 import { VcsProvisioningService } from "./vcs/VcsProvisioningService.ts";
 import { GitWorkflowService } from "./git/GitWorkflowService.ts";
 import { SupermemoryService } from "./memory/SupermemoryService.ts";
+import { ComposioService } from "./composio/ComposioService.ts";
 import { ReviewService } from "./review/ReviewService.ts";
 import { ProjectSetupScriptRunner } from "./project/Services/ProjectSetupScriptRunner.ts";
 import { RepositoryIdentityResolver } from "./project/Services/RepositoryIdentityResolver.ts";
@@ -157,6 +158,13 @@ const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [WS_METHODS.serverTestMemoryConnection, AuthOrchestrationOperateScope],
   [WS_METHODS.serverInstallMemoryProviders, AuthOrchestrationOperateScope],
   [WS_METHODS.serverDisableMemory, AuthOrchestrationOperateScope],
+  [WS_METHODS.serverGetComposioStatus, AuthOrchestrationReadScope],
+  [WS_METHODS.serverListComposioToolkits, AuthOrchestrationReadScope],
+  [WS_METHODS.serverInstallAndLoginComposio, AuthOrchestrationOperateScope],
+  [WS_METHODS.serverLoginComposio, AuthOrchestrationOperateScope],
+  [WS_METHODS.serverLinkComposioToolkit, AuthOrchestrationOperateScope],
+  [WS_METHODS.serverInstallComposioAgentSupport, AuthOrchestrationOperateScope],
+  [WS_METHODS.serverDisableComposio, AuthOrchestrationOperateScope],
   [WS_METHODS.cloudGetRelayClientStatus, AuthRelayWriteScope],
   [WS_METHODS.cloudInstallRelayClient, AuthRelayWriteScope],
   [WS_METHODS.sourceControlLookupRepository, AuthOrchestrationReadScope],
@@ -302,6 +310,7 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
       );
       const sourceControlRepositories = yield* SourceControlRepositoryService;
       const supermemory = yield* SupermemoryService;
+      const composio = yield* ComposioService;
       const bootstrapCredentials = yield* PairingGrantStore.PairingGrantStore;
       const sessions = yield* SessionStore.SessionStore;
       const processDiagnostics = yield* ProcessDiagnostics.ProcessDiagnostics;
@@ -1194,6 +1203,42 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
         [WS_METHODS.serverDisableMemory]: (_input) =>
           observeRpcEffect(WS_METHODS.serverDisableMemory, supermemory.disable, {
             "rpc.aggregate": "server.memory",
+          }),
+        [WS_METHODS.serverGetComposioStatus]: (_input) =>
+          observeRpcEffect(WS_METHODS.serverGetComposioStatus, composio.getStatus, {
+            "rpc.aggregate": "server.composio",
+          }),
+        [WS_METHODS.serverListComposioToolkits]: (input) =>
+          observeRpcEffect(WS_METHODS.serverListComposioToolkits, composio.listToolkits(input), {
+            "rpc.aggregate": "server.composio",
+          }),
+        [WS_METHODS.serverInstallAndLoginComposio]: (input) =>
+          observeRpcStream(
+            WS_METHODS.serverInstallAndLoginComposio,
+            composio.installAndLogin(input),
+            {
+              "rpc.aggregate": "server.composio",
+            },
+          ),
+        [WS_METHODS.serverLoginComposio]: (input) =>
+          observeRpcStream(WS_METHODS.serverLoginComposio, composio.login(input), {
+            "rpc.aggregate": "server.composio",
+          }),
+        [WS_METHODS.serverLinkComposioToolkit]: (input) =>
+          observeRpcStream(WS_METHODS.serverLinkComposioToolkit, composio.linkToolkit(input), {
+            "rpc.aggregate": "server.composio",
+          }),
+        [WS_METHODS.serverInstallComposioAgentSupport]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.serverInstallComposioAgentSupport,
+            composio.installAgentSupport(input),
+            {
+              "rpc.aggregate": "server.composio",
+            },
+          ),
+        [WS_METHODS.serverDisableComposio]: (_input) =>
+          observeRpcEffect(WS_METHODS.serverDisableComposio, composio.disable, {
+            "rpc.aggregate": "server.composio",
           }),
         [WS_METHODS.cloudGetRelayClientStatus]: (_input) =>
           observeRpcEffect(WS_METHODS.cloudGetRelayClientStatus, relayClient.resolve, {

@@ -159,6 +159,13 @@ vi.mock("@t3tools/client-runtime", async (importOriginal) => {
       testMemoryConnection: vi.fn(),
       installMemoryProviders: vi.fn(),
       disableMemory: vi.fn(),
+      getComposioStatus: vi.fn(),
+      listComposioToolkits: vi.fn(),
+      installAndLoginComposio: vi.fn(),
+      loginComposio: vi.fn(),
+      linkComposioToolkit: vi.fn(),
+      installComposioAgentSupport: vi.fn(),
+      disableComposio: vi.fn(),
     },
   };
   return {

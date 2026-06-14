@@ -99,6 +99,7 @@ import { ServerLifecycleEvents, type ServerLifecycleEventsShape } from "./server
 import { ServerRuntimeStartup, type ServerRuntimeStartupShape } from "./serverRuntimeStartup.ts";
 import { ServerSettingsService, type ServerSettingsShape } from "./serverSettings.ts";
 import { SupermemoryService, type SupermemoryServiceShape } from "./memory/SupermemoryService.ts";
+import { ComposioService, type ComposioServiceShape } from "./composio/ComposioService.ts";
 import { TerminalManager, type TerminalManagerShape } from "./terminal/Services/Manager.ts";
 import {
   BrowserTraceCollector,
@@ -250,6 +251,19 @@ const defaultSupermemoryStatus: SupermemoryStatus = {
   providers: [],
 };
 
+const defaultComposioStatus = {
+  enabled: false,
+  primaryAction: "install_and_login" as const,
+  cli: {
+    status: "missing" as const,
+    platform: "darwin" as const,
+    installCommandLabel: "curl -fsSL https://composio.dev/install | bash",
+  },
+  auth: { status: "unknown" as const },
+  toolkits: [],
+  agentSupport: [],
+};
+
 const makeBrowserOtlpPayload = (spanName: string) =>
   Effect.gen(function* () {
     const collector = yield* Effect.acquireRelease(
@@ -356,6 +370,7 @@ const buildAppUnderTest = (options?: {
     providerRegistry?: Partial<ProviderRegistryShape>;
     serverSettings?: Partial<ServerSettingsShape>;
     supermemory?: Partial<SupermemoryServiceShape>;
+    composio?: Partial<ComposioServiceShape>;
     externalLauncher?: Partial<ExternalLauncher.ExternalLauncherShape>;
     vcsDriver?: Partial<VcsDriver.VcsDriverShape>;
     vcsDriverRegistry?: Partial<VcsDriverRegistry.VcsDriverRegistryShape>;
@@ -551,7 +566,7 @@ const buildAppUnderTest = (options?: {
         })
       : VcsStatusBroadcaster.layer.pipe(Layer.provide(gitWorkflowLayer));
 
-    const servedRoutesLayer = HttpRouter.serve(makeRoutesLayer, {
+    const servedRoutesBaseLayer = HttpRouter.serve(makeRoutesLayer, {
       disableListenLog: true,
       disableLogger: true,
     }).pipe(
@@ -597,6 +612,18 @@ const buildAppUnderTest = (options?: {
           installProviders: () => Effect.succeed(defaultSupermemoryStatus),
           disable: Effect.succeed(defaultSupermemoryStatus),
           ...options?.layers?.supermemory,
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(ComposioService)({
+          getStatus: Effect.succeed(defaultComposioStatus),
+          listToolkits: () => Effect.succeed({ items: [], source: "fallback" as const }),
+          installAndLogin: () => Stream.empty,
+          login: () => Stream.empty,
+          linkToolkit: () => Stream.empty,
+          installAgentSupport: () => Effect.succeed(defaultComposioStatus),
+          disable: Effect.succeed(defaultComposioStatus),
+          ...options?.layers?.composio,
         }),
       ),
       Layer.provide(
@@ -688,6 +715,9 @@ const buildAppUnderTest = (options?: {
           ...options?.layers?.terminalManager,
         }),
       ),
+    );
+
+    const servedRoutesLayer = servedRoutesBaseLayer.pipe(
       Layer.provide(
         Layer.mock(OrchestrationEngineService)({
           readEvents: () => Stream.empty,

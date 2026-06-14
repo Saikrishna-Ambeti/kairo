@@ -49,6 +49,7 @@ import { hasCloudPublicConfig } from "./cloud/publicConfig.ts";
 import { ProviderRegistryLive } from "./provider/Layers/ProviderRegistry.ts";
 import { ServerSettingsLive } from "./serverSettings.ts";
 import { SupermemoryServiceLive } from "./memory/SupermemoryService.ts";
+import { ComposioServiceLive } from "./composio/ComposioService.ts";
 import { ProjectFaviconResolverLive } from "./project/Layers/ProjectFaviconResolver.ts";
 import { RepositoryIdentityResolverLive } from "./project/Layers/RepositoryIdentityResolver.ts";
 import { WorkspaceEntriesLive } from "./workspace/Layers/WorkspaceEntries.ts";
@@ -306,7 +307,10 @@ const RuntimeCoreBaseDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(ServerSecretStore.layer),
 );
 
-const RuntimeCoreDependenciesLive = SupermemoryServiceLive.pipe(
+const RuntimeCoreDependenciesLive = Layer.mergeAll(
+  SupermemoryServiceLive,
+  ComposioServiceLive,
+).pipe(
   Layer.provideMerge(RuntimeCoreBaseDependenciesLive),
   Layer.provideMerge(
     Layer.mergeAll(

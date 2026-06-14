@@ -163,6 +163,34 @@ function createBrowserLocalApi(rpcClient?: WsRpcClient): LocalApi {
         rpcClient
           ? rpcClient.server.disableMemory()
           : Promise.reject(unavailableLocalBackendError()),
+      getComposioStatus: () =>
+        rpcClient
+          ? rpcClient.server.getComposioStatus()
+          : Promise.reject(unavailableLocalBackendError()),
+      listComposioToolkits: (input) =>
+        rpcClient
+          ? rpcClient.server.listComposioToolkits(input)
+          : Promise.reject(unavailableLocalBackendError()),
+      installAndLoginComposio: (input, onProgress) =>
+        rpcClient
+          ? rpcClient.server.installAndLoginComposio(input, onProgress)
+          : Promise.reject(unavailableLocalBackendError()),
+      loginComposio: (input, onProgress) =>
+        rpcClient
+          ? rpcClient.server.loginComposio(input, onProgress)
+          : Promise.reject(unavailableLocalBackendError()),
+      linkComposioToolkit: (input, onProgress) =>
+        rpcClient
+          ? rpcClient.server.linkComposioToolkit(input, onProgress)
+          : Promise.reject(unavailableLocalBackendError()),
+      installComposioAgentSupport: (input) =>
+        rpcClient
+          ? rpcClient.server.installComposioAgentSupport(input)
+          : Promise.reject(unavailableLocalBackendError()),
+      disableComposio: () =>
+        rpcClient
+          ? rpcClient.server.disableComposio()
+          : Promise.reject(unavailableLocalBackendError()),
       discoverSourceControl: () =>
         rpcClient
           ? rpcClient.server.discoverSourceControl()

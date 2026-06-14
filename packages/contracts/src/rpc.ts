@@ -52,6 +52,16 @@ import {
   TestMemoryConnectionInput,
 } from "./memory.ts";
 import {
+  ComposioError,
+  ComposioOperationProgressEvent,
+  ComposioStatus,
+  ComposioToolkitCatalog,
+  InstallComposioAgentSupportInput,
+  InstallComposioInput,
+  LinkComposioToolkitInput,
+  ListComposioToolkitsInput,
+} from "./composio.ts";
+import {
   ClientOrchestrationCommand,
   ORCHESTRATION_WS_METHODS,
   OrchestrationDispatchCommandError,
@@ -207,6 +217,13 @@ export const WS_METHODS = {
   serverTestMemoryConnection: "server.testMemoryConnection",
   serverInstallMemoryProviders: "server.installMemoryProviders",
   serverDisableMemory: "server.disableMemory",
+  serverGetComposioStatus: "server.getComposioStatus",
+  serverListComposioToolkits: "server.listComposioToolkits",
+  serverInstallAndLoginComposio: "server.installAndLoginComposio",
+  serverLoginComposio: "server.loginComposio",
+  serverLinkComposioToolkit: "server.linkComposioToolkit",
+  serverInstallComposioAgentSupport: "server.installComposioAgentSupport",
+  serverDisableComposio: "server.disableComposio",
 
   // Cloud environment methods
   cloudGetRelayClientStatus: "cloud.getRelayClientStatus",
@@ -343,6 +360,63 @@ export const WsServerDisableMemoryRpc = Rpc.make(WS_METHODS.serverDisableMemory,
   payload: Schema.Struct({}),
   success: SupermemoryStatus,
   error: SupermemoryRpcError,
+});
+
+const ComposioRpcError = Schema.Union([
+  ComposioError,
+  ServerSettingsError,
+  EnvironmentAuthorizationError,
+]);
+
+export const WsServerGetComposioStatusRpc = Rpc.make(WS_METHODS.serverGetComposioStatus, {
+  payload: Schema.Struct({}),
+  success: ComposioStatus,
+  error: ComposioRpcError,
+});
+
+export const WsServerListComposioToolkitsRpc = Rpc.make(WS_METHODS.serverListComposioToolkits, {
+  payload: ListComposioToolkitsInput,
+  success: ComposioToolkitCatalog,
+  error: ComposioRpcError,
+});
+
+export const WsServerInstallAndLoginComposioRpc = Rpc.make(
+  WS_METHODS.serverInstallAndLoginComposio,
+  {
+    payload: InstallComposioInput,
+    success: ComposioOperationProgressEvent,
+    error: ComposioRpcError,
+    stream: true,
+  },
+);
+
+export const WsServerLoginComposioRpc = Rpc.make(WS_METHODS.serverLoginComposio, {
+  payload: InstallComposioInput,
+  success: ComposioOperationProgressEvent,
+  error: ComposioRpcError,
+  stream: true,
+});
+
+export const WsServerLinkComposioToolkitRpc = Rpc.make(WS_METHODS.serverLinkComposioToolkit, {
+  payload: LinkComposioToolkitInput,
+  success: ComposioOperationProgressEvent,
+  error: ComposioRpcError,
+  stream: true,
+});
+
+export const WsServerInstallComposioAgentSupportRpc = Rpc.make(
+  WS_METHODS.serverInstallComposioAgentSupport,
+  {
+    payload: InstallComposioAgentSupportInput,
+    success: ComposioStatus,
+    error: ComposioRpcError,
+  },
+);
+
+export const WsServerDisableComposioRpc = Rpc.make(WS_METHODS.serverDisableComposio, {
+  payload: Schema.Struct({}),
+  success: ComposioStatus,
+  error: ComposioRpcError,
 });
 
 export const WsCloudGetRelayClientStatusRpc = Rpc.make(WS_METHODS.cloudGetRelayClientStatus, {
@@ -648,6 +722,13 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerTestMemoryConnectionRpc,
   WsServerInstallMemoryProvidersRpc,
   WsServerDisableMemoryRpc,
+  WsServerGetComposioStatusRpc,
+  WsServerListComposioToolkitsRpc,
+  WsServerInstallAndLoginComposioRpc,
+  WsServerLoginComposioRpc,
+  WsServerLinkComposioToolkitRpc,
+  WsServerInstallComposioAgentSupportRpc,
+  WsServerDisableComposioRpc,
   WsCloudGetRelayClientStatusRpc,
   WsCloudInstallRelayClientRpc,
   WsSourceControlLookupRepositoryRpc,

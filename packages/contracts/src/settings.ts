@@ -362,6 +362,24 @@ export const ObservabilitySettings = Schema.Struct({
 });
 export type ObservabilitySettings = typeof ObservabilitySettings.Type;
 
+export const DEFAULT_COMPOSIO_TOOLKITS = [
+  // Toolkits connected through Composio are persisted here. Discovery suggestions
+  // live in the catalog endpoint, not in the connected-apps status.
+] as const;
+
+export const IntegrationsSettings = Schema.Struct({
+  composio: Schema.Struct({
+    enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+    providerInstanceIds: Schema.Array(ProviderInstanceId).pipe(
+      Schema.withDecodingDefault(Effect.succeed([])),
+    ),
+    preferredToolkits: Schema.Array(TrimmedNonEmptyString).pipe(
+      Schema.withDecodingDefault(Effect.succeed([...DEFAULT_COMPOSIO_TOOLKITS])),
+    ),
+  }).pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+}).pipe(Schema.withDecodingDefault(Effect.succeed({})));
+export type IntegrationsSettings = typeof IntegrationsSettings.Type;
+
 export const DEFAULT_AUTOMATIC_GIT_FETCH_INTERVAL = Duration.seconds(30);
 
 export const ServerSettings = Schema.Struct({
@@ -406,6 +424,7 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
   memory: MemorySettings,
+  integrations: IntegrationsSettings,
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 });
 export type ServerSettings = typeof ServerSettings.Type;
@@ -506,6 +525,17 @@ export const ServerSettingsPatch = Schema.Struct({
   // The web UI sends a fully-formed map every time it edits this field.
   providerInstances: Schema.optionalKey(Schema.Record(ProviderInstanceId, ProviderInstanceConfig)),
   memory: Schema.optionalKey(MemorySettingsPatch),
+  integrations: Schema.optionalKey(
+    Schema.Struct({
+      composio: Schema.optionalKey(
+        Schema.Struct({
+          enabled: Schema.optionalKey(Schema.Boolean),
+          providerInstanceIds: Schema.optionalKey(Schema.Array(ProviderInstanceId)),
+          preferredToolkits: Schema.optionalKey(Schema.Array(TrimmedNonEmptyString)),
+        }),
+      ),
+    }),
+  ),
 });
 export type ServerSettingsPatch = typeof ServerSettingsPatch.Type;
 
