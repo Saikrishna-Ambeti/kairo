@@ -1,6 +1,8 @@
 # Architecture
 
-Kairo runs as a **Node.js WebSocket server** that wraps `codex app-server` (JSON-RPC over stdio) and serves a React web app.
+Kairo is an AI assistant app backed by a **Node.js WebSocket server** and a React client. The product goal is a practical assistant for daily work: it keeps useful context, can use persistent memory, and can connect to authorized data from other platforms.
+
+The current runtime grew out of a coding-agent workbench. Today the server still wraps local provider runtimes such as `codex app-server` (JSON-RPC over stdio), serves the React web app, and normalizes provider events into a shared orchestration model.
 
 ```
 ┌─────────────────────────────────┐
@@ -31,7 +33,9 @@ Kairo runs as a **Node.js WebSocket server** that wraps `codex app-server` (JSON
 
 - **Server**: `apps/server` is the main coordinator. It serves the web app, accepts WebSocket requests, waits for startup readiness before welcoming clients, and sends all outbound pushes through a single ordered push path.
 
-- **Provider runtime**: `codex app-server` does the actual provider/session work. The server talks to it over JSON-RPC on stdio and translates those runtime events into the app's orchestration model.
+- **Provider runtime**: Local AI provider runtimes do the actual assistant/session work. The server talks to them through provider adapters and translates native runtime events into the app's orchestration model.
+
+- **Memory and connected data**: Product-level memory and account integrations are treated as assistant context sources. They should enter the runtime through explicit user authorization and shared orchestration paths rather than one-off UI state.
 
 - **Background workers**: Long-running async flows such as runtime ingestion, command reaction, and checkpoint processing run as queue-backed workers. This keeps work ordered, reduces timing races, and gives tests a deterministic way to wait for the system to go idle.
 

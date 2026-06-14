@@ -1,12 +1,18 @@
 # Kairo
 
-Kairo is a minimal web GUI for coding agents (currently Codex, Claude, Cursor, and OpenCode, more coming soon).
+Kairo is an AI assistant app for getting through everyday work faster.
+
+It is built for people who are new to AI, or who want a calmer way to use AI effectively in daily life and work. Kairo gives you one place to ask for help, keep useful context in persistent memory, and connect the assistant to information from the tools and platforms you already use.
+
+Kairo can help with practical tasks like understanding documents, drafting responses, summarizing information, planning next steps, and using connected data when you authorize it. Under the hood it can run multiple AI providers, including Codex, Claude, Cursor, and OpenCode.
+
+> [!NOTE]
+> Kairo is still very early. Some user-facing flows are changing from a coding-agent workbench into a more general assistant experience.
 
 ## Installation
 
 > [!WARNING]
-> Kairo currently supports Codex, Claude, Cursor, and OpenCode.
-> Install and authenticate at least one provider before use:
+> Kairo currently uses local AI provider CLIs. Install and authenticate at least one provider before use:
 >
 > - Codex: install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`
 > - Claude: install [Claude Code](https://claude.com/product/claude-code) and run `claude auth login`
@@ -45,11 +51,11 @@ yay -S kairo-bin
 
 ## Some notes
 
-We are very very early in this project. Expect bugs.
+We are very early in this project. Expect bugs.
 
 We are not accepting contributions yet.
 
-There's no public docs site yet, checkout the miscellaneous markdown files in [docs](./docs).
+There's no public docs site yet. Browse the markdown files in [docs](./docs) for setup notes, architecture references, and product cleanup plans.
 
 ## Documentation
 

@@ -1,5 +1,8 @@
 # Source Control Integrations
 
+> [!NOTE]
+> This is a developer/legacy reference. Source-control workflows are not part of the default non-technical assistant product direction.
+
 Kairo connects directly to your Git hosting provider so you can create pull requests, review code, and manage repositories without leaving your editor. Work stays in flow—no more jumping between browser tabs and terminal windows.
 
 ## Supported Providers

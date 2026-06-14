@@ -1,5 +1,7 @@
 # Provider architecture
 
+Kairo can present multiple AI providers as choices for the assistant. Provider choice is a product feature, but provider-specific process management stays behind the server boundary.
+
 The web app communicates with the server via WebSocket using a simple JSON-RPC-style protocol:
 
 - **Request/Response**: `{ id, method, params }` → `{ id, result }` or `{ id, error }`
@@ -13,7 +15,7 @@ Methods mirror the `NativeApi` interface defined in `@kairo/contracts`:
 - `providers.respondToRequest`, `providers.stopSession`
 - `shell.openInEditor`, `server.getConfig`
 
-Codex is the only implemented provider. `claudeCode` is reserved in contracts/UI.
+Provider implementations are exposed through server adapters. Current user-facing builds may include Codex, Claude, Cursor, and OpenCode depending on installed CLIs and feature availability.
 
 ## Client transport
 
