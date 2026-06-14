@@ -59,7 +59,7 @@ describe("Composio integrations settings logic", () => {
     expect(getComposioSetupDialogCopy("install_and_login")).toEqual({
       title: "Set up Composio",
       description:
-        "T3 Code will install the Composio CLI, then open the Composio sign-in flow. You can close this dialog. Setup will continue in the background.",
+        "Kairo will install the Composio CLI, then open the Composio sign-in flow. You can close this dialog. Setup will continue in the background.",
     });
     expect(getComposioSetupSteps("install_and_login")).toEqual([
       "Checking CLI",
@@ -74,7 +74,7 @@ describe("Composio integrations settings logic", () => {
     expect(getComposioSetupDialogCopy("login")).toEqual({
       title: "Sign in to Composio",
       description:
-        "T3 Code found the Composio CLI and will open the Composio sign-in flow. You can close this dialog. Setup will continue in the background.",
+        "Kairo found the Composio CLI and will open the Composio sign-in flow. You can close this dialog. Setup will continue in the background.",
     });
     expect(getComposioSetupSteps("login")).toEqual([
       "Checking CLI",

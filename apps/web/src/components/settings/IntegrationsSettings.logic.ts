@@ -43,8 +43,8 @@ export function getComposioSetupDialogCopy(mode: SetupMode): {
 } {
   const modeDescription =
     mode === "install_and_login"
-      ? "T3 Code will install the Composio CLI, then open the Composio sign-in flow."
-      : "T3 Code found the Composio CLI and will open the Composio sign-in flow.";
+      ? "Kairo will install the Composio CLI, then open the Composio sign-in flow."
+      : "Kairo found the Composio CLI and will open the Composio sign-in flow.";
   return {
     title: mode === "install_and_login" ? "Set up Composio" : "Sign in to Composio",
     description: `${modeDescription} You can close this dialog. Setup will continue in the background.`,
