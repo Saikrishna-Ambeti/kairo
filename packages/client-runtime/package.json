@@ -20,10 +20,10 @@
   "dependencies": {
     "@kairo/contracts": "workspace:*",
     "@kairo/shared": "workspace:*",
-    "effect": "catalog:"
+    "effect": "4.0.0-beta.78"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
+    "@effect/vitest": "4.0.0-beta.78",
     "vite-plus": "catalog:"
   }
 }

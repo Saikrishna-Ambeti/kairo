@@ -12,19 +12,19 @@
     "smoke-test": "node scripts/smoke-test.mjs"
   },
   "dependencies": {
-    "@effect/platform-node": "catalog:",
+    "@effect/platform-node": "4.0.0-beta.78",
     "@kairo/client-runtime": "workspace:*",
     "@kairo/contracts": "workspace:*",
     "@kairo/shared": "workspace:*",
     "@kairo/ssh": "workspace:*",
     "@kairo/tailscale": "workspace:*",
-    "effect": "catalog:",
+    "effect": "4.0.0-beta.78",
     "electron": "41.5.0",
-    "electron-updater": "^6.6.2"
+    "electron-updater": "^6.8.9"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
-    "@types/node": "catalog:",
+    "@effect/vitest": "4.0.0-beta.78",
+    "@types/node": "24.12.4",
     "cross-env": "^10.1.0",
     "electron-builder": "26.8.1",
     "vite-plus": "catalog:"

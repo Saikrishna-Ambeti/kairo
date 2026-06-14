@@ -160,14 +160,14 @@
     "@kairo/contracts": "workspace:*",
     "@noble/curves": "catalog:",
     "@noble/hashes": "catalog:",
-    "effect": "catalog:",
+    "effect": "4.0.0-beta.78",
     "jose": "catalog:",
-    "yaml": "catalog:"
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@effect/platform-node": "catalog:",
-    "@effect/vitest": "catalog:",
-    "@types/node": "catalog:",
+    "@effect/platform-node": "4.0.0-beta.78",
+    "@effect/vitest": "4.0.0-beta.78",
+    "@types/node": "24.12.4",
     "vite-plus": "catalog:"
   }
 }

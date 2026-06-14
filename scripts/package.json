@@ -7,14 +7,14 @@
     "test": "vp test run"
   },
   "dependencies": {
-    "@effect/platform-node": "catalog:",
+    "@effect/platform-node": "4.0.0-beta.78",
     "@kairo/contracts": "workspace:*",
     "@kairo/shared": "workspace:*",
-    "effect": "catalog:",
-    "yaml": "catalog:"
+    "effect": "4.0.0-beta.78",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
+    "@effect/vitest": "4.0.0-beta.78",
     "vite-plus": "catalog:"
   }
 }
