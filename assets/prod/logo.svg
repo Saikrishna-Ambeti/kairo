@@ -1,4 +1,53 @@
 <svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M0 10C0 4.47715 4.47715 0 10 0H118C123.523 0 128 4.47715 128 10V118C128 123.523 123.523 128 118 128H10C4.47715 128 0 123.523 0 118V10Z" fill="black"/>
-<path d="M33.4509 93V47.56H15.5309V37H64.3309V47.56H46.4109V93H33.4509ZM86.7253 93.96C82.832 93.96 78.9653 93.4533 75.1253 92.44C71.2853 91.3733 68.032 89.88 65.3653 87.96L70.4053 78.04C72.5386 79.5867 75.0186 80.8133 77.8453 81.72C80.672 82.6267 83.5253 83.08 86.4053 83.08C89.6586 83.08 92.2186 82.44 94.0853 81.16C95.952 79.88 96.8853 78.12 96.8853 75.88C96.8853 73.7467 96.0586 72.0667 94.4053 70.84C92.752 69.6133 90.0853 69 86.4053 69H80.4853V60.44L96.0853 42.76L97.5253 47.4H68.1653V37H107.365V45.4L91.8453 63.08L85.2853 59.32H89.0453C95.9253 59.32 101.125 60.8667 104.645 63.96C108.165 67.0533 109.925 71.0267 109.925 75.88C109.925 79.0267 109.099 81.9867 107.445 84.76C105.792 87.48 103.259 89.6933 99.8453 91.4C96.432 93.1067 92.0586 93.96 86.7253 93.96Z" fill="white"/>
+  <defs>
+    <clipPath id="rounded-clip">
+      <rect width="128" height="128" rx="18"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#rounded-clip)">
+  <!-- Black background -->
+  <rect width="128" height="128" fill="#000000"/>
+
+  <!-- SVG created with Arrow, by QuiverAI (https://quiver.ai) -->
+  <style type="text/css">
+    .cls-0  { fill:#EEF0FA; }
+    .cls-1  { fill:url(#SVGID_1_); }
+    .cls-2  { fill:url(#SVGID_2_); }
+    .cls-3  { fill:url(#SVGID_3_); }
+    .cls-4  { fill:url(#SVGID_4_); }
+    .cls-5  { fill:#1B1058; }
+  </style>
+
+  <linearGradient id="SVGID_1_" x1="41.78" x2="103.6" y1="90.09" y2="88.58" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#101C50" offset="0"/>
+    <stop stop-color="#5E35BD" offset="1"/>
+  </linearGradient>
+  <linearGradient id="SVGID_2_" x1="12.63" x2="38.67" y1="19.37" y2="51.18" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#5A32BA" offset="0"/>
+    <stop stop-color="#5430AA" offset="1"/>
+  </linearGradient>
+  <linearGradient id="SVGID_3_" x1="26.34" x2="26.34" y1="12.42" y2="59.76" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#5D3DC2" offset="0"/>
+    <stop stop-color="#7B7AF1" offset="1"/>
+  </linearGradient>
+  <linearGradient id="SVGID_4_" x1="12.64" x2="97.81" y1="99.76" y2="16.43" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#101C5F" offset="0"/>
+    <stop stop-color="#5633AE" offset=".5061"/>
+    <stop stop-color="#8D3CF9" offset="1"/>
+  </linearGradient>
+  <linearGradient id="SVGID_5_" x1="25.33" x2="86.86" y1="65.15" y2="65.15" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#3B54BC" offset="0"/>
+    <stop stop-color="#875CE6" offset="1"/>
+  </linearGradient>
+
+  <!-- K scaled uniformly to 75%, nudged right 4px to visually center -->
+  <g transform="translate(68 64) scale(0.75) translate(-64 -64)">
+    <polygon class="cls-1" points="103.6 110.6 69.1 110.6 38.8 78.1 57.6 59.3"/>
+    <polyline class="cls-2" points="38.7 12 12.7 12 12.7 73.2 38.7 45.4 38.7 12"/>
+    <polygon class="cls-3" points="25.5 12.3 25.4 12.3 25.4 58.5 26.7 57.1 26.7 12.3"/>
+    <path class="cls-4" d="m69.3 12-56.6 60.2v38.5h27v-26.9l2.9-3.1 61-68.7h-34.3z"/>
+    <polygon points="86.9 12.9 25.4 76.9 25.3 77 25.3 110.6 26.7 110.6 26.7 77.7 41 62.2 85.8 109.7 86.9 110.5 89 110.5 41.9 61.1" fill="url(#SVGID_5_)"/>
+  </g>
+  </g>
 </svg>

@@ -704,7 +704,7 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   const buildConfig: Record<string, unknown> = {
     appId: "com.kairo.app",
     productName: resolveDesktopProductName(version),
-    artifactName: "Kairo-Code-${version}-${arch}.${ext}",
+    artifactName: "Kairo-${version}-${arch}.${ext}",
     directories: {
       buildResources: "apps/desktop/resources",
     },
