@@ -14,8 +14,10 @@ import { APP_DISPLAY_NAME } from "../branding";
 import { AppSidebarLayout } from "../components/AppSidebarLayout";
 import { CommandPalette } from "../components/CommandPalette";
 import { RelayClientInstallDialog } from "../components/cloud/RelayClientInstallDialog";
+import { OnboardingGate } from "../components/onboarding/OnboardingGate";
 import { SshPasswordPromptDialog } from "../components/desktop/SshPasswordPromptDialog";
 import { ProviderUpdateLaunchNotification } from "../components/ProviderUpdateLaunchNotification";
+import { SplashScreen } from "../components/SplashScreen";
 import {
   SlowRpcAckToastCoordinator,
   WebSocketConnectionCoordinator,
@@ -30,7 +32,7 @@ import {
 } from "../components/ui/toast";
 import { resolveAndPersistPreferredEditor } from "../editorPreferences";
 import { readLocalApi } from "../localApi";
-import { useSettings } from "../hooks/useSettings";
+import { useClientSettingsHydrated, useSettings, useUpdateSettings } from "../hooks/useSettings";
 import {
   deriveLogicalProjectKeyFromSettings,
   derivePhysicalProjectKeyFromPath,
@@ -104,6 +106,9 @@ function RootRouteView() {
   const pathname = useLocation({ select: (location) => location.pathname });
   const { authGateState } = Route.useRouteContext();
   const primaryEnvironmentAuthenticated = authGateState.status === "authenticated";
+  const clientSettingsHydrated = useClientSettingsHydrated();
+  const onboardingCompleted = useSettings((settings) => settings.onboardingCompleted);
+  const { updateSettings } = useUpdateSettings();
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -129,6 +134,14 @@ function RootRouteView() {
       </AppSidebarLayout>
     </CommandPalette>
   );
+  const appContent =
+    primaryEnvironmentAuthenticated && !clientSettingsHydrated ? (
+      <SplashScreen />
+    ) : primaryEnvironmentAuthenticated && !onboardingCompleted ? (
+      <OnboardingGate onComplete={() => updateSettings({ onboardingCompleted: true })} />
+    ) : (
+      appShell
+    );
 
   return (
     <ToastProvider>
@@ -144,9 +157,9 @@ function RootRouteView() {
         {primaryEnvironmentAuthenticated ? <WebSocketConnectionCoordinator /> : null}
         {primaryEnvironmentAuthenticated ? <SlowRpcAckToastCoordinator /> : null}
         {primaryEnvironmentAuthenticated ? (
-          <WebSocketConnectionSurface>{appShell}</WebSocketConnectionSurface>
+          <WebSocketConnectionSurface>{appContent}</WebSocketConnectionSurface>
         ) : (
-          appShell
+          appContent
         )}
       </AnchoredToastProvider>
     </ToastProvider>
