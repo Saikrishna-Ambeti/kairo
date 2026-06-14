@@ -2,7 +2,7 @@ export function SplashScreen() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
       <div className="flex size-24 items-center justify-center" aria-label="Kairo splash screen">
-        <img alt="Kairo" className="size-16 object-contain" src="/apple-touch-icon.png" />
+        <img alt="Kairo" className="size-16 object-contain" src="/kairo.svg" />
       </div>
     </div>
   );
