@@ -49,7 +49,7 @@ const CODING_AGENT_DRIVERS = new Set<ProviderDriverKind>([
 ]);
 
 const MEMORY_AGENT_DRIVERS = CODING_AGENT_DRIVERS;
-const SUPERMEMORY_CONSOLE_URL = "https://app.supermemory.ai";
+const SUPERMEMORY_CONSOLE_URL = "https://app.supermemory.ai/?view=integrations";
 
 type StepKey = "agents" | "memory" | "composio" | "finish";
 type BusyAction =
@@ -417,7 +417,7 @@ function MemoryStep({
           API key
         </div>
         <ol className="list-decimal space-y-2 pl-4 text-muted-foreground">
-          <li>Open the Supermemory developer console.</li>
+          <li>Open the Supermemory Personal App</li>
           <li>Go to API Keys, then create a new key.</li>
           <li>Copy the key and save it here.</li>
         </ol>
