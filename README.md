@@ -19,35 +19,9 @@ Kairo can help with practical tasks like understanding documents, drafting respo
 > - Cursor: install [Cursor CLI](https://cursor.com/cli) and run `cursor-agent login`
 > - OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
 
-### Run without installing
-
-```bash
-npx kairo@latest
-```
-
-Tip: Use `npx kairo@latest --help` for the full CLI reference.
-
 ### Desktop app
 
-Install the latest version of the desktop app from [GitHub Releases](https://github.com/pingdotgg/kairo/releases), or from your favorite package registry:
-
-#### Windows (`winget`)
-
-```bash
-winget install Kairo.Kairo
-```
-
-#### macOS (Homebrew)
-
-```bash
-brew install --cask kairo
-```
-
-#### Arch Linux (AUR)
-
-```bash
-yay -S kairo-bin
-```
+Install the latest version of the desktop app from [GitHub Releases](https://github.com/pingdotgg/kairo/releases).
 
 ## Some notes
 
@@ -55,13 +29,12 @@ We are very early in this project. Expect bugs.
 
 We are not accepting contributions yet.
 
-There's no public docs site yet. Browse the markdown files in [docs](./docs) for setup notes, architecture references, and product cleanup plans.
+There's no public docs site yet. Browse the markdown files in [docs](./docs) for setup notes and architecture references.
 
 ## Documentation
 
 - [Getting started](./docs/getting-started/quick-start.md)
 - [Architecture overview](./docs/architecture/overview.md)
-- [Non-technical AI cleanup plan](./docs/project/non-technical-ai-cleanup-plan.md)
 - [Provider guides](./docs/providers/codex.md)
 - [Operations](./docs/operations/ci.md)
 - [Reference](./docs/reference/encyclopedia.md)
@@ -93,5 +66,3 @@ vp i
 ```
 
 Read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening an issue or PR.
-
-Need support? Join the [Discord](https://discord.gg/jn4EGJjrvv).
