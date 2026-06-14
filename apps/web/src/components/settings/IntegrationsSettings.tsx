@@ -13,7 +13,7 @@ import type {
   ComposioStatus,
   ComposioToolkitStatus,
   ProviderInstanceId,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 
 import { ensureLocalApi } from "../../localApi";
 import { cn } from "../../lib/utils";

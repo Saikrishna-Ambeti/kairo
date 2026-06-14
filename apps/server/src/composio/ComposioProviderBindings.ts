@@ -4,7 +4,7 @@ import type {
   ProviderInstanceEnvironmentVariable,
   ProviderInstanceId,
   ServerSettings,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 
 function mergeGeneratedEnvironment(
   existing: ProviderInstanceConfig["environment"],

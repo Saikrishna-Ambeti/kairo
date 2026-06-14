@@ -3,7 +3,7 @@ import type {
   ComposioStatus,
   ComposioToolkitCatalogItem,
   ComposioToolkitStatus,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 
 export type SetupMode = "install_and_login" | "login";
 

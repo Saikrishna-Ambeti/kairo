@@ -1,4 +1,4 @@
-import type { ComposioStatus } from "@t3tools/contracts";
+import type { ComposioStatus } from "@kairo/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {

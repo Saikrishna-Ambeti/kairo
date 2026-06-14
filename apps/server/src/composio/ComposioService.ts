@@ -22,7 +22,7 @@ import {
   type ListComposioToolkitsInput,
   type ProviderInstanceId,
   ServerSettingsError,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
@@ -68,7 +68,7 @@ export interface ComposioServiceShape {
 }
 
 export class ComposioService extends Context.Service<ComposioService, ComposioServiceShape>()(
-  "t3/composio/ComposioService",
+  "kairo/composio/ComposioService",
 ) {}
 
 const TOOLKIT_META: Readonly<

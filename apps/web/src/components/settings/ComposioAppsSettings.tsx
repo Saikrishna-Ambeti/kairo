@@ -4,7 +4,7 @@ import type {
   ComposioStatus,
   ComposioToolkitCatalog,
   ComposioToolkitCatalogItem,
-} from "@t3tools/contracts";
+} from "@kairo/contracts";
 import {
   ArrowLeftIcon,
   ExternalLinkIcon,
