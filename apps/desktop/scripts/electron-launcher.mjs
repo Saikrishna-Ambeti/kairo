@@ -1,4 +1,4 @@
-// This file mostly exists because we want dev mode to say "Kairo (Dev)" instead of "electron"
+// This file mostly exists because we want dev mode to say "Kairo (Beta)" instead of "electron"
 
 import { spawnSync } from "node:child_process";
 import {
@@ -25,7 +25,7 @@ const repoRoot = resolve(desktopDir, "..", "..");
 const devBundleIdSuffix = basename(repoRoot)
   .toLowerCase()
   .replaceAll(/[^a-z0-9]+/g, "");
-export const APP_DISPLAY_NAME = isDevelopment ? "Kairo (Dev)" : "Kairo (Alpha)";
+export const APP_DISPLAY_NAME = isDevelopment ? "Kairo (Beta)" : "Kairo (Alpha)";
 export const APP_BUNDLE_ID = isDevelopment
   ? `com.kairo.app.dev.${devBundleIdSuffix || "local"}`
   : "com.kairo.app";
