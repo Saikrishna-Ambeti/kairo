@@ -65,6 +65,21 @@ interface AgentOption {
   readonly provider: ServerProvider | undefined;
 }
 
+const ONBOARDING_STEPS: ReadonlyArray<{ key: StepKey; label: string; icon: ElementType }> = [
+  { key: "agents", label: "Agents", icon: TerminalIcon },
+  { key: "memory", label: "Memory", icon: BrainCircuitIcon },
+  { key: "composio", label: "Composio", icon: PlugZapIcon },
+  { key: "finish", label: "Finish", icon: CheckCircle2Icon },
+];
+
+function onboardingStepIndex(step: StepKey): number {
+  return ONBOARDING_STEPS.findIndex((candidate) => candidate.key === step);
+}
+
+export function canNavigateBackToOnboardingStep(activeStep: StepKey, targetStep: StepKey): boolean {
+  return onboardingStepIndex(targetStep) < onboardingStepIndex(activeStep);
+}
+
 function showOnboardingError(title: string, error: unknown) {
   toastManager.add(
     stackedThreadToast({
@@ -119,34 +134,29 @@ function connectedAppLabel(item: ComposioToolkitCatalogItem): string {
 function StepRail({
   activeStep,
   completed,
+  onStepSelect,
 }: {
   activeStep: StepKey;
   completed: ReadonlySet<StepKey>;
+  onStepSelect: (step: StepKey) => void;
 }) {
-  const steps: ReadonlyArray<{ key: StepKey; label: string; icon: ElementType }> = [
-    { key: "agents", label: "Agents", icon: TerminalIcon },
-    { key: "memory", label: "Memory", icon: BrainCircuitIcon },
-    { key: "composio", label: "Composio", icon: PlugZapIcon },
-    { key: "finish", label: "Finish", icon: CheckCircle2Icon },
-  ];
-
   return (
     <nav className="grid gap-2 sm:grid-cols-4" aria-label="Onboarding steps">
-      {steps.map((step) => {
+      {ONBOARDING_STEPS.map((step) => {
         const Icon = step.icon;
         const done = completed.has(step.key);
         const active = activeStep === step.key;
-        return (
-          <div
-            aria-current={active ? "step" : undefined}
-            className={cn(
-              "flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2 text-sm",
-              active && "border-primary/50 bg-primary/8 text-foreground",
-              done && !active && "border-success/25 bg-success/8 text-success-foreground",
-              !active && !done && "border-border bg-background/50 text-muted-foreground",
-            )}
-            key={step.key}
-          >
+        const canGoBack = canNavigateBackToOnboardingStep(activeStep, step.key);
+        const className = cn(
+          "flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm outline-none transition-colors",
+          active && "border-primary/50 bg-primary/8 text-foreground",
+          done && !active && "border-success/25 bg-success/8 text-success-foreground",
+          !active && !done && "border-border bg-background/50 text-muted-foreground",
+          canGoBack &&
+            "cursor-pointer hover:border-primary/35 hover:bg-muted/45 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+        );
+        const content = (
+          <>
             <span
               className={cn(
                 "flex size-6 shrink-0 items-center justify-center rounded-md border",
@@ -156,6 +166,26 @@ function StepRail({
               {done ? <CheckCircle2Icon className="size-3.5" /> : <Icon className="size-3.5" />}
             </span>
             <span className="truncate font-medium">{step.label}</span>
+          </>
+        );
+
+        if (canGoBack) {
+          return (
+            <button
+              aria-label={`Go back to ${step.label}`}
+              className={className}
+              key={step.key}
+              onClick={() => onStepSelect(step.key)}
+              type="button"
+            >
+              {content}
+            </button>
+          );
+        }
+
+        return (
+          <div aria-current={active ? "step" : undefined} className={className} key={step.key}>
+            {content}
           </div>
         );
       })}
@@ -702,6 +732,7 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
   const [catalogQuery, setCatalogQuery] = useState("");
   const [connectingToolkit, setConnectingToolkit] = useState<string | null>(null);
   const didInitialLoadRef = useRef(false);
+  const userSelectedStepRef = useRef(false);
 
   const agentOptions = useMemo<ReadonlyArray<AgentOption>>(
     () =>
@@ -798,10 +829,17 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
   }, [installedAgents, memoryProviders, memoryStatus?.enabled, selectedMemoryProviderIds.size]);
 
   useEffect(() => {
+    if (userSelectedStepRef.current) return;
     if (activeStep === "agents" && agentComplete) setActiveStep("memory");
     if (activeStep === "memory" && memoryComplete) setActiveStep("composio");
     if (activeStep === "composio" && composioComplete) setActiveStep("finish");
   }, [activeStep, agentComplete, composioComplete, memoryComplete]);
+
+  const selectStep = (step: StepKey) => {
+    if (!canNavigateBackToOnboardingStep(activeStep, step)) return;
+    userSelectedStepRef.current = true;
+    setActiveStep(step);
+  };
 
   const installAgent = async (option: AgentOption) => {
     const provider = option.provider;
@@ -938,7 +976,7 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
             </p>
             <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Set up Kairo</h1>
           </div>
-          <StepRail activeStep={activeStep} completed={completed} />
+          <StepRail activeStep={activeStep} completed={completed} onStepSelect={selectStep} />
         </header>
 
         <main className="rounded-xl border bg-background/75 p-4 shadow-sm sm:p-5">
