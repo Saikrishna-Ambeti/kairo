@@ -56,6 +56,7 @@ type StepKey = "agents" | "memory" | "composio" | "finish";
 type BusyAction =
   | "refresh"
   | "install-agent"
+  | "login-agent"
   | "save-memory"
   | "setup-composio"
   | "connect-app"
@@ -89,6 +90,16 @@ export function isUsableOnboardingAgent(provider: ServerProvider): boolean {
     isProviderAvailable(provider) &&
     provider.status === "ready"
   );
+}
+
+export function getOnboardingAgentAction(
+  provider: ServerProvider | undefined,
+): "detected" | "install" | "login" {
+  if (provider && isUsableOnboardingAgent(provider)) return "detected";
+  if (provider?.enabled && provider.installed && provider.auth.status === "unauthenticated") {
+    return "login";
+  }
+  return "install";
 }
 
 function showOnboardingError(title: string, error: unknown) {
@@ -217,14 +228,18 @@ function AgentStep({
   options,
   usableAgents,
   busy,
+  busyProviderInstanceId,
   onInstall,
+  onLogin,
   onRefresh,
   onContinue,
 }: {
   options: ReadonlyArray<AgentOption>;
   usableAgents: ReadonlyArray<ServerProvider>;
   busy: BusyAction;
+  busyProviderInstanceId: ProviderInstanceId | null;
   onInstall: (option: AgentOption) => void;
+  onLogin: (option: AgentOption) => void;
   onRefresh: () => void;
   onContinue: () => void;
 }) {
@@ -242,7 +257,9 @@ function AgentStep({
           {options.map((option) => {
             const provider = option.provider;
             const canInstall = Boolean(provider?.versionAdvisory?.canUpdate);
-            const detected = provider ? isUsableOnboardingAgent(provider) : false;
+            const action = getOnboardingAgentAction(provider);
+            const targetBusy =
+              provider && busyProviderInstanceId === provider.instanceId ? busy : null;
             return (
               <div
                 className="grid gap-3 rounded-lg border bg-card p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center"
@@ -265,10 +282,19 @@ function AgentStep({
                   </p>
                 </div>
                 <div className="flex gap-2 sm:justify-end">
-                  {detected ? (
+                  {action === "detected" ? (
                     <Button size="sm" variant="outline" disabled>
                       <CheckCircle2Icon className="size-3.5" />
                       Detected
+                    </Button>
+                  ) : action === "login" ? (
+                    <Button size="sm" disabled={busy !== null} onClick={() => onLogin(option)}>
+                      {targetBusy === "login-agent" ? (
+                        <LoaderCircleIcon className="size-3.5 animate-spin" />
+                      ) : (
+                        <KeyRoundIcon className="size-3.5" />
+                      )}
+                      Login
                     </Button>
                   ) : (
                     <Button
@@ -276,7 +302,7 @@ function AgentStep({
                       disabled={!canInstall || busy !== null}
                       onClick={() => onInstall(option)}
                     >
-                      {busy === "install-agent" ? (
+                      {targetBusy === "install-agent" ? (
                         <LoaderCircleIcon className="size-3.5 animate-spin" />
                       ) : (
                         <TerminalIcon className="size-3.5" />
@@ -730,6 +756,9 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
   const [activeStep, setActiveStep] = useState<StepKey>("agents");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<BusyAction>(null);
+  const [busyProviderInstanceId, setBusyProviderInstanceId] = useState<ProviderInstanceId | null>(
+    null,
+  );
   const [memoryApiKey, setMemoryApiKey] = useState("");
   const [selectedMemoryProviderIds, setSelectedMemoryProviderIds] = useState<
     ReadonlySet<ProviderInstanceId>
@@ -846,6 +875,7 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
     const provider = option.provider;
     if (!provider) return;
     setBusy("install-agent");
+    setBusyProviderInstanceId(provider.instanceId);
     try {
       const next = await ensureLocalApi().server.updateProvider({
         provider: provider.driver,
@@ -863,6 +893,33 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
       showOnboardingError(`Could not install ${option.definition.label}`, error);
     } finally {
       setBusy(null);
+      setBusyProviderInstanceId(null);
+    }
+  };
+
+  const loginAgent = async (option: AgentOption) => {
+    const provider = option.provider;
+    if (!provider) return;
+    setBusy("login-agent");
+    setBusyProviderInstanceId(provider.instanceId);
+    try {
+      const next = await ensureLocalApi().server.loginProvider({
+        provider: provider.driver,
+        instanceId: provider.instanceId,
+      });
+      setProvidersOverride(next.providers);
+      await refreshAll();
+      toastManager.add(
+        stackedThreadToast({
+          type: "success",
+          title: `${option.definition.label} login command finished`,
+        }),
+      );
+    } catch (error) {
+      showOnboardingError(`Could not login ${option.definition.label}`, error);
+    } finally {
+      setBusy(null);
+      setBusyProviderInstanceId(null);
     }
   };
 
@@ -986,7 +1043,9 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
               options={agentOptions}
               usableAgents={usableAgents}
               busy={busy}
+              busyProviderInstanceId={busyProviderInstanceId}
               onInstall={(option) => void installAgent(option)}
+              onLogin={(option) => void loginAgent(option)}
               onRefresh={() =>
                 void refreshAll().catch((error) => showOnboardingError("Refresh failed", error))
               }

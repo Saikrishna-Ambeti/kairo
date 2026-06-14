@@ -1,7 +1,11 @@
 import { ProviderDriverKind, ProviderInstanceId, type ServerProvider } from "@kairo/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { canNavigateBackToOnboardingStep, isUsableOnboardingAgent } from "./OnboardingGate";
+import {
+  canNavigateBackToOnboardingStep,
+  getOnboardingAgentAction,
+  isUsableOnboardingAgent,
+} from "./OnboardingGate";
 
 function provider(input: Partial<ServerProvider> = {}): ServerProvider {
   return {
@@ -49,5 +53,29 @@ describe("onboarding agent detection", () => {
     ).toBe(false);
     expect(isUsableOnboardingAgent(provider({ installed: false }))).toBe(false);
     expect(isUsableOnboardingAgent(provider({ availability: "unavailable" }))).toBe(false);
+  });
+
+  it("shows login for installed providers that require authentication", () => {
+    expect(
+      getOnboardingAgentAction(
+        provider({
+          status: "error",
+          auth: { status: "unauthenticated" },
+          message: "Codex CLI is not authenticated. Run `codex login` and try again.",
+        }),
+      ),
+    ).toBe("login");
+  });
+
+  it("keeps failed unauthenticated providers on install when they are missing", () => {
+    expect(
+      getOnboardingAgentAction(
+        provider({
+          installed: false,
+          status: "error",
+          auth: { status: "unknown" },
+        }),
+      ),
+    ).toBe("install");
   });
 });

@@ -68,6 +68,11 @@ const UPDATE = makePackageManagedProviderMaintenanceResolver({
   provider: DRIVER_KIND,
   npmPackageName: "@anthropic-ai/claude-code",
   homebrewFormula: "claude-code",
+  login: {
+    executable: "claude",
+    args: ["auth", "login"],
+    lockKey: "claude-auth",
+  },
   nativeUpdate: {
     executable: "claude",
     args: ["update"],

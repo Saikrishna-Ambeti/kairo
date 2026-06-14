@@ -40,6 +40,14 @@ export interface ProviderMaintenanceCommandResult {
 }
 
 export interface ProviderMaintenanceRunnerShape {
+  readonly loginProvider: (
+    target:
+      | ProviderDriverKind
+      | {
+          readonly provider: ProviderDriverKind;
+          readonly instanceId?: ProviderInstanceId | undefined;
+        },
+  ) => Effect.Effect<ServerProviderUpdatedPayload, ServerProviderUpdateError>;
   readonly updateProvider: (
     target:
       | ProviderDriverKind
@@ -81,7 +89,7 @@ const runProviderMaintenanceCommandWithSpawner = Effect.fn("ProviderMaintenanceR
             Effect.mapError(
               (cause) =>
                 new ProviderMaintenanceCommandError({
-                  message: `Failed to run update command ${input.command}: ${cause.message}`,
+                  message: `Failed to run provider command ${input.command}: ${cause.message}`,
                   cause,
                 }),
             ),
@@ -160,14 +168,14 @@ function commandOutput(result: ProviderMaintenanceCommandResult): string | null 
   return truncateText(output, UPDATE_OUTPUT_MAX_BYTES);
 }
 
-function failureMessage(result: ProviderMaintenanceCommandResult): string {
+function failureMessage(result: ProviderMaintenanceCommandResult, commandLabel: string): string {
   if (result.timedOut) {
-    return "Update timed out.";
+    return `${commandLabel} timed out.`;
   }
   if (result.exitCode !== null && result.exitCode !== 0) {
-    return `Update command exited with code ${result.exitCode}.`;
+    return `${commandLabel} exited with code ${result.exitCode}.`;
   }
-  return "Update command failed.";
+  return `${commandLabel} failed.`;
 }
 
 function isOutdatedProvider(provider: ServerProvider | undefined): boolean {
@@ -207,6 +215,22 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
         reason: "An update is already running for this provider.",
       }),
   });
+
+  const resolveTarget = (
+    target:
+      | ProviderDriverKind
+      | {
+          readonly provider: ProviderDriverKind;
+          readonly instanceId?: ProviderInstanceId | undefined;
+        },
+  ) => {
+    const provider = typeof target === "string" ? target : target.provider;
+    const instanceId =
+      typeof target === "string"
+        ? defaultInstanceIdForDriver(provider)
+        : (target.instanceId ?? defaultInstanceIdForDriver(provider));
+    return { provider, instanceId };
+  };
 
   const verifyRefreshedProvider = (
     provider: ProviderDriverKind,
@@ -277,15 +301,132 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
       }),
     );
 
+  const loginProvider: ProviderMaintenanceRunnerShape["loginProvider"] = Effect.fn(
+    "ProviderMaintenanceRunner.loginProvider",
+  )(function* (target) {
+    const { provider, instanceId } = resolveTarget(target);
+    const capabilities = yield* providerRegistry.getProviderMaintenanceCapabilitiesForInstance(
+      instanceId,
+      provider,
+    );
+    const login = capabilities.login;
+    if (!login) {
+      return yield* new ServerProviderUpdateError({
+        provider,
+        reason: "This provider does not support one-click login.",
+      });
+    }
+
+    const setLoginState = (state: ServerProviderUpdateState | null) =>
+      providerRegistry.setProviderMaintenanceActionState({
+        instanceId,
+        action: "login",
+        state,
+      });
+
+    const runProviderLogin = Effect.fn("ProviderMaintenanceRunner.runProviderLogin")(function* () {
+      const finish = (state: ServerProviderUpdateState) =>
+        setLoginState(state).pipe(
+          Effect.andThen(providerRegistry.refreshInstance(instanceId)),
+          Effect.map((providers) => ({ providers })),
+        );
+      const startedAtRef = yield* Ref.make<string | null>(null);
+
+      const runCommand = Effect.fn("ProviderMaintenanceRunner.runProviderLoginCommand")(
+        function* () {
+          const startedAt = yield* nowIso;
+          yield* Ref.set(startedAtRef, startedAt);
+          yield* setLoginState(
+            makeUpdateState({
+              status: "running",
+              startedAt,
+              finishedAt: null,
+              message: "Logging in provider.",
+            }),
+          );
+
+          const result = yield* runMaintenanceCommand(login.executable, login.args);
+          const finishedAt = yield* nowIso;
+          if (result.timedOut || result.exitCode !== 0) {
+            return yield* finish(
+              makeUpdateState({
+                status: "failed",
+                startedAt,
+                finishedAt,
+                message: failureMessage(result, "Login command"),
+                output: commandOutput(result),
+              }),
+            );
+          }
+
+          return yield* finish(
+            makeUpdateState({
+              status: "succeeded",
+              startedAt,
+              finishedAt,
+              message: "Provider login completed.",
+              output: commandOutput(result),
+            }),
+          );
+        },
+      );
+
+      const recordFailedLogin = Effect.fn("ProviderMaintenanceRunner.recordFailedLogin")(function* (
+        cause: Cause.Cause<unknown>,
+      ) {
+        const failure = Cause.squash(cause);
+        const startedAt = yield* Ref.get(startedAtRef);
+        return yield* finish(
+          makeUpdateState({
+            status: "failed",
+            startedAt,
+            finishedAt: yield* nowIso,
+            message: failure instanceof Error ? failure.message : "Login command failed.",
+            output: null,
+          }),
+        );
+      });
+
+      return yield* runCommand().pipe(Effect.catchCause(recordFailedLogin));
+    });
+
+    return yield* commandCoordinator
+      .withCommandLock({
+        targetKey: `login:${instanceId}`,
+        lockKey: login.lockKey,
+        onQueued: setLoginState(
+          makeUpdateState({
+            status: "queued",
+            startedAt: null,
+            finishedAt: null,
+            message: "Waiting for another provider login to finish.",
+          }),
+        ).pipe(Effect.asVoid),
+        run: runProviderLogin(),
+      })
+      .pipe(
+        Effect.flatMap(() =>
+          setLoginState(null).pipe(
+            Effect.andThen(providerRegistry.refreshInstance(instanceId)),
+            Effect.map((providers) => ({ providers })),
+          ),
+        ),
+        Effect.mapError((error) =>
+          isServerProviderUpdateError(error)
+            ? new ServerProviderUpdateError({
+                provider,
+                reason: error.reason,
+              })
+            : error,
+        ),
+      );
+  });
+
   const updateProvider: ProviderMaintenanceRunnerShape["updateProvider"] = Effect.fn(
     "ProviderMaintenanceRunner.updateProvider",
   )(function* (target) {
-    const provider = typeof target === "string" ? target : target.provider;
-    const instanceId =
-      typeof target === "string"
-        ? defaultInstanceIdForDriver(provider)
-        : (target.instanceId ?? defaultInstanceIdForDriver(provider));
-    const targetKey = `instance:${instanceId}`;
+    const { provider, instanceId } = resolveTarget(target);
+    const targetKey = `update:${instanceId}`;
     const capabilities = yield* providerRegistry.getProviderMaintenanceCapabilitiesForInstance(
       instanceId,
       provider,
@@ -340,7 +481,7 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
                   status: "failed",
                   startedAt,
                   finishedAt,
-                  message: failureMessage(result),
+                  message: failureMessage(result, "Update command"),
                   output: commandOutput(result),
                 }),
               );
@@ -411,6 +552,7 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
   });
 
   return ProviderMaintenanceRunner.of({
+    loginProvider,
     updateProvider,
   });
 });

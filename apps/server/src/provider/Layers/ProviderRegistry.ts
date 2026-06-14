@@ -268,7 +268,13 @@ export const ProviderRegistryLive = Layer.effect(
     );
     const providersRef = yield* Ref.make<ReadonlyArray<ServerProvider>>(cachedProviders);
     const maintenanceActionStatesRef = yield* Ref.make<
-      ReadonlyMap<ProviderInstanceId, { readonly update?: ServerProviderUpdateState | undefined }>
+      ReadonlyMap<
+        ProviderInstanceId,
+        {
+          readonly login?: ServerProviderUpdateState | undefined;
+          readonly update?: ServerProviderUpdateState | undefined;
+        }
+      >
     >(new Map());
 
     // Live-source registry — the dynamic counterpart to the boot-time
@@ -391,7 +397,7 @@ export const ProviderRegistryLive = Layer.effect(
     const setProviderMaintenanceActionState = Effect.fn("setProviderMaintenanceActionState")(
       function* (input: {
         readonly instanceId: ProviderInstanceId;
-        readonly action: "update";
+        readonly action: "login" | "update";
         readonly state: ServerProviderUpdateState | null;
       }) {
         yield* Ref.update(maintenanceActionStatesRef, (previous) => {

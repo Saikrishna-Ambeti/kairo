@@ -19,6 +19,7 @@ import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
 import { ProviderRegistry, type ProviderRegistryShape } from "./Services/ProviderRegistry.ts";
+import type { ProviderMaintenanceActionKind } from "./Services/ProviderRegistry.ts";
 import * as ProviderMaintenanceRunner from "./providerMaintenanceRunner.ts";
 import {
   clearLatestProviderVersionCacheForTests,
@@ -58,6 +59,9 @@ function lifecycleFor(provider: ProviderDriverKind): ProviderMaintenanceCapabili
         ? ["install", "-g", "opencode-ai@latest"]
         : ["install", "-g", "@openai/codex@latest"],
     updateLockKey: "npm-global",
+    loginExecutable: provider === OPENCODE_DRIVER ? "opencode" : "codex",
+    loginArgs: provider === OPENCODE_DRIVER ? ["auth", "login"] : ["login"],
+    loginLockKey: provider === OPENCODE_DRIVER ? "opencode-auth" : "codex-auth",
   });
 }
 
@@ -157,7 +161,7 @@ function makeRegistry(
       "providerMaintenanceRunner.test.setProviderMaintenanceActionState",
     )(function* (input: {
       readonly instanceId: ProviderInstanceId;
-      readonly action: "update";
+      readonly action: ProviderMaintenanceActionKind;
       readonly state: ServerProviderUpdateState | null;
     }) {
       const updateState = input.state;
@@ -208,6 +212,33 @@ const makeTestRunner = (registry: ProviderRegistryShape) =>
   );
 
 describe("providerMaintenanceRunner", () => {
+  it.effect("runs the allowlisted provider login command and refreshes the instance", () => {
+    const calls: Array<{ command: string; args: ReadonlyArray<string> }> = [];
+    return Effect.gen(function* () {
+      const { registry } = yield* makeRegistry(baseProvider);
+      const updater = yield* makeTestRunner(registry);
+
+      const result = yield* updater.loginProvider(CODEX_DRIVER);
+      assert.deepStrictEqual(calls, [
+        {
+          command: "codex",
+          args: ["login"],
+        },
+      ]);
+      assert.deepStrictEqual(result.providers, [baseProvider]);
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          latestVersionHttpClient("1.2.3"),
+          mockSpawnerLayer((command, args) => {
+            calls.push({ command, args });
+            return { stdout: "logged in" };
+          }),
+        ),
+      ),
+    );
+  });
+
   it.effect("runs the allowlisted provider update command and records success", () => {
     const calls: Array<{ command: string; args: ReadonlyArray<string> }> = [];
     return Effect.gen(function* () {

@@ -60,6 +60,11 @@ const UPDATE = makePackageManagedProviderMaintenanceResolver({
   provider: DRIVER_KIND,
   npmPackageName: "@openai/codex",
   homebrewFormula: "codex",
+  login: {
+    executable: "codex",
+    args: ["login"],
+    lockKey: "codex-auth",
+  },
   nativeUpdate: null,
 });
 

@@ -142,6 +142,7 @@ vi.mock("@kairo/client-runtime", async (importOriginal) => {
       getConfig: vi.fn(),
       refreshProviders: vi.fn(),
       discoverSourceControl: vi.fn(),
+      loginProvider: vi.fn(),
       updateProvider: vi.fn(),
       upsertKeybinding: vi.fn(),
       removeKeybinding: vi.fn(),

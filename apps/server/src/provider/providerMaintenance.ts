@@ -20,6 +20,7 @@ export interface ProviderMaintenanceCapabilities {
   readonly provider: ProviderDriverKind;
   readonly packageName: string | null;
   readonly update: ProviderMaintenanceCommandAction | null;
+  readonly login?: ProviderMaintenanceCommandAction | null;
 }
 
 export interface ProviderMaintenanceCommandAction {
@@ -46,6 +47,11 @@ export interface PackageManagedProviderMaintenanceDefinition {
   readonly provider: ProviderDriverKind;
   readonly npmPackageName: string;
   readonly homebrewFormula: string | null;
+  readonly login?: {
+    readonly executable: string;
+    readonly args: ReadonlyArray<string>;
+    readonly lockKey: string;
+  } | null;
   readonly nativeUpdate: {
     readonly executable: string;
     readonly args: ReadonlyArray<string>;
@@ -78,6 +84,9 @@ export function makeProviderMaintenanceCapabilities(input: {
   readonly updateExecutable: string | null;
   readonly updateArgs: ReadonlyArray<string>;
   readonly updateLockKey: string | null;
+  readonly loginExecutable?: string | null;
+  readonly loginArgs?: ReadonlyArray<string>;
+  readonly loginLockKey?: string | null;
 }): ProviderMaintenanceCapabilities {
   const update =
     input.updateExecutable === null || input.updateLockKey === null
@@ -88,10 +97,23 @@ export function makeProviderMaintenanceCapabilities(input: {
           args: input.updateArgs,
           lockKey: input.updateLockKey,
         };
+  const login =
+    input.loginExecutable === undefined ||
+    input.loginExecutable === null ||
+    input.loginLockKey === undefined ||
+    input.loginLockKey === null
+      ? null
+      : {
+          command: [input.loginExecutable, ...(input.loginArgs ?? [])].join(" "),
+          executable: input.loginExecutable,
+          args: input.loginArgs ?? [],
+          lockKey: input.loginLockKey,
+        };
   return {
     provider: input.provider,
     packageName: input.packageName,
     update,
+    ...(login ? { login } : {}),
   };
 }
 
@@ -105,11 +127,33 @@ export function makeManualOnlyProviderMaintenanceCapabilities(input: {
     updateExecutable: null,
     updateArgs: [],
     updateLockKey: null,
+    loginExecutable: null,
+    loginArgs: [],
+    loginLockKey: null,
   });
+}
+
+function loginCapability(
+  definition: PackageManagedProviderMaintenanceDefinition,
+  executable?: string | null,
+) {
+  if (!definition.login) {
+    return {
+      loginExecutable: null,
+      loginArgs: [],
+      loginLockKey: null,
+    };
+  }
+  return {
+    loginExecutable: executable ?? definition.login.executable,
+    loginArgs: definition.login.args,
+    loginLockKey: definition.login.lockKey,
+  };
 }
 
 function makeNpmGlobalProviderMaintenanceCapabilities(
   definition: PackageManagedProviderMaintenanceDefinition,
+  loginExecutable?: string | null,
 ): ProviderMaintenanceCapabilities {
   return makeProviderMaintenanceCapabilities({
     provider: definition.provider,
@@ -117,11 +161,13 @@ function makeNpmGlobalProviderMaintenanceCapabilities(
     updateExecutable: "npm",
     updateArgs: ["install", "-g", `${definition.npmPackageName}@latest`],
     updateLockKey: "npm-global",
+    ...loginCapability(definition, loginExecutable),
   });
 }
 
 function makeBunGlobalProviderMaintenanceCapabilities(
   definition: PackageManagedProviderMaintenanceDefinition,
+  loginExecutable?: string | null,
 ): ProviderMaintenanceCapabilities {
   return makeProviderMaintenanceCapabilities({
     provider: definition.provider,
@@ -129,11 +175,13 @@ function makeBunGlobalProviderMaintenanceCapabilities(
     updateExecutable: "bun",
     updateArgs: ["i", "-g", `${definition.npmPackageName}@latest`],
     updateLockKey: "bun-global",
+    ...loginCapability(definition, loginExecutable),
   });
 }
 
 function makePnpmGlobalProviderMaintenanceCapabilities(
   definition: PackageManagedProviderMaintenanceDefinition,
+  loginExecutable?: string | null,
 ): ProviderMaintenanceCapabilities {
   return makeProviderMaintenanceCapabilities({
     provider: definition.provider,
@@ -141,11 +189,13 @@ function makePnpmGlobalProviderMaintenanceCapabilities(
     updateExecutable: "pnpm",
     updateArgs: ["add", "-g", `${definition.npmPackageName}@latest`],
     updateLockKey: "pnpm-global",
+    ...loginCapability(definition, loginExecutable),
   });
 }
 
 function makeVitePlusGlobalProviderMaintenanceCapabilities(
   definition: PackageManagedProviderMaintenanceDefinition,
+  loginExecutable?: string | null,
 ): ProviderMaintenanceCapabilities {
   return makeProviderMaintenanceCapabilities({
     provider: definition.provider,
@@ -153,16 +203,22 @@ function makeVitePlusGlobalProviderMaintenanceCapabilities(
     updateExecutable: "vp",
     updateArgs: ["i", "-g", definition.npmPackageName],
     updateLockKey: "vite-plus-global",
+    ...loginCapability(definition, loginExecutable),
   });
 }
 
 function makeHomebrewProviderMaintenanceCapabilities(
   definition: PackageManagedProviderMaintenanceDefinition,
+  loginExecutable?: string | null,
 ): ProviderMaintenanceCapabilities {
   if (!definition.homebrewFormula) {
-    return makeManualOnlyProviderMaintenanceCapabilities({
+    return makeProviderMaintenanceCapabilities({
       provider: definition.provider,
       packageName: definition.npmPackageName,
+      updateExecutable: null,
+      updateArgs: [],
+      updateLockKey: null,
+      ...loginCapability(definition, loginExecutable),
     });
   }
 
@@ -172,11 +228,13 @@ function makeHomebrewProviderMaintenanceCapabilities(
     updateExecutable: "brew",
     updateArgs: ["upgrade", definition.homebrewFormula],
     updateLockKey: "homebrew",
+    ...loginCapability(definition, loginExecutable),
   });
 }
 
 function makeNativeProviderMaintenanceCapabilities(
   definition: PackageManagedProviderMaintenanceDefinition,
+  loginExecutable?: string | null,
 ): ProviderMaintenanceCapabilities | null {
   if (!definition.nativeUpdate) {
     return null;
@@ -188,6 +246,7 @@ function makeNativeProviderMaintenanceCapabilities(
     updateExecutable: definition.nativeUpdate.executable,
     updateArgs: definition.nativeUpdate.args,
     updateLockKey: definition.nativeUpdate.lockKey,
+    ...loginCapability(definition, loginExecutable),
   });
 }
 
@@ -268,34 +327,38 @@ export function resolvePackageManagedProviderMaintenance(
       commandPaths.some((commandPath) => nativeUpdate.isCommandPath(commandPath))
     ) {
       return (
-        makeNativeProviderMaintenanceCapabilities(definition) ??
-        makeNpmGlobalProviderMaintenanceCapabilities(definition)
+        makeNativeProviderMaintenanceCapabilities(definition, binaryPath) ??
+        makeNpmGlobalProviderMaintenanceCapabilities(definition, binaryPath)
       );
     }
     if (commandPaths.some(isVitePlusGlobalCommandPath)) {
-      return makeVitePlusGlobalProviderMaintenanceCapabilities(definition);
+      return makeVitePlusGlobalProviderMaintenanceCapabilities(definition, binaryPath);
     }
     if (commandPaths.some(isBunGlobalCommandPath)) {
-      return makeBunGlobalProviderMaintenanceCapabilities(definition);
+      return makeBunGlobalProviderMaintenanceCapabilities(definition, binaryPath);
     }
     if (commandPaths.some(isPnpmGlobalCommandPath)) {
-      return makePnpmGlobalProviderMaintenanceCapabilities(definition);
+      return makePnpmGlobalProviderMaintenanceCapabilities(definition, binaryPath);
     }
     if (commandPaths.some(isNpmGlobalCommandPath)) {
-      return makeNpmGlobalProviderMaintenanceCapabilities(definition);
+      return makeNpmGlobalProviderMaintenanceCapabilities(definition, binaryPath);
     }
     if (commandPaths.some(isHomebrewCommandPath)) {
-      return makeHomebrewProviderMaintenanceCapabilities(definition);
+      return makeHomebrewProviderMaintenanceCapabilities(definition, binaryPath);
     }
   }
 
   if (!hasPathSeparator(binaryPath)) {
-    return makeNpmGlobalProviderMaintenanceCapabilities(definition);
+    return makeNpmGlobalProviderMaintenanceCapabilities(definition, binaryPath);
   }
 
-  return makeManualOnlyProviderMaintenanceCapabilities({
+  return makeProviderMaintenanceCapabilities({
     provider: definition.provider,
     packageName: definition.npmPackageName,
+    updateExecutable: null,
+    updateArgs: [],
+    updateLockKey: null,
+    ...loginCapability(definition, binaryPath),
   });
 }
 

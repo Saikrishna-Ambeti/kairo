@@ -523,6 +523,7 @@ export interface LocalApi {
     refreshProviders: (input?: {
       readonly instanceId?: ProviderInstanceId;
     }) => Promise<ServerProviderUpdatedPayload>;
+    loginProvider: (input: ServerProviderUpdateInput) => Promise<ServerProviderUpdatedPayload>;
     updateProvider: (input: ServerProviderUpdateInput) => Promise<ServerProviderUpdatedPayload>;
     upsertKeybinding: (input: ServerUpsertKeybindingInput) => Promise<ServerUpsertKeybindingResult>;
     removeKeybinding: (input: ServerRemoveKeybindingInput) => Promise<ServerRemoveKeybindingResult>;

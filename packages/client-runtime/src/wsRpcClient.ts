@@ -136,6 +136,7 @@ export interface WsRpcClient {
     readonly discoverSourceControl: RpcUnaryNoArgMethod<
       typeof WS_METHODS.serverDiscoverSourceControl
     >;
+    readonly loginProvider: RpcUnaryMethod<typeof WS_METHODS.serverLoginProvider>;
     readonly updateProvider: RpcUnaryMethod<typeof WS_METHODS.serverUpdateProvider>;
     readonly upsertKeybinding: RpcUnaryMethod<typeof WS_METHODS.serverUpsertKeybinding>;
     readonly removeKeybinding: RpcUnaryMethod<typeof WS_METHODS.serverRemoveKeybinding>;
@@ -322,6 +323,8 @@ export function createWsRpcClient(
         transport.request((client) => client[WS_METHODS.serverRefreshProviders](input ?? {})),
       discoverSourceControl: () =>
         transport.request((client) => client[WS_METHODS.serverDiscoverSourceControl]({})),
+      loginProvider: (input) =>
+        transport.request((client) => client[WS_METHODS.serverLoginProvider](input)),
       updateProvider: (input) =>
         transport.request((client) => client[WS_METHODS.serverUpdateProvider](input)),
       upsertKeybinding: (input) =>
