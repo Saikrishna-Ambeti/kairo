@@ -13,6 +13,7 @@ import {
   resolveDesktopUpdateChannel,
   resolveMockUpdateServerPort,
   resolveMockUpdateServerUrl,
+  shouldUseHdiutilDmgbuildShim,
 } from "./build-desktop-artifact.ts";
 import { BRAND_ASSET_PATHS } from "./lib/brand-assets.ts";
 
@@ -39,6 +40,18 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       linuxIconPng: BRAND_ASSET_PATHS.nightlyLinuxIconPng,
       windowsIconIco: BRAND_ASSET_PATHS.nightlyWindowsIconIco,
     });
+  });
+
+  it("uses the hdiutil DMG shim for macOS hosts older than Ventura", () => {
+    assert.equal(shouldUseHdiutilDmgbuildShim("mac", "darwin", "21.6.0", {}), true);
+    assert.equal(shouldUseHdiutilDmgbuildShim("mac", "darwin", "22.1.0", {}), false);
+    assert.equal(
+      shouldUseHdiutilDmgbuildShim("mac", "darwin", "21.6.0", {
+        CUSTOM_DMGBUILD_PATH: "/usr/local/bin/dmgbuild",
+      }),
+      false,
+    );
+    assert.equal(shouldUseHdiutilDmgbuildShim("linux", "darwin", "21.6.0", {}), false);
   });
 
   it("omits bundled workspace packages from staged desktop dependencies", () => {

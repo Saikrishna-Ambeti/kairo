@@ -11,6 +11,7 @@ import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { release as osRelease } from "node:os";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -679,6 +680,19 @@ export function resolveDesktopProductName(version: string): string {
     : (desktopPackageJson.productName ?? "Kairo");
 }
 
+export function shouldUseHdiutilDmgbuildShim(
+  platform: typeof BuildPlatform.Type,
+  hostPlatform: NodeJS.Platform,
+  darwinRelease: string,
+  env: NodeJS.ProcessEnv,
+): boolean {
+  if (platform !== "mac" || hostPlatform !== "darwin") return false;
+  if (env.CUSTOM_DMGBUILD_PATH?.trim()) return false;
+
+  const kernelMajor = Number.parseInt(darwinRelease.split(".")[0] ?? "", 10);
+  return Number.isFinite(kernelMajor) && kernelMajor < 22;
+}
+
 const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   platform: typeof BuildPlatform.Type,
   target: string,
@@ -967,6 +981,9 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     }
     buildEnv.npm_config_msvs_version = buildEnv.npm_config_msvs_version ?? "2022";
     buildEnv.GYP_MSVS_VERSION = buildEnv.GYP_MSVS_VERSION ?? "2022";
+  }
+  if (shouldUseHdiutilDmgbuildShim(options.platform, process.platform, osRelease(), buildEnv)) {
+    buildEnv.CUSTOM_DMGBUILD_PATH = path.join(repoRoot, "scripts", "dmgbuild-hdiutil-shim.mjs");
   }
   if (options.verbose) {
     buildEnv.DEBUG =
