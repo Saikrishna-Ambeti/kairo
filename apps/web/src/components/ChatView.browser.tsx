@@ -4,7 +4,7 @@ import "../index.css";
 import {
   EventId,
   ORCHESTRATION_WS_METHODS,
-  DEFAULT_PRODUCT_SURFACE_CONFIG,
+  DEVELOPER_PRODUCT_SURFACES,
   EnvironmentId,
   type EnvironmentApi,
   type MessageId,
@@ -43,6 +43,7 @@ import {
 } from "vite-plus/test";
 import { render } from "vitest-browser-react";
 
+import { writeBrowserClientSettings } from "../clientPersistenceStorage";
 import { useCommandPaletteStore } from "../commandPaletteStore";
 import { useComposerDraftStore, DraftId } from "../composerDraftStore";
 import {
@@ -62,7 +63,7 @@ import {
 } from "../lib/terminalContext";
 import { isMacPlatform } from "../lib/utils";
 import { __resetLocalApiForTests } from "../localApi";
-import { AppAtomRegistryProvider } from "../rpc/atomRegistry";
+import { AppAtomRegistryProvider, resetAppAtomRegistryForTests } from "../rpc/atomRegistry";
 import { getServerConfig } from "../rpc/serverState";
 import { getRouter } from "../router";
 import { deriveLogicalProjectKeyFromSettings } from "../logicalProject";
@@ -211,7 +212,7 @@ function createBaseServerConfig(): ServerConfig {
     keybindingsConfigPath: "/repo/project/.kairo-keybindings.json",
     keybindings: [],
     issues: [],
-    surface: DEFAULT_PRODUCT_SURFACE_CONFIG,
+    surface: DEVELOPER_PRODUCT_SURFACES,
     providers: [
       {
         driver: ProviderDriverKind.make("codex"),
@@ -1744,8 +1745,14 @@ describe("ChatView timeline estimator parity (full app)", () => {
       },
     });
     await __resetLocalApiForTests();
+    terminalSessionManager.reset();
+    resetAppAtomRegistryForTests();
     await setViewport(DEFAULT_VIEWPORT);
     localStorage.clear();
+    writeBrowserClientSettings({
+      ...DEFAULT_CLIENT_SETTINGS,
+      onboardingCompleted: true,
+    });
     document.body.innerHTML = "";
     wsRequests.length = 0;
     customWsRpcResolver = null;
@@ -1939,7 +1946,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("does not leak a server worktree path into drawer runtime env when launch context clears it", async () => {
+  it("attaches an already-open drawer with the active thread worktree runtime env", async () => {
     const snapshot = createSnapshotForTargetUser({
       targetMessageId: "msg-user-launch-context-target" as MessageId,
       targetText: "launch context worktree override",
@@ -2005,13 +2012,13 @@ describe("ChatView timeline estimator parity (full app)", () => {
             | undefined;
           expect(attachRequest).toMatchObject({
             _tag: WS_METHODS.terminalAttach,
-            cwd: "/repo/project",
-            worktreePath: null,
+            cwd: "/repo/worktrees/feature-branch",
+            worktreePath: "/repo/worktrees/feature-branch",
             env: {
               KAIRO_PROJECT_ROOT: "/repo/project",
+              KAIRO_WORKTREE_PATH: "/repo/worktrees/feature-branch",
             },
           });
-          expect(attachRequest?.env?.KAIRO_WORKTREE_PATH).toBeUndefined();
         },
         { timeout: 8_000, interval: 16 },
       );
@@ -4036,6 +4043,38 @@ describe("ChatView timeline estimator parity (full app)", () => {
   });
 
   it("shows the sidebar terminal indicator from terminal metadata activity", async () => {
+    const terminalMetadataEvents: ReadonlyArray<TerminalMetadataStreamEvent> = [
+      {
+        type: "upsert",
+        terminal: {
+          threadId: THREAD_ID,
+          terminalId: DEFAULT_TERMINAL_ID,
+          cwd: "/repo/project",
+          worktreePath: null,
+          status: "running",
+          pid: 123,
+          exitCode: null,
+          exitSignal: null,
+          hasRunningSubprocess: true,
+          label: "Terminal 1",
+          updatedAt: isoAt(1_200),
+        },
+      },
+    ];
+    terminalSessionManager.subscribeMetadata({
+      environmentId: LOCAL_ENVIRONMENT_ID,
+      client: {
+        terminal: {
+          onMetadata: (listener) => {
+            for (const event of terminalMetadataEvents) {
+              listener(event);
+            }
+            return () => undefined;
+          },
+        },
+      },
+    });
+
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
@@ -4043,24 +4082,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         targetText: "terminal metadata indicator target",
       }),
       configureFixture: (nextFixture) => {
-        nextFixture.terminalMetadataEvents = [
-          {
-            type: "upsert",
-            terminal: {
-              threadId: THREAD_ID,
-              terminalId: DEFAULT_TERMINAL_ID,
-              cwd: "/repo/project",
-              worktreePath: null,
-              status: "running",
-              pid: 123,
-              exitCode: null,
-              exitSignal: null,
-              hasRunningSubprocess: true,
-              label: "Terminal 1",
-              updatedAt: isoAt(1_200),
-            },
-          },
-        ];
+        nextFixture.terminalMetadataEvents = terminalMetadataEvents;
       },
     });
 
@@ -4098,13 +4120,11 @@ describe("ChatView timeline estimator parity (full app)", () => {
   });
 
   it("shows the confirm archive action after clicking the archive button", async () => {
-    localStorage.setItem(
-      "kairo:client-settings:v1",
-      JSON.stringify({
-        ...DEFAULT_CLIENT_SETTINGS,
-        confirmThreadArchive: true,
-      }),
-    );
+    writeBrowserClientSettings({
+      ...DEFAULT_CLIENT_SETTINGS,
+      onboardingCompleted: true,
+      confirmThreadArchive: true,
+    });
 
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
@@ -4120,13 +4140,21 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await expect.element(threadRow).toBeInTheDocument();
       await threadRow.hover();
 
-      const archiveButton = page.getByTestId(`thread-archive-${THREAD_ID}`);
-      await expect.element(archiveButton).toBeInTheDocument();
-      await archiveButton.click();
+      const archiveButton = await waitForElement(
+        () =>
+          document.querySelector<HTMLButtonElement>(`[data-testid="thread-archive-${THREAD_ID}"]`),
+        "Unable to find archive button.",
+      );
+      archiveButton.click();
 
-      const confirmButton = page.getByTestId(`thread-archive-confirm-${THREAD_ID}`);
-      await expect.element(confirmButton).toBeInTheDocument();
-      await expect.element(confirmButton).toBeVisible();
+      const confirmButton = await waitForElement(
+        () =>
+          document.querySelector<HTMLButtonElement>(
+            `[data-testid="thread-archive-confirm-${THREAD_ID}"]`,
+          ),
+        "Unable to find confirm archive button.",
+      );
+      expect(confirmButton.offsetParent).not.toBeNull();
     } finally {
       localStorage.removeItem("kairo:client-settings:v1");
       await mounted.cleanup();

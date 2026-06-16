@@ -58,6 +58,23 @@ function renderWithTestRouter(children: ReactNode) {
   return render(<RouterProvider router={router} />);
 }
 
+function setInputValue(input: HTMLInputElement, value: string) {
+  const valueSetter = Object.getOwnPropertyDescriptor(
+    window.HTMLInputElement.prototype,
+    "value",
+  )?.set;
+  valueSetter?.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function clickTestElement(element: HTMLElement | SVGElement) {
+  if (element instanceof HTMLElement) {
+    element.click();
+    return;
+  }
+  element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+}
+
 const authAccessHarness = vi.hoisted(() => {
   type Snapshot = AuthAccessSnapshot;
   let snapshot: Snapshot = {
@@ -505,6 +522,9 @@ describe("GeneralSettingsPanel observability", () => {
     | null = null;
 
   beforeEach(async () => {
+    Reflect.deleteProperty(window, "desktopBridge");
+    Reflect.deleteProperty(window, "nativeApi");
+    resetAppAtomRegistryForTests();
     resetServerStateForTests();
     await __resetLocalApiForTests();
     localStorage.clear();
@@ -525,6 +545,7 @@ describe("GeneralSettingsPanel observability", () => {
     document.body.innerHTML = "";
     resetServerStateForTests();
     await __resetLocalApiForTests();
+    resetAppAtomRegistryForTests();
     authAccessHarness.reset();
   });
 
@@ -758,13 +779,13 @@ describe("GeneralSettingsPanel observability", () => {
       .element(page.getByRole("heading", { name: "Local network", exact: true }))
       .not.toBeInTheDocument();
 
-    await page.getByRole("button", { name: "+2" }).click();
+    clickTestElement(page.getByRole("button", { name: "+2" }).element());
 
     await expect
       .element(page.getByRole("heading", { name: "Local network", exact: true }))
       .toBeInTheDocument();
     await expect.element(page.getByText("Default", { exact: true })).toBeInTheDocument();
-    await page.getByRole("button", { name: "Set as default" }).first().click();
+    clickTestElement(page.getByRole("button", { name: "Set as default" }).first().element());
     await expect.element(page.getByText("http://127.0.0.1:3773/").first()).toBeInTheDocument();
   });
 
@@ -895,14 +916,30 @@ describe("GeneralSettingsPanel observability", () => {
     await expect.element(page.getByText("Authorized clients")).toBeInTheDocument();
     await expect.element(page.getByText("Revoke others")).toBeInTheDocument();
     await expect.element(page.getByText("This Mac")).toBeInTheDocument();
-    await page.getByRole("button", { name: "Create link", exact: true }).click();
-    await expect.element(page.getByText("Create pairing link")).toBeInTheDocument();
-    await expect.element(page.getByRole("checkbox", { name: /View environment/ })).toBeChecked();
-    await expect.element(page.getByRole("checkbox", { name: /Operate tasks/ })).toBeChecked();
-    await page.getByRole("button", { name: "Read only", exact: true }).click();
-    await expect.element(page.getByRole("checkbox", { name: /View environment/ })).toBeChecked();
-    await expect.element(page.getByRole("checkbox", { name: /Operate tasks/ })).not.toBeChecked();
-    await page.getByRole("button", { name: "Create link", exact: true }).click();
+    clickTestElement(page.getByRole("button", { name: "Create link", exact: true }).element());
+    const pairingDialog = page.getByRole("dialog", { name: "Create pairing link" });
+    await expect.element(pairingDialog).toBeInTheDocument();
+    await expect
+      .element(pairingDialog.getByRole("checkbox", { name: /View environment/ }))
+      .toBeChecked();
+    await expect
+      .element(pairingDialog.getByRole("checkbox", { name: /Operate tasks/ }))
+      .toBeChecked();
+    clickTestElement(
+      pairingDialog.getByRole("button", { name: "Read only", exact: true }).element(),
+    );
+    await expect
+      .element(pairingDialog.getByRole("checkbox", { name: /View environment/ }))
+      .toBeChecked();
+    await expect
+      .element(pairingDialog.getByRole("checkbox", { name: /Operate tasks/ }))
+      .not.toBeChecked();
+    clickTestElement(
+      pairingDialog.getByRole("button", { name: "Create link", exact: true }).element(),
+    );
+    await vi.waitFor(() => {
+      expect(pairingLinks).toHaveLength(1);
+    });
     authAccessHarness.emitPairingLinkUpserted(pairingLinks[0]!);
     authAccessHarness.emitClientUpserted(clientSessions[1]!);
     await expect
@@ -911,7 +948,7 @@ describe("GeneralSettingsPanel observability", () => {
     await expect
       .element(page.getByText("Mobile · iOS · Safari · 192.168.1.88"))
       .toBeInTheDocument();
-    await page.getByRole("button", { name: "Client scopes: show 1 scope" }).click();
+    clickTestElement(page.getByRole("button", { name: "Client scopes: show 1 scope" }).element());
     await expect.element(page.getByText("orchestration:read", { exact: true })).toBeInTheDocument();
     await expect
       .element(page.getByRole("button", { name: /^Copy pairing URL for:/ }))
@@ -998,10 +1035,12 @@ describe("GeneralSettingsPanel observability", () => {
     );
 
     await expect.element(page.getByText("Julius iPhone")).toBeInTheDocument();
-    await page.getByRole("button", { name: "Revoke others", exact: true }).click();
+    clickTestElement(page.getByRole("button", { name: "Revoke others", exact: true }).element());
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled();
+    });
     await expect.element(page.getByText("This Mac")).toBeInTheDocument();
     await expect.element(page.getByText("Julius iPhone")).not.toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalled();
   });
 
   it("shows a disabled network access toggle with guidance in desktop builds", async () => {
@@ -1018,12 +1057,14 @@ describe("GeneralSettingsPanel observability", () => {
 
     const networkAccessToggle = page.getByLabelText("Enable network access");
     await expect.element(networkAccessToggle).not.toBeDisabled();
-    await networkAccessToggle.click();
+    clickTestElement(networkAccessToggle.element());
     await expect.element(page.getByText("Enable network access?")).toBeInTheDocument();
     await expect
       .element(page.getByText("Kairo will restart to expose this environment over the network."))
       .toBeInTheDocument();
-    await page.getByRole("button", { name: "Restart and enable", exact: true }).click();
+    clickTestElement(
+      page.getByRole("button", { name: "Restart and enable", exact: true }).element(),
+    );
     await vi.waitFor(() => {
       expect(desktopBridge.setServerExposureMode).toHaveBeenCalledWith("network-accessible");
     });
@@ -1066,12 +1107,18 @@ describe("GeneralSettingsPanel observability", () => {
       </AppAtomRegistryProvider>,
     );
 
-    await page.getByRole("button", { name: "Add environment", exact: true }).click();
+    const addEnvironmentButton = page
+      .getByRole("button", { name: "Add environment", exact: true })
+      .element();
+    clickTestElement(
+      addEnvironmentButton.closest<HTMLElement>("[data-slot='dialog-trigger']") ??
+        addEnvironmentButton,
+    );
     const addEnvironmentDialog = page.getByRole("dialog", { name: "Add Environment" });
     await expect
       .element(addEnvironmentDialog.getByRole("heading", { name: "Add Environment", exact: true }))
       .toBeInTheDocument();
-    await addEnvironmentDialog.getByRole("button", { name: /^SSH\b/ }).click();
+    clickTestElement(addEnvironmentDialog.getByRole("button", { name: /^SSH\b/ }).element());
     await vi.waitFor(() => {
       expect(discoverSshHosts).toHaveBeenCalledTimes(1);
     });
@@ -1079,13 +1126,24 @@ describe("GeneralSettingsPanel observability", () => {
       .element(page.getByRole("heading", { name: "devbox", exact: true }))
       .toBeInTheDocument();
 
-    await addEnvironmentDialog.getByLabelText("SSH host or alias").fill("devbox.example.com");
-    await addEnvironmentDialog.getByLabelText("Username").fill("julius");
-    await addEnvironmentDialog.getByLabelText("Port").fill("2222");
-    await addEnvironmentDialog
-      .getByRole("button", { name: "Add environment", exact: true })
-      .first()
-      .click();
+    setInputValue(
+      addEnvironmentDialog.getByLabelText("SSH host or alias").element() as HTMLInputElement,
+      "devbox.example.com",
+    );
+    setInputValue(
+      addEnvironmentDialog.getByLabelText("Username").element() as HTMLInputElement,
+      "julius",
+    );
+    setInputValue(
+      addEnvironmentDialog.getByLabelText("Port").element() as HTMLInputElement,
+      "2222",
+    );
+    clickTestElement(
+      addEnvironmentDialog
+        .getByRole("button", { name: "Add environment", exact: true })
+        .first()
+        .element(),
+    );
 
     await vi.waitFor(() => {
       expect(mockConnectDesktopSshEnvironment).toHaveBeenCalledWith(
@@ -1156,9 +1214,11 @@ describe("GeneralSettingsPanel observability", () => {
     );
 
     const openLogsButton = page.getByLabelText("Open logs folder");
-    await openLogsButton.click();
+    clickTestElement(openLogsButton.element());
 
-    expect(openInEditor).toHaveBeenCalledWith("/repo/project/.kairo/logs", "cursor");
+    await vi.waitFor(() => {
+      expect(openInEditor).toHaveBeenCalledWith("/repo/project/.kairo/logs", "cursor");
+    });
   });
 
   it("shows an OpenCode server URL field in provider settings", async () => {
@@ -1170,7 +1230,7 @@ describe("GeneralSettingsPanel observability", () => {
       </AppAtomRegistryProvider>,
     );
 
-    await page.getByLabelText("Toggle OpenCode details").click();
+    clickTestElement(page.getByLabelText("Toggle OpenCode details").element());
 
     // The unified provider-instance card renders field labels without a
     // driver-name prefix (the driver name is already shown in the card
@@ -1207,13 +1267,17 @@ describe("GeneralSettingsPanel observability", () => {
       </AppAtomRegistryProvider>,
     );
 
-    await page.getByRole("button", { name: "Update available — view details" }).click();
+    clickTestElement(
+      page.getByRole("button", { name: "Update available — view details" }).element(),
+    );
     await expect.element(page.getByRole("button", { name: "Update now" })).toBeInTheDocument();
-    await page.getByRole("button", { name: "Update now" }).click();
+    clickTestElement(page.getByRole("button", { name: "Update now" }).element());
 
-    expect(updateProvider).toHaveBeenCalledWith({
-      provider: ProviderDriverKind.make("codex"),
-      instanceId: ProviderInstanceId.make("codex"),
+    await vi.waitFor(() => {
+      expect(updateProvider).toHaveBeenCalledWith({
+        provider: ProviderDriverKind.make("codex"),
+        instanceId: ProviderInstanceId.make("codex"),
+      });
     });
   });
 
@@ -1232,7 +1296,9 @@ describe("GeneralSettingsPanel observability", () => {
       </AppAtomRegistryProvider>,
     );
 
-    await page.getByRole("button", { name: "Update available — view details" }).click();
+    clickTestElement(
+      page.getByRole("button", { name: "Update available — view details" }).element(),
+    );
     await expect.element(page.getByText(longUpdateCommand)).toBeInTheDocument();
 
     await vi.waitFor(() => {
@@ -1268,6 +1334,8 @@ describe("SourceControlSettingsPanel discovery states", () => {
     | null = null;
 
   beforeEach(async () => {
+    Reflect.deleteProperty(window, "desktopBridge");
+    Reflect.deleteProperty(window, "nativeApi");
     resetAppAtomRegistryForTests();
     await __resetLocalApiForTests();
     document.body.innerHTML = "";
@@ -1279,6 +1347,7 @@ describe("SourceControlSettingsPanel discovery states", () => {
       await teardown?.call(mounted).catch(() => {});
     }
     mounted = null;
+    Reflect.deleteProperty(window, "desktopBridge");
     Reflect.deleteProperty(window, "nativeApi");
     document.body.innerHTML = "";
     await __resetLocalApiForTests();
@@ -1289,10 +1358,14 @@ describe("SourceControlSettingsPanel discovery states", () => {
     discoverSourceControl: () => Promise<SourceControlDiscoveryResult>,
   ) {
     window.nativeApi = {
+      persistence: {
+        getClientSettings: vi.fn().mockResolvedValue(null),
+        setClientSettings: vi.fn().mockResolvedValue(undefined),
+      },
       server: {
         discoverSourceControl,
       },
-    } as LocalApi;
+    } as unknown as LocalApi;
   }
 
   it("shows skeleton sections while the first source control scan is pending", async () => {
@@ -1388,7 +1461,7 @@ describe("SourceControlSettingsPanel discovery states", () => {
     const toggle = page.getByRole("button", { name: "Toggle Git details" });
     await expect.element(toggle).toHaveAttribute("aria-expanded", "false");
 
-    await toggle.click();
+    clickTestElement(toggle.element());
 
     await expect.element(toggle).toHaveAttribute("aria-expanded", "true");
     await expect

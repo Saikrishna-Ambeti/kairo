@@ -17,6 +17,7 @@ import {
   type ThreadId,
   WS_METHODS,
 } from "@kairo/contracts";
+import { DEFAULT_CLIENT_SETTINGS } from "@kairo/contracts/settings";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import { ws, http, HttpResponse } from "msw";
 import { setupWorker } from "msw/browser";
@@ -34,6 +35,7 @@ import {
 import { render } from "vitest-browser-react";
 
 import { useComposerDraftStore } from "../composerDraftStore";
+import { writeBrowserClientSettings } from "../clientPersistenceStorage";
 import { __resetLocalApiForTests } from "../localApi";
 import { AppAtomRegistryProvider } from "../rpc/atomRegistry";
 import { getServerConfig, getServerConfigUpdatedNotification } from "../rpc/serverState";
@@ -559,6 +561,10 @@ describe("Keybindings update toast", () => {
     });
     await __resetLocalApiForTests();
     localStorage.clear();
+    writeBrowserClientSettings({
+      ...DEFAULT_CLIENT_SETTINGS,
+      onboardingCompleted: true,
+    });
     document.body.innerHTML = "";
     useComposerDraftStore.setState({
       draftsByThreadKey: {},

@@ -65,8 +65,10 @@ const browserTestProject = {
   test: {
     name: "browser",
     include: ["src/components/**/*.browser.tsx"],
-    hookTimeout: 30_000,
-    testTimeout: 30_000,
+    // ChatView and settings browser coverage intentionally exercise full
+    // user-facing flows, which can exceed the default budget on CI runners.
+    hookTimeout: 60_000,
+    testTimeout: 60_000,
     browser: {
       enabled: true,
       provider: playwright() as never,

@@ -81,7 +81,7 @@ export function SettingsRow({
               {resetAction}
             </span>
           </div>
-          <p className="text-xs text-muted-foreground/80">{description}</p>
+          <div className="text-xs text-muted-foreground/80">{description}</div>
           {status ? <div className="pt-0.5 text-[11px] text-muted-foreground">{status}</div> : null}
         </div>
         {control ? (
