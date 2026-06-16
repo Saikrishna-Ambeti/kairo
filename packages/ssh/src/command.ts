@@ -13,7 +13,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { buildSshChildEnvironment, type SshAuthOptions } from "./auth.ts";
 import { SshCommandError, SshInvalidTargetError } from "./errors.ts";
 
-const PUBLISHABLE_Kairo_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
+const PUBLISHABLE_KAIRO_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
 const DEFAULT_SSH_COMMAND_TIMEOUT_MS = 60_000;
 const MAX_SSH_ERROR_OUTPUT_LENGTH = 4_000;
 export const SSH_COMMAND = process.platform === "win32" ? "ssh.exe" : "ssh";
@@ -355,7 +355,7 @@ export function resolveRemoteKairoCliPackageSpec(input: {
   readonly isDevelopment?: boolean;
 }): string {
   const appVersion = input.appVersion.trim();
-  if (!input.isDevelopment && PUBLISHABLE_Kairo_VERSION_PATTERN.test(appVersion)) {
+  if (!input.isDevelopment && PUBLISHABLE_KAIRO_VERSION_PATTERN.test(appVersion)) {
     return `kairo@${appVersion}`;
   }
 

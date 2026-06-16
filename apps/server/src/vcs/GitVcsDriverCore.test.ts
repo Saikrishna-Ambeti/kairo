@@ -227,13 +227,13 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
         const sshWrapperPath = pathService.join(tempDir, "ssh-wrapper.sh");
         const previousGitSsh = process.env.GIT_SSH;
         const previousAskpassRequire = process.env.SSH_ASKPASS_REQUIRE;
-        const previousAskpassLog = process.env.Kairo_TEST_SSH_ASKPASS_LOG;
+        const previousAskpassLog = process.env.KAIRO_TEST_SSH_ASKPASS_LOG;
 
         yield* fileSystem.writeFileString(
           sshWrapperPath,
           [
             "#!/bin/sh",
-            'printf "%s\\n" "${SSH_ASKPASS_REQUIRE:-}" > "$Kairo_TEST_SSH_ASKPASS_LOG"',
+            'printf "%s\\n" "${SSH_ASKPASS_REQUIRE:-}" > "$KAIRO_TEST_SSH_ASKPASS_LOG"',
             "exit 1",
             "",
           ].join("\n"),
@@ -246,7 +246,7 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
         yield* Effect.gen(function* () {
           process.env.GIT_SSH = sshWrapperPath;
           process.env.SSH_ASKPASS_REQUIRE = "force";
-          process.env.Kairo_TEST_SSH_ASKPASS_LOG = sshLogPath;
+          process.env.KAIRO_TEST_SSH_ASKPASS_LOG = sshLogPath;
 
           yield* (yield* GitVcsDriver.GitVcsDriver).statusDetails(cwd);
 
@@ -265,9 +265,9 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
                 process.env.SSH_ASKPASS_REQUIRE = previousAskpassRequire;
               }
               if (previousAskpassLog === undefined) {
-                delete process.env.Kairo_TEST_SSH_ASKPASS_LOG;
+                delete process.env.KAIRO_TEST_SSH_ASKPASS_LOG;
               } else {
-                process.env.Kairo_TEST_SSH_ASKPASS_LOG = previousAskpassLog;
+                process.env.KAIRO_TEST_SSH_ASKPASS_LOG = previousAskpassLog;
               }
             }),
           ),

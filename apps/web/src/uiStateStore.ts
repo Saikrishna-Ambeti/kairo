@@ -9,10 +9,8 @@ const LEGACY_PERSISTED_STATE_KEYS = [
   "kairo:renderer-state:v5",
   "kairo:renderer-state:v4",
   "kairo:renderer-state:v3",
-  "codething:renderer-state:v4",
-  "codething:renderer-state:v3",
-  "codething:renderer-state:v2",
-  "codething:renderer-state:v1",
+  "kairo:renderer-state:v2",
+  "kairo:renderer-state:v1",
 ] as const;
 
 export interface PersistedUiState {

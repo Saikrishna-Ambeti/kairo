@@ -28,7 +28,7 @@ const MAX_PORT = 65535;
 const DESKTOP_DEV_LOOPBACK_HOST = "127.0.0.1";
 const DEV_PORT_PROBE_HOSTS = ["127.0.0.1", "0.0.0.0", "::1", "::"] as const;
 
-export const DEFAULT_Kairo_HOME = Effect.map(Effect.service(Path.Path), (path) =>
+export const DEFAULT_KAIRO_HOME = Effect.map(Effect.service(Path.Path), (path) =>
   path.join(NodeOS.homedir(), ".kairo"),
 );
 
@@ -127,7 +127,7 @@ function resolveBaseDir(baseDir: string | undefined): Effect.Effect<string, neve
       return path.resolve(configured);
     }
 
-    return yield* DEFAULT_Kairo_HOME;
+    return yield* DEFAULT_KAIRO_HOME;
   });
 }
 

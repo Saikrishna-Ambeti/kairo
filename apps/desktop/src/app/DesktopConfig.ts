@@ -38,7 +38,7 @@ export const DesktopConfig = Config.all({
   kairoHome: trimmedString("KAIRO_HOME"),
   devServerUrl: Config.url("VITE_DEV_SERVER_URL").pipe(Config.option),
   appUserModelIdOverride: trimmedString("KAIRO_DESKTOP_APP_USER_MODEL_ID"),
-  devRemoteKairoServerEntryPath: trimmedString("KAIRO_DEV_REMOTE_Kairo_SERVER_ENTRY_PATH"),
+  devRemoteKairoServerEntryPath: trimmedString("KAIRO_DEV_REMOTE_SERVER_ENTRY_PATH"),
   configuredBackendPort: Config.port("KAIRO_PORT").pipe(Config.option),
   commitHashOverride: trimmedString("KAIRO_COMMIT_HASH"),
   desktopLanHostOverride: trimmedString("KAIRO_DESKTOP_LAN_HOST"),

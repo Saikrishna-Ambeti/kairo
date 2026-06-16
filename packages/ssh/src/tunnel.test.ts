@@ -92,13 +92,13 @@ describe("ssh tunnel scripts", () => {
   it("builds the remote kairo runner with npx and npm fallbacks", () => {
     const script = buildRemoteKairoRunnerScript({ nodeEngineRange: TEST_NODE_ENGINE_RANGE });
 
-    assert.include(script, "Kairo_NODE_SCRIPT_PATH=''");
+    assert.include(script, "KAIRO_NODE_SCRIPT_PATH=''");
     assert.include(script, 'exec kairo "$@"');
     assert.include(script, "exec npx --yes 'kairo@latest' \"$@\"");
     assert.include(script, "exec npm exec --yes 'kairo@latest' -- \"$@\"");
     assert.include(script, "could not install 'kairo@latest'");
     assert.include(script, 'prepend_path_if_dir "$HOME/.local/bin"');
-    assert.include(script, `Kairo_NODE_ENGINE_RANGE='${TEST_NODE_ENGINE_RANGE}'`);
+    assert.include(script, `KAIRO_NODE_ENGINE_RANGE='${TEST_NODE_ENGINE_RANGE}'`);
     assert.include(script, "remote_node_satisfies_engine()");
     assert.include(script, "function satisfiesSemverRange");
     assert.include(script, "satisfiesSemverRange(rawVersion, range)");
@@ -109,14 +109,14 @@ describe("ssh tunnel scripts", () => {
     assert.include(script, 'prepend_path_if_dir "$HOME/.nodenv/shims"');
     assert.include(script, 'NVM_DIR="$HOME/.nvm"');
     assert.include(script, "nvm use --silent default");
-    assert.include(script, 'for Kairo_NODE_BIN in "$NVM_DIR"/versions/node/*/bin');
+    assert.include(script, 'for KAIRO_NODE_BIN in "$NVM_DIR"/versions/node/*/bin');
     assert.notInclude(script, "ensure $NVM_DIR/nvm.sh is available");
   });
 
   it("does not hard-code a remote node engine range", () => {
     const script = buildRemoteKairoRunnerScript();
 
-    assert.include(script, "Kairo_NODE_ENGINE_RANGE=''");
+    assert.include(script, "KAIRO_NODE_ENGINE_RANGE=''");
     assert.notInclude(script, TEST_NODE_ENGINE_RANGE);
   });
 
@@ -132,14 +132,14 @@ describe("ssh tunnel scripts", () => {
 
   it("builds the remote kairo runner with a node script override", () => {
     const script = buildRemoteKairoRunnerScript({
-      nodeScriptPath: "/Users/julius/Development/Work/codething-mvp/apps/server/dist/bin.mjs",
+      nodeScriptPath: "/Users/julius/Development/Work/kairo/apps/server/dist/bin.mjs",
     });
 
     assert.include(
       script,
-      "Kairo_NODE_SCRIPT_PATH='/Users/julius/Development/Work/codething-mvp/apps/server/dist/bin.mjs'",
+      "KAIRO_NODE_SCRIPT_PATH='/Users/julius/Development/Work/kairo/apps/server/dist/bin.mjs'",
     );
-    assert.include(script, 'exec node "$Kairo_NODE_SCRIPT_PATH" "$@"');
+    assert.include(script, 'exec node "$KAIRO_NODE_SCRIPT_PATH" "$@"');
   });
 
   it("uses the remote kairo runner for launch and pairing scripts", () => {
@@ -159,7 +159,7 @@ describe("ssh tunnel scripts", () => {
     assert.include(buildRemoteLaunchScript(), "if ! ensure_remote_node_path; then");
     assert.include(
       buildRemoteLaunchScript({ nodeEngineRange: TEST_NODE_ENGINE_RANGE }),
-      `Kairo_NODE_ENGINE_RANGE='${TEST_NODE_ENGINE_RANGE}'`,
+      `KAIRO_NODE_ENGINE_RANGE='${TEST_NODE_ENGINE_RANGE}'`,
     );
     assert.include(
       buildRemoteLaunchScript({ nodeEngineRange: TEST_NODE_ENGINE_RANGE }),

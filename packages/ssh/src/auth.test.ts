@@ -44,12 +44,12 @@ describe("ssh auth", () => {
       const askpassPath = path.join(directory, "ssh-askpass.sh");
       assert.equal(env.SSH_ASKPASS, askpassPath);
       assert.equal(env.SSH_ASKPASS_REQUIRE, "force");
-      assert.equal(env.Kairo_SSH_AUTH_SECRET, "super-secret");
+      assert.equal(env.KAIRO_SSH_AUTH_SECRET, "super-secret");
       assert.equal(env.DISPLAY, "kairo");
       assert.equal(yield* fs.exists(askpassPath), true);
       assert.include(
         yield* fs.readFileString(askpassPath),
-        'printf "%s\\n" "$Kairo_SSH_AUTH_SECRET"',
+        'printf "%s\\n" "$KAIRO_SSH_AUTH_SECRET"',
       );
     }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
   );

@@ -1,14 +1,14 @@
 /**
  * Debug logging for the mobile terminal pipeline. Prefix: `[kairo-terminal]`.
  *
- * Enabled when `__DEV__` is true, or set `globalThis.__Kairo_TERMINAL_DEBUG__ = true` in a JS
+ * Enabled when `__DEV__` is true, or set `globalThis.__KAIRO_TERMINAL_DEBUG__ = true` in a JS
  * debugger / Metro console to trace release/TestFlight builds.
  */
 export function isTerminalDebugEnabled(): boolean {
   return (
     (typeof __DEV__ !== "undefined" && __DEV__) ||
     (typeof globalThis !== "undefined" &&
-      (globalThis as { __Kairo_TERMINAL_DEBUG__?: boolean }).__Kairo_TERMINAL_DEBUG__ === true)
+      (globalThis as { __KAIRO_TERMINAL_DEBUG__?: boolean }).__KAIRO_TERMINAL_DEBUG__ === true)
   );
 }
 

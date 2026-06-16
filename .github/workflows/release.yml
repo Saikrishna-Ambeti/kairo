@@ -93,7 +93,7 @@ jobs:
           run-install: true
 
       - name: Ensure Electron runtime is installed
-        run: vp run --filter @kairotools/desktop ensure:electron
+        run: vp run --filter @kairo/desktop ensure:electron
 
       - id: release_meta
         name: Resolve release version
@@ -225,10 +225,10 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     env:
-      KairoCODE_CLERK_PUBLISHABLE_KEY: ${{ needs.relay_public_config.outputs.clerk_publishable_key }}
-      KairoCODE_CLERK_JWT_TEMPLATE: ${{ needs.relay_public_config.outputs.clerk_jwt_template }}
-      KairoCODE_CLERK_CLI_OAUTH_CLIENT_ID: ${{ needs.relay_public_config.outputs.clerk_cli_oauth_client_id }}
-      KairoCODE_RELAY_URL: ${{ needs.relay_public_config.outputs.relay_url }}
+      KAIRO_CLERK_PUBLISHABLE_KEY: ${{ needs.relay_public_config.outputs.clerk_publishable_key }}
+      KAIRO_CLERK_JWT_TEMPLATE: ${{ needs.relay_public_config.outputs.clerk_jwt_template }}
+      KAIRO_CLERK_CLI_OAUTH_CLIENT_ID: ${{ needs.relay_public_config.outputs.clerk_cli_oauth_client_id }}
+      KAIRO_RELAY_URL: ${{ needs.relay_public_config.outputs.relay_url }}
     strategy:
       fail-fast: false
       matrix:
@@ -487,10 +487,10 @@ jobs:
       contents: read
       id-token: write
     env:
-      KairoCODE_CLERK_PUBLISHABLE_KEY: ${{ needs.relay_public_config.outputs.clerk_publishable_key }}
-      KairoCODE_CLERK_JWT_TEMPLATE: ${{ needs.relay_public_config.outputs.clerk_jwt_template }}
-      KairoCODE_CLERK_CLI_OAUTH_CLIENT_ID: ${{ needs.relay_public_config.outputs.clerk_cli_oauth_client_id }}
-      KairoCODE_RELAY_URL: ${{ needs.relay_public_config.outputs.relay_url }}
+      KAIRO_CLERK_PUBLISHABLE_KEY: ${{ needs.relay_public_config.outputs.clerk_publishable_key }}
+      KAIRO_CLERK_JWT_TEMPLATE: ${{ needs.relay_public_config.outputs.clerk_jwt_template }}
+      KAIRO_CLERK_CLI_OAUTH_CLIENT_ID: ${{ needs.relay_public_config.outputs.clerk_cli_oauth_client_id }}
+      KAIRO_RELAY_URL: ${{ needs.relay_public_config.outputs.relay_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -505,14 +505,14 @@ jobs:
           run-install: |
             args:
               - --filter=kairo...
-              - --filter=@kairotools/web...
-              - --filter=@kairotools/scripts...
+              - --filter=@kairo/web...
+              - --filter=@kairo/scripts...
 
       - name: Align package versions to release version
         run: node scripts/update-release-package-versions.ts "${{ needs.preflight.outputs.version }}"
 
       - name: Build web package
-        run: vp run --filter @kairotools/web build
+        run: vp run --filter @kairo/web build
 
       - name: Build CLI package
         run: vp run --filter kairo build
@@ -547,7 +547,7 @@ jobs:
           cache: true
           run-install: |
             args:
-              - --filter=@kairotools/scripts...
+              - --filter=@kairo/scripts...
 
       - name: Download all desktop artifacts
         uses: actions/download-artifact@v8
@@ -644,15 +644,15 @@ jobs:
     runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 10
     env:
-      KairoCODE_CLERK_PUBLISHABLE_KEY: ${{ needs.relay_public_config.outputs.clerk_publishable_key }}
-      KairoCODE_CLERK_JWT_TEMPLATE: ${{ needs.relay_public_config.outputs.clerk_jwt_template }}
-      KairoCODE_RELAY_URL: ${{ needs.relay_public_config.outputs.relay_url }}
+      KAIRO_CLERK_PUBLISHABLE_KEY: ${{ needs.relay_public_config.outputs.clerk_publishable_key }}
+      KAIRO_CLERK_JWT_TEMPLATE: ${{ needs.relay_public_config.outputs.clerk_jwt_template }}
+      KAIRO_RELAY_URL: ${{ needs.relay_public_config.outputs.relay_url }}
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      KairoCODE_WEB_ROUTER_URL: ${{ vars.KairoCODE_WEB_ROUTER_URL }}
-      KairoCODE_WEB_LATEST_DOMAIN: ${{ vars.KairoCODE_WEB_LATEST_DOMAIN }}
-      KairoCODE_WEB_NIGHTLY_DOMAIN: ${{ vars.KairoCODE_WEB_NIGHTLY_DOMAIN }}
+      KAIRO_WEB_ROUTER_URL: ${{ vars.KAIRO_WEB_ROUTER_URL }}
+      KAIRO_WEB_LATEST_DOMAIN: ${{ vars.KAIRO_WEB_LATEST_DOMAIN }}
+      KAIRO_WEB_NIGHTLY_DOMAIN: ${{ vars.KAIRO_WEB_NIGHTLY_DOMAIN }}
       VERCEL_TEAM_SLUG: ${{ vars.VERCEL_TEAM_SLUG }}
     steps:
       - name: Checkout
@@ -667,8 +667,8 @@ jobs:
           cache: true
           run-install: |
             args:
-              - --filter=@kairotools/scripts...
-              - --filter=@kairotools/web...
+              - --filter=@kairo/scripts...
+              - --filter=@kairo/web...
 
       - name: Align package versions to release version
         run: node scripts/update-release-package-versions.ts "${{ needs.preflight.outputs.version }}"
@@ -686,9 +686,9 @@ jobs:
             exit 1
           fi
 
-          router_url="${KairoCODE_WEB_ROUTER_URL:-https://app.kairo.codes}"
-          latest_domain="${KairoCODE_WEB_LATEST_DOMAIN:-latest.app.kairo.codes}"
-          nightly_domain="${KairoCODE_WEB_NIGHTLY_DOMAIN:-nightly.app.kairo.codes}"
+          router_url="${KAIRO_WEB_ROUTER_URL:-https://app.kairo.codes}"
+          latest_domain="${KAIRO_WEB_LATEST_DOMAIN:-latest.app.kairo.codes}"
+          nightly_domain="${KAIRO_WEB_NIGHTLY_DOMAIN:-nightly.app.kairo.codes}"
           router_domain="${router_url#http://}"
           router_domain="${router_domain#https://}"
           router_domain="${router_domain%%/*}"
@@ -713,9 +713,9 @@ jobs:
               --token "$VERCEL_TOKEN" \
               "${vercel_scope_args[@]}" \
               --build-env "APP_VERSION=${{ needs.preflight.outputs.version }}" \
-              --build-env "KairoCODE_CLERK_PUBLISHABLE_KEY=${KairoCODE_CLERK_PUBLISHABLE_KEY:-}" \
-              --build-env "KairoCODE_CLERK_JWT_TEMPLATE=${KairoCODE_CLERK_JWT_TEMPLATE:-}" \
-              --build-env "KairoCODE_RELAY_URL=${KairoCODE_RELAY_URL:-}" \
+              --build-env "KAIRO_CLERK_PUBLISHABLE_KEY=${KAIRO_CLERK_PUBLISHABLE_KEY:-}" \
+              --build-env "KAIRO_CLERK_JWT_TEMPLATE=${KAIRO_CLERK_JWT_TEMPLATE:-}" \
+              --build-env "KAIRO_RELAY_URL=${KAIRO_RELAY_URL:-}" \
               --build-env "VITE_HOSTED_APP_URL=$router_url" \
               --build-env "VITE_HOSTED_APP_CHANNEL=$channel_name"
           )"
@@ -772,8 +772,8 @@ jobs:
           cache: true
           run-install: |
             args:
-              - --filter=@kairotools/scripts...
-              - --filter=@kairotools/oxlint-plugin-kairocode...
+              - --filter=@kairo/scripts...
+              - --filter=@kairo/oxlint-plugin-kairo...
 
       - id: update_versions
         name: Update version strings
@@ -832,7 +832,7 @@ jobs:
           cache: true
           run-install: |
             args:
-              - --filter=@kairotools/scripts...
+              - --filter=@kairo/scripts...
 
       - name: Announce prerelease on Discord
         if: needs.preflight.outputs.is_prerelease == 'true'

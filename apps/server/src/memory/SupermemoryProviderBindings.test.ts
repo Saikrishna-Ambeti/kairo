@@ -18,7 +18,7 @@ import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import {
   getCodexSupermemoryIntegrationState,
   syncCodexSupermemoryIntegration,
-  Kairo_SUPERMEMORY_CONTAINER_TAG,
+  KAIRO_SUPERMEMORY_CONTAINER_TAG,
 } from "./SupermemoryCodexIntegration.ts";
 import {
   applySupermemoryProviderBindings,
@@ -239,8 +239,8 @@ describe("Supermemory provider installer status", () => {
         expect(state.configSynced).toBe(true);
 
         const config = yield* readJsonFile(path.join(homePath, "supermemory.json"));
-        expect(objectField(config, "userContainerTag")).toBe(Kairo_SUPERMEMORY_CONTAINER_TAG);
-        expect(objectField(config, "projectContainerTag")).toBe(Kairo_SUPERMEMORY_CONTAINER_TAG);
+        expect(objectField(config, "userContainerTag")).toBe(KAIRO_SUPERMEMORY_CONTAINER_TAG);
+        expect(objectField(config, "projectContainerTag")).toBe(KAIRO_SUPERMEMORY_CONTAINER_TAG);
 
         const credentials = yield* readJsonFile(
           path.join(homePath, "supermemory", "credentials.json"),

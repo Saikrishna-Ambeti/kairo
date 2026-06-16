@@ -27,7 +27,7 @@ describe("ComposioService", () => {
   it.effect("parses toolkit catalog JSON without turning object fields into apps", () =>
     Effect.gen(function* () {
       const previousInstallDir = process.env.COMPOSIO_INSTALL_DIR;
-      process.env.COMPOSIO_INSTALL_DIR = "/tmp/t3code-composio-test-catalog";
+      process.env.COMPOSIO_INSTALL_DIR = "/tmp/kairo-composio-test-catalog";
       const runMock = vi.fn((input: ProcessRunInput) =>
         Effect.sync(() => {
           if (input.command === "composio" && input.args[0] === "--version") {
@@ -114,7 +114,7 @@ describe("ComposioService", () => {
   it.effect("reports only connected Composio toolkits in status", () =>
     Effect.gen(function* () {
       const previousInstallDir = process.env.COMPOSIO_INSTALL_DIR;
-      process.env.COMPOSIO_INSTALL_DIR = "/tmp/t3code-composio-test-connected";
+      process.env.COMPOSIO_INSTALL_DIR = "/tmp/kairo-composio-test-connected";
       const runMock = vi.fn((input: ProcessRunInput) =>
         Effect.sync(() => {
           if (input.command === "composio" && input.args[0] === "--version") {
@@ -208,7 +208,7 @@ describe("ComposioService", () => {
   it.effect("skips CLI install when install-and-login re-check discovers composio", () =>
     Effect.gen(function* () {
       const previousInstallDir = process.env.COMPOSIO_INSTALL_DIR;
-      process.env.COMPOSIO_INSTALL_DIR = "/tmp/t3code-composio-test-missing";
+      process.env.COMPOSIO_INSTALL_DIR = "/tmp/kairo-composio-test-missing";
       const runs: ProcessRunInput[] = [];
       const runMock = vi.fn((input: ProcessRunInput) =>
         Effect.sync(() => {

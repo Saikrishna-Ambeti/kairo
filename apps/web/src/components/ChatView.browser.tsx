@@ -5082,7 +5082,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           if (body.partialPath === "~/Development/") {
             return {
               parentPath: "~/Development/",
-              entries: [{ name: "codething", fullPath: "~/Development/codething" }],
+              entries: [{ name: "kairo", fullPath: "~/Development/kairo" }],
             };
           }
 
@@ -5303,7 +5303,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       if (partialPath === "~/workspaces/") {
         return {
           parentPath: "~/workspaces/",
-          entries: [{ name: "codething", fullPath: "~/workspaces/codething" }],
+          entries: [{ name: "kairo", fullPath: "~/workspaces/kairo" }],
         };
       }
 
@@ -5394,7 +5394,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         },
         { timeout: 8_000, interval: 16 },
       );
-      await expect.element(palette.getByText("codething", { exact: true })).toBeInTheDocument();
+      await expect.element(palette.getByText("kairo", { exact: true })).toBeInTheDocument();
       await expect
         .element(palette.getByRole("button", { name: "Add (Enter)" }))
         .toBeInTheDocument();

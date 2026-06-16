@@ -16,7 +16,7 @@ import {
 
 const GROK_API_KEY_ENV = "XAI_API_KEY";
 const GROK_OAUTH2_REFERRER_ENV = "GROK_OAUTH2_REFERRER";
-const Kairo_CODE_OAUTH_REFERRER = "kairo";
+const KAIRO_OAUTH_REFERRER = "kairo";
 const GROK_AUTH_METHOD_API_KEY = "xai.api_key";
 const GROK_AUTH_METHOD_CACHED_TOKEN = "cached_token";
 const GROK_DRIVER_KIND = ProviderDriverKind.make("grok");
@@ -43,7 +43,7 @@ export function buildGrokAcpSpawnInput(
     cwd,
     env: {
       ...environment,
-      [GROK_OAUTH2_REFERRER_ENV]: Kairo_CODE_OAUTH_REFERRER,
+      [GROK_OAUTH2_REFERRER_ENV]: KAIRO_OAUTH_REFERRER,
     },
   };
 }

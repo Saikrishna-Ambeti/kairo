@@ -348,12 +348,12 @@ export const REMOTE_NODE_ENV_SCRIPT = `prepend_path_if_dir() {
 }
 
 remote_node_satisfies_engine() {
-  Kairo_NODE_ENGINE_RANGE=@@Kairo_NODE_ENGINE_RANGE@@
-  if [ -z "$Kairo_NODE_ENGINE_RANGE" ]; then
+  KAIRO_NODE_ENGINE_RANGE=@@KAIRO_NODE_ENGINE_RANGE@@
+  if [ -z "$KAIRO_NODE_ENGINE_RANGE" ]; then
     return 0
   fi
-  node - "$Kairo_NODE_ENGINE_RANGE" <<'NODE'
-@@Kairo_NODE_ENGINE_CHECK_SCRIPT@@
+  node - "$KAIRO_NODE_ENGINE_RANGE" <<'NODE'
+@@KAIRO_NODE_ENGINE_CHECK_SCRIPT@@
 NODE
 }
 
@@ -418,9 +418,9 @@ ensure_remote_node_path() {
   fi
 
   if ! command -v node >/dev/null 2>&1 && [ -d "$NVM_DIR/versions/node" ]; then
-    for Kairo_NODE_BIN in "$NVM_DIR"/versions/node/*/bin; do
-      if [ -x "$Kairo_NODE_BIN/node" ]; then
-        PATH="$Kairo_NODE_BIN:$PATH"
+    for KAIRO_NODE_BIN in "$NVM_DIR"/versions/node/*/bin; do
+      if [ -x "$KAIRO_NODE_BIN/node" ]; then
+        PATH="$KAIRO_NODE_BIN:$PATH"
         export PATH
       fi
     done
@@ -432,31 +432,31 @@ ensure_remote_node_path() {
 
 export const REMOTE_RUNNER_SCRIPT = `#!/bin/sh
 set -eu
-@@Kairo_NODE_ENV_SCRIPT@@
+@@KAIRO_NODE_ENV_SCRIPT@@
 ensure_remote_node_path || true
-Kairo_NODE_SCRIPT_PATH=@@Kairo_NODE_SCRIPT_PATH@@
-if [ -n "$Kairo_NODE_SCRIPT_PATH" ]; then
+KAIRO_NODE_SCRIPT_PATH=@@KAIRO_NODE_SCRIPT_PATH@@
+if [ -n "$KAIRO_NODE_SCRIPT_PATH" ]; then
   if ! command -v node >/dev/null 2>&1; then
     printf 'Remote host is missing node on PATH. Install Node or configure a supported version manager for non-interactive shells.\\n' >&2
     exit 1
   fi
-  exec node "$Kairo_NODE_SCRIPT_PATH" "$@"
+  exec node "$KAIRO_NODE_SCRIPT_PATH" "$@"
 fi
 if command -v kairo >/dev/null 2>&1; then
   exec kairo "$@"
 fi
 if command -v npx >/dev/null 2>&1; then
-  exec npx --yes @@Kairo_PACKAGE_SPEC@@ "$@"
+  exec npx --yes @@KAIRO_PACKAGE_SPEC@@ "$@"
 fi
 if command -v npm >/dev/null 2>&1; then
-  exec npm exec --yes @@Kairo_PACKAGE_SPEC@@ -- "$@"
+  exec npm exec --yes @@KAIRO_PACKAGE_SPEC@@ -- "$@"
 fi
-printf 'Remote host is missing the kairo CLI and could not install @@Kairo_PACKAGE_SPEC@@ because node/npm/npx are unavailable on PATH. Install Node or configure a supported version manager for non-interactive shells.\\n' >&2
+printf 'Remote host is missing the kairo CLI and could not install @@KAIRO_PACKAGE_SPEC@@ because node/npm/npx are unavailable on PATH. Install Node or configure a supported version manager for non-interactive shells.\\n' >&2
 exit 1
 `;
 
 export const REMOTE_LAUNCH_SCRIPT = `set -eu
-@@Kairo_NODE_ENV_SCRIPT@@
+@@KAIRO_NODE_ENV_SCRIPT@@
 STATE_KEY="$1"
 STATE_DIR="$HOME/.kairo/ssh-launch/$STATE_KEY"
 DEFAULT_SERVER_HOME="$HOME/.kairo"
@@ -473,7 +473,7 @@ cleanup_runner_next() {
 }
 trap cleanup_runner_next EXIT
 cat >"$RUNNER_NEXT" <<'SH'
-@@Kairo_RUNNER_SCRIPT@@
+@@KAIRO_RUNNER_SCRIPT@@
 SH
 RUNNER_CHANGED=0
 if [ ! -f "$RUNNER_FILE" ] || ! cmp -s "$RUNNER_NEXT" "$RUNNER_FILE"; then
@@ -486,13 +486,13 @@ if ! ensure_remote_node_path; then
   exit 1
 fi
 pick_port() {
-  node - "$PORT_FILE" "@@Kairo_DEFAULT_REMOTE_PORT@@" "@@Kairo_REMOTE_PORT_SCAN_WINDOW@@" <<'NODE'
-@@Kairo_PICK_PORT_SCRIPT@@
+  node - "$PORT_FILE" "@@KAIRO_DEFAULT_REMOTE_PORT@@" "@@KAIRO_REMOTE_PORT_SCAN_WINDOW@@" <<'NODE'
+@@KAIRO_PICK_PORT_SCRIPT@@
 NODE
 }
 wait_ready() {
-  node - "$REMOTE_PORT" "$1" "@@Kairo_READY_PROBE_TIMEOUT_MS@@" <<'NODE'
-@@Kairo_WAIT_READY_SCRIPT@@
+  node - "$REMOTE_PORT" "$1" "@@KAIRO_READY_PROBE_TIMEOUT_MS@@" <<'NODE'
+@@KAIRO_WAIT_READY_SCRIPT@@
 NODE
 }
 wait_for_pid_exit() {
@@ -537,7 +537,7 @@ if [ -n "$DEFAULT_RUNTIME_INFO" ]; then
 fi
 if [ -n "$DEFAULT_REMOTE_PORT" ]; then
   REMOTE_PORT="$DEFAULT_REMOTE_PORT"
-  if wait_ready "@@Kairo_REUSE_READY_TIMEOUT_MS@@"; then
+  if wait_ready "@@KAIRO_REUSE_READY_TIMEOUT_MS@@"; then
     if [ "$REMOTE_MANAGED" = "managed" ]; then
       PID_TO_STOP="\${REMOTE_PID:-$DEFAULT_RUNTIME_PID}"
       if [ -n "$PID_TO_STOP" ] && kill -0 "$PID_TO_STOP" 2>/dev/null; then
@@ -563,7 +563,7 @@ if [ -n "$DEFAULT_REMOTE_PORT" ]; then
   fi
 fi
 if [ "$REMOTE_MANAGED" = "external" ]; then
-  if [ -z "$REMOTE_PORT" ] || ! wait_ready "@@Kairo_REUSE_READY_TIMEOUT_MS@@"; then
+  if [ -z "$REMOTE_PORT" ] || ! wait_ready "@@KAIRO_REUSE_READY_TIMEOUT_MS@@"; then
     REMOTE_PID=""
     REMOTE_PORT=""
     REMOTE_MANAGED=""
@@ -575,7 +575,7 @@ elif [ -n "$REMOTE_PID" ] && [ -n "$REMOTE_PORT" ] && kill -0 "$REMOTE_PID" 2>/d
     REMOTE_PID=""
     REMOTE_PORT=""
     REMOTE_MANAGED=""
-  elif ! wait_ready "@@Kairo_REUSE_READY_TIMEOUT_MS@@"; then
+  elif ! wait_ready "@@KAIRO_REUSE_READY_TIMEOUT_MS@@"; then
     kill "$REMOTE_PID" 2>/dev/null || true
     wait_for_pid_exit "$REMOTE_PID"
     REMOTE_PID=""
@@ -598,7 +598,7 @@ if [ -z "$REMOTE_PORT" ]; then
   printf '%s\\n' "$REMOTE_PID" >"$PID_FILE"
   printf '%s\\n' "$REMOTE_PORT" >"$PORT_FILE"
   printf 'managed\\n' >"$MANAGED_FILE"
-  if ! wait_ready "@@Kairo_READY_TIMEOUT_MS@@"; then
+  if ! wait_ready "@@KAIRO_READY_TIMEOUT_MS@@"; then
     printf 'Remote Kairo server did not become ready on 127.0.0.1:%s.\\n' "$REMOTE_PORT" >&2
     tail -n 80 "$LOG_FILE" >&2 2>/dev/null || true
     kill "$REMOTE_PID" 2>/dev/null || true
@@ -611,12 +611,12 @@ printf '{"remotePort":%s,"serverKind":"%s"}\\n' "$REMOTE_PORT" "\${REMOTE_MANAGE
 `;
 
 export const REMOTE_PAIRING_SCRIPT = `set -eu
-STATE_DIR="$HOME/.kairo/ssh-launch/@@Kairo_STATE_KEY@@"
+STATE_DIR="$HOME/.kairo/ssh-launch/@@KAIRO_STATE_KEY@@"
 DEFAULT_SERVER_HOME="$HOME/.kairo"
 RUNNER_FILE="$STATE_DIR/run-kairo.sh"
 mkdir -p "$STATE_DIR"
 cat >"$RUNNER_FILE" <<'SH'
-@@Kairo_RUNNER_SCRIPT@@
+@@KAIRO_RUNNER_SCRIPT@@
 SH
 chmod 700 "$RUNNER_FILE"
 PAIRING_BASE_DIR="$DEFAULT_SERVER_HOME"
@@ -624,7 +624,7 @@ PAIRING_BASE_DIR="$DEFAULT_SERVER_HOME"
 `;
 
 export const REMOTE_STOP_SCRIPT = `set -eu
-STATE_DIR="$HOME/.kairo/ssh-launch/@@Kairo_STATE_KEY@@"
+STATE_DIR="$HOME/.kairo/ssh-launch/@@KAIRO_STATE_KEY@@"
 PID_FILE="$STATE_DIR/pid"
 PORT_FILE="$STATE_DIR/port"
 MANAGED_FILE="$STATE_DIR/managed"
@@ -643,7 +643,7 @@ printf '{"stopped":true}\\n'
 `;
 
 const REMOTE_LOG_TAIL_SCRIPT = `set -eu
-STATE_DIR="$HOME/.kairo/ssh-launch/@@Kairo_STATE_KEY@@"
+STATE_DIR="$HOME/.kairo/ssh-launch/@@KAIRO_STATE_KEY@@"
 LOG_FILE="$STATE_DIR/server.log"
 if [ -f "$LOG_FILE" ]; then
   tail -n 80 "$LOG_FILE" 2>/dev/null || true
@@ -655,9 +655,9 @@ export function buildRemoteKairoRunnerScript(input?: RemoteKairoRunnerOptions): 
   const nodeScriptPath = input?.nodeScriptPath?.trim() || "";
   return stripTrailingNewlines(
     applyScriptPlaceholders(REMOTE_RUNNER_SCRIPT, {
-      Kairo_PACKAGE_SPEC: packageSpec,
-      Kairo_NODE_SCRIPT_PATH: shellSingleQuote(nodeScriptPath),
-      Kairo_NODE_ENV_SCRIPT: buildRemoteNodeEnvScript(input),
+      KAIRO_PACKAGE_SPEC: packageSpec,
+      KAIRO_NODE_SCRIPT_PATH: shellSingleQuote(nodeScriptPath),
+      KAIRO_NODE_ENV_SCRIPT: buildRemoteNodeEnvScript(input),
     }),
   );
 }
@@ -665,23 +665,23 @@ export function buildRemoteKairoRunnerScript(input?: RemoteKairoRunnerOptions): 
 function buildRemoteNodeEnvScript(input?: RemoteKairoRunnerOptions): string {
   return stripTrailingNewlines(
     applyScriptPlaceholders(REMOTE_NODE_ENV_SCRIPT, {
-      Kairo_NODE_ENGINE_RANGE: shellSingleQuote(input?.nodeEngineRange?.trim() || ""),
-      Kairo_NODE_ENGINE_CHECK_SCRIPT: stripTrailingNewlines(buildRemoteNodeEngineCheckScript()),
+      KAIRO_NODE_ENGINE_RANGE: shellSingleQuote(input?.nodeEngineRange?.trim() || ""),
+      KAIRO_NODE_ENGINE_CHECK_SCRIPT: stripTrailingNewlines(buildRemoteNodeEngineCheckScript()),
     }),
   );
 }
 
 export function buildRemoteLaunchScript(input?: RemoteKairoRunnerOptions): string {
   return applyScriptPlaceholders(REMOTE_LAUNCH_SCRIPT, {
-    Kairo_NODE_ENV_SCRIPT: buildRemoteNodeEnvScript(input),
-    Kairo_RUNNER_SCRIPT: stripTrailingNewlines(buildRemoteKairoRunnerScript(input)),
-    Kairo_PICK_PORT_SCRIPT: stripTrailingNewlines(REMOTE_PICK_PORT_SCRIPT),
-    Kairo_WAIT_READY_SCRIPT: stripTrailingNewlines(REMOTE_WAIT_READY_SCRIPT),
-    Kairo_DEFAULT_REMOTE_PORT: String(DEFAULT_REMOTE_PORT),
-    Kairo_REMOTE_PORT_SCAN_WINDOW: String(REMOTE_PORT_SCAN_WINDOW),
-    Kairo_READY_TIMEOUT_MS: String(REMOTE_READY_TIMEOUT_MS),
-    Kairo_REUSE_READY_TIMEOUT_MS: String(REMOTE_REUSE_READY_TIMEOUT_MS),
-    Kairo_READY_PROBE_TIMEOUT_MS: String(SSH_READY_PROBE_TIMEOUT_MS),
+    KAIRO_NODE_ENV_SCRIPT: buildRemoteNodeEnvScript(input),
+    KAIRO_RUNNER_SCRIPT: stripTrailingNewlines(buildRemoteKairoRunnerScript(input)),
+    KAIRO_PICK_PORT_SCRIPT: stripTrailingNewlines(REMOTE_PICK_PORT_SCRIPT),
+    KAIRO_WAIT_READY_SCRIPT: stripTrailingNewlines(REMOTE_WAIT_READY_SCRIPT),
+    KAIRO_DEFAULT_REMOTE_PORT: String(DEFAULT_REMOTE_PORT),
+    KAIRO_REMOTE_PORT_SCAN_WINDOW: String(REMOTE_PORT_SCAN_WINDOW),
+    KAIRO_READY_TIMEOUT_MS: String(REMOTE_READY_TIMEOUT_MS),
+    KAIRO_REUSE_READY_TIMEOUT_MS: String(REMOTE_REUSE_READY_TIMEOUT_MS),
+    KAIRO_READY_PROBE_TIMEOUT_MS: String(SSH_READY_PROBE_TIMEOUT_MS),
   });
 }
 
@@ -690,20 +690,20 @@ export function buildRemotePairingScript(
   input?: RemoteKairoRunnerOptions,
 ): string {
   return applyScriptPlaceholders(REMOTE_PAIRING_SCRIPT, {
-    Kairo_STATE_KEY: remoteStateKey(target),
-    Kairo_RUNNER_SCRIPT: stripTrailingNewlines(buildRemoteKairoRunnerScript(input)),
+    KAIRO_STATE_KEY: remoteStateKey(target),
+    KAIRO_RUNNER_SCRIPT: stripTrailingNewlines(buildRemoteKairoRunnerScript(input)),
   });
 }
 
 export function buildRemoteStopScript(target: DesktopSshEnvironmentTarget): string {
   return applyScriptPlaceholders(REMOTE_STOP_SCRIPT, {
-    Kairo_STATE_KEY: remoteStateKey(target),
+    KAIRO_STATE_KEY: remoteStateKey(target),
   });
 }
 
 function buildRemoteLogTailScript(target: DesktopSshEnvironmentTarget): string {
   return applyScriptPlaceholders(REMOTE_LOG_TAIL_SCRIPT, {
-    Kairo_STATE_KEY: remoteStateKey(target),
+    KAIRO_STATE_KEY: remoteStateKey(target),
   });
 }
 

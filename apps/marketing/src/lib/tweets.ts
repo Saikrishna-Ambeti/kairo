@@ -9,7 +9,7 @@ export const tweets = [
   {
     handle: "Shay_Benshabtay",
     content:
-      "Kairo code is not perfect, but it's damn good. Open and fun , I can make my own fork for my uses and use the great tooling with my own needs.",
+      "Kairo is not perfect, but it's damn good. Open and fun , I can make my own fork for my uses and use the great tooling with my own needs.",
     link: "https://x.com/Shay_Benshabtay/status/2054668503857156326",
   },
   {
@@ -21,7 +21,7 @@ export const tweets = [
   },
   {
     handle: "developedbyed",
-    content: "might say alpha but Kairo code is pretty awesome, really fast too",
+    content: "might say alpha but Kairo is pretty awesome, really fast too",
     link: "https://x.com/developedbyed/status/2030627970532921605",
   },
   {
@@ -53,17 +53,17 @@ export const tweets = [
   {
     handle: "Josikinz",
     content:
-      "Kairo code is better because it’s like if the codex Mac app didn’t make my computer run like shit 😋",
+      "Kairo is better because it’s like if the codex Mac app didn’t make my computer run like shit 😋",
     link: "https://x.com/Josikinz/status/2030367951694745870",
   },
   {
     handle: "jetpackjoe_",
-    content: "Kairo code is pretty alright I guess",
+    content: "Kairo is pretty alright I guess",
     link: "https://x.com/jetpackjoe_/status/2054666792933404959",
   },
   {
     handle: "mil000",
-    content: "Kairo code saved my relationship!",
+    content: "Kairo saved my relationship!",
     link: "https://x.com/mil000/status/2030120041451246071",
   },
   {
@@ -116,8 +116,7 @@ export const tweets = [
   },
   {
     handle: "uwunetes",
-    content:
-      "claude code make me go *whine whine whine* and kairo code make me go woof woof awooooo!!!",
+    content: "claude code make me go *whine whine whine* and Kairo make me go woof woof awooooo!!!",
     link: "https://x.com/uwunetes/status/2054683356022120640",
   },
 ] satisfies Tweet[];

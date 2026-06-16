@@ -147,7 +147,7 @@ const makeExitLogFixture = Effect.fn("makeExitLogFixture")(function* (prefix: st
   return {
     exitLogPath,
     wrapperPath: yield* makeMockAgentWrapper({
-      Kairo_ACP_EXIT_LOG_PATH: exitLogPath,
+      KAIRO_ACP_EXIT_LOG_PATH: exitLogPath,
     }),
   };
 });
@@ -424,7 +424,7 @@ describe("checkCursorProviderStatus", () => {
         },
         {
           ...process.env,
-          Kairo_ACP_REQUEST_LOG_PATH: requestLogPath,
+          KAIRO_ACP_REQUEST_LOG_PATH: requestLogPath,
         },
       ).pipe(Effect.provide(NodeServices.layer)),
     );

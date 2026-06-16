@@ -97,8 +97,8 @@ it.layer(CursorTextGenerationTestLayer)("CursorTextGeneration", (it) => {
 
     return withFakeAcpAgent(
       {
-        Kairo_ACP_REQUEST_LOG_PATH: requestLogPath,
-        Kairo_ACP_PROMPT_RESPONSE_TEXT: JSON.stringify({
+        KAIRO_ACP_REQUEST_LOG_PATH: requestLogPath,
+        KAIRO_ACP_PROMPT_RESPONSE_TEXT: JSON.stringify({
           subject: "Add generated commit message",
           body: "- verify cursor acp model config path",
         }),
@@ -189,7 +189,7 @@ it.layer(CursorTextGenerationTestLayer)("CursorTextGeneration", (it) => {
   it.effect("accepts json objects with extra assistant text around them", () =>
     withFakeAcpAgent(
       {
-        Kairo_ACP_PROMPT_RESPONSE_TEXT:
+        KAIRO_ACP_PROMPT_RESPONSE_TEXT:
           'Sure, here is the JSON:\n```json\n{\n  "subject": "Update README dummy comment with attribution and date",\n  "body": ""\n}\n```\nDone.',
       },
       (textGeneration) =>
@@ -214,7 +214,7 @@ it.layer(CursorTextGenerationTestLayer)("CursorTextGeneration", (it) => {
   it.effect("generates thread titles through Cursor ACP text generation", () =>
     withFakeAcpAgent(
       {
-        Kairo_ACP_PROMPT_RESPONSE_TEXT: JSON.stringify({
+        KAIRO_ACP_PROMPT_RESPONSE_TEXT: JSON.stringify({
           title: '"Trim reconnect spinner status after resume."',
         }),
       },
@@ -240,8 +240,8 @@ it.layer(CursorTextGenerationTestLayer)("CursorTextGeneration", (it) => {
 
     return withFakeAcpAgent(
       {
-        Kairo_ACP_EXIT_LOG_PATH: exitLogPath,
-        Kairo_ACP_PROMPT_RESPONSE_TEXT: JSON.stringify({
+        KAIRO_ACP_EXIT_LOG_PATH: exitLogPath,
+        KAIRO_ACP_PROMPT_RESPONSE_TEXT: JSON.stringify({
           subject: "Close runtime after generation",
           body: "",
         }),

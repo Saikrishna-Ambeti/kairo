@@ -10,7 +10,7 @@ import * as Schema from "effect/Schema";
 import { expandHomePath } from "../pathExpansion.ts";
 import { redactSupermemorySecrets } from "./SupermemorySecrets.ts";
 
-export const Kairo_SUPERMEMORY_CONTAINER_TAG = "kairo_user_memory";
+export const KAIRO_SUPERMEMORY_CONTAINER_TAG = "kairo_user_memory";
 
 const CODEX_DIR_NAME = ".codex";
 const SUPERMEMORY_DIR_NAME = "supermemory";
@@ -121,9 +121,9 @@ const readConfigSynced = Effect.fn("readConfigSynced")(function* (
     !!config &&
     typeof config === "object" &&
     (config as { readonly userContainerTag?: unknown }).userContainerTag ===
-      Kairo_SUPERMEMORY_CONTAINER_TAG &&
+      KAIRO_SUPERMEMORY_CONTAINER_TAG &&
     (config as { readonly projectContainerTag?: unknown }).projectContainerTag ===
-      Kairo_SUPERMEMORY_CONTAINER_TAG
+      KAIRO_SUPERMEMORY_CONTAINER_TAG
   );
 });
 
@@ -199,8 +199,8 @@ export const syncCodexSupermemoryIntegration = Effect.fn("syncCodexSupermemoryIn
       existing && typeof existing === "object" && !Array.isArray(existing) ? { ...existing } : {};
     Object.assign(next, {
       containerTagPrefix: "kairo",
-      userContainerTag: Kairo_SUPERMEMORY_CONTAINER_TAG,
-      projectContainerTag: Kairo_SUPERMEMORY_CONTAINER_TAG,
+      userContainerTag: KAIRO_SUPERMEMORY_CONTAINER_TAG,
+      projectContainerTag: KAIRO_SUPERMEMORY_CONTAINER_TAG,
     });
     const configJson = yield* encodeJsonString(next).pipe(Effect.orDie);
     yield* fs.writeFileString(configPath, `${configJson}\n`).pipe(
