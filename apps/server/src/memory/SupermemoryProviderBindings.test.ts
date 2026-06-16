@@ -138,7 +138,7 @@ const makeSettings = (
 describe("Supermemory secrets", () => {
   it("redacts Supermemory-looking API keys from user-facing text", () => {
     expect(redactSupermemorySecrets("failed with sm_abc123_xyz in stderr")).toBe(
-      "failed with [REDACTED_SUPERMEMORY_KEY] in stderr",
+      "failed with sm_*** in stderr",
     );
   });
 });

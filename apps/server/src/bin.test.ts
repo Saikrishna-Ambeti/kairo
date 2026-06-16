@@ -6,7 +6,11 @@ import { join } from "node:path";
 
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { DEFAULT_PRODUCT_SURFACE_CONFIG, EnvironmentOrchestrationHttpApi } from "@kairo/contracts";
+import {
+  AuthAdministrativeScopes,
+  DEFAULT_PRODUCT_SURFACE_CONFIG,
+  EnvironmentOrchestrationHttpApi,
+} from "@kairo/contracts";
 import * as NetService from "@kairo/shared/Net";
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -355,28 +359,10 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
 
       assert.equal(typeof issued.sessionId, "string");
       assert.equal(typeof issued.token, "string");
-      assert.deepEqual(issued.scopes, [
-        "orchestration:read",
-        "orchestration:operate",
-        "terminal:operate",
-        "review:write",
-        "relay:read",
-        "access:read",
-        "access:write",
-        "relay:write",
-      ]);
+      assert.deepEqual(issued.scopes, [...AuthAdministrativeScopes]);
       assert.equal(listed.length, 1);
       assert.equal(listed[0]?.sessionId, issued.sessionId);
-      assert.deepEqual(listed[0]?.scopes, [
-        "orchestration:read",
-        "orchestration:operate",
-        "terminal:operate",
-        "review:write",
-        "relay:read",
-        "access:read",
-        "access:write",
-        "relay:write",
-      ]);
+      assert.deepEqual(listed[0]?.scopes, [...AuthAdministrativeScopes]);
       assert.equal("token" in (listed[0] ?? {}), false);
     }),
   );

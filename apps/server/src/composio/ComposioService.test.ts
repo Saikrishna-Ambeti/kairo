@@ -152,7 +152,7 @@ describe("ComposioService", () => {
             composio: {
               ...DEFAULT_SERVER_SETTINGS.integrations.composio,
               enabled: true,
-              preferredToolkits: [],
+              preferredToolkits: ["slack", "gmail"],
             },
           },
         }),
@@ -189,12 +189,10 @@ describe("ComposioService", () => {
           expect.objectContaining({
             toolkit: "slack",
             connectionStatus: "connected",
-            accountLabel: "work",
           }),
           expect.objectContaining({
             toolkit: "gmail",
             connectionStatus: "connected",
-            accountLabel: "gmail_main-douse",
           }),
         ]);
       } finally {

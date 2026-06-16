@@ -124,6 +124,9 @@ vi.mock("./catalog", () => ({
     setState: mockRegistrySetState,
     subscribe: vi.fn(() => () => {}),
   },
+  getSavedEnvironmentRuntimeState: vi.fn(() => ({
+    serverConfig: null,
+  })),
   useSavedEnvironmentRuntimeStore: {
     getState: () => ({
       ensure: vi.fn(),

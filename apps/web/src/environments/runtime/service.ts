@@ -61,6 +61,7 @@ import {
   toPersistedSavedEnvironmentRecord,
   useSavedEnvironmentRegistryStore,
   useSavedEnvironmentRuntimeStore,
+  getSavedEnvironmentRuntimeState,
   waitForSavedEnvironmentRegistryHydration,
   writeSavedEnvironmentBearerToken,
   writeSavedEnvironmentCredential,
@@ -1251,7 +1252,7 @@ function createSavedEnvironmentClient(
         getConnectionLabel: () => getSavedEnvironmentRecord(environmentId)?.label ?? null,
         getVersionMismatchHint: () =>
           resolveServerConfigVersionMismatch(
-            useSavedEnvironmentRuntimeStore.getState().byId[environmentId]?.serverConfig,
+            getSavedEnvironmentRuntimeState(environmentId).serverConfig,
           )?.hint ?? null,
         onAttempt: () => {
           setRuntimeConnecting(environmentId);
@@ -1261,7 +1262,7 @@ function createSavedEnvironmentClient(
         },
         onError: (message: string) => {
           const mismatch = resolveServerConfigVersionMismatch(
-            useSavedEnvironmentRuntimeStore.getState().byId[environmentId]?.serverConfig,
+            getSavedEnvironmentRuntimeState(environmentId).serverConfig,
           );
           useSavedEnvironmentRuntimeStore.getState().patch(environmentId, {
             connectionState: "error",
@@ -1275,7 +1276,7 @@ function createSavedEnvironmentClient(
             appendVersionMismatchHint(
               details.reason,
               resolveServerConfigVersionMismatch(
-                useSavedEnvironmentRuntimeStore.getState().byId[environmentId]?.serverConfig,
+                getSavedEnvironmentRuntimeState(environmentId).serverConfig,
               ),
             ),
           );
@@ -1408,7 +1409,7 @@ function registerConnection(connection: EnvironmentConnection): EnvironmentConne
 
 function readProductSurfaceConfig(environmentId: EnvironmentId) {
   return (
-    useSavedEnvironmentRuntimeStore.getState().byId[environmentId]?.serverConfig?.surface ??
+    getSavedEnvironmentRuntimeState(environmentId).serverConfig?.surface ??
     getServerConfig()?.surface ??
     DEFAULT_PRODUCT_SURFACE_CONFIG
   );

@@ -58,6 +58,9 @@ vi.mock("./catalog", () => ({
       rename: vi.fn(),
     }),
   },
+  getSavedEnvironmentRuntimeState: vi.fn(() => ({
+    serverConfig: null,
+  })),
   useSavedEnvironmentRuntimeStore: {
     getState: () => ({
       ensure: vi.fn(),

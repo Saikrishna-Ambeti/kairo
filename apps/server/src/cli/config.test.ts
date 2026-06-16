@@ -10,6 +10,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
 import {
+  DEFAULT_PRODUCT_SURFACE_CONFIG,
   DesktopBackendBootstrap,
   type DesktopBackendBootstrap as DesktopBackendBootstrapValue,
 } from "@kairo/contracts";
@@ -121,6 +122,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         logWebSocketEvents: true,
         tailscaleServeEnabled: false,
         tailscaleServePort: 443,
+        surface: DEFAULT_PRODUCT_SURFACE_CONFIG,
       });
     }),
   );
@@ -187,6 +189,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         logWebSocketEvents: true,
         tailscaleServeEnabled: true,
         tailscaleServePort: 8443,
+        surface: DEFAULT_PRODUCT_SURFACE_CONFIG,
       });
     }),
   );
@@ -256,6 +259,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         logWebSocketEvents: false,
         tailscaleServeEnabled: false,
         tailscaleServePort: 443,
+        surface: DEFAULT_PRODUCT_SURFACE_CONFIG,
       });
     }),
   );
@@ -330,6 +334,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         logWebSocketEvents: false,
         tailscaleServeEnabled: false,
         tailscaleServePort: 443,
+        surface: DEFAULT_PRODUCT_SURFACE_CONFIG,
       });
       assert.equal(join(baseDir, "userdata"), resolved.stateDir);
     }),
@@ -455,6 +460,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         logWebSocketEvents: true,
         tailscaleServeEnabled: false,
         tailscaleServePort: 443,
+        surface: DEFAULT_PRODUCT_SURFACE_CONFIG,
       });
     }),
   );
@@ -524,6 +530,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         logWebSocketEvents: false,
         tailscaleServeEnabled: false,
         tailscaleServePort: 443,
+        surface: DEFAULT_PRODUCT_SURFACE_CONFIG,
       });
     }),
   );
@@ -587,6 +594,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         logWebSocketEvents: false,
         tailscaleServeEnabled: false,
         tailscaleServePort: 443,
+        surface: DEFAULT_PRODUCT_SURFACE_CONFIG,
       });
     }),
   );

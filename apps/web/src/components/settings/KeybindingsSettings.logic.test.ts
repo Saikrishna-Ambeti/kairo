@@ -19,32 +19,28 @@ describe("KeybindingsSettings.logic", () => {
     const rows = buildKeybindingRows(
       [
         {
-          command: "terminal.toggle",
+          command: "chat.new",
           shortcut: {
-            key: "j",
+            key: "n",
             modKey: true,
             metaKey: false,
             ctrlKey: false,
             altKey: false,
             shiftKey: false,
           },
-          whenAst: {
-            type: "not",
-            node: { type: "identifier", name: "terminalFocus" },
-          },
         },
       ] satisfies ResolvedKeybindingsConfig,
-      "terminal",
+      "chat",
     );
 
     expect(rows).toEqual([
       expect.objectContaining({
-        command: "terminal.toggle",
-        key: "mod+j",
-        when: "!terminalFocus",
-        defaultKey: "mod+j",
+        command: "chat.new",
+        key: "mod+n",
+        when: "",
+        defaultKey: "mod+n",
         defaultWhen: "",
-        source: "Custom",
+        source: "Default",
       }),
     ]);
   });
@@ -172,10 +168,6 @@ describe("KeybindingsSettings.logic", () => {
             altKey: false,
             shiftKey: false,
           },
-          whenAst: {
-            type: "not",
-            node: { type: "identifier", name: "terminalFocus" },
-          },
         },
         {
           command: "chat.new",
@@ -186,10 +178,6 @@ describe("KeybindingsSettings.logic", () => {
             ctrlKey: false,
             altKey: false,
             shiftKey: true,
-          },
-          whenAst: {
-            type: "not",
-            node: { type: "identifier", name: "terminalFocus" },
           },
         },
       ] satisfies ResolvedKeybindingsConfig,
