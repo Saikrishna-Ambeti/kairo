@@ -481,7 +481,7 @@ jobs:
     name: Publish CLI to npm
     needs: [preflight, relay_public_config, build]
     if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' && needs.relay_public_config.result == 'success' && needs.build.result == 'success' }}
-    runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404 # blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 10
     permissions:
       contents: read
