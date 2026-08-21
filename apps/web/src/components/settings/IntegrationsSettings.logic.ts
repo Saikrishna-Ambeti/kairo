@@ -5,6 +5,14 @@ import type {
   ComposioToolkitStatus,
 } from "@kairo/contracts";
 
+export const COMPOSIO_CLI_DOCS_URL = "https://docs.composio.dev/docs/cli";
+
+export function getComposioFailureDescription(status: ComposioStatus): string {
+  const message = status.operation?.message ?? "Setup failed.";
+  const detail = status.operation?.errorDetail;
+  return detail ? `${message} ${detail}` : message;
+}
+
 export type SetupMode = "install_and_login" | "login";
 
 export interface ComposioPrimaryButtonState {

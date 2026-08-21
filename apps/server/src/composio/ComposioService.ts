@@ -153,6 +153,11 @@ const CONNECTED_ACCOUNT_DISCOVERY_TOOLKITS = [
   ]),
 ] as const;
 
+const COMPOSIO_INSTALL_COMMAND = "curl -fsSL https://composio.dev/install | sh";
+const WINDOWS_UNSUPPORTED_MESSAGE =
+  "Composio does not support native Windows. Run Kairo in WSL, then set up Composio there.";
+const isComposioError = Schema.is(ComposioError);
+
 const decodeUnknownJsonString = Schema.decodeEffect(Schema.UnknownFromJsonString);
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
@@ -475,9 +480,9 @@ function platform(): ComposioPlatform {
 
 function installCommandLabel(): string {
   if (process.platform === "win32") {
-    return "PowerShell: npm install -g @composio/cli";
+    return `WSL: ${COMPOSIO_INSTALL_COMMAND}`;
   }
-  return "curl -fsSL https://composio.dev/install | bash";
+  return COMPOSIO_INSTALL_COMMAND;
 }
 
 function installedPathCandidate(path: Path.Path): string {
@@ -496,6 +501,12 @@ function redact(output: string): string {
   return output
     .replaceAll(/(key|token|secret|api[_-]?key)(=|:)\S+/gi, "$1$2[redacted]")
     .slice(0, 12_000);
+}
+
+function errorDetail(error: ComposioServiceError): string | undefined {
+  if (!isComposioError(error) || typeof error.cause !== "string") return undefined;
+  const detail = redact(error.cause).trim();
+  return detail || undefined;
 }
 
 function accountLabelFromWhoami(output: string): string | undefined {
@@ -582,11 +593,14 @@ export const makeComposioService = Effect.gen(function* () {
     const executable = yield* resolveExecutable;
     if (!executable) {
       return {
-        status: process.platform === "win32" ? "missing" : "missing",
+        status: process.platform === "win32" ? "unsupported" : "missing",
         platform: platform(),
         installCommandLabel: installCommandLabel(),
         lastCheckedAt: checkedAt,
-        message: "Composio CLI is not installed on this backend.",
+        message:
+          process.platform === "win32"
+            ? WINDOWS_UNSUPPORTED_MESSAGE
+            : "Composio CLI is not installed on this backend.",
       } satisfies ComposioCliState;
     }
     const version = yield* run(executable, ["--version"]).pipe(
@@ -624,8 +638,8 @@ export const makeComposioService = Effect.gen(function* () {
     cli: ComposioCliState,
     authStatus: "authenticated" | "unauthenticated" | "unknown",
   ): ComposioPrimaryAction => {
-    if (cli.status === "missing" || cli.status === "unsupported" || cli.status === "error")
-      return "install_and_login";
+    if (cli.status === "unsupported") return "none";
+    if (cli.status === "missing" || cli.status === "error") return "install_and_login";
     if (authStatus !== "authenticated") return "login";
     return "none";
   };
@@ -880,37 +894,17 @@ export const makeComposioService = Effect.gen(function* () {
         yield* publish(operation, "Checking CLI", "Composio CLI is already installed.");
         return executable;
       }
-      let result: ProcessRunOutput;
       if (process.platform === "win32") {
-        const script = [
-          "$ErrorActionPreference = 'Stop'",
-          "if (Get-Command composio -ErrorAction SilentlyContinue) { exit 0 }",
-          "if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { throw 'npm is required for native Windows Composio CLI install. Install Node.js/npm or use WSL.' }",
-          "npm install -g @composio/cli",
-        ].join("; ");
-        operation = yield* publish(
-          operation,
-          "Installing CLI",
-          "Installing Composio CLI with PowerShell.",
-        );
-        result = yield* run(
-          "powershell.exe",
-          ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
-          Duration.minutes(10),
-        );
-      } else {
-        operation = yield* publish(operation, "Installing CLI", "Installing Composio CLI.");
-        result = yield* run(
-          "bash",
-          ["-lc", "curl -fsSL https://composio.dev/install | bash"],
-          Duration.minutes(10),
-        );
+        return yield* new ComposioError({ message: WINDOWS_UNSUPPORTED_MESSAGE });
       }
+      let result: ProcessRunOutput;
+      operation = yield* publish(operation, "Installing CLI", "Installing Composio CLI.");
+      result = yield* run("bash", ["-lc", COMPOSIO_INSTALL_COMMAND], Duration.minutes(10));
       if (result.code !== 0 || result.timedOut) {
         return yield* new ComposioError({
           message: result.timedOut
-            ? "Composio CLI install timed out."
-            : "Composio CLI install failed.",
+            ? "Composio CLI install timed out. Check your network, then retry."
+            : "Composio CLI install failed. Review the installer output below, fix the reported problem, then retry.",
           cause: redact(result.stderr || result.stdout),
         });
       }
@@ -1006,11 +1000,13 @@ export const makeComposioService = Effect.gen(function* () {
           Effect.gen(function* () {
             const updatedAt = yield* nowIso;
             const current = (yield* Ref.get(operationRef)) ?? operation;
+            const detail = errorDetail(error);
             const failed = {
               ...current,
               status: "failed" as const,
               updatedAt,
               message: error.message,
+              ...(detail ? { errorDetail: detail } : {}),
             };
             yield* Ref.set(operationRef, failed);
             yield* PubSub.publish(events, {
@@ -1018,6 +1014,7 @@ export const makeComposioService = Effect.gen(function* () {
               operation: failed,
               stage: "Failed",
               message: error.message,
+              ...(detail ? { stderr: detail } : {}),
             });
           }),
         ),
@@ -1048,6 +1045,7 @@ export const makeComposioService = Effect.gen(function* () {
             operation,
             stage: operation.status === "succeeded" ? "Complete" : "Failed",
             message: operation.message ?? "Composio operation finished.",
+            ...(operation.errorDetail ? { stderr: operation.errorDetail } : {}),
           })),
         );
         return Stream.concat(

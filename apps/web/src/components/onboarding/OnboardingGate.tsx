@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ElementType } from "react";
 import {
-  type ProviderDriverKind,
   type ProviderInstanceId,
   type ServerProvider,
   type SupermemoryProviderStatus,
@@ -34,6 +33,8 @@ import { Input } from "../ui/input";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { ComposioSetupDialog } from "../settings/IntegrationsSettings";
 import {
+  COMPOSIO_CLI_DOCS_URL,
+  getComposioFailureDescription,
   getAvailableComposioCatalogItems,
   getConnectedComposioToolkits,
   getComposioPrimaryButtonState,
@@ -599,6 +600,7 @@ function ComposioStep({
     operationRunning,
   });
   const authenticated = status?.auth.status === "authenticated";
+  const nativeWindowsUnsupported = status?.cli.status === "unsupported";
   const connectedToolkits = getConnectedComposioToolkits(status);
   const availableApps = getAvailableComposioCatalogItems(catalog?.items ?? [], status, query).slice(
     0,
@@ -633,7 +635,15 @@ function ComposioStep({
                 {status?.cli.executablePath ?? status?.cli.message ?? "Checking local CLI status."}
               </p>
             </div>
-            {primaryAction !== "none" ? (
+            {nativeWindowsUnsupported ? (
+              <Button
+                variant="outline"
+                onClick={() => void ensureLocalApi().shell.openExternal(COMPOSIO_CLI_DOCS_URL)}
+              >
+                <ExternalLinkIcon className="size-4" />
+                WSL setup guide
+              </Button>
+            ) : primaryAction !== "none" ? (
               <Button
                 disabled={primaryButton.disabled || busy !== null}
                 onClick={() => onRunSetup(primaryAction)}
@@ -652,6 +662,12 @@ function ComposioStep({
               </Button>
             )}
           </div>
+          {nativeWindowsUnsupported ? (
+            <p className="text-xs text-muted-foreground">
+              Native Windows installation is unavailable. Run Kairo from WSL and install Composio in
+              that environment.
+            </p>
+          ) : null}
         </div>
 
         {authenticated ? (
@@ -1025,6 +1041,14 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
       if (next.auth.status === "authenticated") {
         setActiveStep("finish");
         toastManager.add(stackedThreadToast({ type: "success", title: "Composio ready" }));
+      } else if (next.operation?.status === "failed") {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Composio setup failed",
+            description: getComposioFailureDescription(next),
+          }),
+        );
       }
     } catch (error) {
       showOnboardingError("Composio setup failed", error);
