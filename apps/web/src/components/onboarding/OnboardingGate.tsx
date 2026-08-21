@@ -13,8 +13,6 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ElementType } from "react";
 import {
-  ProviderDriverKind as ProviderDriverKindSchema,
-  isProviderAvailable,
   type ProviderDriverKind,
   type ProviderInstanceId,
   type ServerProvider,
@@ -42,14 +40,18 @@ import {
   type SetupMode,
 } from "../settings/IntegrationsSettings.logic";
 import { PROVIDER_CLIENT_DEFINITIONS } from "../settings/providerDriverMeta";
+import {
+  ONBOARDING_CODING_AGENT_DRIVERS,
+  findOnboardingProvider,
+  getOnboardingAgentAction,
+  getOnboardingAgentDescription,
+  getOnboardingAgentProgressLabel,
+  isUsableOnboardingAgent,
+  resolveOnboardingAgentInstallOutcome,
+  resolveOnboardingAgentReadiness,
+} from "./OnboardingGate.logic";
 
-const CODING_AGENT_DRIVERS = new Set<ProviderDriverKind>([
-  ProviderDriverKindSchema.make("codex"),
-  ProviderDriverKindSchema.make("claudeAgent"),
-  ProviderDriverKindSchema.make("opencode"),
-]);
-
-const MEMORY_AGENT_DRIVERS = CODING_AGENT_DRIVERS;
+const MEMORY_AGENT_DRIVERS = ONBOARDING_CODING_AGENT_DRIVERS;
 const SUPERMEMORY_CONSOLE_URL = "https://app.supermemory.ai/?view=integrations";
 
 type StepKey = "agents" | "memory" | "composio" | "finish";
@@ -80,38 +82,6 @@ function onboardingStepIndex(step: StepKey): number {
 
 export function canNavigateBackToOnboardingStep(activeStep: StepKey, targetStep: StepKey): boolean {
   return onboardingStepIndex(targetStep) < onboardingStepIndex(activeStep);
-}
-
-export function isUsableOnboardingAgent(provider: ServerProvider): boolean {
-  return (
-    CODING_AGENT_DRIVERS.has(provider.driver) &&
-    provider.enabled &&
-    provider.installed &&
-    isProviderAvailable(provider) &&
-    provider.status === "ready"
-  );
-}
-
-export function getOnboardingAgentAction(
-  provider: ServerProvider | undefined,
-): "detected" | "install" | "login" {
-  if (provider && isUsableOnboardingAgent(provider)) return "detected";
-  if (provider?.enabled && provider.installed && provider.auth.status === "unauthenticated") {
-    return "login";
-  }
-  return "install";
-}
-
-export function getOnboardingAgentDescription(provider: ServerProvider | undefined): string {
-  const action = getOnboardingAgentAction(provider);
-  if (action === "login") {
-    return "Sign in to this provider to finish detection.";
-  }
-  return (
-    provider?.versionAdvisory?.updateCommand ??
-    provider?.message ??
-    "Install the CLI and refresh detection."
-  );
 }
 
 function showOnboardingError(title: string, error: unknown) {
@@ -272,6 +242,11 @@ function AgentStep({
             const action = getOnboardingAgentAction(provider);
             const targetBusy =
               provider && busyProviderInstanceId === provider.instanceId ? busy : null;
+            const progressLabel = getOnboardingAgentProgressLabel(
+              provider,
+              targetBusy === "install-agent",
+              option.definition.label,
+            );
             return (
               <div
                 className="grid gap-3 rounded-lg border bg-card p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center"
@@ -287,9 +262,28 @@ function AgentStep({
                       {agentStatusLabel(provider)}
                     </Badge>
                   </div>
-                  <p className="truncate text-xs text-muted-foreground">
+                  <p
+                    className={cn(
+                      "text-xs leading-5 text-muted-foreground",
+                      !progressLabel && "sm:line-clamp-2",
+                    )}
+                  >
                     {getOnboardingAgentDescription(provider)}
                   </p>
+                  {progressLabel ? (
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex items-center justify-between gap-3 text-xs">
+                        <span aria-live="polite" className="font-medium text-foreground">
+                          {progressLabel}
+                        </span>
+                        <span className="text-muted-foreground">Keep Kairo open</span>
+                      </div>
+                      <progress
+                        aria-label={`${option.definition.label} installation progress`}
+                        className="h-1.5 w-full appearance-none overflow-hidden rounded-full bg-muted [&::-moz-progress-bar]:rounded-full [&::-moz-progress-bar]:bg-primary [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-value]:bg-primary"
+                      />
+                    </div>
+                  ) : null}
                 </div>
                 <div className="flex gap-2 sm:justify-end">
                   {action === "detected" ? (
@@ -306,6 +300,20 @@ function AgentStep({
                       )}
                       Login
                     </Button>
+                  ) : action === "refresh" ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy !== null}
+                      onClick={onRefresh}
+                    >
+                      {busy === "refresh" ? (
+                        <LoaderCircleIcon className="size-3.5 animate-spin" />
+                      ) : (
+                        <RefreshCwIcon className="size-3.5" />
+                      )}
+                      Refresh
+                    </Button>
                   ) : (
                     <Button
                       size="sm"
@@ -317,7 +325,10 @@ function AgentStep({
                       ) : (
                         <TerminalIcon className="size-3.5" />
                       )}
-                      Install
+                      {provider?.updateState?.status === "failed" ||
+                      provider?.updateState?.status === "unchanged"
+                        ? "Retry install"
+                        : "Install"}
                     </Button>
                   )}
                 </div>
@@ -757,10 +768,7 @@ function FinishStep({ onComplete }: { onComplete: () => void }) {
 
 export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
   const serverProviders = useServerProviders();
-  const [providersOverride, setProvidersOverride] = useState<ReadonlyArray<ServerProvider> | null>(
-    null,
-  );
-  const providers = providersOverride ?? serverProviders;
+  const providers = serverProviders;
   const [memoryStatus, setMemoryStatus] = useState<SupermemoryStatus | null>(null);
   const [composioStatus, setComposioStatus] = useState<ComposioStatus | null>(null);
   const [activeStep, setActiveStep] = useState<StepKey>("agents");
@@ -787,7 +795,7 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
   const agentOptions = useMemo<ReadonlyArray<AgentOption>>(
     () =>
       PROVIDER_CLIENT_DEFINITIONS.filter((definition) =>
-        CODING_AGENT_DRIVERS.has(definition.value),
+        ONBOARDING_CODING_AGENT_DRIVERS.has(definition.value),
       ).map((definition) => ({
         definition,
         provider: providers.find((provider) => provider.driver === definition.value),
@@ -839,7 +847,6 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
         localApi.server.getMemoryStatus(),
         localApi.server.getComposioStatus(),
       ]);
-      setProvidersOverride(providerPayload.providers);
       setMemoryStatus(nextMemory);
       setComposioStatus(nextComposio);
       return { providers: providerPayload.providers, memory: nextMemory, composio: nextComposio };
@@ -891,14 +898,42 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
         provider: provider.driver,
         instanceId: provider.instanceId,
       });
-      setProvidersOverride(next.providers);
-      await refreshAll();
-      toastManager.add(
-        stackedThreadToast({
-          type: "success",
-          title: `${option.definition.label} install command finished`,
-        }),
+      const commandProvider = findOnboardingProvider(next.providers, provider.instanceId);
+      const refreshed = await refreshAll();
+      const refreshedProvider = findOnboardingProvider(refreshed.providers, provider.instanceId);
+      const outcome = resolveOnboardingAgentInstallOutcome(
+        commandProvider?.updateState?.status === "failed" ||
+          commandProvider?.updateState?.status === "unchanged"
+          ? commandProvider
+          : (refreshedProvider ?? commandProvider),
       );
+      if (outcome.kind === "ready") {
+        toastManager.add(
+          stackedThreadToast({
+            type: "success",
+            title: `${option.definition.label} ready`,
+          }),
+        );
+      } else if (outcome.kind === "failed" || outcome.kind === "missing") {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: `Could not install ${option.definition.label}`,
+            description: outcome.description,
+          }),
+        );
+      } else {
+        toastManager.add(
+          stackedThreadToast({
+            type: "warning",
+            title:
+              outcome.kind === "needs_login"
+                ? `${option.definition.label} installed. Sign in next.`
+                : `${option.definition.label} needs attention`,
+            description: outcome.description,
+          }),
+        );
+      }
     } catch (error) {
       showOnboardingError(`Could not install ${option.definition.label}`, error);
     } finally {
@@ -917,13 +952,21 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
         provider: provider.driver,
         instanceId: provider.instanceId,
       });
-      setProvidersOverride(next.providers);
-      await refreshAll();
+      const refreshed = await refreshAll();
+      const refreshedProvider =
+        findOnboardingProvider(refreshed.providers, provider.instanceId) ??
+        findOnboardingProvider(next.providers, provider.instanceId);
+      const outcome = resolveOnboardingAgentReadiness(refreshedProvider);
       toastManager.add(
-        stackedThreadToast({
-          type: "success",
-          title: `${option.definition.label} login command finished`,
-        }),
+        stackedThreadToast(
+          outcome.kind === "ready"
+            ? { type: "success", title: `${option.definition.label} ready` }
+            : {
+                type: "warning",
+                title: `${option.definition.label} still needs attention`,
+                description: outcome.description,
+              },
+        ),
       );
     } catch (error) {
       showOnboardingError(`Could not login ${option.definition.label}`, error);

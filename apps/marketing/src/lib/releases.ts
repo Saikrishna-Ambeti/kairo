@@ -1,4 +1,4 @@
-const REPO = "pingdotgg/kairo";
+const REPO = "Saikrishna-Ambeti/kairo";
 
 export const RELEASES_URL = `https://github.com/${REPO}/releases`;
 

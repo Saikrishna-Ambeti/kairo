@@ -9,6 +9,10 @@ Kairo can help with practical tasks like understanding documents, drafting respo
 > [!NOTE]
 > Kairo is still very early. Some user-facing flows are changing from a coding-agent workbench into a more general assistant experience.
 
+## Origins and attribution
+
+Kairo is derived from [T3 Code](https://github.com/pingdotgg/t3code) by T3 Tools Inc., under the MIT License. Kairo-specific work is documented in [PATCH.md](./docs/project/PATCH.md). See [ATTRIBUTION.md](./ATTRIBUTION.md) for copyright and upstream attribution.
+
 ## Installation
 
 > [!WARNING]
@@ -21,7 +25,7 @@ Kairo can help with practical tasks like understanding documents, drafting respo
 
 ### Desktop app
 
-Install the latest version of the desktop app from [GitHub Releases](https://github.com/pingdotgg/kairo/releases).
+Install the latest version of the desktop app from [GitHub Releases](https://github.com/Saikrishna-Ambeti/kairo/releases).
 
 ## Some notes
 
