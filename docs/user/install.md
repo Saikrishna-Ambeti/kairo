@@ -49,6 +49,15 @@ Nightly:
 yay -S kairo-nightly-bin
 ```
 
+## First run
+
+Each app launch starts with three setup steps: sign in, choose your profession, and connect one
+coding-agent provider. Selecting **Other** lets you enter your own profession. Memory and app
+integrations remain available in **Settings** after setup.
+
+Builds without Kairo Connect configuration show the sign-in step and let you continue without an
+account.
+
 ## Providers
 
 Kairo drives provider CLIs; it does not ship them. Install the CLI for each provider you want
