@@ -17,7 +17,7 @@ import {
 } from "../state/entities";
 import { useEnvironments } from "../state/environments";
 import { APP_DISPLAY_NAME } from "~/branding";
-import { hasCloudPublicConfig } from "~/cloud/publicConfig";
+import { hasManagedRelayConfig } from "~/cloud/publicConfig";
 
 function ChatIndexRouteView() {
   const { authGateState } = Route.useRouteContext();
@@ -137,7 +137,7 @@ export const Route = createFileRoute("/_chat/")({
 });
 
 function HostedStaticOnboardingState() {
-  const cloudEnabled = hasCloudPublicConfig();
+  const cloudEnabled = hasManagedRelayConfig();
 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">

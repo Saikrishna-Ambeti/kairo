@@ -12,7 +12,7 @@ This document covers the unified release workflow for stable and nightly desktop
   - scheduled nightly check every three hours
   - manual `workflow_dispatch` for either channel
 - Runs quality gates first: lint, typecheck, test.
-- Reads the shared production Kairo Connect relay URL and Clerk client configuration before packaging clients.
+- Reads production Clerk client configuration and the optional Kairo Connect relay URL before packaging clients.
 - Builds four artifacts in parallel for both channels:
   - macOS `arm64` DMG
   - macOS `x64` DMG

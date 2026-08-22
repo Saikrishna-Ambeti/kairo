@@ -18,3 +18,9 @@ Connection startup, status, and configuration refresh the grant from Clerk when 
 available. Status and configuration then probe `/v1/capabilities`. A present but invalid or expired
 grant does not make the service ready. Kairo Connect relay and the local Supermemory CLI are not
 part of the memory request path.
+
+`CloudSession.clerkToken` comes from Clerk identity, not managed relay availability. Web, desktop,
+and mobile keep that session available for local, direct, Tailscale, and relay-backed connections.
+The client connection driver sends the token through `serverProvisionMemoryAccess` after any
+environment session becomes ready. A missing relay URL leaves relay discovery dormant and does not
+change grant provisioning.

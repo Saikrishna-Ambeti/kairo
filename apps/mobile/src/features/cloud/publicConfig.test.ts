@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from "vite-plus/test";
 
 import {
   CloudPublicConfigMissingError,
+  hasCloudIdentityConfig,
+  hasManagedRelayConfig,
   hasTracingPublicConfig,
+  resolveCloudClerkTokenOptions,
   resolveCloudPublicConfig,
-  resolveRelayClerkTokenOptions,
 } from "./publicConfig";
 
 vi.mock("expo-constants", () => ({
@@ -17,7 +19,7 @@ vi.mock("expo-constants", () => ({
 
 describe("resolveCloudPublicConfig", () => {
   it("reports the missing Clerk JWT template as structured configuration", () => {
-    expect(() => resolveRelayClerkTokenOptions()).toThrowError(
+    expect(() => resolveCloudClerkTokenOptions()).toThrowError(
       new CloudPublicConfigMissingError({ key: "KAIRO_CLERK_JWT_TEMPLATE" }),
     );
   });
@@ -86,6 +88,25 @@ describe("resolveCloudPublicConfig", () => {
         tracesToken: null,
       },
     });
+  });
+
+  it("enables Clerk identity without enabling managed relay", () => {
+    const config = resolveCloudPublicConfig({
+      clerk: { publishableKey: "pk_test_example", jwtTemplate: "kairo-relay" },
+    });
+
+    expect(hasCloudIdentityConfig(config)).toBe(true);
+    expect(hasManagedRelayConfig(config)).toBe(false);
+  });
+
+  it("enables managed relay when identity and relay URL are configured", () => {
+    const config = resolveCloudPublicConfig({
+      clerk: { publishableKey: "pk_test_example", jwtTemplate: "kairo-relay" },
+      relay: { url: "https://relay.example.test" },
+    });
+
+    expect(hasCloudIdentityConfig(config)).toBe(true);
+    expect(hasManagedRelayConfig(config)).toBe(true);
   });
 
   it("rejects an insecure traces URL", () => {

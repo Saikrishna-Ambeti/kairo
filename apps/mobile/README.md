@@ -20,6 +20,10 @@ Kairo Connect is optional and disabled in a fresh clone. Public configuration be
 repository-root `.env` or `.env.local`, not an `apps/mobile/.env` file. See
 [`../../.env.example`](../../.env.example).
 
+Kairo Cloud account sign-in and hosted memory require only the Clerk publishable key and JWT
+template. Kairo Connect additionally requires the relay URL. Mobile makes no relay requests and
+hides relay setup when that URL is absent.
+
 ## Development
 
 Start Metro for the dev client:
