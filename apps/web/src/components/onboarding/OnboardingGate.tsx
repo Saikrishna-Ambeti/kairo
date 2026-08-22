@@ -165,7 +165,7 @@ function OnboardingFrame({
 }) {
   return (
     <div className="h-dvh overflow-auto bg-background text-foreground">
-      <div className="mx-auto flex min-h-dvh w-full max-w-4xl flex-col gap-4 px-4 py-5 sm:px-6 sm:py-6">
+      <div className="mx-auto flex min-h-dvh w-full max-w-4xl flex-col justify-center gap-4 px-4 py-5 sm:px-6 sm:py-6">
         <header className="space-y-4 rounded-xl border border-border/80 bg-card p-5 sm:p-6">
           <div className="space-y-2">
             <h1 className="text-3xl font-semibold tracking-[-0.03em]">Set up Kairo</h1>
