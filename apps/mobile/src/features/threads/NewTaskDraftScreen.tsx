@@ -657,8 +657,9 @@ export function NewTaskDraftScreen(props: {
       draft.workspaceSelection?.worktreePath ?? flow.selectedWorktreePath;
     const startFromOrigin = draft.workspaceSelection?.startFromOrigin ?? flow.startFromOrigin;
     const runtimeMode = draft.runtimeMode ?? flow.runtimeMode;
-    const interactionMode = flow.planModeEnabled
-      ? (draft.interactionMode ?? flow.interactionMode)
+    const requestedInteractionMode = draft.interactionMode ?? flow.interactionMode;
+    const interactionMode = flow.interactionModes.includes(requestedInteractionMode)
+      ? requestedInteractionMode
       : "default";
     const initialMessageText = draft.text.trim();
 
@@ -1007,21 +1008,33 @@ export function NewTaskDraftScreen(props: {
               maxWidth={152}
               onPress={settingsSheetPresentation.open}
             />
-            {flow.planModeEnabled ? (
+            {flow.interactionModes.length > 1 ? (
               <ComposerInlineControl
-                accessibilityHint={`Switches to ${flow.interactionMode === "plan" ? "Build" : "Plan"} mode`}
-                accessibilityLabel={`Interaction mode: ${flow.interactionMode === "plan" ? "Plan" : "Build"}`}
+                accessibilityHint="Switches to the next interaction mode"
+                accessibilityLabel={`Interaction mode: ${flow.interactionMode === "plan" ? "Plan" : flow.interactionMode === "study" ? "Study" : "Build"}`}
                 disabled={isIncomingShareTransferPending}
                 emphasized
                 icon={
                   flow.interactionMode === "plan"
                     ? { ios: "list.bullet.clipboard", android: "auto_awesome" }
-                    : { ios: "hammer", android: "construction" }
+                    : flow.interactionMode === "study"
+                      ? { ios: "graduationcap", android: "school" }
+                      : { ios: "hammer", android: "construction" }
                 }
-                label={flow.interactionMode === "plan" ? "Plan" : "Build"}
-                onPress={() =>
-                  flow.setInteractionMode(flow.interactionMode === "plan" ? "default" : "plan")
+                label={
+                  flow.interactionMode === "plan"
+                    ? "Plan"
+                    : flow.interactionMode === "study"
+                      ? "Study"
+                      : "Build"
                 }
+                onPress={() => {
+                  const currentIndex = flow.interactionModes.indexOf(flow.interactionMode);
+                  flow.setInteractionMode(
+                    flow.interactionModes[(currentIndex + 1) % flow.interactionModes.length] ??
+                      "default",
+                  );
+                }}
                 showChevron={false}
               />
             ) : null}
