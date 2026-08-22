@@ -52,13 +52,7 @@ import {
   ReviewDiffPreviewResult,
 } from "./review.ts";
 import { KeybindingsConfigError } from "./keybindings.ts";
-import {
-  ConfigureMemoryInput,
-  InstallMemoryProvidersInput,
-  SupermemoryError,
-  SupermemoryStatus,
-  TestMemoryConnectionInput,
-} from "./memory.ts";
+import { ConfigureMemoryInput, SupermemoryError, SupermemoryStatus } from "./memory.ts";
 import {
   ComposioError,
   ComposioStatus,
@@ -314,8 +308,6 @@ export const WS_METHODS = {
   serverGetUsageSummary: "server.getUsageSummary",
   serverGetMemoryStatus: "server.getMemoryStatus",
   serverConfigureMemory: "server.configureMemory",
-  serverTestMemoryConnection: "server.testMemoryConnection",
-  serverInstallMemoryProviders: "server.installMemoryProviders",
   serverDisableMemory: "server.disableMemory",
   serverGetComposioStatus: "server.getComposioStatus",
   serverConfigureComposio: "server.configureComposio",
@@ -509,18 +501,6 @@ export const WsServerGetMemoryStatusRpc = Rpc.make(WS_METHODS.serverGetMemorySta
 
 export const WsServerConfigureMemoryRpc = Rpc.make(WS_METHODS.serverConfigureMemory, {
   payload: ConfigureMemoryInput,
-  success: SupermemoryStatus,
-  error: SupermemoryRpcError,
-});
-
-export const WsServerTestMemoryConnectionRpc = Rpc.make(WS_METHODS.serverTestMemoryConnection, {
-  payload: TestMemoryConnectionInput,
-  success: SupermemoryStatus,
-  error: SupermemoryRpcError,
-});
-
-export const WsServerInstallMemoryProvidersRpc = Rpc.make(WS_METHODS.serverInstallMemoryProviders, {
-  payload: InstallMemoryProvidersInput,
   success: SupermemoryStatus,
   error: SupermemoryRpcError,
 });
@@ -1139,8 +1119,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetBackgroundPolicyRpc,
   WsServerGetMemoryStatusRpc,
   WsServerConfigureMemoryRpc,
-  WsServerTestMemoryConnectionRpc,
-  WsServerInstallMemoryProvidersRpc,
   WsServerDisableMemoryRpc,
   WsServerGetComposioStatusRpc,
   WsServerConfigureComposioRpc,

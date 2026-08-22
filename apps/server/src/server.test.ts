@@ -291,8 +291,8 @@ const defaultSupermemoryStatus: SupermemoryStatus = {
   enabled: false,
   mode: "hosted",
   scope: "user",
-  auth: {
-    hasApiKey: false,
+  service: {
+    available: false,
   },
   providers: [],
 };
@@ -680,9 +680,10 @@ const buildAppUnderTest = (options?: {
         Layer.mock(SupermemoryService)({
           getStatus: Effect.succeed(defaultSupermemoryStatus),
           configure: () => Effect.succeed(defaultSupermemoryStatus),
-          testConnection: () => Effect.succeed(defaultSupermemoryStatus),
-          installProviders: () => Effect.succeed(defaultSupermemoryStatus),
           disable: Effect.succeed(defaultSupermemoryStatus),
+          save: () => Effect.succeed({}),
+          recall: () => Effect.succeed({}),
+          context: () => Effect.succeed({}),
           ...options?.layers?.supermemory,
         }),
       ),

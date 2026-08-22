@@ -5,11 +5,9 @@ import {
 import type {
   ConfigureComposioInput,
   ConfigureMemoryInput,
-  InstallMemoryProvidersInput,
   ProviderInstanceId,
   ServerProviderUpdateInput,
   TestComposioConnectionInput,
-  TestMemoryConnectionInput,
 } from "@kairo/contracts";
 import { useCallback } from "react";
 
@@ -37,12 +35,6 @@ export function usePrimaryServerApi() {
     reportFailure: false,
   });
   const configureMemory = useAtomCommand(serverEnvironment.configureMemory, {
-    reportFailure: false,
-  });
-  const testMemoryConnection = useAtomCommand(serverEnvironment.testMemoryConnection, {
-    reportFailure: false,
-  });
-  const installMemoryProviders = useAtomCommand(serverEnvironment.installMemoryProviders, {
     reportFailure: false,
   });
   const disableMemory = useAtomCommand(serverEnvironment.disableMemory, { reportFailure: false });
@@ -75,10 +67,6 @@ export function usePrimaryServerApi() {
       runCommand(getMemoryStatus({ environmentId: requireEnvironmentId(), input: {} })),
     configureMemory: (input: ConfigureMemoryInput) =>
       runCommand(configureMemory({ environmentId: requireEnvironmentId(), input })),
-    testMemoryConnection: (input: TestMemoryConnectionInput = {}) =>
-      runCommand(testMemoryConnection({ environmentId: requireEnvironmentId(), input })),
-    installMemoryProviders: (input: InstallMemoryProvidersInput) =>
-      runCommand(installMemoryProviders({ environmentId: requireEnvironmentId(), input })),
     disableMemory: () =>
       runCommand(disableMemory({ environmentId: requireEnvironmentId(), input: {} })),
     getComposioStatus: () =>

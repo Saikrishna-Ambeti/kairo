@@ -2,9 +2,7 @@ import {
   BrainCircuitIcon,
   CheckCircle2Icon,
   CloudIcon,
-  KeyRoundIcon,
   LoaderCircleIcon,
-  PlugZapIcon,
   PowerIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -17,21 +15,15 @@ import type {
 import { useServerProviders, useServerSettings } from "../../rpc/serverState";
 import { usePrimaryServerApi } from "../../state/primaryServerApi";
 import { cn } from "../../lib/utils";
-import { Alert, AlertDescription } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
-import { Input } from "../ui/input";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
 
-type BusyAction = "configure" | "test" | "install" | "providers" | "rotate" | "disable" | null;
+type BusyAction = "configure" | "providers" | "disable" | null;
 
-type TestConnectionState =
-  | { status: "idle" }
-  | { status: "testing" }
-  | { status: "success"; message: string }
-  | { status: "error"; message: string };
+const SUPPORTED_MEMORY_DRIVERS = new Set(["codex", "claudeAgent", "cursor", "grok", "opencode"]);
 
 function showMemoryError(title: string, error: unknown) {
   toastManager.add(
@@ -69,7 +61,7 @@ function useSupermemoryStatus() {
     };
   }, [refresh]);
 
-  return { status, setStatus, loading, refresh };
+  return { status, setStatus, loading };
 }
 
 function statusBadgeVariant(status: SupermemoryProviderStatus["status"]) {
@@ -80,10 +72,7 @@ function statusBadgeVariant(status: SupermemoryProviderStatus["status"]) {
     case "unsupported":
       return "error";
     case "needs_action":
-    case "needs_install":
       return "warning";
-    case "installing":
-      return "info";
     default:
       return "outline";
   }
@@ -91,15 +80,6 @@ function statusBadgeVariant(status: SupermemoryProviderStatus["status"]) {
 
 function statusLabel(status: SupermemoryProviderStatus["status"]): string {
   return status.replace(/_/g, " ");
-}
-
-function ProviderBillingNote() {
-  return (
-    <p className="rounded-lg border bg-muted/20 px-3 py-2 text-xs leading-5 text-muted-foreground">
-      Codex memory is free on hosted. Hosted memory for non-Codex providers may require a paid
-      Supermemory plan.
-    </p>
-  );
 }
 
 function SupermemoryProviderSelector({
@@ -113,11 +93,8 @@ function SupermemoryProviderSelector({
 }) {
   const toggle = (provider: SupermemoryProviderStatus, checked: boolean) => {
     const next = new Set(selected);
-    if (checked) {
-      next.add(provider.instanceId);
-    } else {
-      next.delete(provider.instanceId);
-    }
+    if (checked) next.add(provider.instanceId);
+    else next.delete(provider.instanceId);
     onChange(next);
   };
 
@@ -165,37 +142,27 @@ function SupermemorySetupWizard({
   const serverApi = usePrimaryServerApi();
   const settings = useServerSettings();
   const serverProviders = useServerProviders();
-  const [apiKey, setApiKey] = useState("");
   const [busy, setBusy] = useState<BusyAction>(null);
   const defaultProviderId = settings.textGenerationModelSelection.instanceId;
   const providers = useMemo(() => {
     if (status.providers.length > 0) return status.providers;
-    return serverProviders.map((provider) => ({
-      instanceId: provider.instanceId,
-      driver: provider.driver,
-      displayName: provider.displayName ?? String(provider.instanceId),
-      selected: provider.instanceId === defaultProviderId,
-      supported:
-        provider.driver === "codex" ||
-        provider.driver === "claudeAgent" ||
-        provider.driver === "opencode",
-      status:
-        provider.driver === "codex" ||
-        provider.driver === "claudeAgent" ||
-        provider.driver === "opencode"
-          ? ("not_selected" as const)
-          : ("unsupported" as const),
-    }));
+    return serverProviders.map((provider) => {
+      const supported = SUPPORTED_MEMORY_DRIVERS.has(provider.driver);
+      return {
+        instanceId: provider.instanceId,
+        driver: provider.driver,
+        displayName: provider.displayName ?? String(provider.instanceId),
+        selected: provider.instanceId === defaultProviderId,
+        supported,
+        status: supported ? ("not_selected" as const) : ("unsupported" as const),
+      };
+    });
   }, [defaultProviderId, serverProviders, status.providers]);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<ProviderInstanceId>>(
     () =>
       new Set(
         providers
-          .filter((provider) =>
-            status.enabled
-              ? provider.selected
-              : provider.instanceId === defaultProviderId && provider.supported,
-          )
+          .filter((provider) => provider.instanceId === defaultProviderId && provider.supported)
           .map((provider) => provider.instanceId),
       ),
   );
@@ -205,28 +172,20 @@ function SupermemorySetupWizard({
     const defaultProvider = providers.find(
       (provider) => provider.instanceId === defaultProviderId && provider.supported,
     );
-    if (defaultProvider) {
-      setSelectedIds(new Set([defaultProvider.instanceId]));
-    }
+    if (defaultProvider) setSelectedIds(new Set([defaultProvider.instanceId]));
   }, [defaultProviderId, providers, selectedIds.size]);
 
-  const canSubmit = selectedIds.size > 0 && apiKey.trim().length > 0;
-
   const configure = async () => {
-    if (!canSubmit) return;
+    if (selectedIds.size === 0) return;
     setBusy("configure");
     try {
-      const trimmedApiKey = apiKey.trim();
-      const next = await serverApi.configureMemory({
-        providerInstanceIds: [...selectedIds],
-        ...(trimmedApiKey ? { apiKey: trimmedApiKey } : {}),
-      });
+      const next = await serverApi.configureMemory({ providerInstanceIds: [...selectedIds] });
       onStatus(next);
       toastManager.add(
         stackedThreadToast({
           type: "success",
-          title: "Memory configured",
-          description: "Selected providers will receive Supermemory bindings on restart.",
+          title: "Memory enabled",
+          description: "Memory will be available in new provider sessions.",
         }),
       );
     } catch (error) {
@@ -241,21 +200,7 @@ function SupermemorySetupWizard({
       <SettingsSection icon={<BrainCircuitIcon className="size-3.5" />} title="Memory">
         <div className="space-y-5 p-5">
           <div className="space-y-2">
-            <label className="text-xs font-medium text-muted-foreground" htmlFor="sm-api-key">
-              Supermemory API key
-            </label>
-            <Input
-              id="sm-api-key"
-              nativeInput
-              onChange={(event) => setApiKey(event.currentTarget.value)}
-              placeholder="sm_..."
-              type="password"
-              value={apiKey}
-            />
-          </div>
-          <div className="space-y-2">
             <div className="text-xs font-medium text-muted-foreground">Provider instances</div>
-            <ProviderBillingNote />
             <SupermemoryProviderSelector
               onChange={setSelectedIds}
               providers={providers}
@@ -263,11 +208,19 @@ function SupermemorySetupWizard({
             />
           </div>
           <div className="flex justify-end">
-            <Button disabled={!canSubmit || busy !== null} onClick={configure}>
+            <Button
+              disabled={selectedIds.size === 0 || busy !== null || !status.service.available}
+              onClick={configure}
+            >
               {busy === "configure" ? <LoaderCircleIcon className="size-4 animate-spin" /> : null}
-              Enable Memory
+              Enable memory
             </Button>
           </div>
+          {!status.service.available ? (
+            <p className="text-xs text-warning">
+              This Kairo host does not have working Kairo Cloud access.
+            </p>
+          ) : null}
         </div>
       </SettingsSection>
     </SettingsPageContainer>
@@ -285,14 +238,12 @@ function SupermemoryStatusSummary({ status }: { status: SupermemoryStatus }) {
         </div>
       </div>
       <div className="rounded-xl border p-3">
-        <div className="text-xs text-muted-foreground">Auth</div>
+        <div className="text-xs text-muted-foreground">Setup</div>
         <div className="mt-1 flex items-center gap-2 text-sm font-semibold">
-          {status.auth.hasApiKey ? (
-            <CheckCircle2Icon className="size-4 text-success" />
-          ) : (
-            <KeyRoundIcon className="size-4 text-warning" />
-          )}
-          {status.auth.hasApiKey ? "API key saved" : "Missing API key"}
+          <CheckCircle2Icon
+            className={cn("size-4", status.service.available ? "text-success" : "text-warning")}
+          />
+          {status.service.available ? "Managed by Kairo" : "Service unavailable"}
         </div>
       </div>
       <div className="rounded-xl border p-3">
@@ -312,8 +263,6 @@ function ConfiguredSupermemoryPanel({
 }) {
   const serverApi = usePrimaryServerApi();
   const [busy, setBusy] = useState<BusyAction>(null);
-  const [testConnection, setTestConnection] = useState<TestConnectionState>({ status: "idle" });
-  const [editingProviders, setEditingProviders] = useState(false);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<ProviderInstanceId>>(
     () =>
       new Set(
@@ -322,7 +271,6 @@ function ConfiguredSupermemoryPanel({
           .map((provider) => provider.instanceId),
       ),
   );
-  const [rotatedKey, setRotatedKey] = useState("");
 
   useEffect(() => {
     setSelectedIds(
@@ -345,84 +293,22 @@ function ConfiguredSupermemoryPanel({
     }
   };
 
-  const testMemoryConnection = async () => {
-    setBusy("test");
-    setTestConnection({ status: "testing" });
-    try {
-      const next = await serverApi.testMemoryConnection();
-      onStatus(next);
-      if (next.auth.lastError) {
-        setTestConnection({ status: "error", message: next.auth.lastError });
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Connection test failed",
-            description: next.auth.lastError,
-          }),
-        );
-      } else {
-        const message = "Connection successful. Supermemory is ready to use.";
-        setTestConnection({ status: "success", message });
-        toastManager.add(
-          stackedThreadToast({
-            type: "success",
-            title: "Connection successful",
-            description: "Supermemory is ready to use.",
-          }),
-        );
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setTestConnection({ status: "error", message });
-      showMemoryError("Connection test failed", error);
-    } finally {
-      setBusy(null);
-    }
-  };
+  const providersChanged = status.providers.some(
+    (provider) => provider.selected !== selectedIds.has(provider.instanceId),
+  );
 
   return (
     <SettingsPageContainer>
       <SettingsSection icon={<BrainCircuitIcon className="size-3.5" />} title="Supermemory">
         <SupermemoryStatusSummary status={status} />
-        <div className="space-y-4 border-t p-5">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              disabled={busy !== null}
-              onClick={testMemoryConnection}
-              size="sm"
-              variant="outline"
-            >
-              {busy === "test" ? (
-                <LoaderCircleIcon className="size-4 animate-spin" />
-              ) : (
-                <PlugZapIcon className="size-4" />
-              )}
-              Test connection
-            </Button>
-            <Button
-              disabled={busy !== null}
-              onClick={() => setEditingProviders((open) => !open)}
-              size="sm"
-              variant="outline"
-            >
-              Edit providers
-            </Button>
-            <Button
-              disabled={busy !== null}
-              onClick={() =>
-                runAction("install", () =>
-                  serverApi.installMemoryProviders({
-                    providerInstanceIds: status.providers
-                      .filter((provider) => provider.selected && provider.supported)
-                      .map((provider) => provider.instanceId),
-                  }),
-                )
-              }
-              size="sm"
-              variant="outline"
-            >
-              Install providers
-            </Button>
+        <div className="space-y-3 border-t p-5">
+          <div className="text-xs font-medium text-muted-foreground">Provider instances</div>
+          <SupermemoryProviderSelector
+            onChange={setSelectedIds}
+            providers={status.providers}
+            selected={selectedIds}
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <Button
               disabled={busy !== null}
               onClick={() => runAction("disable", () => serverApi.disableMemory())}
@@ -432,99 +318,19 @@ function ConfiguredSupermemoryPanel({
               <PowerIcon className="size-4" />
               Disable memory
             </Button>
-          </div>
-          {testConnection.status === "testing" ? (
-            <Alert variant="info">
-              <LoaderCircleIcon className="size-4 animate-spin" />
-              <AlertDescription>Testing Supermemory connection...</AlertDescription>
-            </Alert>
-          ) : testConnection.status === "success" ? (
-            <Alert variant="success">
-              <CheckCircle2Icon className="size-4" />
-              <AlertDescription>{testConnection.message}</AlertDescription>
-            </Alert>
-          ) : testConnection.status === "error" ? (
-            <Alert variant="error">
-              <AlertDescription>{testConnection.message}</AlertDescription>
-            </Alert>
-          ) : null}
-          {status.auth.lastError && testConnection.status === "idle" ? (
-            <p className="rounded-lg bg-warning/8 px-3 py-2 text-xs text-warning-foreground">
-              {status.auth.lastError}
-            </p>
-          ) : null}
-          {editingProviders ? (
-            <div className="space-y-3">
-              <ProviderBillingNote />
-              <SupermemoryProviderSelector
-                onChange={setSelectedIds}
-                providers={status.providers}
-                selected={selectedIds}
-              />
-              <div className="flex justify-end">
-                <Button
-                  disabled={busy !== null}
-                  onClick={() =>
-                    runAction("providers", () =>
-                      serverApi.configureMemory({
-                        providerInstanceIds: [...selectedIds],
-                      }),
-                    )
-                  }
-                  size="sm"
-                >
-                  Save providers
-                </Button>
-              </div>
-            </div>
-          ) : null}
-          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-            <Input
-              nativeInput
-              onChange={(event) => setRotatedKey(event.currentTarget.value)}
-              placeholder="New Supermemory API key"
-              type="password"
-              value={rotatedKey}
-            />
             <Button
-              disabled={busy !== null || rotatedKey.trim().length === 0}
+              disabled={busy !== null || selectedIds.size === 0 || !providersChanged}
               onClick={() =>
-                runAction("rotate", async () => {
-                  const next = await serverApi.configureMemory({
-                    apiKey: rotatedKey.trim(),
-                    providerInstanceIds: status.providers
-                      .filter((provider) => provider.selected)
-                      .map((provider) => provider.instanceId),
-                  });
-                  setRotatedKey("");
-                  return next;
-                })
+                runAction("providers", () =>
+                  serverApi.configureMemory({ providerInstanceIds: [...selectedIds] }),
+                )
               }
-              variant="outline"
+              size="sm"
             >
-              <KeyRoundIcon className="size-4" />
-              Rotate key
+              {busy === "providers" ? <LoaderCircleIcon className="size-4 animate-spin" /> : null}
+              Save providers
             </Button>
           </div>
-        </div>
-        <div className="divide-y border-t">
-          {status.providers.map((provider) => (
-            <div
-              className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-5 py-3"
-              key={provider.instanceId}
-            >
-              <div className="min-w-0">
-                <div className="truncate text-sm font-medium">{provider.displayName}</div>
-                <div className="truncate text-xs text-muted-foreground">
-                  {provider.instanceId} · {provider.driver}
-                  {provider.message ? ` · ${provider.message}` : ""}
-                </div>
-              </div>
-              <Badge size="sm" variant={statusBadgeVariant(provider.status)}>
-                {statusLabel(provider.status)}
-              </Badge>
-            </div>
-          ))}
         </div>
       </SettingsSection>
     </SettingsPageContainer>

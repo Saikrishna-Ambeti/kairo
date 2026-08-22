@@ -1,0 +1,55 @@
+import * as Context from "effect/Context";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+
+const NonEmptyString = Schema.String.check(Schema.isNonEmpty());
+const NamespaceHmacKey = Schema.String.check(Schema.isMinLength(32));
+
+const CloudApiEnvironment = Schema.Struct({
+  SUPERMEMORY_API_KEY: NonEmptyString,
+  KAIRO_CLOUD_TOKEN_PUBLIC_KEY: NonEmptyString,
+  KAIRO_MEMORY_NAMESPACE_HMAC_KEY: NamespaceHmacKey,
+  KAIRO_CLOUD_ISSUER: Schema.optionalKey(NonEmptyString),
+  SUPERMEMORY_API_URL: Schema.optionalKey(Schema.URLFromString),
+});
+const decodeCloudApiEnvironment = Schema.decodeUnknownSync(CloudApiEnvironment);
+
+export interface CloudApiConfigurationShape {
+  readonly supermemoryApiKey: Redacted.Redacted<string>;
+  readonly supermemoryApiUrl: URL;
+  readonly tokenPublicKey: string;
+  readonly tokenIssuer: string;
+  readonly namespaceHmacKey: Redacted.Redacted<string>;
+}
+
+export class CloudApiConfiguration extends Context.Service<
+  CloudApiConfiguration,
+  CloudApiConfigurationShape
+>()("kairo-cloud-api/Config/CloudApiConfiguration") {}
+
+export const make = (configuration: CloudApiConfigurationShape) =>
+  CloudApiConfiguration.of(configuration);
+
+export const layer = (configuration: CloudApiConfigurationShape) =>
+  Layer.succeed(CloudApiConfiguration, make(configuration));
+
+export function fromEnv(
+  env: Readonly<Record<string, string | undefined>>,
+): CloudApiConfigurationShape {
+  const decoded = decodeCloudApiEnvironment({
+    SUPERMEMORY_API_KEY: env.SUPERMEMORY_API_KEY,
+    KAIRO_CLOUD_TOKEN_PUBLIC_KEY: env.KAIRO_CLOUD_TOKEN_PUBLIC_KEY,
+    KAIRO_MEMORY_NAMESPACE_HMAC_KEY: env.KAIRO_MEMORY_NAMESPACE_HMAC_KEY,
+    ...(env.KAIRO_CLOUD_ISSUER ? { KAIRO_CLOUD_ISSUER: env.KAIRO_CLOUD_ISSUER } : {}),
+    ...(env.SUPERMEMORY_API_URL ? { SUPERMEMORY_API_URL: env.SUPERMEMORY_API_URL } : {}),
+  });
+
+  return make({
+    supermemoryApiKey: Redacted.make(decoded.SUPERMEMORY_API_KEY),
+    supermemoryApiUrl: decoded.SUPERMEMORY_API_URL ?? new URL("https://api.supermemory.ai"),
+    tokenPublicKey: decoded.KAIRO_CLOUD_TOKEN_PUBLIC_KEY.replace(/\\n/gu, "\n"),
+    tokenIssuer: decoded.KAIRO_CLOUD_ISSUER ?? "kairo-cloud",
+    namespaceHmacKey: Redacted.make(decoded.KAIRO_MEMORY_NAMESPACE_HMAC_KEY),
+  });
+}

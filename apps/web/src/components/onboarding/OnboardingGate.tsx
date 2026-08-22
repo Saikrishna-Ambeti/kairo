@@ -1,36 +1,32 @@
+import { ClerkFailed, ClerkLoaded, ClerkLoading, useAuth, useClerk } from "@clerk/react";
+import { type ProviderInstanceId, type ServerProvider } from "@kairo/contracts";
+import * as Schema from "effect/Schema";
 import {
   AppWindowIcon,
   ArrowRightIcon,
-  BrainCircuitIcon,
   CheckCircle2Icon,
-  CloudIcon,
-  ExternalLinkIcon,
   KeyRoundIcon,
   LoaderCircleIcon,
-  PlugZapIcon,
+  LogInIcon,
   RefreshCwIcon,
   TerminalIcon,
+  UserRoundIcon,
+  type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ElementType } from "react";
-import {
-  type ProviderInstanceId,
-  type ServerProvider,
-  type SupermemoryProviderStatus,
-  type SupermemoryStatus,
-  type ComposioStatus,
-} from "@kairo/contracts";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { ensureLocalApi } from "../../localApi";
+import { hasCloudPublicConfig } from "../../cloud/publicConfig";
+import { isElectron } from "../../env";
+import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { cn } from "../../lib/utils";
 import { useServerProviders } from "../../rpc/serverState";
-import { usePrimaryEnvironmentId } from "../../state/environments";
 import { usePrimaryServerApi } from "../../state/primaryServerApi";
+import { resolveClerkSignInProps } from "../clerk/authRedirect";
+import { PROVIDER_CLIENT_DEFINITIONS } from "../settings/providerDriverMeta";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Checkbox } from "../ui/checkbox";
-import { Input } from "../ui/input";
 import { stackedThreadToast, toastManager } from "../ui/toast";
-import { PROVIDER_CLIENT_DEFINITIONS } from "../settings/providerDriverMeta";
+import { ProfessionalRolePicker } from "./ProfessionalRolePicker";
 import {
   ONBOARDING_CODING_AGENT_DRIVERS,
   findOnboardingProvider,
@@ -41,38 +37,36 @@ import {
   resolveOnboardingAgentInstallOutcome,
   resolveOnboardingAgentReadiness,
 } from "./OnboardingGate.logic";
+import {
+  isProfessionalRoleComplete,
+  PROFESSIONAL_ROLE_OTHER_STORAGE_KEY,
+  PROFESSIONAL_ROLE_STORAGE_KEY,
+  ProfessionalRoleOtherSchema,
+  ProfessionalRoleSchema,
+  type ProfessionalRole,
+} from "./professionalRole";
 
-const MEMORY_AGENT_DRIVERS = ONBOARDING_CODING_AGENT_DRIVERS;
-const SUPERMEMORY_CONSOLE_URL = "https://app.supermemory.ai/?view=integrations";
-const COMPOSIO_DASHBOARD_URL = "https://dashboard.composio.dev";
-
-type StepKey = "agents" | "memory" | "composio" | "finish";
-type BusyAction =
-  | "refresh"
-  | "install-agent"
-  | "login-agent"
-  | "save-memory"
-  | "setup-composio"
-  | null;
+export type OnboardingStep = "sign-in" | "profession" | "setup";
+type BusyAction = "refresh" | "install-agent" | "login-agent" | null;
 
 interface AgentOption {
   readonly definition: (typeof PROVIDER_CLIENT_DEFINITIONS)[number];
   readonly provider: ServerProvider | undefined;
 }
 
-const ONBOARDING_STEPS: ReadonlyArray<{ key: StepKey; label: string; icon: ElementType }> = [
-  { key: "agents", label: "Agents", icon: TerminalIcon },
-  { key: "memory", label: "Memory", icon: BrainCircuitIcon },
-  { key: "composio", label: "Composio", icon: PlugZapIcon },
-  { key: "finish", label: "Finish", icon: CheckCircle2Icon },
+const ONBOARDING_STEPS: ReadonlyArray<{
+  readonly key: OnboardingStep;
+  readonly label: string;
+  readonly icon: LucideIcon;
+}> = [
+  { key: "sign-in", label: "Sign in", icon: LogInIcon },
+  { key: "profession", label: "Profession", icon: UserRoundIcon },
+  { key: "setup", label: "Setup", icon: TerminalIcon },
 ];
 
-function onboardingStepIndex(step: StepKey): number {
-  return ONBOARDING_STEPS.findIndex((candidate) => candidate.key === step);
-}
-
-export function canNavigateBackToOnboardingStep(activeStep: StepKey, targetStep: StepKey): boolean {
-  return onboardingStepIndex(targetStep) < onboardingStepIndex(activeStep);
+export function advanceOnboardingStep(step: OnboardingStep): OnboardingStep {
+  if (step === "sign-in") return "profession";
+  return "setup";
 }
 
 function showOnboardingError(title: string, error: unknown) {
@@ -90,8 +84,7 @@ function statusText(value: string): string {
 }
 
 function agentBadgeVariant(provider: ServerProvider | undefined) {
-  if (!provider) return "outline";
-  if (!provider.enabled) return "outline";
+  if (!provider || !provider.enabled) return "outline";
   if (isUsableOnboardingAgent(provider)) return "success";
   if (provider.status === "error") return "error";
   if (provider.installed) return "warning";
@@ -103,79 +96,56 @@ function agentStatusLabel(provider: ServerProvider | undefined): string {
   if (!provider.enabled) return "Disabled";
   if (!provider.installed) return "Not installed";
   if (provider.auth.status === "authenticated") return "Ready";
-  if (provider.auth.status === "unauthenticated") return "Needs login";
+  if (provider.auth.status === "unauthenticated" || provider.auth.status === "unknown") {
+    return "Needs login";
+  }
   return statusText(provider.status);
 }
 
-function memoryProviderBadgeVariant(status: SupermemoryProviderStatus["status"]) {
-  switch (status) {
-    case "ready":
-      return "success";
-    case "needs_install":
-    case "needs_action":
-      return "warning";
-    case "error":
-    case "unsupported":
-      return "error";
-    default:
-      return "outline";
-  }
-}
-
-function StepRail({
+function OnboardingProgress({
   activeStep,
-  completed,
-  onStepSelect,
+  onProfessionEdit,
 }: {
-  activeStep: StepKey;
-  completed: ReadonlySet<StepKey>;
-  onStepSelect: (step: StepKey) => void;
+  readonly activeStep: OnboardingStep;
+  readonly onProfessionEdit?: (() => void) | undefined;
 }) {
+  const activeIndex = ONBOARDING_STEPS.findIndex((step) => step.key === activeStep);
+
   return (
-    <nav className="grid gap-2 sm:grid-cols-4" aria-label="Onboarding steps">
-      {ONBOARDING_STEPS.map((step) => {
+    <nav aria-label="Onboarding progress" className="grid gap-2 sm:grid-cols-3">
+      {ONBOARDING_STEPS.map((step, index) => {
         const Icon = step.icon;
-        const done = completed.has(step.key);
-        const active = activeStep === step.key;
-        const canGoBack = canNavigateBackToOnboardingStep(activeStep, step.key);
+        const active = step.key === activeStep;
+        const complete = index < activeIndex;
+        const canEditProfession = step.key === "profession" && activeStep === "setup";
         const className = cn(
           "flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm outline-none transition-colors",
-          active && "border-primary/50 bg-primary/8 text-foreground",
-          done && !active && "border-success/25 bg-success/8 text-success-foreground",
-          !active && !done && "border-border bg-background/50 text-muted-foreground",
-          canGoBack &&
-            "cursor-pointer hover:border-primary/35 hover:bg-muted/45 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+          active && "border-primary/45 bg-primary/8 text-foreground",
+          complete && !active && "border-success/25 bg-success/8 text-success-foreground",
+          !active && !complete && "border-border bg-background/55 text-muted-foreground",
+          canEditProfession &&
+            "cursor-pointer hover:border-primary/35 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring",
         );
         const content = (
           <>
             <span
               className={cn(
-                "flex size-6 shrink-0 items-center justify-center rounded-md border",
-                done ? "border-success/30 bg-success/10" : "border-current/20",
+                "flex size-7 shrink-0 items-center justify-center rounded-lg border",
+                complete ? "border-success/30 bg-success/10" : "border-current/20",
               )}
             >
-              {done ? <CheckCircle2Icon className="size-3.5" /> : <Icon className="size-3.5" />}
+              {complete ? <CheckCircle2Icon className="size-4" /> : <Icon className="size-4" />}
             </span>
             <span className="truncate font-medium">{step.label}</span>
           </>
         );
 
-        if (canGoBack) {
-          return (
-            <button
-              aria-label={`Go back to ${step.label}`}
-              className={className}
-              key={step.key}
-              onClick={() => onStepSelect(step.key)}
-              type="button"
-            >
-              {content}
-            </button>
-          );
-        }
-
-        return (
-          <div aria-current={active ? "step" : undefined} className={className} key={step.key}>
+        return canEditProfession ? (
+          <button key={step.key} type="button" className={className} onClick={onProfessionEdit}>
+            {content}
+          </button>
+        ) : (
+          <div key={step.key} aria-current={active ? "step" : undefined} className={className}>
             {content}
           </div>
         );
@@ -184,7 +154,167 @@ function StepRail({
   );
 }
 
-function ProviderLogo({ option }: { option: AgentOption }) {
+function OnboardingFrame({
+  activeStep,
+  onProfessionEdit,
+  children,
+}: {
+  readonly activeStep: OnboardingStep;
+  readonly onProfessionEdit?: (() => void) | undefined;
+  readonly children: ReactNode;
+}) {
+  return (
+    <div className="h-dvh overflow-auto bg-background text-foreground">
+      <div className="mx-auto flex min-h-dvh w-full max-w-4xl flex-col justify-center gap-4 px-4 py-5 sm:px-6 sm:py-6">
+        <header className="space-y-4 rounded-xl border border-border/80 bg-card p-5 sm:p-6">
+          <div className="space-y-2">
+            <h1 className="text-3xl font-semibold tracking-[-0.03em]">Set up Kairo</h1>
+            <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+              Sign in, tell us how you work, then connect a coding agent.
+            </p>
+          </div>
+          <OnboardingProgress activeStep={activeStep} onProfessionEdit={onProfessionEdit} />
+        </header>
+        <main className="min-h-64 rounded-xl border border-border/80 bg-card p-5 sm:p-8">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function SignInStep({
+  loading,
+  signedIn,
+  onSignIn,
+  onContinue,
+}: {
+  readonly loading: boolean;
+  readonly signedIn: boolean;
+  readonly onSignIn: () => void;
+  readonly onContinue: () => void;
+}) {
+  if (!loading && !signedIn) {
+    return (
+      <section className="mx-auto flex min-h-48 max-w-lg flex-col items-center justify-center text-center">
+        <span className="mb-4 flex size-11 items-center justify-center rounded-xl border border-primary/25 bg-primary/10 text-primary">
+          <LogInIcon className="size-5" />
+        </span>
+        <h2 className="text-2xl font-semibold tracking-[-0.025em]">Sign in to continue</h2>
+        <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+          Clerk securely connects this device to your Kairo account.
+        </p>
+        <Button className="mt-5 min-w-48" onClick={onSignIn}>
+          Continue with Clerk
+          <ArrowRightIcon className="size-4" />
+        </Button>
+      </section>
+    );
+  }
+
+  return (
+    <section className="mx-auto flex min-h-48 max-w-lg flex-col items-center justify-center text-center">
+      <span className="mb-4 flex size-11 items-center justify-center rounded-xl border border-border bg-muted text-foreground">
+        {loading ? (
+          <LoaderCircleIcon className="size-5 animate-spin" />
+        ) : (
+          <CheckCircle2Icon className="size-5" />
+        )}
+      </span>
+      <h2 className="text-2xl font-semibold tracking-[-0.025em]">
+        {loading ? "Checking your account" : "Account connected"}
+      </h2>
+      <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+        {loading
+          ? "Loading secure sign-in."
+          : "Your Kairo account is ready. Next, tell us how you work."}
+      </p>
+      <Button className="mt-5 min-w-40" disabled={loading} onClick={onContinue}>
+        Continue
+        <ArrowRightIcon className="size-4" />
+      </Button>
+    </section>
+  );
+}
+
+function LocalSignInStep({ onContinue }: { readonly onContinue: () => void }) {
+  return (
+    <section className="mx-auto flex min-h-48 max-w-lg flex-col items-center justify-center text-center">
+      <span className="mb-4 flex size-11 items-center justify-center rounded-xl border border-border bg-muted text-foreground">
+        <LogInIcon className="size-5" />
+      </span>
+      <h2 className="text-2xl font-semibold tracking-[-0.025em]">Continue without an account</h2>
+      <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+        Clerk is not configured in this self-hosted build. You can still finish local setup.
+      </p>
+      <Button className="mt-5 min-w-40" onClick={onContinue}>
+        Continue
+        <ArrowRightIcon className="size-4" />
+      </Button>
+    </section>
+  );
+}
+
+function ClerkLoadErrorStep({ onRetry }: { readonly onRetry: () => void }) {
+  return (
+    <section className="mx-auto flex min-h-48 max-w-lg flex-col items-center justify-center text-center">
+      <span className="mb-4 flex size-11 items-center justify-center rounded-xl border border-destructive/25 bg-destructive/10 text-destructive">
+        <RefreshCwIcon className="size-5" />
+      </span>
+      <h2 className="text-2xl font-semibold tracking-[-0.025em]">Sign-in could not load</h2>
+      <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+        Check your connection, then retry. Your onboarding will stay here.
+      </p>
+      <Button className="mt-5 min-w-40" onClick={onRetry}>
+        Retry sign-in
+        <RefreshCwIcon className="size-4" />
+      </Button>
+    </section>
+  );
+}
+
+function ProfessionStep({
+  role,
+  otherRole,
+  onRoleChange,
+  onOtherRoleChange,
+  onContinue,
+}: {
+  readonly role: ProfessionalRole | null;
+  readonly otherRole: string;
+  readonly onRoleChange: (role: ProfessionalRole) => void;
+  readonly onOtherRoleChange: (value: string) => void;
+  readonly onContinue: () => void;
+}) {
+  const complete = isProfessionalRoleComplete(role, otherRole);
+
+  return (
+    <section className="mx-auto max-w-4xl">
+      <div className="mb-6 text-center">
+        <h2 className="text-2xl font-semibold tracking-[-0.025em]">
+          What best describes your work?
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          Choose one so Kairo can tailor setup guidance to the way you build.
+        </p>
+      </div>
+      <ProfessionalRolePicker
+        value={role}
+        otherValue={otherRole}
+        onChange={onRoleChange}
+        onOtherValueChange={onOtherRoleChange}
+      />
+      <div className="mt-6 flex justify-end">
+        <Button disabled={!complete} onClick={onContinue}>
+          Continue
+          <ArrowRightIcon className="size-4" />
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+function ProviderLogo({ option }: { readonly option: AgentOption }) {
   const Icon = option.definition.icon;
   return (
     <span className="flex size-10 items-center justify-center rounded-lg border bg-background">
@@ -193,7 +323,7 @@ function ProviderLogo({ option }: { option: AgentOption }) {
   );
 }
 
-function AgentStep({
+function ProviderSetupStep({
   options,
   usableAgents,
   busy,
@@ -201,25 +331,27 @@ function AgentStep({
   onInstall,
   onLogin,
   onRefresh,
-  onContinue,
+  onComplete,
 }: {
-  options: ReadonlyArray<AgentOption>;
-  usableAgents: ReadonlyArray<ServerProvider>;
-  busy: BusyAction;
-  busyProviderInstanceId: ProviderInstanceId | null;
-  onInstall: (option: AgentOption) => void;
-  onLogin: (option: AgentOption) => void;
-  onRefresh: () => void;
-  onContinue: () => void;
+  readonly options: ReadonlyArray<AgentOption>;
+  readonly usableAgents: ReadonlyArray<ServerProvider>;
+  readonly busy: BusyAction;
+  readonly busyProviderInstanceId: ProviderInstanceId | null;
+  readonly onInstall: (option: AgentOption) => void;
+  readonly onLogin: (option: AgentOption) => void;
+  readonly onRefresh: () => void;
+  readonly onComplete: () => void;
 }) {
   const hasUsableAgent = usableAgents.length > 0;
+
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <section className="space-y-4">
         <div className="space-y-1">
-          <h2 className="text-2xl font-semibold tracking-tight">Coding agent</h2>
-          <p className="text-sm text-muted-foreground">
-            Kairo checks for supported local CLIs before creating sessions.
+          <h2 className="text-2xl font-semibold tracking-[-0.025em]">Connect a coding agent</h2>
+          <p className="text-sm leading-6 text-muted-foreground">
+            Install or sign in to one supported provider. Memory and app integrations stay in
+            Settings.
           </p>
         </div>
         <div className="grid gap-3">
@@ -234,9 +366,10 @@ function AgentStep({
               targetBusy === "install-agent",
               option.definition.label,
             );
+
             return (
               <div
-                className="grid gap-3 rounded-lg border bg-card p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center"
+                className="grid gap-3 rounded-xl border border-border/80 bg-background/65 p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center"
                 key={option.definition.value}
               >
                 <ProviderLogo option={option} />
@@ -285,7 +418,7 @@ function AgentStep({
                       ) : (
                         <KeyRoundIcon className="size-3.5" />
                       )}
-                      Login
+                      Sign in
                     </Button>
                   ) : action === "refresh" ? (
                     <Button
@@ -324,10 +457,10 @@ function AgentStep({
           })}
         </div>
       </section>
-      <aside className="space-y-3 rounded-lg border bg-muted/20 p-4">
+      <aside className="space-y-4 rounded-xl border border-border/80 bg-muted/25 p-4">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <AppWindowIcon className="size-4 text-muted-foreground" />
-          Detection
+          Provider status
         </div>
         {hasUsableAgent ? (
           <div className="space-y-2 text-sm">
@@ -342,10 +475,10 @@ function AgentStep({
           </div>
         ) : (
           <p className="text-sm leading-6 text-muted-foreground">
-            No supported coding agent was detected on this device.
+            Connect one provider to finish setup.
           </p>
         )}
-        <div className="flex gap-2">
+        <div className="grid gap-2">
           <Button variant="outline" size="sm" disabled={busy !== null} onClick={onRefresh}>
             {busy === "refresh" ? (
               <LoaderCircleIcon className="size-3.5 animate-spin" />
@@ -354,8 +487,8 @@ function AgentStep({
             )}
             Refresh
           </Button>
-          <Button size="sm" disabled={!hasUsableAgent || busy !== null} onClick={onContinue}>
-            Continue
+          <Button size="sm" disabled={!hasUsableAgent || busy !== null} onClick={onComplete}>
+            Finish setup
             <ArrowRightIcon className="size-3.5" />
           </Button>
         </div>
@@ -364,325 +497,25 @@ function AgentStep({
   );
 }
 
-function MemoryProviderSelector({
-  providers,
-  selected,
-  onChange,
+function ProviderSetupGate({
+  onProfessionEdit,
+  onComplete,
 }: {
-  providers: ReadonlyArray<SupermemoryProviderStatus>;
-  selected: ReadonlySet<ProviderInstanceId>;
-  onChange: (next: ReadonlySet<ProviderInstanceId>) => void;
+  readonly onProfessionEdit?: () => void;
+  readonly onComplete: () => void;
 }) {
-  return (
-    <div className="divide-y rounded-lg border bg-card">
-      {providers.map((provider) => {
-        const disabled = !provider.supported;
-        return (
-          <label
-            className={cn(
-              "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3",
-              disabled ? "opacity-60" : "cursor-pointer hover:bg-muted/35",
-            )}
-            key={provider.instanceId}
-          >
-            <Checkbox
-              checked={selected.has(provider.instanceId)}
-              disabled={disabled}
-              onCheckedChange={(checked) => {
-                const next = new Set(selected);
-                if (checked) next.add(provider.instanceId);
-                else next.delete(provider.instanceId);
-                onChange(next);
-              }}
-            />
-            <span className="min-w-0">
-              <span className="block truncate text-sm font-medium">{provider.displayName}</span>
-              <span className="block truncate text-xs text-muted-foreground">
-                {provider.message ?? provider.driver}
-              </span>
-            </span>
-            <Badge size="sm" variant={memoryProviderBadgeVariant(provider.status)}>
-              {statusText(provider.status)}
-            </Badge>
-          </label>
-        );
-      })}
-    </div>
-  );
-}
-
-function MemoryStep({
-  status,
-  providers,
-  selectedProviderIds,
-  apiKey,
-  busy,
-  onApiKeyChange,
-  onProviderSelectionChange,
-  onSave,
-  onContinue,
-}: {
-  status: SupermemoryStatus | null;
-  providers: ReadonlyArray<SupermemoryProviderStatus>;
-  selectedProviderIds: ReadonlySet<ProviderInstanceId>;
-  apiKey: string;
-  busy: BusyAction;
-  onApiKeyChange: (value: string) => void;
-  onProviderSelectionChange: (next: ReadonlySet<ProviderInstanceId>) => void;
-  onSave: () => void;
-  onContinue: () => void;
-}) {
-  const configured = Boolean(status?.enabled && status.auth.hasApiKey);
-  const canSave = apiKey.trim().length > 0 && selectedProviderIds.size > 0;
-  return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
-      <section className="space-y-4">
-        <div className="space-y-1">
-          <h2 className="text-2xl font-semibold tracking-tight">Memory</h2>
-          <p className="text-sm text-muted-foreground">
-            Supermemory stores long-running agent context behind your API key.
-          </p>
-        </div>
-        <div className="grid gap-4 rounded-lg border bg-card p-4">
-          <div className="grid gap-2">
-            <label
-              className="text-xs font-medium text-muted-foreground"
-              htmlFor="onboarding-sm-key"
-            >
-              Supermemory API key
-            </label>
-            <Input
-              id="onboarding-sm-key"
-              nativeInput
-              type="password"
-              placeholder={configured ? "API key saved" : "sm_..."}
-              value={apiKey}
-              onChange={(event) => onApiKeyChange(event.currentTarget.value)}
-            />
-          </div>
-          <div className="grid gap-2">
-            <div className="text-xs font-medium text-muted-foreground">Agent access</div>
-            <MemoryProviderSelector
-              providers={providers}
-              selected={selectedProviderIds}
-              onChange={onProviderSelectionChange}
-            />
-          </div>
-          <div className="flex flex-wrap justify-end gap-2">
-            {configured ? (
-              <Button variant="outline" disabled={busy !== null} onClick={onContinue}>
-                Continue
-                <ArrowRightIcon className="size-3.5" />
-              </Button>
-            ) : null}
-            <Button disabled={!canSave || busy !== null} onClick={onSave}>
-              {busy === "save-memory" ? (
-                <LoaderCircleIcon className="size-4 animate-spin" />
-              ) : (
-                <KeyRoundIcon className="size-4" />
-              )}
-              Save key
-            </Button>
-          </div>
-        </div>
-      </section>
-      <aside className="space-y-4 rounded-lg border bg-muted/20 p-4 text-sm">
-        <div className="flex items-center gap-2 font-semibold">
-          <BrainCircuitIcon className="size-4 text-muted-foreground" />
-          API key
-        </div>
-        <ol className="list-decimal space-y-2 pl-4 text-muted-foreground">
-          <li>Open the Supermemory Personal App</li>
-          <li>Go to API Keys, then create a new key.</li>
-          <li>Copy the key and save it here.</li>
-        </ol>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void ensureLocalApi().shell.openExternal(SUPERMEMORY_CONSOLE_URL)}
-        >
-          <ExternalLinkIcon className="size-3.5" />
-          Open console
-        </Button>
-      </aside>
-    </div>
-  );
-}
-
-function ComposioStep({
-  status,
-  apiKey,
-  selectedProviderIds,
-  busy,
-  onApiKeyChange,
-  onProviderSelectionChange,
-  onSave,
-  onContinue,
-}: {
-  status: ComposioStatus | null;
-  apiKey: string;
-  selectedProviderIds: ReadonlySet<ProviderInstanceId>;
-  busy: BusyAction;
-  onApiKeyChange: (value: string) => void;
-  onProviderSelectionChange: (next: ReadonlySet<ProviderInstanceId>) => void;
-  onSave: () => void;
-  onContinue: () => void;
-}) {
-  const configured = status?.auth.status === "configured";
-  const canSave =
-    busy === null &&
-    selectedProviderIds.size > 0 &&
-    (status?.auth.hasApiKey === true || apiKey.trim().length > 0);
-
-  return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
-      <section className="space-y-4">
-        <div className="space-y-1">
-          <h2 className="text-2xl font-semibold tracking-tight">Composio</h2>
-          <p className="text-sm text-muted-foreground">
-            Connect agents to hosted app tools without installing another runtime.
-          </p>
-        </div>
-        <div className="space-y-4 rounded-lg border bg-card p-4">
-          <div className="flex items-center gap-2">
-            <CloudIcon className="size-4 text-muted-foreground" />
-            <span className="text-sm font-semibold">Composio Connect</span>
-            <Badge size="sm" variant={configured ? "success" : "outline"}>
-              {configured ? "Connected" : "Needs API key"}
-            </Badge>
-          </div>
-          <Input
-            nativeInput
-            type="password"
-            autoComplete="off"
-            placeholder={
-              status?.auth.hasApiKey
-                ? "Saved. Enter a new key to replace it."
-                : "Paste your x-consumer-api-key"
-            }
-            value={apiKey}
-            onChange={(event) => onApiKeyChange(event.currentTarget.value)}
-          />
-          {status?.auth.lastError ? (
-            <p className="text-xs text-destructive">{status.auth.lastError}</p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Key stays in this environment's secret store. New agent sessions receive hosted MCP
-              access.
-            </p>
-          )}
-          <div className="flex flex-wrap gap-2">
-            <Button disabled={!canSave} onClick={onSave}>
-              {busy === "setup-composio" ? (
-                <LoaderCircleIcon className="size-4 animate-spin" />
-              ) : (
-                <PlugZapIcon className="size-4" />
-              )}
-              Save and test
-            </Button>
-            {configured ? (
-              <Button variant="outline" disabled={busy !== null} onClick={onContinue}>
-                Continue
-                <ArrowRightIcon className="size-3.5" />
-              </Button>
-            ) : null}
-          </div>
-        </div>
-      </section>
-      <aside className="space-y-3 rounded-lg border bg-muted/20 p-4">
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <PlugZapIcon className="size-4 text-muted-foreground" />
-          Agent access
-        </div>
-        {(status?.agentSupport ?? []).length > 0 ? (
-          <div className="space-y-2">
-            {status?.agentSupport.map((entry) => (
-              <label
-                className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 text-sm"
-                key={entry.providerInstanceId}
-              >
-                <Checkbox
-                  checked={selectedProviderIds.has(entry.providerInstanceId)}
-                  disabled={!entry.supported || busy !== null}
-                  onCheckedChange={(checked) => {
-                    const next = new Set(selectedProviderIds);
-                    if (checked) next.add(entry.providerInstanceId);
-                    else next.delete(entry.providerInstanceId);
-                    onProviderSelectionChange(next);
-                  }}
-                />
-                <span className="truncate">{entry.displayName}</span>
-              </label>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm leading-6 text-muted-foreground">
-            Select a supported agent after installing it.
-          </p>
-        )}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void ensureLocalApi().shell.openExternal(COMPOSIO_DASHBOARD_URL)}
-        >
-          <ExternalLinkIcon className="size-3.5" />
-          Get API key
-        </Button>
-      </aside>
-    </div>
-  );
-}
-
-function FinishStep({ onComplete }: { onComplete: () => void }) {
-  return (
-    <div className="mx-auto grid max-w-2xl gap-5 text-center">
-      <div className="mx-auto flex size-14 items-center justify-center rounded-xl border bg-success/10 text-success-foreground">
-        <CheckCircle2Icon className="size-7" />
-      </div>
-      <div className="space-y-2">
-        <h2 className="text-2xl font-semibold tracking-tight">Setup complete</h2>
-        <p className="text-sm leading-6 text-muted-foreground">
-          Your coding agent, memory, and hosted Composio tools are ready.
-        </p>
-      </div>
-      <div className="flex justify-center">
-        <Button onClick={onComplete}>
-          Open Kairo
-          <ArrowRightIcon className="size-4" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
   const serverApi = usePrimaryServerApi();
-  const primaryEnvironmentId = usePrimaryEnvironmentId();
-  const serverApiRef = useRef(serverApi);
   const serverProviders = useServerProviders();
-  const providers = serverProviders;
-  const [memoryStatus, setMemoryStatus] = useState<SupermemoryStatus | null>(null);
-  const [composioStatus, setComposioStatus] = useState<ComposioStatus | null>(null);
-  const [activeStep, setActiveStep] = useState<StepKey>("agents");
+  const [providersOverride, setProvidersOverride] = useState<ReadonlyArray<ServerProvider> | null>(
+    null,
+  );
+  const providers = providersOverride ?? serverProviders;
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<BusyAction>(null);
   const [busyProviderInstanceId, setBusyProviderInstanceId] = useState<ProviderInstanceId | null>(
     null,
   );
-  const [memoryApiKey, setMemoryApiKey] = useState("");
-  const [selectedMemoryProviderIds, setSelectedMemoryProviderIds] = useState<
-    ReadonlySet<ProviderInstanceId>
-  >(new Set());
-  const [composioApiKey, setComposioApiKey] = useState("");
-  const [selectedComposioProviderIds, setSelectedComposioProviderIds] = useState<
-    ReadonlySet<ProviderInstanceId>
-  >(new Set());
   const didInitialLoadRef = useRef(false);
-  const userSelectedStepRef = useRef(false);
-
-  useEffect(() => {
-    serverApiRef.current = serverApi;
-  }, [serverApi]);
 
   const agentOptions = useMemo<ReadonlyArray<AgentOption>>(
     () =>
@@ -694,101 +527,26 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
       })),
     [providers],
   );
-
   const usableAgents = useMemo(() => providers.filter(isUsableOnboardingAgent), [providers]);
 
-  const memoryProviders = useMemo<ReadonlyArray<SupermemoryProviderStatus>>(() => {
-    if (memoryStatus?.providers.length) return memoryStatus.providers;
-    return usableAgents.map((provider) => ({
-      instanceId: provider.instanceId,
-      driver: provider.driver,
-      displayName: provider.displayName ?? String(provider.instanceId),
-      selected: true,
-      supported: MEMORY_AGENT_DRIVERS.has(provider.driver),
-      status: MEMORY_AGENT_DRIVERS.has(provider.driver) ? "not_selected" : "unsupported",
-    }));
-  }, [usableAgents, memoryStatus?.providers]);
-
-  const agentComplete = usableAgents.length > 0;
-  const memoryComplete = Boolean(memoryStatus?.enabled && memoryStatus.auth.hasApiKey);
-  const composioComplete = Boolean(
-    composioStatus?.enabled && composioStatus.auth.status === "configured",
-  );
-  const completed = useMemo(() => {
-    const next = new Set<StepKey>();
-    if (agentComplete) next.add("agents");
-    if (memoryComplete) next.add("memory");
-    if (composioComplete) next.add("composio");
-    if (agentComplete && memoryComplete && composioComplete) next.add("finish");
-    return next;
-  }, [agentComplete, composioComplete, memoryComplete]);
-
-  const refreshAll = useCallback(async () => {
+  const refreshProviders = useCallback(async () => {
     setBusy((current) => current ?? "refresh");
     try {
-      const [providerPayload, nextMemory, nextComposio] = await Promise.all([
-        serverApiRef.current.refreshProviders(),
-        serverApiRef.current.getMemoryStatus(),
-        serverApiRef.current.getComposioStatus(),
-      ]);
-      setMemoryStatus(nextMemory);
-      setComposioStatus(nextComposio);
-      return { providers: providerPayload.providers, memory: nextMemory, composio: nextComposio };
+      const payload = await serverApi.refreshProviders();
+      setProvidersOverride(payload.providers);
+      return payload.providers;
     } finally {
       setBusy((current) => (current === "refresh" ? null : current));
     }
-  }, []);
+  }, [serverApi]);
 
   useEffect(() => {
-    if (primaryEnvironmentId === null || didInitialLoadRef.current) return;
+    if (didInitialLoadRef.current) return;
     didInitialLoadRef.current = true;
-    setLoading(true);
-    void refreshAll()
-      .catch((error) => showOnboardingError("Setup status unavailable", error))
+    void refreshProviders()
+      .catch((error) => showOnboardingError("Provider status unavailable", error))
       .finally(() => setLoading(false));
-  }, [primaryEnvironmentId, refreshAll]);
-
-  useEffect(() => {
-    if (selectedMemoryProviderIds.size > 0 || memoryProviders.length === 0) return;
-    const selected = memoryProviders.filter((provider) =>
-      memoryStatus?.enabled
-        ? provider.selected
-        : provider.supported &&
-          usableAgents.some((agent) => agent.instanceId === provider.instanceId),
-    );
-    setSelectedMemoryProviderIds(new Set(selected.map((provider) => provider.instanceId)));
-  }, [usableAgents, memoryProviders, memoryStatus?.enabled, selectedMemoryProviderIds.size]);
-
-  useEffect(() => {
-    if (selectedComposioProviderIds.size > 0 || !composioStatus?.agentSupport.length) return;
-    const selected = composioStatus.agentSupport.filter((provider) =>
-      composioStatus.enabled
-        ? provider.selected
-        : provider.supported &&
-          usableAgents.some((agent) => agent.instanceId === provider.providerInstanceId),
-    );
-    setSelectedComposioProviderIds(
-      new Set(selected.map((provider) => provider.providerInstanceId)),
-    );
-  }, [
-    composioStatus?.agentSupport,
-    composioStatus?.enabled,
-    selectedComposioProviderIds.size,
-    usableAgents,
-  ]);
-
-  useEffect(() => {
-    if (userSelectedStepRef.current) return;
-    if (activeStep === "agents" && agentComplete) setActiveStep("memory");
-    if (activeStep === "memory" && memoryComplete) setActiveStep("composio");
-    if (activeStep === "composio" && composioComplete) setActiveStep("finish");
-  }, [activeStep, agentComplete, composioComplete, memoryComplete]);
-
-  const selectStep = (step: StepKey) => {
-    if (!canNavigateBackToOnboardingStep(activeStep, step)) return;
-    userSelectedStepRef.current = true;
-    setActiveStep(step);
-  };
+  }, [refreshProviders]);
 
   const installAgent = async (option: AgentOption) => {
     const provider = option.provider;
@@ -801,8 +559,8 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
         instanceId: provider.instanceId,
       });
       const commandProvider = findOnboardingProvider(next.providers, provider.instanceId);
-      const refreshed = await refreshAll();
-      const refreshedProvider = findOnboardingProvider(refreshed.providers, provider.instanceId);
+      const refreshed = await refreshProviders();
+      const refreshedProvider = findOnboardingProvider(refreshed, provider.instanceId);
       const outcome = resolveOnboardingAgentInstallOutcome(
         commandProvider?.updateState?.status === "failed" ||
           commandProvider?.updateState?.status === "unchanged"
@@ -811,10 +569,7 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
       );
       if (outcome.kind === "ready") {
         toastManager.add(
-          stackedThreadToast({
-            type: "success",
-            title: `${option.definition.label} ready`,
-          }),
+          stackedThreadToast({ type: "success", title: `${option.definition.label} ready` }),
         );
       } else if (outcome.kind === "failed" || outcome.kind === "missing") {
         toastManager.add(
@@ -854,9 +609,9 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
         provider: provider.driver,
         instanceId: provider.instanceId,
       });
-      const refreshed = await refreshAll();
+      const refreshed = await refreshProviders();
       const refreshedProvider =
-        findOnboardingProvider(refreshed.providers, provider.instanceId) ??
+        findOnboardingProvider(refreshed, provider.instanceId) ??
         findOnboardingProvider(next.providers, provider.instanceId);
       const outcome = resolveOnboardingAgentReadiness(refreshedProvider);
       toastManager.add(
@@ -871,129 +626,180 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
         ),
       );
     } catch (error) {
-      showOnboardingError(`Could not login ${option.definition.label}`, error);
+      showOnboardingError(`Could not sign in to ${option.definition.label}`, error);
     } finally {
       setBusy(null);
       setBusyProviderInstanceId(null);
     }
   };
 
-  const saveMemory = async () => {
-    const trimmedApiKey = memoryApiKey.trim();
-    if (!trimmedApiKey || selectedMemoryProviderIds.size === 0) return;
-    setBusy("save-memory");
-    try {
-      const next = await serverApi.configureMemory({
-        apiKey: trimmedApiKey,
-        providerInstanceIds: [...selectedMemoryProviderIds],
-      });
-      setMemoryStatus(next);
-      setMemoryApiKey("");
-      setActiveStep("composio");
-      toastManager.add(stackedThreadToast({ type: "success", title: "Memory configured" }));
-    } catch (error) {
-      showOnboardingError("Memory setup failed", error);
-    } finally {
-      setBusy(null);
-    }
-  };
+  return (
+    <OnboardingFrame activeStep="setup" onProfessionEdit={onProfessionEdit}>
+      {loading ? (
+        <div
+          role="status"
+          className="flex min-h-48 items-center justify-center text-sm text-muted-foreground"
+        >
+          <LoaderCircleIcon className="mr-2 size-4 animate-spin" />
+          Checking providers
+        </div>
+      ) : (
+        <ProviderSetupStep
+          options={agentOptions}
+          usableAgents={usableAgents}
+          busy={busy}
+          busyProviderInstanceId={busyProviderInstanceId}
+          onInstall={(option) => void installAgent(option)}
+          onLogin={(option) => void loginAgent(option)}
+          onRefresh={() =>
+            void refreshProviders().catch((error) =>
+              showOnboardingError("Provider refresh failed", error),
+            )
+          }
+          onComplete={onComplete}
+        />
+      )}
+    </OnboardingFrame>
+  );
+}
 
-  const saveComposio = async () => {
-    const trimmedApiKey = composioApiKey.trim();
-    if (
-      selectedComposioProviderIds.size === 0 ||
-      (!trimmedApiKey && !composioStatus?.auth.hasApiKey)
-    ) {
-      return;
-    }
-    setBusy("setup-composio");
-    try {
-      await serverApi.configureComposio({
-        ...(trimmedApiKey ? { apiKey: trimmedApiKey } : {}),
-        providerInstanceIds: [...selectedComposioProviderIds],
-      });
-      const next = await serverApi.testComposioConnection(
-        trimmedApiKey ? { apiKey: trimmedApiKey } : {},
-      );
-      setComposioStatus(next);
-      setComposioApiKey("");
-      if (next.auth.status !== "configured") {
-        throw new Error(next.auth.lastError ?? "Composio rejected the API key.");
-      }
-      setActiveStep("finish");
-      toastManager.add(stackedThreadToast({ type: "success", title: "Composio ready" }));
-    } catch (error) {
-      showOnboardingError("Composio setup failed", error);
-      void refreshAll().catch(() => undefined);
-    } finally {
-      setBusy(null);
-    }
-  };
+function useProfessionSelection() {
+  const [role, setRole] = useLocalStorage<ProfessionalRole | null, ProfessionalRole | null>(
+    PROFESSIONAL_ROLE_STORAGE_KEY,
+    null,
+    ProfessionalRoleSchema.pipe(Schema.NullOr),
+  );
+  const [otherRole, setOtherRole] = useLocalStorage(
+    PROFESSIONAL_ROLE_OTHER_STORAGE_KEY,
+    "",
+    ProfessionalRoleOtherSchema,
+  );
 
-  if (loading) {
+  return { role, setRole, otherRole, setOtherRole };
+}
+
+function CloudOnboardingFlow({ onComplete }: { readonly onComplete: () => void }) {
+  const clerk = useClerk();
+  const { isLoaded, isSignedIn } = useAuth({ treatPendingAsSignedOut: false });
+  const { role, setRole, otherRole, setOtherRole } = useProfessionSelection();
+  const [activeStep, setActiveStep] = useState<OnboardingStep>("sign-in");
+  const [signInStarted, setSignInStarted] = useState(false);
+
+  useEffect(() => {
+    if (activeStep === "sign-in" && signInStarted && isSignedIn) {
+      setActiveStep("profession");
+    }
+  }, [activeStep, isSignedIn, signInStarted]);
+
+  if (activeStep === "sign-in") {
     return (
-      <div className="flex h-dvh items-center justify-center bg-background text-sm text-muted-foreground">
-        <LoaderCircleIcon className="mr-2 size-4 animate-spin" />
-        Checking setup
-      </div>
+      <OnboardingFrame activeStep="sign-in">
+        <SignInStep
+          loading={!isLoaded}
+          signedIn={Boolean(isSignedIn)}
+          onSignIn={() => {
+            setSignInStarted(true);
+            clerk.openSignIn(resolveClerkSignInProps(window.location.href, isElectron));
+          }}
+          onContinue={() => setActiveStep("profession")}
+        />
+      </OnboardingFrame>
+    );
+  }
+
+  if (activeStep === "profession") {
+    return (
+      <OnboardingFrame activeStep="profession">
+        <ProfessionStep
+          role={role}
+          otherRole={otherRole}
+          onRoleChange={setRole}
+          onOtherRoleChange={setOtherRole}
+          onContinue={() => {
+            if (!isProfessionalRoleComplete(role, otherRole)) return;
+            if (role === "other") setOtherRole(otherRole.trim());
+            setActiveStep("setup");
+          }}
+        />
+      </OnboardingFrame>
     );
   }
 
   return (
-    <div className="h-dvh overflow-auto bg-background text-foreground">
-      <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-        <header className="space-y-4">
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              Device setup
-            </p>
-            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Set up Kairo</h1>
-          </div>
-          <StepRail activeStep={activeStep} completed={completed} onStepSelect={selectStep} />
-        </header>
-
-        <main className="rounded-xl border bg-background/75 p-4 shadow-sm sm:p-5">
-          {activeStep === "agents" ? (
-            <AgentStep
-              options={agentOptions}
-              usableAgents={usableAgents}
-              busy={busy}
-              busyProviderInstanceId={busyProviderInstanceId}
-              onInstall={(option) => void installAgent(option)}
-              onLogin={(option) => void loginAgent(option)}
-              onRefresh={() =>
-                void refreshAll().catch((error) => showOnboardingError("Refresh failed", error))
-              }
-              onContinue={() => setActiveStep("memory")}
-            />
-          ) : activeStep === "memory" ? (
-            <MemoryStep
-              status={memoryStatus}
-              providers={memoryProviders}
-              selectedProviderIds={selectedMemoryProviderIds}
-              apiKey={memoryApiKey}
-              busy={busy}
-              onApiKeyChange={setMemoryApiKey}
-              onProviderSelectionChange={setSelectedMemoryProviderIds}
-              onSave={() => void saveMemory()}
-              onContinue={() => setActiveStep("composio")}
-            />
-          ) : activeStep === "composio" ? (
-            <ComposioStep
-              status={composioStatus}
-              apiKey={composioApiKey}
-              selectedProviderIds={selectedComposioProviderIds}
-              busy={busy}
-              onApiKeyChange={setComposioApiKey}
-              onProviderSelectionChange={setSelectedComposioProviderIds}
-              onSave={() => void saveComposio()}
-              onContinue={() => setActiveStep("finish")}
-            />
-          ) : (
-            <FinishStep onComplete={onComplete} />
-          )}
-        </main>
-      </div>
-    </div>
+    <ProviderSetupGate
+      onProfessionEdit={() => setActiveStep("profession")}
+      onComplete={onComplete}
+    />
   );
+}
+
+function CloudOnboardingGate({ onComplete }: { readonly onComplete: () => void }) {
+  return (
+    <>
+      <ClerkLoading>
+        <OnboardingFrame activeStep="sign-in">
+          <SignInStep
+            loading
+            signedIn={false}
+            onSignIn={() => undefined}
+            onContinue={() => undefined}
+          />
+        </OnboardingFrame>
+      </ClerkLoading>
+      <ClerkFailed>
+        <OnboardingFrame activeStep="sign-in">
+          <ClerkLoadErrorStep onRetry={() => window.location.reload()} />
+        </OnboardingFrame>
+      </ClerkFailed>
+      <ClerkLoaded>
+        <CloudOnboardingFlow onComplete={onComplete} />
+      </ClerkLoaded>
+    </>
+  );
+}
+
+function LocalOnboardingGate({ onComplete }: { readonly onComplete: () => void }) {
+  const { role, setRole, otherRole, setOtherRole } = useProfessionSelection();
+  const [activeStep, setActiveStep] = useState<OnboardingStep>("sign-in");
+
+  if (activeStep === "sign-in") {
+    return (
+      <OnboardingFrame activeStep="sign-in">
+        <LocalSignInStep onContinue={() => setActiveStep(advanceOnboardingStep("sign-in"))} />
+      </OnboardingFrame>
+    );
+  }
+
+  if (activeStep === "profession") {
+    return (
+      <OnboardingFrame activeStep="profession">
+        <ProfessionStep
+          role={role}
+          otherRole={otherRole}
+          onRoleChange={setRole}
+          onOtherRoleChange={setOtherRole}
+          onContinue={() => {
+            if (!isProfessionalRoleComplete(role, otherRole)) return;
+            if (role === "other") setOtherRole(otherRole.trim());
+            setActiveStep(advanceOnboardingStep("profession"));
+          }}
+        />
+      </OnboardingFrame>
+    );
+  }
+
+  return (
+    <ProviderSetupGate
+      onProfessionEdit={() => setActiveStep("profession")}
+      onComplete={onComplete}
+    />
+  );
+}
+
+export function OnboardingGate({ onComplete }: { readonly onComplete: () => void }) {
+  if (!hasCloudPublicConfig()) {
+    return <LocalOnboardingGate onComplete={onComplete} />;
+  }
+
+  return <CloudOnboardingGate onComplete={onComplete} />;
 }
