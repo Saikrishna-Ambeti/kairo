@@ -22,6 +22,7 @@ import {
 import type { EnvironmentConnectionPresentation } from "@kairo/client-runtime/connection";
 import { resolveVisibleInteractionModes } from "@kairo/client-runtime/interactionModes";
 import { serializeComposerFileLink } from "@kairo/shared/composerTrigger";
+import { activateDeepResearchPrompt } from "@kairo/shared/deepResearch";
 import { createModelSelection, normalizeModelSlug } from "@kairo/shared/model";
 import {
   memo,
@@ -99,6 +100,7 @@ import { ProviderModelPicker } from "./ProviderModelPicker";
 import { type ComposerCommandItem, ComposerCommandMenu } from "./ComposerCommandMenu";
 import { ComposerPendingApprovalActions } from "./ComposerPendingApprovalActions";
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
+import { ComposerFeaturesMenu } from "./ComposerFeaturesMenu";
 import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
 import { ComposerPendingApprovalPanel } from "./ComposerPendingApprovalPanel";
 import { ComposerPendingUserInputPanel } from "./ComposerPendingUserInputPanel";
@@ -1114,6 +1116,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           label: "/model",
           description: "Switch response model for this thread",
         },
+        {
+          id: "slash:research",
+          type: "slash-command",
+          command: "research",
+          label: "/research",
+          description: "Research this request in the background",
+        },
         ...(interactionModes.includes("plan")
           ? ([
               {
@@ -1771,6 +1780,18 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     };
   }, [readComposerSnapshot]);
 
+  const activateDeepResearch = useCallback(() => {
+    const snapshot = readComposerSnapshot();
+    const nextText = activateDeepResearchPrompt(snapshot.value);
+    if (nextText === snapshot.value) {
+      window.requestAnimationFrame(() => composerEditorRef.current?.focusAtEnd());
+      return;
+    }
+    applyPromptReplacement(0, snapshot.value.length, nextText, {
+      expectedText: snapshot.value,
+    });
+  }, [applyPromptReplacement, readComposerSnapshot]);
+
   const onSelectComposerItem = useCallback(
     (item: ComposerCommandItem) => {
       if (composerSelectLockRef.current) return;
@@ -1807,6 +1828,24 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           if (applied) {
             setComposerHighlightedItemId(null);
             setIsComposerModelPickerOpen(true);
+          }
+          return;
+        }
+        if (item.command === "research") {
+          const replacement = "/research ";
+          const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
+            snapshot.value,
+            trigger.rangeEnd,
+            replacement,
+          );
+          const applied = applyPromptReplacement(
+            trigger.rangeStart,
+            replacementRangeEnd,
+            replacement,
+            { expectedText: snapshot.value.slice(trigger.rangeStart, replacementRangeEnd) },
+          );
+          if (applied) {
+            setComposerHighlightedItemId(null);
           }
           return;
         }
@@ -1977,6 +2016,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       shouldBlurMobileComposerOnSubmit,
     ],
   );
+  const startDeepResearch = useCallback(() => {
+    const shouldStart = composerSendState.hasSendableContent;
+    activateDeepResearch();
+    if (shouldStart) {
+      window.requestAnimationFrame(() => submitComposer(undefined, "background"));
+    }
+  }, [activateDeepResearch, composerSendState.hasSendableContent, submitComposer]);
   const expandMobileComposer = useCallback(() => {
     if (composerBlurFrameRef.current !== null) {
       window.cancelAnimationFrame(composerBlurFrameRef.current);
@@ -3390,10 +3436,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       runtimeMode={runtimeMode}
                       traitsMenuContent={providerTraitsMenuContent}
                       onInteractionModeChange={handleInteractionModeChange}
+                      onDeepResearchSelect={startDeepResearch}
                       onRuntimeModeChange={handleRuntimeModeChange}
                     />
                   ) : (
                     <>
+                      <ComposerFeaturesMenu onDeepResearchSelect={startDeepResearch} />
                       {providerTraitsPicker ? (
                         <>
                           <Separator
