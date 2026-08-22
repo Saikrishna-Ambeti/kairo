@@ -1,50 +1,32 @@
+import { ClerkFailed, ClerkLoaded, ClerkLoading, useAuth, useClerk } from "@clerk/react";
+import { type ProviderInstanceId, type ServerProvider } from "@kairo/contracts";
+import * as Schema from "effect/Schema";
 import {
   AppWindowIcon,
   ArrowRightIcon,
-  BrainCircuitIcon,
   CheckCircle2Icon,
-  ExternalLinkIcon,
   KeyRoundIcon,
   LoaderCircleIcon,
-  PlugZapIcon,
+  LogInIcon,
   RefreshCwIcon,
-  SearchIcon,
   TerminalIcon,
+  UserRoundIcon,
+  type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ElementType } from "react";
-import {
-  ProviderDriverKind,
-  type ProviderDriverKind as ProviderDriverKindValue,
-  type ProviderInstanceId,
-  type ServerProvider,
-  type SupermemoryProviderStatus,
-  type SupermemoryStatus,
-  type ComposioOperationProgressEvent,
-  type ComposioStatus,
-  type ComposioToolkitCatalog,
-  type ComposioToolkitCatalogItem,
-} from "@kairo/contracts";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { ensureLocalApi } from "../../localApi";
+import { hasCloudPublicConfig } from "../../cloud/publicConfig";
+import { isElectron } from "../../env";
+import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { cn } from "../../lib/utils";
 import { useServerProviders } from "../../rpc/serverState";
-import { usePrimaryEnvironmentId } from "../../state/environments";
 import { usePrimaryServerApi } from "../../state/primaryServerApi";
+import { resolveClerkSignInProps } from "../clerk/authRedirect";
+import { PROVIDER_CLIENT_DEFINITIONS } from "../settings/providerDriverMeta";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Checkbox } from "../ui/checkbox";
-import { Input } from "../ui/input";
 import { stackedThreadToast, toastManager } from "../ui/toast";
-import { ComposioSetupDialog } from "../settings/ComposioSetupDialog";
-import {
-  COMPOSIO_CLI_DOCS_URL,
-  getComposioFailureDescription,
-  getAvailableComposioCatalogItems,
-  getConnectedComposioToolkits,
-  getComposioPrimaryButtonState,
-  type SetupMode,
-} from "../settings/IntegrationsSettings.logic";
-import { PROVIDER_CLIENT_DEFINITIONS } from "../settings/providerDriverMeta";
+import { ProfessionalRolePicker } from "./ProfessionalRolePicker";
 import {
   ONBOARDING_CODING_AGENT_DRIVERS,
   findOnboardingProvider,
@@ -55,41 +37,36 @@ import {
   resolveOnboardingAgentInstallOutcome,
   resolveOnboardingAgentReadiness,
 } from "./OnboardingGate.logic";
+import {
+  isProfessionalRoleComplete,
+  PROFESSIONAL_ROLE_OTHER_STORAGE_KEY,
+  PROFESSIONAL_ROLE_STORAGE_KEY,
+  ProfessionalRoleOtherSchema,
+  ProfessionalRoleSchema,
+  type ProfessionalRole,
+} from "./professionalRole";
 
-const MEMORY_AGENT_DRIVERS = new Set<ProviderDriverKindValue>([
-  ...ONBOARDING_CODING_AGENT_DRIVERS,
-  ProviderDriverKind.make("cursor"),
-  ProviderDriverKind.make("grok"),
-]);
-
-type StepKey = "agents" | "memory" | "composio" | "finish";
-type BusyAction =
-  | "refresh"
-  | "install-agent"
-  | "login-agent"
-  | "save-memory"
-  | "setup-composio"
-  | "connect-app"
-  | null;
+export type OnboardingStep = "sign-in" | "profession" | "setup";
+type BusyAction = "refresh" | "install-agent" | "login-agent" | null;
 
 interface AgentOption {
   readonly definition: (typeof PROVIDER_CLIENT_DEFINITIONS)[number];
   readonly provider: ServerProvider | undefined;
 }
 
-const ONBOARDING_STEPS: ReadonlyArray<{ key: StepKey; label: string; icon: ElementType }> = [
-  { key: "agents", label: "Agents", icon: TerminalIcon },
-  { key: "memory", label: "Memory", icon: BrainCircuitIcon },
-  { key: "composio", label: "Composio", icon: PlugZapIcon },
-  { key: "finish", label: "Finish", icon: CheckCircle2Icon },
+const ONBOARDING_STEPS: ReadonlyArray<{
+  readonly key: OnboardingStep;
+  readonly label: string;
+  readonly icon: LucideIcon;
+}> = [
+  { key: "sign-in", label: "Sign in", icon: LogInIcon },
+  { key: "profession", label: "Profession", icon: UserRoundIcon },
+  { key: "setup", label: "Setup", icon: TerminalIcon },
 ];
 
-function onboardingStepIndex(step: StepKey): number {
-  return ONBOARDING_STEPS.findIndex((candidate) => candidate.key === step);
-}
-
-export function canNavigateBackToOnboardingStep(activeStep: StepKey, targetStep: StepKey): boolean {
-  return onboardingStepIndex(targetStep) < onboardingStepIndex(activeStep);
+export function advanceOnboardingStep(step: OnboardingStep): OnboardingStep {
+  if (step === "sign-in") return "profession";
+  return "setup";
 }
 
 function showOnboardingError(title: string, error: unknown) {
@@ -107,8 +84,7 @@ function statusText(value: string): string {
 }
 
 function agentBadgeVariant(provider: ServerProvider | undefined) {
-  if (!provider) return "outline";
-  if (!provider.enabled) return "outline";
+  if (!provider || !provider.enabled) return "outline";
   if (isUsableOnboardingAgent(provider)) return "success";
   if (provider.status === "error") return "error";
   if (provider.installed) return "warning";
@@ -120,82 +96,56 @@ function agentStatusLabel(provider: ServerProvider | undefined): string {
   if (!provider.enabled) return "Disabled";
   if (!provider.installed) return "Not installed";
   if (provider.auth.status === "authenticated") return "Ready";
-  if (provider.auth.status === "unauthenticated") return "Needs login";
+  if (provider.auth.status === "unauthenticated" || provider.auth.status === "unknown") {
+    return "Needs login";
+  }
   return statusText(provider.status);
 }
 
-function memoryProviderBadgeVariant(status: SupermemoryProviderStatus["status"]) {
-  switch (status) {
-    case "ready":
-      return "success";
-    case "needs_action":
-      return "warning";
-    case "error":
-    case "unsupported":
-      return "error";
-    default:
-      return "outline";
-  }
-}
-
-function connectedAppLabel(item: ComposioToolkitCatalogItem): string {
-  return item.label.trim() || item.toolkit;
-}
-
-function StepRail({
+function OnboardingProgress({
   activeStep,
-  completed,
-  onStepSelect,
+  onProfessionEdit,
 }: {
-  activeStep: StepKey;
-  completed: ReadonlySet<StepKey>;
-  onStepSelect: (step: StepKey) => void;
+  readonly activeStep: OnboardingStep;
+  readonly onProfessionEdit?: (() => void) | undefined;
 }) {
+  const activeIndex = ONBOARDING_STEPS.findIndex((step) => step.key === activeStep);
+
   return (
-    <nav className="grid gap-2 sm:grid-cols-4" aria-label="Onboarding steps">
-      {ONBOARDING_STEPS.map((step) => {
+    <nav aria-label="Onboarding progress" className="grid gap-2 sm:grid-cols-3">
+      {ONBOARDING_STEPS.map((step, index) => {
         const Icon = step.icon;
-        const done = completed.has(step.key);
-        const active = activeStep === step.key;
-        const canGoBack = canNavigateBackToOnboardingStep(activeStep, step.key);
+        const active = step.key === activeStep;
+        const complete = index < activeIndex;
+        const canEditProfession = step.key === "profession" && activeStep === "setup";
         const className = cn(
           "flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm outline-none transition-colors",
-          active && "border-primary/50 bg-primary/8 text-foreground",
-          done && !active && "border-success/25 bg-success/8 text-success-foreground",
-          !active && !done && "border-border bg-background/50 text-muted-foreground",
-          canGoBack &&
-            "cursor-pointer hover:border-primary/35 hover:bg-muted/45 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+          active && "border-primary/45 bg-primary/8 text-foreground",
+          complete && !active && "border-success/25 bg-success/8 text-success-foreground",
+          !active && !complete && "border-border bg-background/55 text-muted-foreground",
+          canEditProfession &&
+            "cursor-pointer hover:border-primary/35 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring",
         );
         const content = (
           <>
             <span
               className={cn(
-                "flex size-6 shrink-0 items-center justify-center rounded-md border",
-                done ? "border-success/30 bg-success/10" : "border-current/20",
+                "flex size-7 shrink-0 items-center justify-center rounded-lg border",
+                complete ? "border-success/30 bg-success/10" : "border-current/20",
               )}
             >
-              {done ? <CheckCircle2Icon className="size-3.5" /> : <Icon className="size-3.5" />}
+              {complete ? <CheckCircle2Icon className="size-4" /> : <Icon className="size-4" />}
             </span>
             <span className="truncate font-medium">{step.label}</span>
           </>
         );
 
-        if (canGoBack) {
-          return (
-            <button
-              aria-label={`Go back to ${step.label}`}
-              className={className}
-              key={step.key}
-              onClick={() => onStepSelect(step.key)}
-              type="button"
-            >
-              {content}
-            </button>
-          );
-        }
-
-        return (
-          <div aria-current={active ? "step" : undefined} className={className} key={step.key}>
+        return canEditProfession ? (
+          <button key={step.key} type="button" className={className} onClick={onProfessionEdit}>
+            {content}
+          </button>
+        ) : (
+          <div key={step.key} aria-current={active ? "step" : undefined} className={className}>
             {content}
           </div>
         );
@@ -204,7 +154,167 @@ function StepRail({
   );
 }
 
-function ProviderLogo({ option }: { option: AgentOption }) {
+function OnboardingFrame({
+  activeStep,
+  onProfessionEdit,
+  children,
+}: {
+  readonly activeStep: OnboardingStep;
+  readonly onProfessionEdit?: (() => void) | undefined;
+  readonly children: ReactNode;
+}) {
+  return (
+    <div className="h-dvh overflow-auto bg-background text-foreground">
+      <div className="mx-auto flex min-h-dvh w-full max-w-4xl flex-col justify-center gap-4 px-4 py-5 sm:px-6 sm:py-6">
+        <header className="space-y-4 rounded-xl border border-border/80 bg-card p-5 sm:p-6">
+          <div className="space-y-2">
+            <h1 className="text-3xl font-semibold tracking-[-0.03em]">Set up Kairo</h1>
+            <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+              Sign in, tell us how you work, then connect a coding agent.
+            </p>
+          </div>
+          <OnboardingProgress activeStep={activeStep} onProfessionEdit={onProfessionEdit} />
+        </header>
+        <main className="min-h-64 rounded-xl border border-border/80 bg-card p-5 sm:p-8">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function SignInStep({
+  loading,
+  signedIn,
+  onSignIn,
+  onContinue,
+}: {
+  readonly loading: boolean;
+  readonly signedIn: boolean;
+  readonly onSignIn: () => void;
+  readonly onContinue: () => void;
+}) {
+  if (!loading && !signedIn) {
+    return (
+      <section className="mx-auto flex min-h-48 max-w-lg flex-col items-center justify-center text-center">
+        <span className="mb-4 flex size-11 items-center justify-center rounded-xl border border-primary/25 bg-primary/10 text-primary">
+          <LogInIcon className="size-5" />
+        </span>
+        <h2 className="text-2xl font-semibold tracking-[-0.025em]">Sign in to continue</h2>
+        <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+          Clerk securely connects this device to your Kairo account.
+        </p>
+        <Button className="mt-5 min-w-48" onClick={onSignIn}>
+          Continue with Clerk
+          <ArrowRightIcon className="size-4" />
+        </Button>
+      </section>
+    );
+  }
+
+  return (
+    <section className="mx-auto flex min-h-48 max-w-lg flex-col items-center justify-center text-center">
+      <span className="mb-4 flex size-11 items-center justify-center rounded-xl border border-border bg-muted text-foreground">
+        {loading ? (
+          <LoaderCircleIcon className="size-5 animate-spin" />
+        ) : (
+          <CheckCircle2Icon className="size-5" />
+        )}
+      </span>
+      <h2 className="text-2xl font-semibold tracking-[-0.025em]">
+        {loading ? "Checking your account" : "Account connected"}
+      </h2>
+      <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+        {loading
+          ? "Loading secure sign-in."
+          : "Your Kairo account is ready. Next, tell us how you work."}
+      </p>
+      <Button className="mt-5 min-w-40" disabled={loading} onClick={onContinue}>
+        Continue
+        <ArrowRightIcon className="size-4" />
+      </Button>
+    </section>
+  );
+}
+
+function LocalSignInStep({ onContinue }: { readonly onContinue: () => void }) {
+  return (
+    <section className="mx-auto flex min-h-48 max-w-lg flex-col items-center justify-center text-center">
+      <span className="mb-4 flex size-11 items-center justify-center rounded-xl border border-border bg-muted text-foreground">
+        <LogInIcon className="size-5" />
+      </span>
+      <h2 className="text-2xl font-semibold tracking-[-0.025em]">Continue without an account</h2>
+      <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+        Clerk is not configured in this self-hosted build. You can still finish local setup.
+      </p>
+      <Button className="mt-5 min-w-40" onClick={onContinue}>
+        Continue
+        <ArrowRightIcon className="size-4" />
+      </Button>
+    </section>
+  );
+}
+
+function ClerkLoadErrorStep({ onRetry }: { readonly onRetry: () => void }) {
+  return (
+    <section className="mx-auto flex min-h-48 max-w-lg flex-col items-center justify-center text-center">
+      <span className="mb-4 flex size-11 items-center justify-center rounded-xl border border-destructive/25 bg-destructive/10 text-destructive">
+        <RefreshCwIcon className="size-5" />
+      </span>
+      <h2 className="text-2xl font-semibold tracking-[-0.025em]">Sign-in could not load</h2>
+      <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+        Check your connection, then retry. Your onboarding will stay here.
+      </p>
+      <Button className="mt-5 min-w-40" onClick={onRetry}>
+        Retry sign-in
+        <RefreshCwIcon className="size-4" />
+      </Button>
+    </section>
+  );
+}
+
+function ProfessionStep({
+  role,
+  otherRole,
+  onRoleChange,
+  onOtherRoleChange,
+  onContinue,
+}: {
+  readonly role: ProfessionalRole | null;
+  readonly otherRole: string;
+  readonly onRoleChange: (role: ProfessionalRole) => void;
+  readonly onOtherRoleChange: (value: string) => void;
+  readonly onContinue: () => void;
+}) {
+  const complete = isProfessionalRoleComplete(role, otherRole);
+
+  return (
+    <section className="mx-auto max-w-4xl">
+      <div className="mb-6 text-center">
+        <h2 className="text-2xl font-semibold tracking-[-0.025em]">
+          What best describes your work?
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          Choose one so Kairo can tailor setup guidance to the way you build.
+        </p>
+      </div>
+      <ProfessionalRolePicker
+        value={role}
+        otherValue={otherRole}
+        onChange={onRoleChange}
+        onOtherValueChange={onOtherRoleChange}
+      />
+      <div className="mt-6 flex justify-end">
+        <Button disabled={!complete} onClick={onContinue}>
+          Continue
+          <ArrowRightIcon className="size-4" />
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+function ProviderLogo({ option }: { readonly option: AgentOption }) {
   const Icon = option.definition.icon;
   return (
     <span className="flex size-10 items-center justify-center rounded-lg border bg-background">
@@ -213,7 +323,7 @@ function ProviderLogo({ option }: { option: AgentOption }) {
   );
 }
 
-function AgentStep({
+function ProviderSetupStep({
   options,
   usableAgents,
   busy,
@@ -221,25 +331,27 @@ function AgentStep({
   onInstall,
   onLogin,
   onRefresh,
-  onContinue,
+  onComplete,
 }: {
-  options: ReadonlyArray<AgentOption>;
-  usableAgents: ReadonlyArray<ServerProvider>;
-  busy: BusyAction;
-  busyProviderInstanceId: ProviderInstanceId | null;
-  onInstall: (option: AgentOption) => void;
-  onLogin: (option: AgentOption) => void;
-  onRefresh: () => void;
-  onContinue: () => void;
+  readonly options: ReadonlyArray<AgentOption>;
+  readonly usableAgents: ReadonlyArray<ServerProvider>;
+  readonly busy: BusyAction;
+  readonly busyProviderInstanceId: ProviderInstanceId | null;
+  readonly onInstall: (option: AgentOption) => void;
+  readonly onLogin: (option: AgentOption) => void;
+  readonly onRefresh: () => void;
+  readonly onComplete: () => void;
 }) {
   const hasUsableAgent = usableAgents.length > 0;
+
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <section className="space-y-4">
         <div className="space-y-1">
-          <h2 className="text-2xl font-semibold tracking-tight">Coding agent</h2>
-          <p className="text-sm text-muted-foreground">
-            Kairo checks for supported local CLIs before creating sessions.
+          <h2 className="text-2xl font-semibold tracking-[-0.025em]">Connect a coding agent</h2>
+          <p className="text-sm leading-6 text-muted-foreground">
+            Install or sign in to one supported provider. Memory and app integrations stay in
+            Settings.
           </p>
         </div>
         <div className="grid gap-3">
@@ -254,9 +366,10 @@ function AgentStep({
               targetBusy === "install-agent",
               option.definition.label,
             );
+
             return (
               <div
-                className="grid gap-3 rounded-lg border bg-card p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center"
+                className="grid gap-3 rounded-xl border border-border/80 bg-background/65 p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center"
                 key={option.definition.value}
               >
                 <ProviderLogo option={option} />
@@ -305,7 +418,7 @@ function AgentStep({
                       ) : (
                         <KeyRoundIcon className="size-3.5" />
                       )}
-                      Login
+                      Sign in
                     </Button>
                   ) : action === "refresh" ? (
                     <Button
@@ -344,10 +457,10 @@ function AgentStep({
           })}
         </div>
       </section>
-      <aside className="space-y-3 rounded-lg border bg-muted/20 p-4">
+      <aside className="space-y-4 rounded-xl border border-border/80 bg-muted/25 p-4">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <AppWindowIcon className="size-4 text-muted-foreground" />
-          Detection
+          Provider status
         </div>
         {hasUsableAgent ? (
           <div className="space-y-2 text-sm">
@@ -362,10 +475,10 @@ function AgentStep({
           </div>
         ) : (
           <p className="text-sm leading-6 text-muted-foreground">
-            No supported coding agent was detected on this device.
+            Connect one provider to finish setup.
           </p>
         )}
-        <div className="flex gap-2">
+        <div className="grid gap-2">
           <Button variant="outline" size="sm" disabled={busy !== null} onClick={onRefresh}>
             {busy === "refresh" ? (
               <LoaderCircleIcon className="size-3.5 animate-spin" />
@@ -374,8 +487,8 @@ function AgentStep({
             )}
             Refresh
           </Button>
-          <Button size="sm" disabled={!hasUsableAgent || busy !== null} onClick={onContinue}>
-            Continue
+          <Button size="sm" disabled={!hasUsableAgent || busy !== null} onClick={onComplete}>
+            Finish setup
             <ArrowRightIcon className="size-3.5" />
           </Button>
         </div>
@@ -384,412 +497,25 @@ function AgentStep({
   );
 }
 
-function MemoryProviderSelector({
-  providers,
-  selected,
-  onChange,
+function ProviderSetupGate({
+  onProfessionEdit,
+  onComplete,
 }: {
-  providers: ReadonlyArray<SupermemoryProviderStatus>;
-  selected: ReadonlySet<ProviderInstanceId>;
-  onChange: (next: ReadonlySet<ProviderInstanceId>) => void;
+  readonly onProfessionEdit?: () => void;
+  readonly onComplete: () => void;
 }) {
-  return (
-    <div className="divide-y rounded-lg border bg-card">
-      {providers.map((provider) => {
-        const disabled = !provider.supported;
-        return (
-          <label
-            className={cn(
-              "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3",
-              disabled ? "opacity-60" : "cursor-pointer hover:bg-muted/35",
-            )}
-            key={provider.instanceId}
-          >
-            <Checkbox
-              checked={selected.has(provider.instanceId)}
-              disabled={disabled}
-              onCheckedChange={(checked) => {
-                const next = new Set(selected);
-                if (checked) next.add(provider.instanceId);
-                else next.delete(provider.instanceId);
-                onChange(next);
-              }}
-            />
-            <span className="min-w-0">
-              <span className="block truncate text-sm font-medium">{provider.displayName}</span>
-              <span className="block truncate text-xs text-muted-foreground">
-                {provider.message ?? provider.driver}
-              </span>
-            </span>
-            <Badge size="sm" variant={memoryProviderBadgeVariant(provider.status)}>
-              {statusText(provider.status)}
-            </Badge>
-          </label>
-        );
-      })}
-    </div>
-  );
-}
-
-function MemoryStep({
-  status,
-  providers,
-  selectedProviderIds,
-  busy,
-  onProviderSelectionChange,
-  onSave,
-  onContinue,
-}: {
-  status: SupermemoryStatus | null;
-  providers: ReadonlyArray<SupermemoryProviderStatus>;
-  selectedProviderIds: ReadonlySet<ProviderInstanceId>;
-  busy: BusyAction;
-  onProviderSelectionChange: (next: ReadonlySet<ProviderInstanceId>) => void;
-  onSave: () => void;
-  onContinue: () => void;
-}) {
-  const configured = Boolean(status?.enabled && status.service.available);
-  const canSave = selectedProviderIds.size > 0 && Boolean(status?.service.available);
-  return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
-      <section className="space-y-4">
-        <div className="space-y-1">
-          <h2 className="text-2xl font-semibold tracking-tight">Memory</h2>
-          <p className="text-sm text-muted-foreground">
-            Kairo hosts Supermemory and keeps long-running context available across agent sessions.
-          </p>
-        </div>
-        <div className="grid gap-4 rounded-lg border bg-card p-4">
-          <div className="grid gap-2">
-            <div className="text-xs font-medium text-muted-foreground">Agent access</div>
-            <MemoryProviderSelector
-              providers={providers}
-              selected={selectedProviderIds}
-              onChange={onProviderSelectionChange}
-            />
-          </div>
-          <div className="flex flex-wrap justify-end gap-2">
-            {configured ? (
-              <Button variant="outline" disabled={busy !== null} onClick={onContinue}>
-                Continue
-                <ArrowRightIcon className="size-3.5" />
-              </Button>
-            ) : null}
-            <Button disabled={!canSave || busy !== null} onClick={onSave}>
-              {busy === "save-memory" ? (
-                <LoaderCircleIcon className="size-4 animate-spin" />
-              ) : (
-                <BrainCircuitIcon className="size-4" />
-              )}
-              Enable memory
-            </Button>
-          </div>
-        </div>
-      </section>
-      <aside className="space-y-4 rounded-lg border bg-muted/20 p-4 text-sm">
-        <div className="flex items-center gap-2 font-semibold">
-          <BrainCircuitIcon className="size-4 text-muted-foreground" />
-          Zero setup
-        </div>
-        <p className="leading-6 text-muted-foreground">
-          No Supermemory account, API key, CLI, or provider plugin is needed. The Kairo host needs a
-          valid Kairo Cloud grant; the cloud service keeps each user's memory isolated.
-        </p>
-      </aside>
-    </div>
-  );
-}
-
-function CatalogAppRow({
-  item,
-  connecting,
-  disabled,
-  onConnect,
-}: {
-  item: ComposioToolkitCatalogItem;
-  connecting: boolean;
-  disabled: boolean;
-  onConnect: (toolkit: string) => void;
-}) {
-  return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-t px-4 py-3 first:border-t-0">
-      <div className="min-w-0 space-y-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          {item.logoUrl ? (
-            <img alt="" className="size-5 rounded-sm object-contain" src={item.logoUrl} />
-          ) : null}
-          <span className="truncate text-sm font-semibold">{connectedAppLabel(item)}</span>
-          <Badge size="sm" variant="outline">
-            {item.toolkit}
-          </Badge>
-        </div>
-        <p className="line-clamp-2 text-xs text-muted-foreground">
-          {item.description ?? "Connect this app through Composio."}
-        </p>
-      </div>
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={disabled}
-        onClick={() => onConnect(item.toolkit)}
-      >
-        {connecting ? (
-          <LoaderCircleIcon className="size-3.5 animate-spin" />
-        ) : (
-          <PlugZapIcon className="size-3.5" />
-        )}
-        Connect
-      </Button>
-    </div>
-  );
-}
-
-function ComposioStep({
-  status,
-  catalog,
-  query,
-  busy,
-  connectingToolkit,
-  catalogLoading,
-  onQueryChange,
-  onRunSetup,
-  onLoadCatalog,
-  onConnectToolkit,
-  onContinue,
-}: {
-  status: ComposioStatus | null;
-  catalog: ComposioToolkitCatalog | null;
-  query: string;
-  busy: BusyAction;
-  connectingToolkit: string | null;
-  catalogLoading: boolean;
-  onQueryChange: (value: string) => void;
-  onRunSetup: (mode: SetupMode) => void;
-  onLoadCatalog: () => void;
-  onConnectToolkit: (toolkit: string) => void;
-  onContinue: () => void;
-}) {
-  const primaryAction = status?.primaryAction ?? "install_and_login";
-  const operationRunning = status?.operation?.status === "running";
-  const primaryButton = getComposioPrimaryButtonState({
-    primaryAction,
-    busy: busy === "setup-composio",
-    operationRunning,
-  });
-  const authenticated = status?.auth.status === "authenticated";
-  const nativeWindowsUnsupported = status?.cli.status === "unsupported";
-  const connectedToolkits = getConnectedComposioToolkits(status);
-  const availableApps = getAvailableComposioCatalogItems(catalog?.items ?? [], status, query).slice(
-    0,
-    12,
-  );
-
-  return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
-      <section className="space-y-4">
-        <div className="space-y-1">
-          <h2 className="text-2xl font-semibold tracking-tight">Composio</h2>
-          <p className="text-sm text-muted-foreground">
-            Composio lets agents connect to external apps from this device.
-          </p>
-        </div>
-        <div className="space-y-4 rounded-lg border bg-card p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0 space-y-1">
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <TerminalIcon className="size-4 text-muted-foreground" />
-                <span className="truncate text-sm font-semibold">Composio CLI</span>
-                <Badge
-                  size="sm"
-                  variant={
-                    authenticated ? "success" : primaryAction === "none" ? "outline" : "warning"
-                  }
-                >
-                  {authenticated ? "Authenticated" : statusText(status?.cli.status ?? "checking")}
-                </Badge>
-              </div>
-              <p className="truncate text-xs text-muted-foreground">
-                {status?.cli.executablePath ?? status?.cli.message ?? "Checking local CLI status."}
-              </p>
-            </div>
-            {nativeWindowsUnsupported ? (
-              <Button
-                variant="outline"
-                onClick={() => void ensureLocalApi().shell.openExternal(COMPOSIO_CLI_DOCS_URL)}
-              >
-                <ExternalLinkIcon className="size-4" />
-                WSL setup guide
-              </Button>
-            ) : primaryAction !== "none" ? (
-              <Button
-                disabled={primaryButton.disabled || busy !== null}
-                onClick={() => onRunSetup(primaryAction)}
-              >
-                {busy === "setup-composio" || operationRunning ? (
-                  <LoaderCircleIcon className="size-4 animate-spin" />
-                ) : (
-                  <PlugZapIcon className="size-4" />
-                )}
-                {operationRunning ? primaryButton.runningLabel : primaryButton.label}
-              </Button>
-            ) : (
-              <Button disabled={!authenticated || busy !== null} onClick={onContinue}>
-                Continue
-                <ArrowRightIcon className="size-3.5" />
-              </Button>
-            )}
-          </div>
-          {nativeWindowsUnsupported ? (
-            <p className="text-xs text-muted-foreground">
-              Native Windows installation is unavailable. Run Kairo from WSL and install Composio in
-              that environment.
-            </p>
-          ) : null}
-        </div>
-
-        {authenticated ? (
-          <div className="space-y-4 rounded-lg border bg-card p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="space-y-1">
-                <h3 className="text-sm font-semibold">Connected apps</h3>
-                <p className="text-xs text-muted-foreground">
-                  Apps can also be added later from Settings, then Integrations.
-                </p>
-              </div>
-              <Button variant="outline" size="sm" disabled={busy !== null} onClick={onLoadCatalog}>
-                {catalogLoading ? (
-                  <LoaderCircleIcon className="size-3.5 animate-spin" />
-                ) : (
-                  <PlugZapIcon className="size-3.5" />
-                )}
-                Connect new apps
-              </Button>
-            </div>
-            {connectedToolkits.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {connectedToolkits.map((toolkit) => (
-                  <Badge key={toolkit.toolkit} variant="success">
-                    {toolkit.label}
-                  </Badge>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No connected apps detected yet.</p>
-            )}
-            {catalog ? (
-              <div className="space-y-3">
-                <div className="relative">
-                  <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    nativeInput
-                    className="pl-9"
-                    placeholder="Search apps"
-                    value={query}
-                    onChange={(event) => onQueryChange(event.currentTarget.value)}
-                  />
-                </div>
-                <div className="max-h-80 overflow-auto rounded-lg border">
-                  {availableApps.length > 0 ? (
-                    availableApps.map((item) => (
-                      <CatalogAppRow
-                        key={item.toolkit}
-                        item={item}
-                        disabled={busy !== null}
-                        connecting={connectingToolkit === item.toolkit}
-                        onConnect={onConnectToolkit}
-                      />
-                    ))
-                  ) : (
-                    <div className="px-4 py-4 text-sm text-muted-foreground">No apps found.</div>
-                  )}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </section>
-      <aside className="space-y-3 rounded-lg border bg-muted/20 p-4">
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <PlugZapIcon className="size-4 text-muted-foreground" />
-          Agent access
-        </div>
-        {(status?.agentSupport ?? []).length > 0 ? (
-          <div className="space-y-2">
-            {status?.agentSupport.map((entry) => (
-              <div
-                className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 text-sm"
-                key={entry.providerInstanceId}
-              >
-                <span className="truncate">{entry.displayName}</span>
-                <Badge size="sm" variant={entry.selected ? "success" : "outline"}>
-                  {entry.selected ? "Enabled" : statusText(entry.skillStatus)}
-                </Badge>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm leading-6 text-muted-foreground">
-            Agent access will be installed for the detected providers during setup.
-          </p>
-        )}
-      </aside>
-    </div>
-  );
-}
-
-function FinishStep({ onComplete }: { onComplete: () => void }) {
-  return (
-    <div className="mx-auto grid max-w-2xl gap-5 text-center">
-      <div className="mx-auto flex size-14 items-center justify-center rounded-xl border bg-success/10 text-success-foreground">
-        <CheckCircle2Icon className="size-7" />
-      </div>
-      <div className="space-y-2">
-        <h2 className="text-2xl font-semibold tracking-tight">Setup complete</h2>
-        <p className="text-sm leading-6 text-muted-foreground">
-          Your coding agent, memory, and Composio integrations are ready on this device.
-        </p>
-      </div>
-      <div className="flex justify-center">
-        <Button onClick={onComplete}>
-          Open Kairo
-          <ArrowRightIcon className="size-4" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
   const serverApi = usePrimaryServerApi();
-  const primaryEnvironmentId = usePrimaryEnvironmentId();
-  const serverApiRef = useRef(serverApi);
   const serverProviders = useServerProviders();
-  const providers = serverProviders;
-  const [memoryStatus, setMemoryStatus] = useState<SupermemoryStatus | null>(null);
-  const [composioStatus, setComposioStatus] = useState<ComposioStatus | null>(null);
-  const [activeStep, setActiveStep] = useState<StepKey>("agents");
+  const [providersOverride, setProvidersOverride] = useState<ReadonlyArray<ServerProvider> | null>(
+    null,
+  );
+  const providers = providersOverride ?? serverProviders;
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<BusyAction>(null);
   const [busyProviderInstanceId, setBusyProviderInstanceId] = useState<ProviderInstanceId | null>(
     null,
   );
-  const [selectedMemoryProviderIds, setSelectedMemoryProviderIds] = useState<
-    ReadonlySet<ProviderInstanceId>
-  >(new Set());
-  const [setupMode, setSetupMode] = useState<SetupMode>("install_and_login");
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [events, setEvents] = useState<ComposioOperationProgressEvent[]>([]);
-  const [authUrl, setAuthUrl] = useState<string | null>(null);
-  const [catalog, setCatalog] = useState<ComposioToolkitCatalog | null>(null);
-  const [catalogLoading, setCatalogLoading] = useState(false);
-  const [catalogQuery, setCatalogQuery] = useState("");
-  const [connectingToolkit, setConnectingToolkit] = useState<string | null>(null);
   const didInitialLoadRef = useRef(false);
-  const userSelectedStepRef = useRef(false);
-
-  useEffect(() => {
-    serverApiRef.current = serverApi;
-  }, [serverApi]);
 
   const agentOptions = useMemo<ReadonlyArray<AgentOption>>(
     () =>
@@ -801,90 +527,26 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
       })),
     [providers],
   );
-
   const usableAgents = useMemo(() => providers.filter(isUsableOnboardingAgent), [providers]);
 
-  const memoryProviders = useMemo<ReadonlyArray<SupermemoryProviderStatus>>(() => {
-    if (memoryStatus?.providers.length) return memoryStatus.providers;
-    return usableAgents.map((provider) => ({
-      instanceId: provider.instanceId,
-      driver: provider.driver,
-      displayName: provider.displayName ?? String(provider.instanceId),
-      selected: true,
-      supported: MEMORY_AGENT_DRIVERS.has(provider.driver),
-      status: MEMORY_AGENT_DRIVERS.has(provider.driver) ? "not_selected" : "unsupported",
-    }));
-  }, [usableAgents, memoryStatus?.providers]);
-
-  const selectedComposioProviderIds = useMemo(
-    () =>
-      composioStatus?.agentSupport
-        .filter((entry) => entry.selected)
-        .map((entry) => entry.providerInstanceId) ??
-      usableAgents.map((provider) => provider.instanceId),
-    [composioStatus?.agentSupport, usableAgents],
-  );
-
-  const agentComplete = usableAgents.length > 0;
-  const memoryComplete = Boolean(memoryStatus?.enabled && memoryStatus.service.available);
-  const composioComplete = composioStatus?.auth.status === "authenticated";
-  const completed = useMemo(() => {
-    const next = new Set<StepKey>();
-    if (agentComplete) next.add("agents");
-    if (memoryComplete) next.add("memory");
-    if (composioComplete) next.add("composio");
-    if (agentComplete && memoryComplete && composioComplete) next.add("finish");
-    return next;
-  }, [agentComplete, composioComplete, memoryComplete]);
-
-  const refreshAll = useCallback(async () => {
+  const refreshProviders = useCallback(async () => {
     setBusy((current) => current ?? "refresh");
     try {
-      const [providerPayload, nextMemory, nextComposio] = await Promise.all([
-        serverApiRef.current.refreshProviders(),
-        serverApiRef.current.getMemoryStatus(),
-        serverApiRef.current.getComposioStatus(),
-      ]);
-      setMemoryStatus(nextMemory);
-      setComposioStatus(nextComposio);
-      return { providers: providerPayload.providers, memory: nextMemory, composio: nextComposio };
+      const payload = await serverApi.refreshProviders();
+      setProvidersOverride(payload.providers);
+      return payload.providers;
     } finally {
       setBusy((current) => (current === "refresh" ? null : current));
     }
-  }, []);
+  }, [serverApi]);
 
   useEffect(() => {
-    if (primaryEnvironmentId === null || didInitialLoadRef.current) return;
+    if (didInitialLoadRef.current) return;
     didInitialLoadRef.current = true;
-    setLoading(true);
-    void refreshAll()
-      .catch((error) => showOnboardingError("Setup status unavailable", error))
+    void refreshProviders()
+      .catch((error) => showOnboardingError("Provider status unavailable", error))
       .finally(() => setLoading(false));
-  }, [primaryEnvironmentId, refreshAll]);
-
-  useEffect(() => {
-    if (selectedMemoryProviderIds.size > 0 || memoryProviders.length === 0) return;
-    const selected = memoryProviders.filter((provider) =>
-      memoryStatus?.enabled
-        ? provider.selected
-        : provider.supported &&
-          usableAgents.some((agent) => agent.instanceId === provider.instanceId),
-    );
-    setSelectedMemoryProviderIds(new Set(selected.map((provider) => provider.instanceId)));
-  }, [usableAgents, memoryProviders, memoryStatus?.enabled, selectedMemoryProviderIds.size]);
-
-  useEffect(() => {
-    if (userSelectedStepRef.current) return;
-    if (activeStep === "agents" && agentComplete) setActiveStep("memory");
-    if (activeStep === "memory" && memoryComplete) setActiveStep("composio");
-    if (activeStep === "composio" && composioComplete) setActiveStep("finish");
-  }, [activeStep, agentComplete, composioComplete, memoryComplete]);
-
-  const selectStep = (step: StepKey) => {
-    if (!canNavigateBackToOnboardingStep(activeStep, step)) return;
-    userSelectedStepRef.current = true;
-    setActiveStep(step);
-  };
+  }, [refreshProviders]);
 
   const installAgent = async (option: AgentOption) => {
     const provider = option.provider;
@@ -897,8 +559,8 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
         instanceId: provider.instanceId,
       });
       const commandProvider = findOnboardingProvider(next.providers, provider.instanceId);
-      const refreshed = await refreshAll();
-      const refreshedProvider = findOnboardingProvider(refreshed.providers, provider.instanceId);
+      const refreshed = await refreshProviders();
+      const refreshedProvider = findOnboardingProvider(refreshed, provider.instanceId);
       const outcome = resolveOnboardingAgentInstallOutcome(
         commandProvider?.updateState?.status === "failed" ||
           commandProvider?.updateState?.status === "unchanged"
@@ -907,10 +569,7 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
       );
       if (outcome.kind === "ready") {
         toastManager.add(
-          stackedThreadToast({
-            type: "success",
-            title: `${option.definition.label} ready`,
-          }),
+          stackedThreadToast({ type: "success", title: `${option.definition.label} ready` }),
         );
       } else if (outcome.kind === "failed" || outcome.kind === "missing") {
         toastManager.add(
@@ -950,9 +609,9 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
         provider: provider.driver,
         instanceId: provider.instanceId,
       });
-      const refreshed = await refreshAll();
+      const refreshed = await refreshProviders();
       const refreshedProvider =
-        findOnboardingProvider(refreshed.providers, provider.instanceId) ??
+        findOnboardingProvider(refreshed, provider.instanceId) ??
         findOnboardingProvider(next.providers, provider.instanceId);
       const outcome = resolveOnboardingAgentReadiness(refreshedProvider);
       toastManager.add(
@@ -967,180 +626,180 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
         ),
       );
     } catch (error) {
-      showOnboardingError(`Could not login ${option.definition.label}`, error);
+      showOnboardingError(`Could not sign in to ${option.definition.label}`, error);
     } finally {
       setBusy(null);
       setBusyProviderInstanceId(null);
     }
   };
 
-  const saveMemory = async () => {
-    if (selectedMemoryProviderIds.size === 0) return;
-    setBusy("save-memory");
-    try {
-      const next = await serverApi.configureMemory({
-        providerInstanceIds: [...selectedMemoryProviderIds],
-      });
-      setMemoryStatus(next);
-      setActiveStep("composio");
-      toastManager.add(stackedThreadToast({ type: "success", title: "Memory configured" }));
-    } catch (error) {
-      showOnboardingError("Memory setup failed", error);
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const appendComposioProgress = (event: ComposioOperationProgressEvent) => {
-    setEvents((previous) => [...previous, event].slice(-80));
-    if (event.authUrl) setAuthUrl(event.authUrl);
-    setComposioStatus((previous) =>
-      previous
-        ? {
-            ...previous,
-            operation: event.operation,
+  return (
+    <OnboardingFrame activeStep="setup" onProfessionEdit={onProfessionEdit}>
+      {loading ? (
+        <div
+          role="status"
+          className="flex min-h-48 items-center justify-center text-sm text-muted-foreground"
+        >
+          <LoaderCircleIcon className="mr-2 size-4 animate-spin" />
+          Checking providers
+        </div>
+      ) : (
+        <ProviderSetupStep
+          options={agentOptions}
+          usableAgents={usableAgents}
+          busy={busy}
+          busyProviderInstanceId={busyProviderInstanceId}
+          onInstall={(option) => void installAgent(option)}
+          onLogin={(option) => void loginAgent(option)}
+          onRefresh={() =>
+            void refreshProviders().catch((error) =>
+              showOnboardingError("Provider refresh failed", error),
+            )
           }
-        : previous,
-    );
-  };
+          onComplete={onComplete}
+        />
+      )}
+    </OnboardingFrame>
+  );
+}
 
-  const runComposioSetup = async (mode: SetupMode) => {
-    setSetupMode(mode);
-    setEvents([]);
-    setAuthUrl(null);
-    setDialogOpen(true);
-    setBusy("setup-composio");
-    try {
-      const input = { providerInstanceIds: selectedComposioProviderIds };
-      const next =
-        mode === "install_and_login"
-          ? await serverApi.installAndLoginComposio(input, appendComposioProgress)
-          : await serverApi.loginComposio(input, appendComposioProgress);
-      setComposioStatus(next);
-      if (next.auth.status === "authenticated") {
-        setActiveStep("finish");
-        toastManager.add(stackedThreadToast({ type: "success", title: "Composio ready" }));
-      } else if (next.operation?.status === "failed") {
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Composio setup failed",
-            description: getComposioFailureDescription(next),
-          }),
-        );
-      }
-    } catch (error) {
-      showOnboardingError("Composio setup failed", error);
-      void refreshAll().catch(() => undefined);
-    } finally {
-      setBusy(null);
+function useProfessionSelection() {
+  const [role, setRole] = useLocalStorage<ProfessionalRole | null, ProfessionalRole | null>(
+    PROFESSIONAL_ROLE_STORAGE_KEY,
+    null,
+    ProfessionalRoleSchema.pipe(Schema.NullOr),
+  );
+  const [otherRole, setOtherRole] = useLocalStorage(
+    PROFESSIONAL_ROLE_OTHER_STORAGE_KEY,
+    "",
+    ProfessionalRoleOtherSchema,
+  );
+
+  return { role, setRole, otherRole, setOtherRole };
+}
+
+function CloudOnboardingFlow({ onComplete }: { readonly onComplete: () => void }) {
+  const clerk = useClerk();
+  const { isLoaded, isSignedIn } = useAuth({ treatPendingAsSignedOut: false });
+  const { role, setRole, otherRole, setOtherRole } = useProfessionSelection();
+  const [activeStep, setActiveStep] = useState<OnboardingStep>("sign-in");
+  const [signInStarted, setSignInStarted] = useState(false);
+
+  useEffect(() => {
+    if (activeStep === "sign-in" && signInStarted && isSignedIn) {
+      setActiveStep("profession");
     }
-  };
+  }, [activeStep, isSignedIn, signInStarted]);
 
-  const loadCatalog = async () => {
-    setCatalogLoading(true);
-    try {
-      const next = await serverApi.listComposioToolkits({ limit: 1000 });
-      setCatalog(next);
-    } catch (error) {
-      showOnboardingError("Could not load Composio apps", error);
-    } finally {
-      setCatalogLoading(false);
-    }
-  };
-
-  const connectToolkit = async (toolkit: string) => {
-    setConnectingToolkit(toolkit);
-    setBusy("connect-app");
-    setSetupMode("login");
-    setEvents([]);
-    setAuthUrl(null);
-    setDialogOpen(true);
-    try {
-      const next = await serverApi.linkComposioToolkit({ toolkit }, appendComposioProgress);
-      setComposioStatus(next);
-      toastManager.add(stackedThreadToast({ type: "success", title: `${toolkit} connected` }));
-    } catch (error) {
-      showOnboardingError(`Could not connect ${toolkit}`, error);
-    } finally {
-      setConnectingToolkit(null);
-      setBusy(null);
-    }
-  };
-
-  if (loading) {
+  if (activeStep === "sign-in") {
     return (
-      <div className="flex h-dvh items-center justify-center bg-background text-sm text-muted-foreground">
-        <LoaderCircleIcon className="mr-2 size-4 animate-spin" />
-        Checking setup
-      </div>
+      <OnboardingFrame activeStep="sign-in">
+        <SignInStep
+          loading={!isLoaded}
+          signedIn={Boolean(isSignedIn)}
+          onSignIn={() => {
+            setSignInStarted(true);
+            clerk.openSignIn(resolveClerkSignInProps(window.location.href, isElectron));
+          }}
+          onContinue={() => setActiveStep("profession")}
+        />
+      </OnboardingFrame>
+    );
+  }
+
+  if (activeStep === "profession") {
+    return (
+      <OnboardingFrame activeStep="profession">
+        <ProfessionStep
+          role={role}
+          otherRole={otherRole}
+          onRoleChange={setRole}
+          onOtherRoleChange={setOtherRole}
+          onContinue={() => {
+            if (!isProfessionalRoleComplete(role, otherRole)) return;
+            if (role === "other") setOtherRole(otherRole.trim());
+            setActiveStep("setup");
+          }}
+        />
+      </OnboardingFrame>
     );
   }
 
   return (
-    <div className="h-dvh overflow-auto bg-background text-foreground">
-      <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-        <header className="space-y-4">
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              Device setup
-            </p>
-            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Set up Kairo</h1>
-          </div>
-          <StepRail activeStep={activeStep} completed={completed} onStepSelect={selectStep} />
-        </header>
-
-        <main className="rounded-xl border bg-background/75 p-4 shadow-sm sm:p-5">
-          {activeStep === "agents" ? (
-            <AgentStep
-              options={agentOptions}
-              usableAgents={usableAgents}
-              busy={busy}
-              busyProviderInstanceId={busyProviderInstanceId}
-              onInstall={(option) => void installAgent(option)}
-              onLogin={(option) => void loginAgent(option)}
-              onRefresh={() =>
-                void refreshAll().catch((error) => showOnboardingError("Refresh failed", error))
-              }
-              onContinue={() => setActiveStep("memory")}
-            />
-          ) : activeStep === "memory" ? (
-            <MemoryStep
-              status={memoryStatus}
-              providers={memoryProviders}
-              selectedProviderIds={selectedMemoryProviderIds}
-              busy={busy}
-              onProviderSelectionChange={setSelectedMemoryProviderIds}
-              onSave={() => void saveMemory()}
-              onContinue={() => setActiveStep("composio")}
-            />
-          ) : activeStep === "composio" ? (
-            <ComposioStep
-              status={composioStatus}
-              catalog={catalog}
-              query={catalogQuery}
-              busy={busy}
-              connectingToolkit={connectingToolkit}
-              catalogLoading={catalogLoading}
-              onQueryChange={setCatalogQuery}
-              onRunSetup={(mode) => void runComposioSetup(mode)}
-              onLoadCatalog={() => void loadCatalog()}
-              onConnectToolkit={(toolkit) => void connectToolkit(toolkit)}
-              onContinue={() => setActiveStep("finish")}
-            />
-          ) : (
-            <FinishStep onComplete={onComplete} />
-          )}
-        </main>
-      </div>
-
-      <ComposioSetupDialog
-        open={dialogOpen}
-        mode={setupMode}
-        events={events}
-        authUrl={authUrl}
-        onOpenChange={setDialogOpen}
-      />
-    </div>
+    <ProviderSetupGate
+      onProfessionEdit={() => setActiveStep("profession")}
+      onComplete={onComplete}
+    />
   );
+}
+
+function CloudOnboardingGate({ onComplete }: { readonly onComplete: () => void }) {
+  return (
+    <>
+      <ClerkLoading>
+        <OnboardingFrame activeStep="sign-in">
+          <SignInStep
+            loading
+            signedIn={false}
+            onSignIn={() => undefined}
+            onContinue={() => undefined}
+          />
+        </OnboardingFrame>
+      </ClerkLoading>
+      <ClerkFailed>
+        <OnboardingFrame activeStep="sign-in">
+          <ClerkLoadErrorStep onRetry={() => window.location.reload()} />
+        </OnboardingFrame>
+      </ClerkFailed>
+      <ClerkLoaded>
+        <CloudOnboardingFlow onComplete={onComplete} />
+      </ClerkLoaded>
+    </>
+  );
+}
+
+function LocalOnboardingGate({ onComplete }: { readonly onComplete: () => void }) {
+  const { role, setRole, otherRole, setOtherRole } = useProfessionSelection();
+  const [activeStep, setActiveStep] = useState<OnboardingStep>("sign-in");
+
+  if (activeStep === "sign-in") {
+    return (
+      <OnboardingFrame activeStep="sign-in">
+        <LocalSignInStep onContinue={() => setActiveStep(advanceOnboardingStep("sign-in"))} />
+      </OnboardingFrame>
+    );
+  }
+
+  if (activeStep === "profession") {
+    return (
+      <OnboardingFrame activeStep="profession">
+        <ProfessionStep
+          role={role}
+          otherRole={otherRole}
+          onRoleChange={setRole}
+          onOtherRoleChange={setOtherRole}
+          onContinue={() => {
+            if (!isProfessionalRoleComplete(role, otherRole)) return;
+            if (role === "other") setOtherRole(otherRole.trim());
+            setActiveStep(advanceOnboardingStep("profession"));
+          }}
+        />
+      </OnboardingFrame>
+    );
+  }
+
+  return (
+    <ProviderSetupGate
+      onProfessionEdit={() => setActiveStep("profession")}
+      onComplete={onComplete}
+    />
+  );
+}
+
+export function OnboardingGate({ onComplete }: { readonly onComplete: () => void }) {
+  if (!hasCloudPublicConfig()) {
+    return <LocalOnboardingGate onComplete={onComplete} />;
+  }
+
+  return <CloudOnboardingGate onComplete={onComplete} />;
 }

@@ -49,8 +49,10 @@ import {
 } from "@kairo/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 
+import * as ServerSecretStore from "../../auth/ServerSecretStore.ts";
 import { applyComposioProviderBindings } from "../../composio/ComposioProviderBindings.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { BUILT_IN_DRIVERS, type BuiltInDriversEnv } from "../builtInDrivers.ts";
@@ -108,9 +110,18 @@ const deriveEffectiveProviderInstanceConfigMap = (
 ): Effect.Effect<ProviderInstanceConfigMap, never> =>
   Effect.gen(function* () {
     const baseConfigMap = deriveProviderInstanceConfigMap(settings);
-    return settings.integrations.composio.enabled
-      ? yield* applyComposioProviderBindings(settings, baseConfigMap)
-      : baseConfigMap;
+    if (!settings.integrations.composio.enabled) {
+      return baseConfigMap;
+    }
+
+    const secretStoreOption = yield* Effect.serviceOption(ServerSecretStore.ServerSecretStore);
+    if (Option.isNone(secretStoreOption)) {
+      return baseConfigMap;
+    }
+
+    return yield* applyComposioProviderBindings(settings, baseConfigMap).pipe(
+      Effect.provideService(ServerSecretStore.ServerSecretStore, secretStoreOption.value),
+    );
   });
 
 /**

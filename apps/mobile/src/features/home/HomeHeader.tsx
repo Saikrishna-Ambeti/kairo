@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ControlPillMenu } from "../../components/ControlPill";
 import { SymbolView } from "../../components/AppSymbol";
-import { KairoWordmark } from "../../components/KairoWordmark";
+import { KairoMark } from "../../components/KairoMark";
 import { HOME_HORIZONTAL_INSET } from "../../lib/layoutMetrics";
 import { resolveMobileStageLabel } from "../../lib/mobileBranding";
 import { useThemeColor } from "../../lib/useThemeColor";
@@ -216,12 +216,18 @@ function AndroidHomeHeader(props: HomeHeaderProps) {
               grow
               onPress={props.onOpenEnvironments}
               brand={
-                <View className="flex-row items-center gap-2">
-                  {/* Mirrors the desktop SidebarBrand: Kairo mark + muted "Code". */}
-                  <KairoWordmark color={iconColor} height={15} />
-                  <RNText className="-ml-0.5 text-[21px] font-kairo-medium tracking-[-0.5px] text-foreground-muted">
-                    Code
-                  </RNText>
+                <View
+                  accessible
+                  accessibilityLabel={`Kairo ${stageLabel}`}
+                  className="flex-row items-center gap-2"
+                >
+                  {/* Mirrors the desktop SidebarBrand: gradient K mark + muted "airo". */}
+                  <View className="flex-row items-center">
+                    <KairoMark size={22} />
+                    <RNText className="-ml-px text-[21px] font-kairo-medium tracking-[-0.5px] text-foreground-muted">
+                      airo
+                    </RNText>
+                  </View>
                   <View className="rounded-full bg-subtle px-2 py-0.75">
                     <RNText className="text-[11px] font-kairo-bold tracking-[1.1px] text-foreground-muted uppercase">
                       {stageLabel}

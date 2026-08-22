@@ -95,11 +95,13 @@ export const Route = createRootRoute({
 
 function RootRouteView() {
   const pathname = useLocation({ select: (location) => location.pathname });
+  const navigate = useNavigate();
   const { authGateState } = Route.useRouteContext();
   const primaryEnvironmentAuthenticated = authGateState.status === "authenticated";
   const clientSettingsHydrated = useClientSettingsHydrated();
-  const onboardingCompleted = useClientSettings((settings) => settings.onboardingCompleted);
+  const [onboardingCompletedThisLaunch, setOnboardingCompletedThisLaunch] = useState(false);
   const updateSettings = useUpdateClientSettings();
+  const onboardingRequired = !onboardingCompletedThisLaunch;
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -138,8 +140,14 @@ function RootRouteView() {
   const appContent =
     primaryEnvironmentAuthenticated && !clientSettingsHydrated ? (
       <SplashScreen />
-    ) : primaryEnvironmentAuthenticated && !onboardingCompleted ? (
-      <OnboardingGate onComplete={() => updateSettings({ onboardingCompleted: true })} />
+    ) : primaryEnvironmentAuthenticated && onboardingRequired ? (
+      <OnboardingGate
+        onComplete={() => {
+          updateSettings({ onboardingCompleted: true });
+          setOnboardingCompletedThisLaunch(true);
+          void navigate({ to: "/" });
+        }}
+      />
     ) : (
       appShell
     );
@@ -152,7 +160,7 @@ function RootRouteView() {
         <FontAppearanceSync />
         {primaryEnvironmentAuthenticated ? <AuthenticatedTracingBootstrap /> : null}
         <RelayClientInstallDialog />
-        <ConnectOnboardingDialog />
+        {!onboardingRequired ? <ConnectOnboardingDialog /> : null}
         <SshPasswordPromptDialog />
         <ConfirmDialogHost />
         <SlowRpcRequestToastCoordinator />
