@@ -9,7 +9,7 @@ import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 
 import { KairoCloudClient, layer as KairoCloudClientLayer } from "./KairoCloudClient.ts";
 
-const decodeUnknownJson = Schema.decodeUnknownSync(Schema.UnknownFromJsonString);
+const decodeUnknownJson = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
 
 describe("KairoCloudClient", () => {
   it.effect("uses the configured gateway and installation grant", () =>
