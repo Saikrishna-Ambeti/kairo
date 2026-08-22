@@ -94,7 +94,7 @@ export type ThemeDefinition = Readonly<{
 
 export const KAIRO_CHAT_THEME: ThemeDefinition = {
   id: "kairo-chat",
-  label: "Kairo Chat",
+  label: "T3 Chat",
   appearance: "light",
   colors: {
     canvas: "oklch(0.982446 0.010114 325.653)",

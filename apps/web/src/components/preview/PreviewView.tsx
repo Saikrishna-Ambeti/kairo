@@ -64,7 +64,6 @@ import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 interface Props {
   threadRef: ScopedThreadRef;
   tabId?: string | null;
-  configuredUrls?: ReadonlyArray<string> | undefined;
   visible: boolean;
   onSendAnnotation?: (
     annotation: PreviewAnnotationPayload,
@@ -81,7 +80,6 @@ const localApi = typeof window === "undefined" ? null : ensureLocalApi();
 export function PreviewView({
   threadRef,
   tabId: requestedTabId,
-  configuredUrls,
   visible,
   onSendAnnotation,
 }: Props) {
@@ -711,8 +709,6 @@ export function PreviewView({
         {showEmptyState ? (
           <PreviewEmptyState
             threadRef={threadRef}
-            environmentId={threadRef.environmentId}
-            configuredUrls={configuredUrls}
             recentEntries={recentHistoryEntries}
             onRemoveRecent={(url) => removeUrlForThread(threadRef, url)}
             onOpenUrl={(next) => void handleOpenServerUrl(next)}

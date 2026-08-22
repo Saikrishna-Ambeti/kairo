@@ -53,8 +53,8 @@ interface Props {
 }
 
 /**
- * Three-dot menu in the chrome row. Wires Hard reload, DevTools, zoom
- * controls, and storage-clearing actions. Only mounted by `PreviewView`
+ * Three-dot menu in the chrome row. Wires reload, zoom controls, and
+ * storage-clearing actions. Only mounted by `PreviewView`
  * when the desktop bridge is present, so we can call it unconditionally.
  */
 export function PreviewMoreMenu({
@@ -95,9 +95,6 @@ export function PreviewMoreMenu({
       <MenuPopup align="end" sideOffset={6} className="min-w-56">
         <MenuItem onClick={callTab(bridge.hardReload)} disabled={tabDisabled}>
           Hard reload
-        </MenuItem>
-        <MenuItem onClick={callTab(bridge.openDevTools)} disabled={tabDisabled}>
-          Open DevTools
         </MenuItem>
         <MenuItem onClick={onNativePictureInPicture} disabled={tabDisabled}>
           {nativePictureInPicture
