@@ -23,6 +23,7 @@ import {
 import { ensureLocalApi } from "../../localApi";
 import { cn } from "../../lib/utils";
 import { useServerProviders } from "../../rpc/serverState";
+import { usePrimaryEnvironmentId } from "../../state/environments";
 import { usePrimaryServerApi } from "../../state/primaryServerApi";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -656,6 +657,8 @@ function FinishStep({ onComplete }: { onComplete: () => void }) {
 
 export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
   const serverApi = usePrimaryServerApi();
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const serverApiRef = useRef(serverApi);
   const serverProviders = useServerProviders();
   const providers = serverProviders;
   const [memoryStatus, setMemoryStatus] = useState<SupermemoryStatus | null>(null);
@@ -676,6 +679,10 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
   >(new Set());
   const didInitialLoadRef = useRef(false);
   const userSelectedStepRef = useRef(false);
+
+  useEffect(() => {
+    serverApiRef.current = serverApi;
+  }, [serverApi]);
 
   const agentOptions = useMemo<ReadonlyArray<AgentOption>>(
     () =>
@@ -720,9 +727,9 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
     setBusy((current) => current ?? "refresh");
     try {
       const [providerPayload, nextMemory, nextComposio] = await Promise.all([
-        serverApi.refreshProviders(),
-        serverApi.getMemoryStatus(),
-        serverApi.getComposioStatus(),
+        serverApiRef.current.refreshProviders(),
+        serverApiRef.current.getMemoryStatus(),
+        serverApiRef.current.getComposioStatus(),
       ]);
       setMemoryStatus(nextMemory);
       setComposioStatus(nextComposio);
@@ -733,13 +740,13 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
   }, []);
 
   useEffect(() => {
-    if (didInitialLoadRef.current) return;
+    if (primaryEnvironmentId === null || didInitialLoadRef.current) return;
     didInitialLoadRef.current = true;
     setLoading(true);
     void refreshAll()
       .catch((error) => showOnboardingError("Setup status unavailable", error))
       .finally(() => setLoading(false));
-  }, [refreshAll]);
+  }, [primaryEnvironmentId, refreshAll]);
 
   useEffect(() => {
     if (selectedMemoryProviderIds.size > 0 || memoryProviders.length === 0) return;
