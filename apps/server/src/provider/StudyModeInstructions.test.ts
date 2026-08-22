@@ -11,6 +11,11 @@ describe("applyStudyModeInstructions", () => {
     const result = applyStudyModeInstructions("Help me understand recursion", "study");
 
     expect(result).toContain("Act as a patient coding tutor");
+    expect(result).toContain("use the recall memory tool");
+    expect(result).toContain("Do this even in a different thread");
+    expect(result).toContain("first incomplete item");
+    expect(result).toContain("use the memory tool");
+    expect(result).toContain("Do not restart the curriculum");
     expect(result).toContain("<student_message>\nHelp me understand recursion\n</student_message>");
   });
 });

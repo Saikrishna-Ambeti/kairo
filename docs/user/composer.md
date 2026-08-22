@@ -17,7 +17,10 @@ Use the interaction mode control to choose how the agent works in the current th
 - **Plan** explores the work and prepares a plan before editing. Use `/plan` or press `Shift+Tab`
   to enter it, and `/default` to return to Build.
 - **Study** teaches through questions, hints, examples, and feedback instead of immediately doing
-  the work. It appears when the professional role selected during onboarding is **Student**. Use
-  `/study` to enter it.
+  the work. It follows an existing learning plan, teaches the current item in detail, and continues
+  from the first incomplete item. When hosted memory is enabled for the provider, Study saves the
+  plan and lesson progress to Supermemory so **continue** can resume the next task or planned day in
+  another thread. It appears when the professional role selected during onboarding is **Student**.
+  Use `/study` to enter it.
 
 The selected mode belongs to the thread. Study Mode does not change the thread's permission mode.

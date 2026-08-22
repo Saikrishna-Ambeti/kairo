@@ -280,6 +280,9 @@ describe("buildCodexDeveloperInstructions", () => {
 
     NodeAssert.ok(instructions.startsWith(codexStudyModeDeveloperInstructions(true)));
     NodeAssert.match(instructions, /patient coding tutor/);
+    NodeAssert.match(instructions, /use the recall memory tool/);
+    NodeAssert.match(instructions, /Do this even in a different thread/);
+    NodeAssert.match(instructions, /use the memory tool/);
   });
 
   it("varies with the model and effort of each turn", () => {
