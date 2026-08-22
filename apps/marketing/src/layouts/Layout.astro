@@ -1,11 +1,4 @@
 ---
-import {
-  ANDROID_PLAY_STORE_URL,
-  GITHUB_REPOSITORY_URL,
-  IOS_APP_STORE_URL,
-  MARKETING_STATS,
-} from "../lib/site";
-
 interface Props {
   title?: string;
   description?: string;
@@ -13,111 +6,511 @@ interface Props {
 }
 
 const {
-  title = "Kairo",
-  description = "Kairo — The open-source control plane for coding agents.",
+  title = "Kairo. The agentic control plane for coding agents",
+  description = "Experience liftoff with Kairo. Coordinate Claude Code, Codex CLI, and OpenCode with direct local stdio, zero token markup, and persistent memory.",
   pageClass,
 } = Astro.props;
 ---
 
-<html lang="en">
+<!doctype html>
+<html lang="en" class="dark">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
+    <meta name="theme-color" content="#0d0e12" />
+
+    <!-- OpenGraph / Social -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content="/logo.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- Google Antigravity Fonts & Icons -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,slnt,wdth,wght,ROND@8..144,-10..0,25..150,400..700,0..100&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Architects+Daughter&family=Caveat:wght@500;600&display=swap"
     />
-    <link rel="icon" href="/favicon.ico" sizes="48x48" />
-    <link rel="icon" type="image/png" href="/favicon-32x32.png" sizes="32x32" />
-    <link rel="icon" type="image/png" href="/favicon-16x16.png" sizes="16x16" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Google+Symbols:opsz,wght,FILL,GRAD,ROND@20..48,100..700,0..1,-50..200,0..100&display=block"
+    />
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
     <title>{title}</title>
   </head>
-  <body>
-    <div class:list={["page", pageClass]}>
-      <nav class="nav">
-        <div class="nav-inner">
-          <a href="/" class="nav-brand" aria-label="Kairo home">
-            <span class="nav-brand-name">Kairo</span>
-          </a>
-          <div class="nav-right">
-            <a
-              class="nav-stars"
-              href={GITHUB_REPOSITORY_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`Star Kairo on GitHub — ${MARKETING_STATS.githubStars} stars`}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M12 2.3l2.9 5.88 6.49.94-4.7 4.58 1.11 6.47L12 17.12l-5.8 3.05 1.11-6.47-4.7-4.58 6.49-.94L12 2.3z"/>
-              </svg>
-              <span><strong>{MARKETING_STATS.githubStars}</strong> GitHub stars</span>
-            </a>
-          </div>
-        </div>
-      </nav>
-
-      <main class="main">
-        <slot />
-      </main>
-
-      <footer class="footer">
-        <div class="footer-inner">
-          <div class="footer-brand">
-            <img src="/icon.webp" alt="" />
-            <span>&copy; {new Date().getFullYear()} Kairo Tools Inc · MIT licensed</span>
-          </div>
-          <div class="footer-links">
-            <a href={GITHUB_REPOSITORY_URL} target="_blank" rel="noopener noreferrer">GitHub</a>
-            <a href="https://discord.gg/jn4EGJjrvv" target="_blank" rel="noopener noreferrer">Discord</a>
-            <a href="/download">Download</a>
-            <a href={IOS_APP_STORE_URL} target="_blank" rel="noopener noreferrer">iOS app</a>
-            <a href={ANDROID_PLAY_STORE_URL} target="_blank" rel="noopener noreferrer">Android app</a>
-            <a href="/terms-of-service">Terms</a>
-            <a href="/privacy-policy">Privacy</a>
-            <a href="/security-policy">Security</a>
-          </div>
-        </div>
-      </footer>
+  <body class={pageClass}>
+    <!-- Background Ambient Grid and Particles container -->
+    <div class="antigravity-bg" aria-hidden="true">
+      <div class="space-mesh"></div>
+      <div class="orb-glow orb-1"></div>
+      <div class="orb-glow orb-2"></div>
     </div>
 
+    <!-- Antigravity Global Header -->
+    <header class="ag-header" id="main-header">
+      <div class="header-container">
+        <div class="header-left">
+          <a href="/" class="ag-logo-wrap" aria-label="Kairo Home">
+            <img
+              src="/logo.png"
+              alt="Kairo Logo"
+              class="ag-symbol-logo"
+              width="30"
+              height="30"
+              style="border-radius: 7px; object-fit: cover;"
+            />
+            <span class="ag-brand-text">kairo</span>
+            <span class="ag-version-badge">2.0</span>
+          </a>
+
+          <!-- Desktop Navigation -->
+          <nav class="ag-nav" aria-label="Main Navigation">
+            <a href="#features" class="ag-nav-btn">
+              <span>Features</span>
+            </a>
+            <a href="#modes" class="ag-nav-btn">
+              <span>App Modes</span>
+            </a>
+            <a href="#download" class="ag-nav-btn">
+              <span>Downloads</span>
+            </a>
+          </nav>
+        </div>
+
+        <div class="header-right">
+          <!-- Command Palette Trigger -->
+          <button class="cmd-search-btn" id="cmd-k-trigger" title="Search (⌘K)" aria-label="Search">
+            <span class="symbol search-icon">search</span>
+            <span class="search-label">Search</span>
+            <kbd class="kbd-badge">⌘K</kbd>
+          </button>
+
+          <a
+            class="ag-ghost-btn"
+            href="https://github.com/pingdotgg/kairo"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="GitHub Repository"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 007.86 10.93c.58.1.79-.25.79-.56v-2c-3.2.69-3.88-1.37-3.88-1.37-.52-1.33-1.27-1.69-1.27-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.76 2.68 1.25 3.33.96.1-.75.4-1.25.72-1.54-2.55-.29-5.24-1.27-5.24-5.67 0-1.25.45-2.28 1.18-3.08-.12-.29-.51-1.45.11-3.02 0 0 .96-.31 3.15 1.18a10.96 10.96 0 015.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.57.23 2.73.11 3.02.74.8 1.18 1.83 1.18 3.08 0 4.41-2.7 5.38-5.27 5.66.41.36.78 1.06.78 2.13v3.16c0 .31.21.67.8.56A11.5 11.5 0 0023.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>
+            <span id="nav-star-count">GitHub</span>
+          </a>
+
+          <a href="#download" class="ag-pill-btn ag-pill-btn--primary">
+            <span>Download</span>
+            <span class="symbol">download</span>
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main View Content -->
+    <main class="main-page-root">
+      <slot />
+    </main>
+
+    <!-- Google Antigravity Giant Footer -->
+    <footer class="ag-footer">
+      <div class="footer-container k-reveal">
+        <div class="footer-upper">
+          <div class="footer-pitch k-reveal">
+            <h3 class="footer-headline">Experience liftoff.</h3>
+            <p class="footer-desc">
+              The agentic control plane built for developer trust. Zero token markup, direct stdio JSON-RPC, and persistent memory across sessions.
+            </p>
+            <div class="footer-status-pill" id="footer-telemetry">
+              <span class="live-dot"></span>
+              <span id="footer-status-text">All systems operational &middot; 14ms stdio latency &middot; v2.0.4</span>
+            </div>
+          </div>
+
+          <div class="footer-nav-columns k-reveal">
+            <div class="footer-col">
+              <h4>Product</h4>
+              <a href="#features">Features</a>
+              <a href="#features">Supermemory</a>
+              <a href="#modes">4 App Modes</a>
+              <a href="#providers">Providers Matrix</a>
+              <a href="#download">Downloads</a>
+            </div>
+            <div class="footer-col">
+              <h4>Engines</h4>
+              <a href="https://claude.com/product/claude-code" target="_blank" rel="noopener noreferrer">Claude Code 3.7</a>
+              <a href="https://developers.openai.com/codex" target="_blank" rel="noopener noreferrer">OpenAI Codex CLI</a>
+              <a href="https://opencode.ai" target="_blank" rel="noopener noreferrer">OpenCode</a>
+            </div>
+            <div class="footer-col">
+              <h4>Resources</h4>
+              <a href="https://github.com/pingdotgg/kairo" target="_blank" rel="noopener noreferrer">GitHub repo</a>
+              <a href="https://github.com/pingdotgg/kairo/releases" target="_blank" rel="noopener noreferrer">Releases</a>
+              <a href="https://discord.gg/jn4EGJjrvv" target="_blank" rel="noopener noreferrer">Discord community</a>
+              <a href="https://github.com/pingdotgg/kairo/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer-bottom-bar k-reveal">
+          <div class="footer-legal">
+            &copy; {new Date().getFullYear()} Kairo Authors. Google Antigravity design. MIT Licensed.
+          </div>
+          <div class="footer-bottom-links">
+            <a href="https://github.com/pingdotgg/kairo" target="_blank" rel="noopener noreferrer">Source code</a>
+            <span>&middot;</span>
+            <a href="https://discord.gg/jn4EGJjrvv" target="_blank" rel="noopener noreferrer">Community</a>
+            <span>&middot;</span>
+            <a href="#download">Get Kairo</a>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <!-- Global Command Palette Modal (⌘K) -->
+    <div class="ag-cmd-overlay" id="cmd-palette" aria-hidden="true">
+      <div class="ag-cmd-dialog" role="dialog" aria-modal="true">
+        <div class="ag-cmd-input-wrap">
+          <span class="symbol">search</span>
+          <input type="text" id="cmd-input" placeholder="Type a command or section name..." autocomplete="off" />
+          <kbd class="kbd-esc">ESC</kbd>
+        </div>
+        <div class="ag-cmd-results" id="cmd-results-list">
+          <div class="cmd-group-label">SECTIONS</div>
+          <a href="#hero" class="ag-cmd-item active" data-cmd-item>
+            <span class="symbol">rocket_launch</span>
+            <div>
+              <strong>Liftoff Hero</strong>
+              <small>Overview and quick start</small>
+            </div>
+          </a>
+          <a href="#features" class="ag-cmd-item" data-cmd-item>
+            <span class="symbol">tune</span>
+            <div>
+              <strong>Features &amp; Intelligence</strong>
+              <small>Document intelligence, Supermemory, and connected tools</small>
+            </div>
+          </a>
+          <a href="#modes" class="ag-cmd-item" data-cmd-item>
+            <span class="symbol">view_quilt</span>
+            <div>
+              <strong>4 App Modes Matrix</strong>
+              <small>Calm Canvas, Rails, Briefings, and Split Inspector</small>
+            </div>
+          </a>
+          <a href="#trailer" class="ag-cmd-item" data-cmd-item>
+            <span class="symbol">play_circle</span>
+            <div>
+              <strong>Video Demo Theater</strong>
+              <small>60-second animated overview</small>
+            </div>
+          </a>
+          <a href="#providers" class="ag-cmd-item" data-cmd-item>
+            <span class="symbol">terminal</span>
+            <div>
+              <strong>CLI Providers Matrix</strong>
+              <small>Claude Code, Codex, and OpenCode</small>
+            </div>
+          </a>
+          <a href="#download" class="ag-cmd-item" data-cmd-item>
+            <span class="symbol">download</span>
+            <div>
+              <strong>Download Installers</strong>
+              <small>macOS, Windows, and Linux desktop binaries</small>
+            </div>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Floating Back to Top Button -->
+    <button id="back-to-top" class="ag-back-to-top" title="Back to top" aria-label="Back to top">
+      <span class="symbol">arrow_upward</span>
+    </button>
+
+    <!-- Global Toast Notification Container -->
+    <div id="ag-toast" class="ag-toast" aria-live="polite"></div>
+
+    <!-- Global Interactive Ambient Cursor Follower & Sparkle Trail Canvas -->
+    <div id="k-cursor-glow" class="k-cursor-glow" aria-hidden="true"></div>
+    <canvas id="k-cursor-particles" class="k-cursor-particles" aria-hidden="true"></canvas>
+
+    <!-- Client Script: Command Palette, Sticky Header, GitHub Stars -->
     <script>
-      const nav = document.querySelector(".nav");
-      const onScroll = () => {
-        if (!nav) return;
-        if (window.scrollY > 12) nav.classList.add("is-scrolled");
-        else nav.classList.remove("is-scrolled");
+      // 1. Header scroll reactivity
+      const header = document.getElementById("main-header");
+      window.addEventListener("scroll", () => {
+        if (window.scrollY > 20) {
+          header?.classList.add("is-scrolled");
+        } else {
+          header?.classList.remove("is-scrolled");
+        }
+      });
+
+      // 2. Command Palette (⌘K)
+      const palette = document.getElementById("cmd-palette");
+      const trigger = document.getElementById("cmd-k-trigger");
+      const input = document.getElementById("cmd-input") as HTMLInputElement | null;
+      const cmdItems = document.querySelectorAll<HTMLAnchorElement>("[data-cmd-item]");
+
+      let selectedIndex = 0;
+
+      function updateActiveItem() {
+        const visibleItems = Array.from(cmdItems).filter((item) => item.style.display !== "none");
+        visibleItems.forEach((item, idx) => {
+          if (idx === selectedIndex) item.classList.add("active");
+          else item.classList.remove("active");
+        });
+      }
+
+      function openCmd() {
+        if (!palette) return;
+        palette.classList.add("is-active");
+        palette.setAttribute("aria-hidden", "false");
+        selectedIndex = 0;
+        updateActiveItem();
+        setTimeout(() => input?.focus(), 40);
+      }
+
+      function closeCmd() {
+        if (!palette) return;
+        palette.classList.remove("is-active");
+        palette.setAttribute("aria-hidden", "true");
+        if (input) input.value = "";
+        cmdItems.forEach((item) => (item.style.display = "flex"));
+      }
+
+      trigger?.addEventListener("click", openCmd);
+
+      // Search filtering & Arrow keys
+      input?.addEventListener("input", () => {
+        const query = (input.value || "").toLowerCase().trim();
+        cmdItems.forEach((item) => {
+          const text = item.textContent?.toLowerCase() || "";
+          if (text.includes(query)) {
+            item.style.display = "flex";
+          } else {
+            item.style.display = "none";
+          }
+        });
+        selectedIndex = 0;
+        updateActiveItem();
+      });
+
+      window.addEventListener("keydown", (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+          e.preventDefault();
+          if (palette?.classList.contains("is-active")) closeCmd();
+          else openCmd();
+          return;
+        }
+        if (palette?.classList.contains("is-active")) {
+          const visibleItems = Array.from(cmdItems).filter((item) => item.style.display !== "none");
+          if (e.key === "Escape") {
+            closeCmd();
+          } else if (e.key === "ArrowDown") {
+            e.preventDefault();
+            selectedIndex = (selectedIndex + 1) % (visibleItems.length || 1);
+            updateActiveItem();
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            selectedIndex = (selectedIndex - 1 + visibleItems.length) % (visibleItems.length || 1);
+            updateActiveItem();
+          } else if (e.key === "Enter") {
+            e.preventDefault();
+            if (visibleItems[selectedIndex]) {
+              visibleItems[selectedIndex].click();
+            }
+          }
+        }
+      });
+
+      palette?.addEventListener("click", (e) => {
+        if (e.target === palette) closeCmd();
+      });
+
+      cmdItems.forEach((item) => {
+        item.addEventListener("click", () => closeCmd());
+      });
+
+      // 3. Back to Top Button
+      const backToTopBtn = document.getElementById("back-to-top");
+      window.addEventListener("scroll", () => {
+        if (window.scrollY > 450) {
+          backToTopBtn?.classList.add("is-visible");
+        } else {
+          backToTopBtn?.classList.remove("is-visible");
+        }
+      }, { passive: true });
+
+      backToTopBtn?.addEventListener("click", () => {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+
+      // 4. Global Toast Notification Helper
+      (window as any).showToast = (msg: string, icon = "check_circle") => {
+        const toast = document.getElementById("ag-toast");
+        if (!toast) return;
+        toast.innerHTML = `<span class="symbol" style="color:#4ade80">${icon}</span><span>${msg}</span>`;
+        toast.classList.add("is-visible");
+        setTimeout(() => {
+          toast.classList.remove("is-visible");
+        }, 2600);
       };
-      window.addEventListener("scroll", onScroll, { passive: true });
-      onScroll();
+
+      // 3. Dropdown toggles
+      const dropdownWrap = document.querySelector(".ag-nav-dropdown-wrap");
+      dropdownWrap?.addEventListener("mouseenter", () => {
+        dropdownWrap.classList.add("is-open");
+      });
+      dropdownWrap?.addEventListener("mouseleave", () => {
+        dropdownWrap.classList.remove("is-open");
+      });
+
+      // 4. Fetch live GitHub stars
+      async function loadStars() {
+        try {
+          const res = await fetch("https://api.github.com/repos/pingdotgg/kairo");
+          if (!res.ok) return;
+          const data = await res.json();
+          const count = data.stargazers_count;
+          const starEl = document.getElementById("nav-star-count");
+          if (starEl && count) {
+            starEl.textContent = `★ ${(count / 1000).toFixed(1)}k`;
+          }
+        } catch {
+          // fallback
+        }
+      }
+      loadStars();
+
+      // 5. Antigravity Footer Letters Zero-G Hover Levitation Physics
+      const letters = document.querySelectorAll<SVGPathElement>(".ag-letter");
+      letters.forEach((letter) => {
+        letter.addEventListener("mouseenter", () => {
+          letter.style.transform = `translateY(-24px) rotate(${Math.random() * 8 - 4}deg) scale(1.05)`;
+          letter.style.filter = `drop-shadow(0 15px 25px rgba(49, 134, 255, 0.6))`;
+          letter.style.fill = `#3186FF`;
+        });
+        letter.addEventListener("mouseleave", () => {
+          letter.style.transform = `translateY(0) rotate(0deg) scale(1)`;
+          letter.style.filter = `none`;
+          letter.style.fill = `currentColor`;
+        });
+      });
+
+      // 6. Global Interactive Cursor Glow & Bioluminescent Sparkle Physics
+      const cursorGlow = document.getElementById("k-cursor-glow");
+      const cursorCanvas = document.getElementById("k-cursor-particles") as HTMLCanvasElement | null;
+      let particleCtx: CanvasRenderingContext2D | null = null;
+      if (cursorCanvas) {
+        particleCtx = cursorCanvas.getContext("2d");
+        const resize = () => {
+          if (!cursorCanvas) return;
+          cursorCanvas.width = window.innerWidth;
+          cursorCanvas.height = window.innerHeight;
+        };
+        resize();
+        window.addEventListener("resize", resize, { passive: true });
+      }
+
+      interface Sparkle {
+        x: number;
+        y: number;
+        vx: number;
+        vy: number;
+        size: number;
+        alpha: number;
+        hue: number;
+      }
+      const sparkles: Sparkle[] = [];
+      let gMouseX = -200;
+      let gMouseY = -200;
+      let curGlowX = -200;
+      let curGlowY = -200;
+
+      window.addEventListener("mousemove", (e) => {
+        gMouseX = e.clientX;
+        gMouseY = e.clientY;
+
+        if (Math.random() < 0.45 && sparkles.length < 40) {
+          sparkles.push({
+            x: e.clientX + (Math.random() - 0.5) * 16,
+            y: e.clientY + (Math.random() - 0.5) * 16,
+            vx: (Math.random() - 0.5) * 0.8,
+            vy: (Math.random() - 0.5) * 0.8 - 0.3,
+            size: Math.random() * 2 + 1,
+            alpha: 0.85,
+            hue: Math.random() < 0.5 ? 190 : 275,
+          });
+        }
+      }, { passive: true });
+
+      const animateGlobalCursor = () => {
+        curGlowX += (gMouseX - curGlowX) * 0.14;
+        curGlowY += (gMouseY - curGlowY) * 0.14;
+        if (cursorGlow) {
+          cursorGlow.style.transform = `translate3d(${curGlowX - 160}px, ${curGlowY - 160}px, 0)`;
+        }
+
+        if (particleCtx && cursorCanvas) {
+          particleCtx.clearRect(0, 0, cursorCanvas.width, cursorCanvas.height);
+          for (let i = sparkles.length - 1; i >= 0; i--) {
+            const sp = sparkles[i];
+            sp.x += sp.vx;
+            sp.y += sp.vy;
+            sp.alpha -= 0.02;
+            if (sp.alpha <= 0) {
+              sparkles.splice(i, 1);
+              continue;
+            }
+            particleCtx.beginPath();
+            particleCtx.arc(sp.x, sp.y, sp.size, 0, Math.PI * 2);
+            particleCtx.fillStyle = `hsla(${sp.hue}, 90%, 75%, ${sp.alpha})`;
+            particleCtx.shadowColor = `hsl(${sp.hue}, 90%, 65%)`;
+            particleCtx.shadowBlur = 8;
+            particleCtx.fill();
+          }
+        }
+        requestAnimationFrame(animateGlobalCursor);
+      };
+      requestAnimationFrame(animateGlobalCursor);
     </script>
   </body>
 </html>
 
 <style is:global>
   :root {
-    --bg: #09090b;
-    --bg-elev: #0c0c0e;
-    --bg-card: #111113;
-    --fg: #fafafa;
-    --fg-muted: #a1a1aa;
-    --fg-dim: #71717a;
-    --fg-faint: #52525b;
-    --border: rgba(255, 255, 255, 0.08);
-    --border-strong: rgba(255, 255, 255, 0.14);
-    --accent-h: 250;
-    --accent: oklch(0.68 0.17 var(--accent-h));
-    --accent-dim: oklch(0.68 0.17 var(--accent-h) / 0.15);
-    --ok: oklch(0.72 0.16 150);
-    --warn: oklch(0.76 0.15 75);
-    --font-sans: "DM Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
-    --radius: 12px;
+    /* Google Antigravity Signature Palette */
+    --ag-bg: #090a0f;
+    --ag-bg-surface: #12141c;
+    --ag-bg-surface-elevated: #1a1d28;
+    --ag-bg-card: rgba(22, 26, 38, 0.7);
+    --ag-bg-card-hover: rgba(30, 36, 52, 0.9);
+
+    --ag-border: rgba(255, 255, 255, 0.08);
+    --ag-border-light: rgba(255, 255, 255, 0.14);
+    --ag-border-hover: rgba(255, 255, 255, 0.25);
+
+    --google-blue: #3186FF;
+    --google-red: #FC413D;
+    --google-yellow: #FBBC04;
+    --google-green: #00B95C;
+
+    --fg-text: #f4f5f8;
+    --fg-secondary: #9aa0a6;
+    --fg-muted: #6b7280;
+    --fg-faint: #4b5563;
+
+    --font-ag-sans: "Google Sans Flex", "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-ag-mono: "Google Sans Code", "JetBrains Mono", monospace;
+
     --radius-sm: 8px;
-    --radius-lg: 16px;
+    --radius-md: 14px;
+    --radius-lg: 24px;
+    --radius-xl: 32px;
+    --radius-pill: 9999px;
   }
 
   * {
@@ -127,32 +520,22 @@ const {
   }
 
   html {
+    background-color: var(--ag-bg);
     color-scheme: dark;
     scroll-behavior: smooth;
+    scroll-padding-top: 84px;
   }
 
   body {
-    background: var(--bg);
-    color: var(--fg);
-    font-family: var(--font-sans);
-    font-feature-settings: "ss01", "ss02";
+    background: var(--ag-bg);
+    color: var(--fg-text);
+    font-family: var(--font-ag-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    min-height: 100vh;
+    line-height: 1.6;
     overflow-x: hidden;
-    line-height: 1.5;
-  }
-
-  body::after {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    opacity: 0.035;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-    background-repeat: repeat;
-    background-size: 256px 256px;
-    z-index: 9999;
+    position: relative;
+    min-height: 100vh;
   }
 
   a {
@@ -162,313 +545,630 @@ const {
 
   button {
     font-family: inherit;
-    cursor: pointer;
-    border: 0;
+    border: none;
     background: none;
-    color: inherit;
+    cursor: pointer;
   }
 
-  img,
-  svg {
-    display: block;
-    max-width: 100%;
+  /* Universal Reveal Animation Utility */
+  .k-reveal {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: opacity, transform;
   }
-
-  .eyebrow {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--fg-dim);
-    font-weight: 500;
-  }
-
-  .display {
-    font-weight: 500;
-    letter-spacing: -0.035em;
-    line-height: 1.05;
-  }
-
-  .container {
-    width: 100%;
-    max-width: 1240px;
-    margin: 0 auto;
-    padding: 0 32px;
-  }
-
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    font-weight: 500;
-    font-size: 14px;
-    padding: 10px 18px;
-    border-radius: 8px;
-    transition: transform 0.18s ease, background 0.18s ease,
-      border-color 0.18s ease, color 0.18s ease;
-    white-space: nowrap;
-  }
-
-  .btn-primary {
-    background: var(--fg);
-    color: #09090b;
-    font-weight: 600;
-  }
-
-  .btn-primary:hover {
-    transform: translateY(-1px);
-    background: #fff;
-  }
-
-  .btn-primary:active {
+  .k-reveal.is-revealed,
+  .k-reveal.in-view {
+    opacity: 1;
     transform: translateY(0);
   }
 
-  .btn-ghost {
-    color: var(--fg-muted);
-    border: 1px solid var(--border);
-    background: transparent;
+  .k-reveal-scale {
+    opacity: 0;
+    transform: translateY(24px) scale(0.97);
+    transition: opacity 0.75s cubic-bezier(0.16, 1, 0.3, 1), transform 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: opacity, transform;
+  }
+  .k-reveal-scale.is-revealed,
+  .k-reveal-scale.in-view {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 
-  .btn-ghost:hover {
-    color: var(--fg);
-    border-color: var(--border-strong);
-    background: rgba(255, 255, 255, 0.02);
+  /* Google Symbols Icon Font */
+  .symbol {
+    font-family: "Google Symbols";
+    font-weight: 300;
+    font-style: normal;
+    font-size: 20px;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    word-wrap: normal;
+    direction: ltr;
+    font-variation-settings: "FILL" 0, "wght" 300, "GRAD" 0, "ROND" 50, "opsz" 24;
   }
 
-  .btn-lg {
-    padding: 14px 22px;
-    font-size: 15px;
-    border-radius: 10px;
+  .symbol.filled {
+    font-variation-settings: "FILL" 1, "wght" 400, "GRAD" 0, "ROND" 50, "opsz" 24;
   }
 
-  .tile {
-    position: relative;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0));
+  /* Ambient Cosmic Mesh */
+  .antigravity-bg {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
     overflow: hidden;
   }
 
-  :focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-    border-radius: 4px;
+  .space-mesh {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    background-size: 54px 54px;
+    mask-image: radial-gradient(ellipse at 50% 15%, black 35%, transparent 80%);
+    -webkit-mask-image: radial-gradient(ellipse at 50% 15%, black 35%, transparent 80%);
   }
 
-  @keyframes fade-in {
-    from {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+  .orb-glow {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(140px);
+    pointer-events: none;
+    opacity: 0.28;
   }
 
-  @keyframes pulse {
-    50% { opacity: 0.4; }
+  .orb-1 {
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, #3186FF 0%, transparent 70%);
+    top: -150px;
+    left: 15%;
   }
 
-  @keyframes spin {
-    to { transform: rotate(360deg); }
+  .orb-2 {
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, #FC413D 0%, transparent 70%);
+    top: 25%;
+    right: 5%;
+    opacity: 0.18;
   }
 
-  @keyframes floatDrift {
-    0%, 100% { translate: 0 0; }
-    50%      { translate: 0 -10px; }
-  }
-
-  @keyframes blink {
-    50% { opacity: 0; }
-  }
-</style>
-
-<style>
-  .page {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    overflow-x: clip;
-  }
-
-  .nav {
-    position: sticky;
+  /* Header */
+  .ag-header {
+    position: fixed;
     top: 0;
-    z-index: 50;
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-    background: color-mix(in srgb, var(--bg) 75%, transparent);
-    border-bottom: 1px solid transparent;
-    transition: border-color 0.3s ease;
+    left: 0;
+    right: 0;
+    z-index: 900;
+    padding: 18px 0;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  .nav.is-scrolled {
-    border-bottom-color: var(--border);
+  .ag-header.is-scrolled {
+    padding: 10px 0;
+    background: rgba(9, 10, 15, 0.82);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--ag-border);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
   }
 
-  .nav-inner {
-    max-width: 1240px;
+  .header-container {
+    max-width: 1280px;
     margin: 0 auto;
-    padding: 12px 32px;
+    padding: 0 28px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 24px;
   }
 
-  .nav-brand {
-    display: inline-flex;
+  .header-left, .header-right {
+    display: flex;
     align-items: center;
-    color: var(--fg);
-    transition: color 0.2s ease;
+    gap: 28px;
   }
 
-  .nav-brand:hover {
+  .ag-logo-wrap {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+
+  .ag-symbol-logo {
+    display: block;
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .ag-logo-wrap:hover .ag-symbol-logo {
+    transform: scale(1.08);
+    box-shadow: 0 0 14px rgba(168, 85, 247, 0.6);
+  }
+
+  .ag-brand-text {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
     color: #fff;
   }
 
-  .nav-brand-name {
-    font-size: 16px;
-    font-weight: 650;
-    letter-spacing: -0.025em;
-    line-height: 1;
+  .ag-version-badge {
+    font-family: var(--font-ag-mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: #3186FF;
+    background: rgba(49, 134, 255, 0.12);
+    border: 1px solid rgba(49, 134, 255, 0.3);
+    padding: 1px 7px;
+    border-radius: var(--radius-pill);
   }
 
-  .nav-right {
+  .ag-nav {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ag-nav-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 14px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--fg-secondary);
+    border-radius: var(--radius-pill);
+    transition: all 0.2s ease;
+  }
+
+  .ag-nav-btn:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .ag-nav-dropdown-wrap {
+    position: relative;
+  }
+
+  .dropdown-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    width: 280px;
+    background: rgba(18, 20, 28, 0.95);
+    backdrop-filter: blur(24px);
+    border: 1px solid var(--ag-border-light);
+    border-radius: var(--radius-md);
+    padding: 8px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(8px);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 1000;
+  }
+
+  .ag-nav-dropdown-wrap.is-open .dropdown-menu {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  .dropdown-entry {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    transition: all 0.15s ease;
+  }
+
+  .dropdown-entry:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .dropdown-entry strong {
+    display: block;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #fff;
+  }
+
+  .dropdown-entry p {
+    font-size: 12px;
+    color: var(--fg-muted);
+  }
+
+  .icon-blue { color: var(--google-blue); }
+  .icon-green { color: var(--google-green); }
+  .icon-yellow { color: var(--google-yellow); }
+  .icon-red { color: var(--google-red); }
+
+  /* Header Right buttons */
+  .cmd-search-btn {
     display: inline-flex;
     align-items: center;
     gap: 8px;
+    padding: 7px 14px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--ag-border);
+    border-radius: var(--radius-pill);
+    color: var(--fg-secondary);
+    font-size: 13px;
+    transition: all 0.2s ease;
   }
 
-  .nav-stars {
+  .cmd-search-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--ag-border-hover);
+    color: #fff;
+  }
+
+  .search-icon {
+    font-size: 17px;
+  }
+
+  .kbd-badge {
+    font-family: var(--font-ag-mono);
+    font-size: 10.5px;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--fg-muted);
+  }
+
+  .ag-ghost-btn {
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    height: 36px;
-    padding: 0 14px;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.02);
-    color: var(--fg-muted);
+    padding: 7px 14px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--ag-border);
+    border-radius: var(--radius-pill);
     font-size: 13px;
-    letter-spacing: -0.01em;
-    white-space: nowrap;
-    transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+    font-weight: 600;
+    color: var(--fg-text);
+    transition: all 0.2s ease;
   }
 
-  .nav-stars:hover {
-    color: var(--fg);
-    border-color: var(--border-strong);
-    background: rgba(255, 255, 255, 0.04);
+  .ag-ghost-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--ag-border-hover);
+    color: #fff;
   }
 
-  .nav-stars strong {
-    color: var(--fg);
+  .ag-pill-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 18px;
+    border-radius: var(--radius-pill);
+    font-size: 13.5px;
+    font-weight: 600;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .ag-pill-btn--primary {
+    background: var(--google-blue);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(49, 134, 255, 0.4);
+  }
+
+  .ag-pill-btn--primary:hover {
+    background: #4292ff;
+    box-shadow: 0 6px 20px rgba(49, 134, 255, 0.6);
+    transform: translateY(-1px);
+  }
+
+  /* Footer styling */
+  .ag-footer {
+    border-top: 1px solid var(--ag-border);
+    background: #06070a;
+    padding: 80px 0 40px;
+    margin-top: 120px;
+    position: relative;
+    z-index: 2;
+  }
+
+  .footer-container {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 28px;
+  }
+
+  .footer-upper {
+    display: grid;
+    grid-template-columns: 1.3fr 2fr;
+    gap: 60px;
+    padding-bottom: 60px;
+    border-bottom: 1px solid var(--ag-border);
+  }
+
+  .footer-headline {
+    font-size: 32px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 12px;
+    letter-spacing: -0.02em;
+  }
+
+  .footer-desc {
+    font-size: 14.5px;
+    color: var(--fg-secondary);
+    line-height: 1.6;
+    max-width: 400px;
+    margin-bottom: 24px;
+  }
+
+  .footer-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-ag-mono);
+    font-size: 12px;
+    color: #00B95C;
+    background: rgba(0, 185, 92, 0.08);
+    border: 1px solid rgba(0, 185, 92, 0.2);
+    padding: 4px 12px;
+    border-radius: var(--radius-pill);
+  }
+
+  .live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #00B95C;
+    box-shadow: 0 0 8px #00B95C;
+  }
+
+  .footer-nav-columns {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 30px;
+  }
+
+  .footer-col h4 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--fg-faint);
+    margin-bottom: 16px;
     font-weight: 600;
   }
 
-  .nav-stars svg {
-    color: var(--warn);
-    flex-shrink: 0;
+  .footer-col a {
+    display: block;
+    font-size: 14px;
+    color: var(--fg-secondary);
+    margin-bottom: 10px;
+    transition: color 0.15s ease;
   }
 
-  .main {
-    flex: 1;
+  .footer-col a:hover {
+    color: #fff;
+  }
+
+
+  .footer-bottom-bar {
     display: flex;
-    flex-direction: column;
-  }
-
-  .footer {
-    margin-top: auto;
-    border-top: 1px solid var(--border);
-    padding: 40px 0 32px;
-  }
-
-  .footer-inner {
-    max-width: 1240px;
-    margin: 0 auto;
-    padding: 0 32px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 24px;
     align-items: center;
     justify-content: space-between;
+    padding-top: 24px;
+    font-size: 13px;
+    color: var(--fg-muted);
   }
 
-  .footer-brand {
+  .footer-bottom-links {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .footer-bottom-links a:hover {
+    color: #fff;
+  }
+
+  /* Command Palette Modal */
+  .ag-cmd-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(12px);
+    z-index: 10000;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 12vh;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+
+  .ag-cmd-overlay.is-active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .ag-cmd-dialog {
+    width: 90%;
+    max-width: 620px;
+    background: #151822;
+    border: 1px solid var(--ag-border-light);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 30px 70px rgba(0, 0, 0, 0.8);
+    overflow: hidden;
+    transform: scale(0.96) translateY(-10px);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .ag-cmd-overlay.is-active .ag-cmd-dialog {
+    transform: scale(1) translateY(0);
+  }
+
+  .ag-cmd-input-wrap {
     display: flex;
     align-items: center;
-    gap: 10px;
-    font-size: 13px;
-    color: var(--fg-dim);
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--ag-border);
   }
 
-  .footer-brand img {
-    width: 20px;
-    height: 20px;
+  .ag-cmd-input-wrap input {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    font-size: 16px;
+    color: #fff;
+    font-family: inherit;
+  }
+
+  .kbd-esc {
+    font-family: var(--font-ag-mono);
+    font-size: 11px;
+    padding: 3px 8px;
+    background: rgba(255, 255, 255, 0.08);
     border-radius: 4px;
+    color: var(--fg-muted);
   }
 
-  .footer-links {
+  .ag-cmd-results {
+    max-height: 380px;
+    overflow-y: auto;
+    padding: 12px;
+  }
+
+  .cmd-group-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--fg-faint);
+    padding: 6px 12px;
+  }
+
+  .ag-cmd-item {
     display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 20px;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    color: var(--fg-text);
+    transition: all 0.15s ease;
   }
 
-  .footer-links a {
+  .ag-cmd-item:hover {
+    background: rgba(49, 134, 255, 0.15);
+    color: #fff;
+  }
+
+  .ag-cmd-item strong {
+    display: block;
+    font-size: 14px;
+  }
+
+  .ag-cmd-item small {
+    color: var(--fg-muted);
+    font-size: 12px;
+  }
+
+  /* Floating Back to Top Button */
+  .ag-back-to-top {
+    position: fixed;
+    bottom: 28px;
+    left: 28px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: rgba(18, 14, 28, 0.85);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(168, 85, 247, 0.4);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 999;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(15px);
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .ag-back-to-top.is-visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+  .ag-back-to-top:hover {
+    background: #a855f7;
+    border-color: #a855f7;
+    transform: translateY(-3px);
+    box-shadow: 0 12px 30px rgba(168, 85, 247, 0.5);
+  }
+
+  /* Global Toast Notification */
+  .ag-toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(30px);
+    background: #11131a;
+    border: 1px solid rgba(74, 222, 128, 0.5);
+    color: #ffffff;
+    padding: 10px 20px;
+    border-radius: 24px;
     font-size: 13px;
-    color: var(--fg-dim);
-    transition: color 0.2s ease;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 99999;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .ag-toast.is-visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
   }
 
-  .footer-links a:hover {
-    color: var(--fg);
+  /* Global Interactive Cursor Glow & Sparkle Canvas */
+  .k-cursor-glow {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 320px;
+    height: 320px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(168, 85, 247, 0.18) 0%, rgba(56, 189, 248, 0.1) 45%, transparent 70%);
+    pointer-events: none;
+    z-index: 9998;
+    mix-blend-mode: screen;
+    will-change: transform;
+    opacity: 0.85;
+    transition: opacity 0.3s ease;
   }
 
-  @media (max-width: 820px) {
-    .nav-inner,
-    .footer-inner {
-      padding-left: 20px;
-      padding-right: 20px;
-    }
-
-    .legal-document-page .nav {
-      display: none;
-    }
-
-    .footer {
-      padding-bottom: max(32px, env(safe-area-inset-bottom));
-    }
-
-    .footer-inner {
-      align-items: flex-start;
-      flex-direction: column;
-      gap: 28px;
-    }
-
-    .footer-links {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      width: 100%;
-      gap: 14px 20px;
-      justify-content: initial;
-    }
+  .k-cursor-particles {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 9999;
   }
 
-  @media (max-width: 420px) {
-    .nav-inner {
-      gap: 12px;
-    }
-
-    .nav-stars {
-      height: 34px;
-      gap: 6px;
-      padding: 0 12px;
-      font-size: 12px;
-    }
+  @media (max-width: 900px) {
+    .header-left .ag-nav { display: none; }
+    .footer-upper { grid-template-columns: 1fr; gap: 40px; }
   }
 </style>
