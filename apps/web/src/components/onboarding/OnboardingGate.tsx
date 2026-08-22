@@ -144,30 +144,26 @@ function OnboardingProgress({
   const activeIndex = ONBOARDING_STEPS.findIndex((step) => step.key === activeStep);
 
   return (
-    <nav aria-label="Onboarding progress" className="grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
+    <nav aria-label="Onboarding progress" className="grid gap-2 sm:grid-cols-3">
       {ONBOARDING_STEPS.map((step, index) => {
         const Icon = step.icon;
         const active = step.key === activeStep;
         const complete = index < activeIndex;
         const canEditProfession = step.key === "profession" && activeStep === "setup";
         const className = cn(
-          "flex min-h-13 min-w-0 items-center gap-3 rounded-xl border px-3.5 py-3 text-left text-sm outline-none transition-[border-color,background-color,color]",
-          active && "border-foreground/20 bg-foreground text-background",
-          complete && !active && "border-border bg-background text-foreground",
-          !active && !complete && "border-transparent bg-background/50 text-muted-foreground",
+          "flex min-w-0 items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm outline-none transition-colors",
+          active && "border-primary/45 bg-primary/8 text-foreground",
+          complete && !active && "border-success/25 bg-success/8 text-success-foreground",
+          !active && !complete && "border-border bg-background/55 text-muted-foreground",
           canEditProfession &&
-            "cursor-pointer hover:border-foreground/20 hover:bg-background focus-visible:ring-2 focus-visible:ring-ring",
+            "cursor-pointer hover:border-primary/35 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring",
         );
         const content = (
           <>
             <span
               className={cn(
                 "flex size-7 shrink-0 items-center justify-center rounded-lg border",
-                active
-                  ? "border-background/25 bg-background/10"
-                  : complete
-                    ? "border-border bg-muted"
-                    : "border-current/20",
+                complete ? "border-success/30 bg-success/10" : "border-current/20",
               )}
             >
               {complete ? <CheckCircle2Icon className="size-4" /> : <Icon className="size-4" />}
@@ -177,13 +173,7 @@ function OnboardingProgress({
         );
 
         return canEditProfession ? (
-          <button
-            key={step.key}
-            type="button"
-            aria-label="Edit profession"
-            className={className}
-            onClick={onProfessionEdit}
-          >
+          <button key={step.key} type="button" className={className} onClick={onProfessionEdit}>
             {content}
           </button>
         ) : (
@@ -207,29 +197,19 @@ function OnboardingFrame({
 }) {
   return (
     <div className="h-dvh overflow-auto bg-background text-foreground">
-      <div className="mx-auto flex min-h-dvh w-full max-w-6xl items-center px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
-        <div className="grid w-full overflow-hidden rounded-2xl border border-border bg-card shadow-[0_24px_70px_-32px_color-mix(in_srgb,var(--foreground)_28%,transparent)] lg:grid-cols-[18rem_minmax(0,1fr)]">
-          <aside className="flex flex-col border-b border-border bg-muted/35 p-5 sm:p-6 lg:min-h-[42rem] lg:border-r lg:border-b-0 lg:p-7">
-            <div>
-              <div className="mb-8 flex size-10 items-center justify-center rounded-xl bg-foreground text-lg font-semibold text-background shadow-sm">
-                K
-              </div>
-              <h1 className="text-3xl font-semibold tracking-[-0.035em]">Set up Kairo</h1>
-              <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
-                Sign in, tell us how you work, then connect a coding agent.
-              </p>
-            </div>
-            <div className="mt-6 lg:mt-10">
-              <OnboardingProgress activeStep={activeStep} onProfessionEdit={onProfessionEdit} />
-            </div>
-            <p className="mt-6 hidden text-xs leading-5 text-muted-foreground lg:mt-auto lg:block">
-              Three focused steps. Advanced integrations stay in Settings.
+      <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <header className="space-y-5 rounded-2xl border border-border/80 bg-card p-5 shadow-lg shadow-black/5 sm:p-6">
+          <div className="space-y-2">
+            <h1 className="text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">Set up Kairo</h1>
+            <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+              Sign in, tell us how you work, then connect a coding agent.
             </p>
-          </aside>
-          <main className="min-h-[34rem] bg-card p-5 sm:p-8 lg:min-h-[42rem] lg:p-10">
-            {children}
-          </main>
-        </div>
+          </div>
+          <OnboardingProgress activeStep={activeStep} onProfessionEdit={onProfessionEdit} />
+        </header>
+        <main className="rounded-2xl border border-border/80 bg-card p-5 shadow-xl shadow-black/7 sm:p-6">
+          {children}
+        </main>
       </div>
     </div>
   );
@@ -248,34 +228,18 @@ function SignInStep({
 }) {
   if (!loading && !signedIn) {
     return (
-      <section className="mx-auto grid min-h-[34rem] max-w-4xl items-center gap-8 lg:grid-cols-[minmax(0,0.8fr)_minmax(22rem,1fr)]">
-        <div className="max-w-sm">
-          <span className="flex size-11 items-center justify-center rounded-xl border border-border bg-muted text-foreground">
-            <LogInIcon className="size-5" />
-          </span>
-          <h2 className="mt-5 text-3xl font-semibold tracking-[-0.03em]">
-            Bring your work with you
-          </h2>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            Sign in with Clerk to connect this device to your Kairo account. Your local projects
-            stay on this machine.
-          </p>
-        </div>
-        <div className="flex min-h-64 flex-col justify-between rounded-xl border border-border bg-muted/30 p-6 sm:p-8">
-          <div>
-            <span className="text-sm font-semibold text-foreground">Kairo account</span>
-            <h3 className="mt-3 text-2xl font-semibold tracking-[-0.025em]">
-              Sign in securely with Clerk
-            </h3>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              Clerk handles account authentication. Kairo never receives your password.
-            </p>
-          </div>
-          <Button className="mt-8 w-full" size="lg" onClick={onSignIn}>
-            Continue with Clerk
-            <ArrowRightIcon className="size-4" />
-          </Button>
-        </div>
+      <section className="mx-auto flex min-h-80 max-w-lg flex-col items-center justify-center text-center">
+        <span className="mb-5 flex size-12 items-center justify-center rounded-xl border border-primary/25 bg-primary/10 text-primary">
+          <LogInIcon className="size-5" />
+        </span>
+        <h2 className="text-2xl font-semibold tracking-[-0.025em]">Sign in to continue</h2>
+        <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+          Clerk securely connects this device to your Kairo account.
+        </p>
+        <Button className="mt-6 min-w-48" onClick={onSignIn}>
+          Continue with Clerk
+          <ArrowRightIcon className="size-4" />
+        </Button>
       </section>
     );
   }
