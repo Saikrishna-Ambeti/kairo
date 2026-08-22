@@ -110,6 +110,7 @@ export function resolvePublicConfig(...sources: readonly Environment[]): KairoPu
       "KAIRO_CLERK_PUBLISHABLE_KEY",
       "VITE_CLERK_PUBLISHABLE_KEY",
       "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY",
+      "CLERK_PUBLISHABLE_KEY",
     ),
     clerkJwtTemplate: firstNonEmpty(
       sources,

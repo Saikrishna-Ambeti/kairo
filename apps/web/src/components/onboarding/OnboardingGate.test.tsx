@@ -1,7 +1,7 @@
 import { ProviderDriverKind, ProviderInstanceId, type ServerProvider } from "@kairo/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { canNavigateBackToOnboardingStep } from "./OnboardingGate";
+import { advanceOnboardingStep } from "./OnboardingGate";
 import {
   getOnboardingAgentAction,
   getOnboardingAgentDescription,
@@ -26,15 +26,11 @@ function provider(input: Partial<ServerProvider> = {}): ServerProvider {
   };
 }
 
-describe("onboarding stage navigation", () => {
-  it("allows selecting earlier stages", () => {
-    expect(canNavigateBackToOnboardingStep("memory", "agents")).toBe(true);
-    expect(canNavigateBackToOnboardingStep("finish", "composio")).toBe(true);
-  });
-
-  it("does not allow selecting the active or later stages from the rail", () => {
-    expect(canNavigateBackToOnboardingStep("memory", "memory")).toBe(false);
-    expect(canNavigateBackToOnboardingStep("memory", "composio")).toBe(false);
+describe("onboarding flow", () => {
+  it("runs sign-in, profession, and provider setup in order", () => {
+    expect(advanceOnboardingStep("sign-in")).toBe("profession");
+    expect(advanceOnboardingStep("profession")).toBe("setup");
+    expect(advanceOnboardingStep("setup")).toBe("setup");
   });
 });
 
