@@ -1,4 +1,9 @@
-import { ArrowLeftIcon, ChartNoAxesColumnIcon, SettingsIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  CalendarClockIcon,
+  ChartNoAxesColumnIcon,
+  SettingsIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { memo, useCallback } from "react";
 import { Link, useCanGoBack, useLocation, useNavigate } from "@tanstack/react-router";
@@ -132,9 +137,11 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
         ? "settings"
         : location.pathname === "/usage"
           ? "usage"
-          : location.pathname === "/pull-requests"
-            ? "pull-requests"
-            : null,
+          : location.pathname === "/scheduled-tasks"
+            ? "scheduled-tasks"
+            : location.pathname === "/pull-requests"
+              ? "pull-requests"
+              : null,
   });
   const closeMobileSidebar = useCallback(() => {
     if (isMobile) {
@@ -152,6 +159,11 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
     }
     void navigate({ to: "/usage" });
   }, [isMobile, navigate, setOpenMobile]);
+
+  const handleScheduledTasksClick = useCallback(() => {
+    closeMobileSidebar();
+    void navigate({ to: "/scheduled-tasks" });
+  }, [closeMobileSidebar, navigate]);
 
   const handleBackClick = useCallback(() => {
     closeMobileSidebar();
@@ -182,6 +194,11 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
             icon={<ChartNoAxesColumnIcon />}
             label="Usage"
             onClick={handleUsageClick}
+          />
+          <SidebarUtilityItem
+            icon={<CalendarClockIcon />}
+            label="Scheduled tasks"
+            onClick={handleScheduledTasksClick}
           />
         </>
       )}
