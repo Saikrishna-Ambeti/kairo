@@ -18,6 +18,7 @@ const keyPair = NodeCrypto.generateKeyPairSync("ed25519", {
 
 const configuration: CloudApiConfigurationShape = {
   clerkSecretKey: Redacted.make("sk_test_clerk"),
+  clerkDevelopmentSecretKey: null,
   clerkJwtAudience: "kairo-test",
   supermemoryApiKey: Redacted.make("sm_service_owned"),
   supermemoryApiUrl: new URL("https://api.supermemory.test"),

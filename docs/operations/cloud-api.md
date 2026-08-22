@@ -5,8 +5,9 @@ domain works; buying or configuring a domain is optional.
 
 Set these runtime environment variables in Vercel:
 
-- `CLERK_SECRET_KEY` is sensitive. Use the same Clerk instance as the Kairo clients.
-- `CLERK_JWT_AUDIENCE` must be `kairo-code-relay`, matching Kairo's `kairo-relay` JWT template.
+- `CLERK_SECRET_KEY` is sensitive. Use the production Clerk instance used by Kairo clients.
+- `CLERK_DEVELOPMENT_SECRET_KEY` is sensitive and optional. Set it when local desktop builds use the Clerk development instance.
+- `CLERK_JWT_AUDIENCE` must be `kairo-relay`, matching Kairo's `kairo-relay` JWT template.
 - `SUPERMEMORY_API_KEY` is sensitive.
 - `KAIRO_CLOUD_TOKEN_PRIVATE_KEY` is sensitive.
 - `KAIRO_CLOUD_TOKEN_PUBLIC_KEY`

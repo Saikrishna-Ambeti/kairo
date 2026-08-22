@@ -8,6 +8,7 @@ const NamespaceHmacKey = Schema.String.check(Schema.isMinLength(32));
 
 const CloudApiEnvironment = Schema.Struct({
   CLERK_SECRET_KEY: NonEmptyString,
+  CLERK_DEVELOPMENT_SECRET_KEY: Schema.optionalKey(NonEmptyString),
   CLERK_JWT_AUDIENCE: NonEmptyString,
   SUPERMEMORY_API_KEY: NonEmptyString,
   COMPOSIO_API_KEY: Schema.optionalKey(NonEmptyString),
@@ -22,6 +23,7 @@ const decodeCloudApiEnvironment = Schema.decodeUnknownSync(CloudApiEnvironment);
 
 export interface CloudApiConfigurationShape {
   readonly clerkSecretKey: Redacted.Redacted<string>;
+  readonly clerkDevelopmentSecretKey: Redacted.Redacted<string> | null;
   readonly clerkJwtAudience: string;
   readonly supermemoryApiKey: Redacted.Redacted<string>;
   readonly supermemoryApiUrl: URL;
@@ -49,6 +51,7 @@ export function fromEnv(
 ): CloudApiConfigurationShape {
   const decoded = decodeCloudApiEnvironment({
     CLERK_SECRET_KEY: env.CLERK_SECRET_KEY,
+    CLERK_DEVELOPMENT_SECRET_KEY: env.CLERK_DEVELOPMENT_SECRET_KEY,
     CLERK_JWT_AUDIENCE: env.CLERK_JWT_AUDIENCE,
     SUPERMEMORY_API_KEY: env.SUPERMEMORY_API_KEY,
     COMPOSIO_API_KEY: env.COMPOSIO_API_KEY,
@@ -62,6 +65,9 @@ export function fromEnv(
 
   return make({
     clerkSecretKey: Redacted.make(decoded.CLERK_SECRET_KEY),
+    clerkDevelopmentSecretKey: decoded.CLERK_DEVELOPMENT_SECRET_KEY
+      ? Redacted.make(decoded.CLERK_DEVELOPMENT_SECRET_KEY)
+      : null,
     clerkJwtAudience: decoded.CLERK_JWT_AUDIENCE,
     supermemoryApiKey: Redacted.make(decoded.SUPERMEMORY_API_KEY),
     supermemoryApiUrl: decoded.SUPERMEMORY_API_URL ?? new URL("https://api.supermemory.ai"),
