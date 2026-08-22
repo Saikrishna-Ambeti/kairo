@@ -8,6 +8,13 @@ Turn T3 Code into Kairo: a calmer, local-first assistant for everyday work. Kair
 
 Behavioral specification of the Kairo changes applied on top of upstream T3 Code. Implementation specifics are intentionally omitted: they track the upstream revision and may change. This section describes what Kairo is and does, not how it is built.
 
+## Upstream baseline
+
+- Synced with upstream T3 Code through `11f05137` in merge `4c1c20a2`.
+- The Kairo behavior described below remains the source of truth when resolving upstream changes.
+- Equivalent upstream behavior is reused instead of maintained twice. The desktop launcher now uses upstream launcher version 15, which already preserves framework symlinks.
+- Generated web routing includes the connected-app settings page at `/settings/integrations/apps`.
+
 ### 1. Product identity
 
 - Product renamed from **T3 Code** to **Kairo**; hosted service from **T3 Connect** to **Kairo Connect**.
@@ -104,3 +111,5 @@ Behavioral specification of the Kairo changes applied on top of upstream T3 Code
 - `58cfef0d` — Restore test workflow.
 - `6af4664c` — Stabilize browser tests.
 - `d6f583ee` — Remove stale Kairo names.
+- `4c1c20a2` — Merge upstream main while preserving the Kairo patch.
+- `7dd78089` — Refresh the generated connected-app integrations route.

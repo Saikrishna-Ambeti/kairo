@@ -30,7 +30,7 @@ export const config: VercelConfig = {
     deploymentEnabled: false,
   },
   installCommand:
-    "npm install -g vite-plus && vp install --filter '@kairo/scripts...' --filter '@kairo/web...'",
+    "npm install -g vite-plus && vp install --ignore-scripts --filter '@kairo/scripts...' --filter '@kairo/web...'",
   routes: [
     {
       src: "/__kairo/channel",

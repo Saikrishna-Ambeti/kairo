@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
-import { cp, mkdir, mkdtemp, readFile, rm, symlink } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
-import { spawn } from "node:child_process";
+import * as NodeFSP from "node:fs/promises";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
+import * as NodeChildProcess from "node:child_process";
 
 function usage() {
   console.error("Usage: dmgbuild-hdiutil-shim -s <settings.json> <volumeName> <artifactPath>");
@@ -34,7 +34,7 @@ function parseArgs(argv) {
 
 function run(command, args) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: "inherit" });
+    const child = NodeChildProcess.spawn(command, args, { stdio: "inherit" });
     child.on("error", reject);
     child.on("exit", (code, signal) => {
       if (code === 0) {
@@ -51,7 +51,7 @@ function contentName(content) {
     return content.name;
   }
   if (typeof content.path === "string" && content.path.length > 0) {
-    return basename(content.path);
+    return NodePath.basename(content.path);
   }
   return undefined;
 }
@@ -63,15 +63,15 @@ async function stageContents(settings, sourceDir) {
     const name = contentName(content);
     if (!name) continue;
 
-    const targetPath = join(sourceDir, name);
+    const targetPath = NodePath.join(sourceDir, name);
     if (content.type === "link") {
       if (typeof content.path !== "string" || content.path.length === 0) continue;
-      await symlink(content.path, targetPath);
+      await NodeFSP.symlink(content.path, targetPath);
       continue;
     }
 
     if (typeof content.path !== "string" || content.path.length === 0) continue;
-    await cp(content.path, targetPath, {
+    await NodeFSP.cp(content.path, targetPath, {
       recursive: true,
       preserveTimestamps: true,
       verbatimSymlinks: true,
@@ -81,13 +81,13 @@ async function stageContents(settings, sourceDir) {
 
 async function main() {
   const { settingsPath, volumeName, artifactPath } = parseArgs(process.argv.slice(2));
-  const settings = JSON.parse(await readFile(settingsPath, "utf8"));
-  const tmpRoot = await mkdtemp(join(tmpdir(), "kairo-dmg-"));
+  const settings = JSON.parse(await NodeFSP.readFile(settingsPath, "utf8"));
+  const tmpRoot = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "kairo-dmg-"));
 
   try {
-    const sourceDir = join(tmpRoot, "contents");
-    await mkdir(sourceDir, { recursive: true });
-    await mkdir(dirname(artifactPath), { recursive: true });
+    const sourceDir = NodePath.join(tmpRoot, "contents");
+    await NodeFSP.mkdir(sourceDir, { recursive: true });
+    await NodeFSP.mkdir(NodePath.dirname(artifactPath), { recursive: true });
     await stageContents(settings, sourceDir);
 
     const args = [
@@ -108,7 +108,7 @@ async function main() {
     args.push(artifactPath);
     await run("hdiutil", args);
   } finally {
-    await rm(tmpRoot, { recursive: true, force: true });
+    await NodeFSP.rm(tmpRoot, { recursive: true, force: true });
   }
 }
 

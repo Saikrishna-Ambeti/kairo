@@ -1,30 +1,52 @@
 import { useAtomValue } from "@effect/atom-react";
 import {
   createManagedRelayQueryManager,
-  ManagedRelayClient,
+  deregisterManagedRelayEnvironment,
+  ManagedRelay,
   managedRelaySessionAtom,
   readManagedRelaySnapshotState,
-} from "@kairo/client-runtime";
+} from "@kairo/client-runtime/relay";
+import {
+  createAtomCommandScheduler,
+  createRuntimeCommand,
+} from "@kairo/client-runtime/state/runtime";
 import type { RelayClientDeviceRecord, RelayClientEnvironmentRecord } from "@kairo/contracts/relay";
+import type { EnvironmentId } from "@kairo/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 
-import { webRuntime } from "../lib/runtime";
+import { runtime } from "../lib/runtime";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 
 const managedRelayAtomRuntime = Atom.runtime(
   Layer.effect(
-    ManagedRelayClient,
-    webRuntime.contextEffect.pipe(
-      Effect.map((context) => Context.get(context, ManagedRelayClient)),
+    ManagedRelay.ManagedRelayClient,
+    runtime.contextEffect.pipe(
+      Effect.map((context) => Context.get(context, ManagedRelay.ManagedRelayClient)),
     ),
   ),
 );
 
 export const managedRelayQueryManager = createManagedRelayQueryManager(managedRelayAtomRuntime);
+
+const managedRelayMutationScheduler = createAtomCommandScheduler();
+
+export const deregisterManagedRelayEnvironmentCommand = createRuntimeCommand(
+  managedRelayAtomRuntime,
+  {
+    label: "web:managed-relay:deregister-environment",
+    scheduler: managedRelayMutationScheduler,
+    concurrency: {
+      mode: "serial",
+      key: (input: { readonly accountId: string; readonly environmentId: EnvironmentId }) =>
+        input.accountId,
+    },
+    execute: (input, registry) => deregisterManagedRelayEnvironment(registry, input),
+  },
+);
 
 const EMPTY_ENVIRONMENTS_ATOM = Atom.make(
   AsyncResult.success<ReadonlyArray<RelayClientEnvironmentRecord>>([]),
@@ -41,6 +63,15 @@ export function useManagedRelayEnvironments() {
     ? managedRelayQueryManager.environmentsAtom(accountId)
     : EMPTY_ENVIRONMENTS_ATOM;
   const result = useAtomValue(atom);
+  const snapshot = readManagedRelaySnapshotState(result);
+  useEffect(() => {
+    if (snapshot.error) {
+      console.error("[kairo-cloud] Relay environment listing failed", {
+        message: snapshot.error,
+        traceId: snapshot.errorTraceId,
+      });
+    }
+  }, [snapshot.error, snapshot.errorTraceId]);
   const refresh = useCallback(() => {
     if (accountId) {
       managedRelayQueryManager.refreshEnvironments(appAtomRegistry, accountId);
@@ -48,7 +79,7 @@ export function useManagedRelayEnvironments() {
   }, [accountId]);
 
   return {
-    ...readManagedRelaySnapshotState(result),
+    ...snapshot,
     accountId,
     refresh,
   };
@@ -59,6 +90,15 @@ export function useManagedRelayDevices() {
   const accountId = session?.accountId ?? null;
   const atom = accountId ? managedRelayQueryManager.devicesAtom(accountId) : EMPTY_DEVICES_ATOM;
   const result = useAtomValue(atom);
+  const snapshot = readManagedRelaySnapshotState(result);
+  useEffect(() => {
+    if (snapshot.error) {
+      console.error("[kairo-cloud] Relay device listing failed", {
+        message: snapshot.error,
+        traceId: snapshot.errorTraceId,
+      });
+    }
+  }, [snapshot.error, snapshot.errorTraceId]);
   const refresh = useCallback(() => {
     if (accountId) {
       managedRelayQueryManager.refreshDevices(appAtomRegistry, accountId);
@@ -66,7 +106,7 @@ export function useManagedRelayDevices() {
   }, [accountId]);
 
   return {
-    ...readManagedRelaySnapshotState(result),
+    ...snapshot,
     accountId,
     refresh,
   };

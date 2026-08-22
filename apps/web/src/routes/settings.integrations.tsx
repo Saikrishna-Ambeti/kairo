@@ -1,7 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { IntegrationsSettings } from "../components/settings/IntegrationsSettings";
+import { IntegrationsSettingsPanel } from "../components/settings/IntegrationsSettings";
+
+function SettingsIntegrationsRoute() {
+  return <IntegrationsSettingsPanel />;
+}
 
 export const Route = createFileRoute("/settings/integrations")({
-  component: IntegrationsSettings,
+  component: SettingsIntegrationsRoute,
 });

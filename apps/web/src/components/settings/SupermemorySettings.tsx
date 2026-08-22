@@ -14,8 +14,8 @@ import type {
   SupermemoryStatus,
 } from "@kairo/contracts";
 
-import { ensureLocalApi } from "../../localApi";
 import { useServerProviders, useServerSettings } from "../../rpc/serverState";
+import { usePrimaryServerApi } from "../../state/primaryServerApi";
 import { cn } from "../../lib/utils";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Badge } from "../ui/badge";
@@ -44,11 +44,12 @@ function showMemoryError(title: string, error: unknown) {
 }
 
 function useSupermemoryStatus() {
+  const serverApi = usePrimaryServerApi();
   const [status, setStatus] = useState<SupermemoryStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    const next = await ensureLocalApi().server.getMemoryStatus();
+    const next = await serverApi.getMemoryStatus();
     setStatus(next);
     return next;
   }, []);
@@ -161,6 +162,7 @@ function SupermemorySetupWizard({
   status: SupermemoryStatus;
   onStatus: (status: SupermemoryStatus) => void;
 }) {
+  const serverApi = usePrimaryServerApi();
   const settings = useServerSettings();
   const serverProviders = useServerProviders();
   const [apiKey, setApiKey] = useState("");
@@ -215,7 +217,7 @@ function SupermemorySetupWizard({
     setBusy("configure");
     try {
       const trimmedApiKey = apiKey.trim();
-      const next = await ensureLocalApi().server.configureMemory({
+      const next = await serverApi.configureMemory({
         providerInstanceIds: [...selectedIds],
         ...(trimmedApiKey ? { apiKey: trimmedApiKey } : {}),
       });
@@ -308,6 +310,7 @@ function ConfiguredSupermemoryPanel({
   status: SupermemoryStatus;
   onStatus: (status: SupermemoryStatus) => void;
 }) {
+  const serverApi = usePrimaryServerApi();
   const [busy, setBusy] = useState<BusyAction>(null);
   const [testConnection, setTestConnection] = useState<TestConnectionState>({ status: "idle" });
   const [editingProviders, setEditingProviders] = useState(false);
@@ -346,7 +349,7 @@ function ConfiguredSupermemoryPanel({
     setBusy("test");
     setTestConnection({ status: "testing" });
     try {
-      const next = await ensureLocalApi().server.testMemoryConnection();
+      const next = await serverApi.testMemoryConnection();
       onStatus(next);
       if (next.auth.lastError) {
         setTestConnection({ status: "error", message: next.auth.lastError });
@@ -408,7 +411,7 @@ function ConfiguredSupermemoryPanel({
               disabled={busy !== null}
               onClick={() =>
                 runAction("install", () =>
-                  ensureLocalApi().server.installMemoryProviders({
+                  serverApi.installMemoryProviders({
                     providerInstanceIds: status.providers
                       .filter((provider) => provider.selected && provider.supported)
                       .map((provider) => provider.instanceId),
@@ -422,7 +425,7 @@ function ConfiguredSupermemoryPanel({
             </Button>
             <Button
               disabled={busy !== null}
-              onClick={() => runAction("disable", () => ensureLocalApi().server.disableMemory())}
+              onClick={() => runAction("disable", () => serverApi.disableMemory())}
               size="sm"
               variant="destructive-outline"
             >
@@ -463,7 +466,7 @@ function ConfiguredSupermemoryPanel({
                   disabled={busy !== null}
                   onClick={() =>
                     runAction("providers", () =>
-                      ensureLocalApi().server.configureMemory({
+                      serverApi.configureMemory({
                         providerInstanceIds: [...selectedIds],
                       }),
                     )
@@ -487,7 +490,7 @@ function ConfiguredSupermemoryPanel({
               disabled={busy !== null || rotatedKey.trim().length === 0}
               onClick={() =>
                 runAction("rotate", async () => {
-                  const next = await ensureLocalApi().server.configureMemory({
+                  const next = await serverApi.configureMemory({
                     apiKey: rotatedKey.trim(),
                     providerInstanceIds: status.providers
                       .filter((provider) => provider.selected)

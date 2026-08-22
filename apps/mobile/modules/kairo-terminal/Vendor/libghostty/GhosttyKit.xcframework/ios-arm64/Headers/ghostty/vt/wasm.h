@@ -38,7 +38,7 @@
  * // Create key encoder
  * const encoderPtr = exports.ghostty_wasm_alloc_opaque();
  * exports.ghostty_key_encoder_new(null, encoderPtr);
- * const encoder = view.getUinkairo2(encoder, true);
+ * const encoder = view.getUint32(encoder, true);
  *
  * // Configure encoder with Kitty protocol flags
  * const flagsPtr = exports.ghostty_wasm_alloc_u8();
@@ -56,7 +56,7 @@
  * );
  *
  * // Read encoded output
- * const bytesWritten = view.getUinkairo2(writtenPtr, true);
+ * const bytesWritten = view.getUint32(writtenPtr, true);
  * const encoded = new Uint8Array(wasmMemory.buffer, bufPtr, bytesWritten);
  * @endcode
  *

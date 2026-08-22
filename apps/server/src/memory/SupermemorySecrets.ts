@@ -1,5 +1,6 @@
 import { SupermemoryError } from "@kairo/contracts";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 
@@ -30,7 +31,10 @@ export const getSupermemoryApiKey = (): Effect.Effect<
           }),
       ),
     );
-    return secret ? textDecoder.decode(secret) : null;
+    return Option.match(secret, {
+      onNone: () => null,
+      onSome: (value) => textDecoder.decode(value),
+    });
   });
 
 export const setSupermemoryApiKey = (

@@ -9,7 +9,7 @@ import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { OtlpTracer } from "effect/unstable/observability";
 
-import { EnvironmentConnectNotAuthorized } from "./environments/EnvironmentConnector.ts";
+import * as EnvironmentConnector from "./environments/EnvironmentConnector.ts";
 import { makeRelayTraceLayer } from "./observability.ts";
 
 interface ExportedRequest {
@@ -21,11 +21,11 @@ interface ExportedRequest {
 const otlpAttributeValue = (value: {
   readonly stringValue?: string | null;
   readonly boolValue?: boolean | null;
-  readonly intValue?: number | null;
+  readonly intValue?: string | number | null;
   readonly doubleValue?: number | null;
 }) => value.stringValue ?? value.boolValue ?? value.intValue ?? value.doubleValue;
 
-const decodeJson = Schema.decodeUnknownEffect(Schema.UnknownFromJsonString);
+const decodeJson = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown));
 
 it.effect("exports schema error fields as span attributes", () =>
   Effect.gen(function* () {
@@ -43,7 +43,7 @@ it.effect("exports schema error fields as span attributes", () =>
     );
 
     yield* Effect.fail(
-      new EnvironmentConnectNotAuthorized({
+      new EnvironmentConnector.EnvironmentConnectNotAuthorized({
         environmentId: "environment-1",
         operation: "connect",
         reason: "managed_endpoint_allocation_not_ready",

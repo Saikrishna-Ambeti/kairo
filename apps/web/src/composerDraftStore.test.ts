@@ -3,7 +3,7 @@ import {
   scopedThreadKey,
   scopeProjectRef,
   scopeThreadRef,
-} from "@kairo/client-runtime";
+} from "@kairo/client-runtime/environment";
 import * as Schema from "effect/Schema";
 import {
   defaultInstanceIdForDriver,
@@ -59,6 +59,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 
 import {
   COMPOSER_DRAFT_STORAGE_KEY,
+  clearComposerDraftsEnvironment,
   finalizePromotedDraftThreadByRef,
   markPromotedDraftThread,
   markPromotedDraftThreadByRef,
@@ -285,6 +286,62 @@ describe("composerDraftStore clearComposerContent", () => {
     const draft = draftFor(threadId, TEST_ENVIRONMENT_ID);
     expect(draft).toBeUndefined();
     expect(revokeSpy).not.toHaveBeenCalledWith("blob:optimistic");
+  });
+});
+
+describe("composerDraftStore moveComposerPromptAndImages", () => {
+  const sourceDraftId = DraftId.make("draft-move-source");
+  const destinationDraftId = DraftId.make("draft-move-destination");
+  let originalRevokeObjectUrl: typeof URL.revokeObjectURL;
+  let revokeSpy: ReturnType<typeof vi.fn<(url: string) => void>>;
+
+  beforeEach(() => {
+    resetComposerDraftStore();
+    originalRevokeObjectUrl = URL.revokeObjectURL;
+    revokeSpy = vi.fn();
+    URL.revokeObjectURL = revokeSpy;
+  });
+
+  afterEach(() => {
+    URL.revokeObjectURL = originalRevokeObjectUrl;
+  });
+
+  it("moves prompt and images to the destination without revoking preview URLs", () => {
+    const store = useComposerDraftStore.getState();
+    store.setPrompt(sourceDraftId, "fix the login redirect");
+    store.addImages(sourceDraftId, [makeImage({ id: "img-move", previewUrl: "blob:move" })]);
+
+    store.moveComposerPromptAndImages(sourceDraftId, destinationDraftId);
+
+    expect(draftByKey(sourceDraftId)).toBeUndefined();
+    const destination = draftByKey(destinationDraftId);
+    expect(destination?.prompt).toBe("fix the login redirect");
+    expect(destination?.images.map((image) => image.id)).toEqual(["img-move"]);
+    expect(revokeSpy).not.toHaveBeenCalled();
+  });
+
+  it("keeps session-bound contexts on the source and strips their placeholders from the moved prompt", () => {
+    const sourceThreadId = ThreadId.make("thread-move-source");
+    const sourceThreadRef = scopeThreadRef(TEST_ENVIRONMENT_ID, sourceThreadId);
+    const store = useComposerDraftStore.getState();
+    store.addTerminalContext(sourceThreadRef, makeTerminalContext({ id: "ctx-stay" }));
+    store.setPrompt(sourceThreadRef, `${INLINE_TERMINAL_CONTEXT_PLACEHOLDER} explain this error`);
+
+    store.moveComposerPromptAndImages(sourceThreadRef, destinationDraftId);
+
+    const source = draftFor(sourceThreadId, TEST_ENVIRONMENT_ID);
+    expect(source?.terminalContexts.map((context) => context.id)).toEqual(["ctx-stay"]);
+    expect(source?.prompt).toBe(INLINE_TERMINAL_CONTEXT_PLACEHOLDER);
+    expect(draftByKey(destinationDraftId)?.prompt).toBe(" explain this error");
+  });
+
+  it("is a no-op when source and destination are the same target", () => {
+    const store = useComposerDraftStore.getState();
+    store.setPrompt(sourceDraftId, "keep me");
+
+    store.moveComposerPromptAndImages(sourceDraftId, sourceDraftId);
+
+    expect(draftByKey(sourceDraftId)?.prompt).toBe("keep me");
   });
 });
 
@@ -522,6 +579,162 @@ describe("composerDraftStore terminal contexts", () => {
   });
 });
 
+describe("composerDraftStore element contexts", () => {
+  const threadId = ThreadId.make("thread-element");
+  const threadRef = scopeThreadRef(TEST_ENVIRONMENT_ID, threadId);
+  const baseSelection = {
+    pageUrl: "https://example.com/dashboard",
+    pageTitle: "Dashboard",
+    tagName: "button",
+    selector: "button.submit",
+    htmlPreview: "<button>Save</button>",
+    componentName: "SubmitButton",
+    source: {
+      functionName: "SubmitButton",
+      fileName: "/repo/Button.tsx",
+      lineNumber: 12,
+      columnNumber: 5,
+    },
+    styles: ".submit { color: white; }",
+  } as const;
+
+  beforeEach(() => {
+    resetComposerDraftStore();
+  });
+
+  it("adds an element context and stamps id + threadId + pickedAt", () => {
+    const accepted = useComposerDraftStore.getState().addElementContext(threadRef, baseSelection);
+    expect(accepted).toBe(true);
+    const draft = draftFor(threadId, TEST_ENVIRONMENT_ID);
+    expect(draft?.elementContexts).toHaveLength(1);
+    const entry = draft?.elementContexts[0]!;
+    expect(entry.id.startsWith("el_")).toBe(true);
+    expect(entry.threadId).toBe(threadId);
+    expect(entry.pickedAt.length).toBeGreaterThan(0);
+    expect(entry.componentName).toBe("SubmitButton");
+  });
+
+  it("dedupes by selector + tag + componentName + pageUrl signature", () => {
+    const store = useComposerDraftStore.getState();
+    expect(store.addElementContext(threadRef, baseSelection)).toBe(true);
+    const second = store.addElementContext(threadRef, {
+      ...baseSelection,
+      htmlPreview: "<button>Save 2</button>",
+    });
+    expect(second).toBe(false);
+    expect(draftFor(threadId, TEST_ENVIRONMENT_ID)?.elementContexts).toHaveLength(1);
+  });
+
+  it("removeElementContext drops by id + leaves siblings intact", () => {
+    const store = useComposerDraftStore.getState();
+    store.addElementContext(threadRef, baseSelection);
+    store.addElementContext(threadRef, { ...baseSelection, selector: "button.cancel" });
+    const ids = draftFor(threadId, TEST_ENVIRONMENT_ID)!.elementContexts.map((c) => c.id);
+    store.removeElementContext(threadRef, ids[0]!);
+    const remaining = draftFor(threadId, TEST_ENVIRONMENT_ID)?.elementContexts;
+    expect(remaining?.map((c) => c.id)).toEqual([ids[1]]);
+  });
+
+  it("setElementContexts replaces the slice and clearComposerContent wipes it", () => {
+    const store = useComposerDraftStore.getState();
+    store.addElementContext(threadRef, baseSelection);
+    store.setElementContexts(threadRef, []);
+    // Fully empty draft should be removed via shouldRemoveDraft.
+    expect(draftFor(threadId, TEST_ENVIRONMENT_ID)).toBeUndefined();
+
+    store.addElementContext(threadRef, baseSelection);
+    store.clearComposerContent(threadRef);
+    expect(draftFor(threadId, TEST_ENVIRONMENT_ID)).toBeUndefined();
+  });
+
+  it("persists element contexts via the partializer (round-trippable)", () => {
+    useComposerDraftStore.getState().addElementContext(threadRef, baseSelection);
+    const persistApi = useComposerDraftStore.persist as unknown as {
+      getOptions: () => {
+        partialize: (state: ReturnType<typeof useComposerDraftStore.getState>) => unknown;
+      };
+    };
+    const persisted = persistApi.getOptions().partialize(useComposerDraftStore.getState()) as {
+      draftsByThreadKey?: Record<string, { elementContexts?: Array<Record<string, unknown>> }>;
+    };
+    const entry =
+      persisted.draftsByThreadKey?.[threadKeyFor(threadId, TEST_ENVIRONMENT_ID)]
+        ?.elementContexts?.[0];
+    expect(entry).toMatchObject({
+      pageUrl: baseSelection.pageUrl,
+      tagName: baseSelection.tagName,
+      selector: baseSelection.selector,
+      componentName: baseSelection.componentName,
+    });
+    // Persistence does NOT include htmlPreview / styles oversize-clamping —
+    // that happens at normalization time, before the value reaches the store.
+    expect(typeof entry?.htmlPreview).toBe("string");
+  });
+});
+
+describe("composerDraftStore review comments", () => {
+  const threadId = ThreadId.make("thread-review-comment");
+  const threadRef = scopeThreadRef(TEST_ENVIRONMENT_ID, threadId);
+  const comment = {
+    id: "comment-1",
+    sectionId: "file:src/app.ts",
+    sectionTitle: "File comment",
+    filePath: "src/app.ts",
+    startIndex: 1,
+    endIndex: 2,
+    rangeLabel: "L2 to L3",
+    text: "Keep this configurable.",
+    diff: "@@ -2,2 +2,2 @@\n two\n three",
+  } as const;
+
+  beforeEach(() => {
+    resetComposerDraftStore();
+  });
+
+  it("upserts and removes review comments by id", () => {
+    const store = useComposerDraftStore.getState();
+    store.addReviewComment(threadRef, comment);
+    store.addReviewComment(threadRef, { ...comment, text: "Updated comment." });
+
+    expect(draftFor(threadId, TEST_ENVIRONMENT_ID)?.reviewComments).toEqual([
+      { ...comment, text: "Updated comment." },
+    ]);
+
+    store.removeReviewComment(threadRef, comment.id);
+    expect(draftFor(threadId, TEST_ENVIRONMENT_ID)).toBeUndefined();
+  });
+
+  it("persists review comments and clears them with composer content", () => {
+    const store = useComposerDraftStore.getState();
+    store.addReviewComment(threadRef, comment);
+    const persistApi = useComposerDraftStore.persist as unknown as {
+      getOptions: () => {
+        partialize: (state: ReturnType<typeof useComposerDraftStore.getState>) => unknown;
+      };
+    };
+    const persisted = persistApi.getOptions().partialize(useComposerDraftStore.getState()) as {
+      draftsByThreadKey?: Record<string, { reviewComments?: Array<Record<string, unknown>> }>;
+    };
+
+    expect(
+      persisted.draftsByThreadKey?.[threadKeyFor(threadId, TEST_ENVIRONMENT_ID)]
+        ?.reviewComments?.[0],
+    ).toMatchObject(comment);
+
+    store.clearComposerContent(threadRef);
+    expect(draftFor(threadId, TEST_ENVIRONMENT_ID)).toBeUndefined();
+  });
+
+  it("stores review comments against a new-thread draft id", () => {
+    const draftId = DraftId.make("draft-review-comment");
+    useComposerDraftStore.getState().addReviewComment(draftId, comment);
+
+    expect(useComposerDraftStore.getState().getComposerDraft(draftId)?.reviewComments).toEqual([
+      comment,
+    ]);
+  });
+});
+
 describe("composerDraftStore project draft thread mapping", () => {
   const projectId = ProjectId.make("project-a");
   const otherProjectId = ProjectId.make("project-b");
@@ -538,6 +751,40 @@ describe("composerDraftStore project draft thread mapping", () => {
 
   beforeEach(() => {
     resetComposerDraftStore();
+  });
+
+  it("clears composer data for one environment without touching another", () => {
+    const store = useComposerDraftStore.getState();
+    const localThreadRef = scopeThreadRef(TEST_ENVIRONMENT_ID, threadId);
+    const remoteThreadRef = scopeThreadRef(OTHER_TEST_ENVIRONMENT_ID, otherThreadId);
+    const originalRevokeObjectUrl = URL.revokeObjectURL;
+    const revokeSpy = vi.fn<(url: string) => void>();
+    URL.revokeObjectURL = revokeSpy;
+
+    try {
+      store.setProjectDraftThreadId(projectRef, localDraftId, { threadId });
+      store.setProjectDraftThreadId(remoteProjectRef, remoteDraftId, {
+        threadId: otherThreadId,
+      });
+      store.setPrompt(localDraftId, "local draft");
+      store.setPrompt(remoteDraftId, "remote draft");
+      store.addImage(localDraftId, makeImage({ id: "img-local", previewUrl: "blob:local-draft" }));
+      store.setPrompt(localThreadRef, "local thread draft");
+      store.setPrompt(remoteThreadRef, "remote thread draft");
+
+      clearComposerDraftsEnvironment(TEST_ENVIRONMENT_ID);
+
+      const next = useComposerDraftStore.getState();
+      expect(next.getDraftThreadByProjectRef(projectRef)).toBeNull();
+      expect(next.getDraftThreadByProjectRef(remoteProjectRef)).not.toBeNull();
+      expect(next.getComposerDraft(localDraftId)).toBeNull();
+      expect(next.getComposerDraft(remoteDraftId)?.prompt).toBe("remote thread draft");
+      expect(next.getComposerDraft(localThreadRef)).toBeNull();
+      expect(next.getComposerDraft(remoteThreadRef)?.prompt).toBe("remote thread draft");
+      expect(revokeSpy).toHaveBeenCalledWith("blob:local-draft");
+    } finally {
+      URL.revokeObjectURL = originalRevokeObjectUrl;
+    }
   });
 
   it("stores and reads project draft thread ids via actions", () => {
@@ -574,6 +821,43 @@ describe("composerDraftStore project draft thread mapping", () => {
       interactionMode: "default",
       createdAt: "2026-01-01T00:00:00.000Z",
     });
+  });
+
+  it("rotates a failed bootstrap thread id without losing its draft", () => {
+    const store = useComposerDraftStore.getState();
+    const retryThreadId = ThreadId.make("thread-retry");
+    store.setProjectDraftThreadId(projectRef, draftId, {
+      threadId,
+      branch: "feature/test",
+      worktreePath: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      envMode: "worktree",
+      startFromOrigin: true,
+      runtimeMode: "approval-required",
+      interactionMode: "plan",
+    });
+    store.setPrompt(draftId, "keep this prompt");
+    markPromotedDraftThread(threadId);
+
+    store.setLogicalProjectDraftThreadId(scopedProjectKey(projectRef), projectRef, draftId, {
+      threadId: retryThreadId,
+      createdAt: "2026-01-01T00:01:00.000Z",
+    });
+
+    expect(useComposerDraftStore.getState().getDraftThread(draftId)).toMatchObject({
+      threadId: retryThreadId,
+      branch: "feature/test",
+      worktreePath: null,
+      createdAt: "2026-01-01T00:01:00.000Z",
+      envMode: "worktree",
+      startFromOrigin: true,
+      runtimeMode: "approval-required",
+      interactionMode: "plan",
+      promotedTo: null,
+    });
+    expect(useComposerDraftStore.getState().getComposerDraft(draftId)?.prompt).toBe(
+      "keep this prompt",
+    );
   });
 
   it("clears only matching project draft mapping entries", () => {
@@ -645,10 +929,9 @@ describe("composerDraftStore project draft thread mapping", () => {
     }
   });
 
-  it("clears orphaned composer drafts when remapping a project to a new draft thread", () => {
+  it("clears empty composer drafts when remapping a project to a new draft thread", () => {
     const store = useComposerDraftStore.getState();
     store.setProjectDraftThreadId(projectRef, draftId, { threadId });
-    store.setPrompt(draftId, "orphan me");
 
     store.setProjectDraftThreadId(projectRef, otherDraftId, { threadId: otherThreadId });
 
@@ -656,6 +939,39 @@ describe("composerDraftStore project draft thread mapping", () => {
       otherThreadId,
     );
     expect(useComposerDraftStore.getState().getDraftThread(draftId)).toBeNull();
+    expect(draftByKey(draftId)).toBeUndefined();
+  });
+
+  it("keeps invested composer drafts alive unmapped when remapping a project to a new draft thread", () => {
+    const store = useComposerDraftStore.getState();
+    store.setProjectDraftThreadId(projectRef, draftId, { threadId });
+    store.setPrompt(draftId, "keep me around");
+
+    store.setProjectDraftThreadId(projectRef, otherDraftId, { threadId: otherThreadId });
+
+    // The mapping moved to the fresh draft...
+    expect(useComposerDraftStore.getState().getDraftThreadByProjectRef(projectRef)?.threadId).toBe(
+      otherThreadId,
+    );
+    // ...but the invested draft survives with its content for the sidebar
+    // draft rows to surface.
+    expect(useComposerDraftStore.getState().getDraftThread(draftId)?.threadId).toBe(threadId);
+    expect(draftByKey(draftId)?.prompt).toBe("keep me around");
+  });
+
+  it("clears every session for a project, including unmapped invested drafts", () => {
+    const store = useComposerDraftStore.getState();
+    store.setProjectDraftThreadId(projectRef, draftId, { threadId });
+    store.setPrompt(draftId, "invested");
+    // The remap leaves the invested draft alive unmapped; project removal
+    // must still sweep it, or its sidebar row outlives the project.
+    store.setProjectDraftThreadId(projectRef, otherDraftId, { threadId: otherThreadId });
+
+    store.clearProjectDraftThreadId(projectRef);
+
+    expect(useComposerDraftStore.getState().getDraftThreadByProjectRef(projectRef)).toBeNull();
+    expect(useComposerDraftStore.getState().getDraftThread(draftId)).toBeNull();
+    expect(useComposerDraftStore.getState().getDraftThread(otherDraftId)).toBeNull();
     expect(draftByKey(draftId)).toBeUndefined();
   });
 
@@ -809,6 +1125,18 @@ describe("composerDraftStore project draft thread mapping", () => {
     expect(draftByKey(draftId)).toBeUndefined();
   });
 
+  it("finalizes a matching materialized draft even when promotion was not pre-marked", () => {
+    const store = useComposerDraftStore.getState();
+    store.setProjectDraftThreadId(projectRef, draftId, { threadId });
+    store.setPrompt(draftId, "promote me");
+
+    finalizePromotedDraftThreadByRef(scopeThreadRef(TEST_ENVIRONMENT_ID, threadId));
+
+    expect(useComposerDraftStore.getState().getDraftThreadByProjectRef(projectRef)).toBeNull();
+    expect(useComposerDraftStore.getState().getDraftThread(draftId)).toBeNull();
+    expect(draftByKey(draftId)).toBeUndefined();
+  });
+
   it("updates branch context on an existing draft thread", () => {
     const store = useComposerDraftStore.getState();
     store.setProjectDraftThreadId(projectRef, draftId, {
@@ -830,6 +1158,21 @@ describe("composerDraftStore project draft thread mapping", () => {
       worktreePath: "/tmp/feature-next",
       envMode: "worktree",
     });
+  });
+
+  it("stores the start-from-origin choice with the draft thread", () => {
+    const store = useComposerDraftStore.getState();
+    store.setProjectDraftThreadId(projectRef, draftId, {
+      threadId,
+      envMode: "worktree",
+      startFromOrigin: true,
+    });
+
+    expect(useComposerDraftStore.getState().getDraftThread(draftId)?.startFromOrigin).toBe(true);
+
+    store.setDraftThreadContext(draftId, { startFromOrigin: false });
+
+    expect(useComposerDraftStore.getState().getDraftThread(draftId)?.startFromOrigin).toBe(false);
   });
 
   it("preserves existing branch and worktree when setProjectDraftThreadId receives undefined", () => {
@@ -885,13 +1228,14 @@ describe("composerDraftStore project draft thread mapping", () => {
     });
   });
 
-  it("clears branch and worktree context when remapping a draft to another environment", () => {
+  it("clears branch and worktree but keeps env mode when remapping a draft to another environment", () => {
     const store = useComposerDraftStore.getState();
     store.setProjectDraftThreadId(projectRef, draftId, {
       threadId,
       branch: "feature/local-only",
       worktreePath: "/tmp/local-worktree",
       envMode: "worktree",
+      startFromOrigin: true,
     });
 
     store.setLogicalProjectDraftThreadId(scopedProjectKey(projectRef), remoteProjectRef, draftId, {
@@ -903,17 +1247,19 @@ describe("composerDraftStore project draft thread mapping", () => {
       projectId,
       branch: null,
       worktreePath: null,
-      envMode: "local",
+      envMode: "worktree",
+      startFromOrigin: true,
     });
   });
 
-  it("clears branch and worktree context when changing a draft thread project ref", () => {
+  it("clears branch and worktree but keeps env mode when changing a draft thread project ref", () => {
     const store = useComposerDraftStore.getState();
     store.setProjectDraftThreadId(projectRef, draftId, {
       threadId,
       branch: "feature/local-only",
       worktreePath: "/tmp/local-worktree",
       envMode: "worktree",
+      startFromOrigin: true,
     });
 
     store.setDraftThreadContext(draftId, {
@@ -925,7 +1271,8 @@ describe("composerDraftStore project draft thread mapping", () => {
       projectId,
       branch: null,
       worktreePath: null,
-      envMode: "local",
+      envMode: "worktree",
+      startFromOrigin: true,
     });
   });
 });

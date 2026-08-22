@@ -3,22 +3,19 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import { ServerConfig } from "../config.ts";
-import { resolveSessionCookieName } from "./utils.ts";
-import { isLoopbackHost, isWildcardHost } from "../startupAccess.ts";
-
-export interface EnvironmentAuthPolicyShape {
-  readonly getDescriptor: () => Effect.Effect<ServerAuthDescriptor>;
-}
+import * as ServerConfig from "../config.ts";
+import { isRemoteReachableHost, resolveSessionCookieName } from "./utils.ts";
 
 export class EnvironmentAuthPolicy extends Context.Service<
   EnvironmentAuthPolicy,
-  EnvironmentAuthPolicyShape
+  {
+    readonly getDescriptor: () => Effect.Effect<ServerAuthDescriptor>;
+  }
 >()("kairo/auth/EnvironmentAuthPolicy") {}
 
-export const make = Effect.fn("makeEnvironmentAuthPolicy")(function* () {
-  const config = yield* ServerConfig;
-  const isRemoteReachable = isWildcardHost(config.host) || !isLoopbackHost(config.host);
+export const make = Effect.gen(function* () {
+  const config = yield* ServerConfig.ServerConfig;
+  const isRemoteReachable = isRemoteReachableHost(config.host);
 
   const policy =
     config.mode === "desktop"
@@ -43,13 +40,16 @@ export const make = Effect.fn("makeEnvironmentAuthPolicy")(function* () {
     sessionCookieName: resolveSessionCookieName({
       mode: config.mode,
       port: config.port,
+      host: config.host,
+      instanceKey: config.stateDir,
+      development: config.devUrl !== undefined,
     }),
   };
 
-  return {
+  return EnvironmentAuthPolicy.of({
     getDescriptor: () =>
       Effect.succeed(descriptor).pipe(Effect.withSpan("EnvironmentAuthPolicy.getDescriptor")),
-  } satisfies EnvironmentAuthPolicyShape;
+  });
 });
 
-export const layer = Layer.effect(EnvironmentAuthPolicy, make());
+export const layer = Layer.effect(EnvironmentAuthPolicy, make);

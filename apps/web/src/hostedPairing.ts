@@ -1,6 +1,6 @@
-import { getPairingTokenFromUrl, setPairingTokenOnUrl } from "./pairingUrl";
+import { DEFAULT_HOSTED_APP_URL } from "@kairo/shared/connectAuth";
 
-const DEFAULT_HOSTED_APP_URL = "https://app.kairo.codes";
+import { getPairingTokenFromUrl, setPairingTokenOnUrl } from "./pairingUrl";
 
 export interface HostedPairingRequest {
   readonly host: string;

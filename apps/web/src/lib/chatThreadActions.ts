@@ -1,16 +1,10 @@
-import { scopeProjectRef } from "@kairo/client-runtime";
+import { scopeProjectRef } from "@kairo/client-runtime/environment";
 import type { EnvironmentId, ProjectId, ScopedProjectRef } from "@kairo/contracts";
 import type { DraftThreadEnvMode } from "../composerDraftStore";
 
 interface ThreadContextLike {
   environmentId: EnvironmentId;
   projectId: ProjectId;
-  branch: string | null;
-  worktreePath: string | null;
-}
-
-interface DraftThreadContextLike extends ThreadContextLike {
-  envMode: DraftThreadEnvMode;
 }
 
 interface NewThreadHandler {
@@ -20,18 +14,24 @@ interface NewThreadHandler {
       branch?: string | null;
       worktreePath?: string | null;
       envMode?: DraftThreadEnvMode;
+      startFromOrigin?: boolean;
     },
-  ): Promise<void>;
+    // The opened draft's identity, which most callers have no use for.
+  ): Promise<unknown>;
 }
 
-type NewThreadOptions = NonNullable<Parameters<NewThreadHandler>[1]>;
-
 export interface ChatThreadActionContext {
-  readonly activeDraftThread: DraftThreadContextLike | null;
+  readonly activeDraftThread: ThreadContextLike | null;
   readonly activeThread: ThreadContextLike | undefined;
   readonly defaultProjectRef: ScopedProjectRef | null;
-  readonly defaultThreadEnvMode: DraftThreadEnvMode;
   readonly handleNewThread: NewThreadHandler;
+}
+
+export function resolveNewDraftStartFromOrigin(input: {
+  envMode: DraftThreadEnvMode;
+  newWorktreesStartFromOrigin: boolean;
+}): boolean {
+  return input.envMode === "worktree" && input.newWorktreesStartFromOrigin;
 }
 
 export function resolveThreadActionProjectRef(
@@ -49,30 +49,12 @@ export function resolveThreadActionProjectRef(
   return context.defaultProjectRef;
 }
 
-function buildContextualThreadOptions(context: ChatThreadActionContext): NewThreadOptions {
-  return {
-    branch: context.activeThread?.branch ?? context.activeDraftThread?.branch ?? null,
-    worktreePath:
-      context.activeThread?.worktreePath ?? context.activeDraftThread?.worktreePath ?? null,
-    envMode:
-      context.activeDraftThread?.envMode ??
-      (context.activeThread?.worktreePath ? "worktree" : "local"),
-  };
-}
-
-function buildDefaultThreadOptions(context: ChatThreadActionContext): NewThreadOptions {
-  return {
-    envMode: context.defaultThreadEnvMode,
-  };
-}
-
-export async function startNewThreadInProjectFromContext(
-  context: ChatThreadActionContext,
-  projectRef: ScopedProjectRef,
-): Promise<void> {
-  await context.handleNewThread(projectRef, buildContextualThreadOptions(context));
-}
-
+// New threads inherit only the *project* from the current context. Branch,
+// worktree, and env mode always come from the user's configured defaults —
+// carrying them over from the viewed thread meant "new thread" silently
+// reused checkouts and branches. Explicit affordances (branch toolbar's
+// "new thread in this worktree") pass those options to handleNewThread
+// directly instead.
 export async function startNewThreadFromContext(
   context: ChatThreadActionContext,
 ): Promise<boolean> {
@@ -81,18 +63,6 @@ export async function startNewThreadFromContext(
     return false;
   }
 
-  await startNewThreadInProjectFromContext(context, projectRef);
-  return true;
-}
-
-export async function startNewLocalThreadFromContext(
-  context: ChatThreadActionContext,
-): Promise<boolean> {
-  const projectRef = resolveThreadActionProjectRef(context);
-  if (!projectRef) {
-    return false;
-  }
-
-  await context.handleNewThread(projectRef, buildDefaultThreadOptions(context));
+  await context.handleNewThread(projectRef);
   return true;
 }

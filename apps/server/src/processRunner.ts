@@ -1,15 +1,19 @@
-import * as Data from "effect/Data";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PlatformError from "effect/PlatformError";
+import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import { HostProcessPlatform } from "@kairo/shared/hostProcess";
+import { resolveSpawnCommand } from "@kairo/shared/shell";
 import {
   collectUint8StreamText,
+  decodeUtf8,
   type CollectedUint8StreamText,
 } from "./stream/collectUint8StreamText.ts";
 
@@ -24,7 +28,6 @@ export interface ProcessRunInput {
   readonly maxOutputBytes?: number | undefined;
   readonly outputMode?: "error" | "truncate" | undefined;
   readonly truncatedMarker?: string | undefined;
-  readonly shell?: boolean | string | undefined;
   /**
    * On timeout, return a synthetic timedOut result.
    * Partial stdout/stderr are not preserved.
@@ -39,59 +42,110 @@ export interface ProcessRunOutput {
   readonly timedOut: boolean;
   readonly stdoutTruncated: boolean;
   readonly stderrTruncated: boolean;
+  readonly stdoutInvalidUtf8: boolean;
+  readonly stderrInvalidUtf8: boolean;
 }
 
-export class ProcessSpawnError extends Data.TaggedError("ProcessSpawnError")<{
+const ProcessInvocationFields = {
+  command: Schema.String,
+  argumentCount: Schema.Number,
+  cwd: Schema.optional(Schema.String),
+  spawnCwd: Schema.optional(Schema.String),
+};
+
+const formatProcessInvocation = (input: {
   readonly command: string;
-  readonly args: ReadonlyArray<string>;
   readonly cwd?: string | undefined;
-  readonly cause: unknown;
-}> {}
+  readonly spawnCwd?: string | undefined;
+}): string => {
+  const executionCwd = input.spawnCwd ?? input.cwd;
+  return executionCwd === undefined
+    ? `'${input.command}'`
+    : `'${input.command}' in '${executionCwd}'`;
+};
 
-export class ProcessStdinError extends Data.TaggedError("ProcessStdinError")<{
-  readonly command: string;
-  readonly args: ReadonlyArray<string>;
-  readonly cwd?: string | undefined;
-  readonly cause: unknown;
-}> {}
-
-export class ProcessOutputLimitError extends Data.TaggedError("ProcessOutputLimitError")<{
-  readonly command: string;
-  readonly args: ReadonlyArray<string>;
-  readonly cwd?: string | undefined;
-  readonly stream: "stdout" | "stderr";
-  readonly maxBytes: number;
-}> {}
-
-export class ProcessReadError extends Data.TaggedError("ProcessReadError")<{
-  readonly command: string;
-  readonly args: ReadonlyArray<string>;
-  readonly cwd?: string | undefined;
-  readonly stream: "stdout" | "stderr" | "exitCode";
-  readonly cause: unknown;
-}> {}
-
-export class ProcessTimeoutError extends Data.TaggedError("ProcessTimeoutError")<{
-  readonly command: string;
-  readonly args: ReadonlyArray<string>;
-  readonly cwd?: string | undefined;
-  readonly timeoutMs: number;
-}> {}
-
-export type ProcessRunError =
-  | ProcessSpawnError
-  | ProcessStdinError
-  | ProcessOutputLimitError
-  | ProcessReadError
-  | ProcessTimeoutError;
-
-export interface ProcessRunnerShape {
-  readonly run: (input: ProcessRunInput) => Effect.Effect<ProcessRunOutput, ProcessRunError>;
+export class ProcessSpawnError extends Schema.TaggedErrorClass<ProcessSpawnError>()(
+  "ProcessSpawnError",
+  {
+    ...ProcessInvocationFields,
+    resolvedCommand: Schema.optional(Schema.String),
+    resolvedArgumentCount: Schema.optional(Schema.Number),
+    shell: Schema.optional(Schema.Boolean),
+    cause: Schema.Defect(),
+  },
+) {
+  override get message(): string {
+    return `Failed to spawn process ${formatProcessInvocation(this)}`;
+  }
 }
 
-export class ProcessRunner extends Context.Service<ProcessRunner, ProcessRunnerShape>()(
-  "kairo/processRunner",
-) {}
+export class ProcessStdinError extends Schema.TaggedErrorClass<ProcessStdinError>()(
+  "ProcessStdinError",
+  {
+    ...ProcessInvocationFields,
+    stdinBytes: Schema.Number,
+    cause: Schema.Defect(),
+  },
+) {
+  override get message(): string {
+    return `Failed to write stdin for process ${formatProcessInvocation(this)}`;
+  }
+}
+
+export class ProcessOutputLimitError extends Schema.TaggedErrorClass<ProcessOutputLimitError>()(
+  "ProcessOutputLimitError",
+  {
+    ...ProcessInvocationFields,
+    stream: Schema.Literals(["stdout", "stderr"]),
+    maxBytes: Schema.Number,
+    observedBytes: Schema.Number,
+  },
+) {
+  override get message(): string {
+    return `Process ${formatProcessInvocation(this)} ${this.stream} produced ${this.observedBytes} bytes, exceeding the ${this.maxBytes} byte limit`;
+  }
+}
+
+export class ProcessReadError extends Schema.TaggedErrorClass<ProcessReadError>()(
+  "ProcessReadError",
+  {
+    ...ProcessInvocationFields,
+    stream: Schema.Literals(["stdout", "stderr", "exitCode"]),
+    cause: Schema.Defect(),
+  },
+) {
+  override get message(): string {
+    return `Failed to read ${this.stream} for process ${formatProcessInvocation(this)}`;
+  }
+}
+
+export class ProcessTimeoutError extends Schema.TaggedErrorClass<ProcessTimeoutError>()(
+  "ProcessTimeoutError",
+  {
+    ...ProcessInvocationFields,
+    timeoutMs: Schema.Number,
+  },
+) {
+  override get message(): string {
+    return `Process ${formatProcessInvocation(this)} timed out after ${this.timeoutMs}ms`;
+  }
+}
+
+export const ProcessRunError = Schema.Union([
+  ProcessSpawnError,
+  ProcessStdinError,
+  ProcessOutputLimitError,
+  ProcessReadError,
+  ProcessTimeoutError,
+]);
+export type ProcessRunError = typeof ProcessRunError.Type;
+
+export class ProcessRunner extends Context.Service<
+  ProcessRunner,
+  {
+    readonly run: (input: ProcessRunInput) => Effect.Effect<ProcessRunOutput, ProcessRunError>;
+  }
+>()("kairo/processRunner") {}
 
 const DEFAULT_TIMEOUT = "60 seconds";
 const DEFAULT_MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
@@ -109,16 +163,20 @@ function hasWindowsCommandNotFoundMessage(output: string): boolean {
   return WINDOWS_COMMAND_NOT_FOUND_PATTERNS.some((pattern) => pattern.test(output));
 }
 
-export function isWindowsCommandNotFound(code: number | null, stderr: string): boolean {
-  if (process.platform !== "win32") return false;
-  if (code === 9009) return true;
-  return hasWindowsCommandNotFoundMessage(stderr);
-}
+export const isWindowsCommandNotFound = Effect.fn("processRunner.isWindowsCommandNotFound")(
+  function* (code: number | null, stderr: string) {
+    const platform = yield* HostProcessPlatform;
+    if (platform !== "win32") return false;
+    if (code === 9009) return true;
+    return hasWindowsCommandNotFoundMessage(stderr);
+  },
+);
 
 const collectText = Effect.fn("processRunner.collectText")(function* (input: {
   readonly command: string;
   readonly args: ReadonlyArray<string>;
   readonly cwd?: string | undefined;
+  readonly spawnCwd?: string | undefined;
   readonly streamName: "stdout" | "stderr";
   readonly stream: Stream.Stream<Uint8Array, PlatformError.PlatformError>;
   readonly maxOutputBytes: number;
@@ -130,8 +188,9 @@ const collectText = Effect.fn("processRunner.collectText")(function* (input: {
       (cause) =>
         new ProcessReadError({
           command: input.command,
-          args: input.args,
+          argumentCount: input.args.length,
           cwd: input.cwd,
+          spawnCwd: input.spawnCwd,
           stream: input.streamName,
           cause,
         }),
@@ -159,14 +218,16 @@ const collectText = Effect.fn("processRunner.collectText")(function* (input: {
       () => ({ chunks: [], bytes: 0 }),
       (state, chunk) => {
         const remainingBytes = input.maxOutputBytes - state.bytes;
-        if (remainingBytes <= 0 || chunk.byteLength > remainingBytes) {
+        if (chunk.byteLength > remainingBytes) {
           return Effect.fail(
             new ProcessOutputLimitError({
               command: input.command,
-              args: input.args,
+              argumentCount: input.args.length,
               cwd: input.cwd,
+              spawnCwd: input.spawnCwd,
               stream: input.streamName,
               maxBytes: input.maxOutputBytes,
+              observedBytes: state.bytes + chunk.byteLength,
             }),
           );
         }
@@ -180,7 +241,7 @@ const collectText = Effect.fn("processRunner.collectText")(function* (input: {
     ),
     Effect.map(
       (state): CollectedUint8StreamText => ({
-        text: Buffer.concat(state.chunks, state.bytes).toString("utf8"),
+        ...decodeUtf8(Buffer.concat(state.chunks, state.bytes)),
         bytes: state.bytes,
         truncated: false,
       }),
@@ -210,13 +271,16 @@ function finalizeRunProcess<R>(
           timedOut: true,
           stdoutTruncated: false,
           stderrTruncated: false,
+          stdoutInvalidUtf8: false,
+          stderrInvalidUtf8: false,
         } satisfies ProcessRunOutput);
       }
       return Effect.fail(
         new ProcessTimeoutError({
           command: input.command,
-          args: input.args,
+          argumentCount: input.args.length,
           cwd: input.cwd,
+          spawnCwd: input.spawnCwd,
           timeoutMs: Duration.toMillis(timeout),
         }),
       );
@@ -231,18 +295,24 @@ const runProcessCore = Effect.fn("processRunner.runProcessCore")(function* (
   const maxOutputBytes = input.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
   const outputMode = input.outputMode ?? "error";
   const truncatedMarker = input.truncatedMarker ?? "";
+  const extendEnv = input.env !== undefined;
+  const spawnCommand = yield* resolveSpawnCommand(
+    input.command,
+    input.args,
+    input.env === undefined ? {} : { env: input.env, extendEnv },
+  );
 
   const child = yield* spawner
     .spawn(
-      ChildProcess.make(input.command, [...input.args], {
+      ChildProcess.make(spawnCommand.command, spawnCommand.args, {
         ...((input.spawnCwd ?? input.cwd) ? { cwd: input.spawnCwd ?? input.cwd } : {}),
         ...(input.env !== undefined
           ? {
               env: input.env,
-              extendEnv: true,
+              extendEnv,
             }
           : {}),
-        ...(input.shell !== undefined ? { shell: input.shell } : {}),
+        shell: spawnCommand.shell,
       }),
     )
     .pipe(
@@ -250,23 +320,30 @@ const runProcessCore = Effect.fn("processRunner.runProcessCore")(function* (
         (cause) =>
           new ProcessSpawnError({
             command: input.command,
-            args: input.args,
+            argumentCount: input.args.length,
             cwd: input.cwd,
+            spawnCwd: input.spawnCwd,
+            resolvedCommand: spawnCommand.command,
+            resolvedArgumentCount: spawnCommand.args.length,
+            shell: spawnCommand.shell,
             cause,
           }),
       ),
     );
 
+  const stdin = input.stdin;
   const writeStdin =
-    input.stdin === undefined
+    stdin === undefined
       ? Effect.void
-      : Stream.run(Stream.encodeText(Stream.make(input.stdin)), child.stdin).pipe(
+      : Stream.run(Stream.encodeText(Stream.make(stdin)), child.stdin).pipe(
           Effect.mapError(
             (cause) =>
               new ProcessStdinError({
                 command: input.command,
-                args: input.args,
+                argumentCount: input.args.length,
                 cwd: input.cwd,
+                spawnCwd: input.spawnCwd,
+                stdinBytes: Buffer.byteLength(stdin),
                 cause,
               }),
           ),
@@ -278,6 +355,7 @@ const runProcessCore = Effect.fn("processRunner.runProcessCore")(function* (
         command: input.command,
         args: input.args,
         cwd: input.cwd,
+        spawnCwd: input.spawnCwd,
         streamName: "stdout",
         stream: child.stdout,
         maxOutputBytes,
@@ -288,6 +366,7 @@ const runProcessCore = Effect.fn("processRunner.runProcessCore")(function* (
         command: input.command,
         args: input.args,
         cwd: input.cwd,
+        spawnCwd: input.spawnCwd,
         streamName: "stderr",
         stream: child.stderr,
         maxOutputBytes,
@@ -304,8 +383,9 @@ const runProcessCore = Effect.fn("processRunner.runProcessCore")(function* (
       (cause) =>
         new ProcessReadError({
           command: input.command,
-          args: input.args,
+          argumentCount: input.args.length,
           cwd: input.cwd,
+          spawnCwd: input.spawnCwd,
           stream: "exitCode",
           cause,
         }),
@@ -319,13 +399,15 @@ const runProcessCore = Effect.fn("processRunner.runProcessCore")(function* (
     timedOut: false,
     stdoutTruncated: stdout.truncated,
     stderrTruncated: stderr.truncated,
+    stdoutInvalidUtf8: stdout.invalidUtf8,
+    stderrInvalidUtf8: stderr.invalidUtf8,
   } satisfies ProcessRunOutput;
 });
 
-export const make = Effect.fn("makeProcessRunner")(function* () {
+export const make = Effect.fn("ProcessRunner.make")(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
-  const run: ProcessRunnerShape["run"] = (input) =>
+  const run: ProcessRunner["Service"]["run"] = (input) =>
     finalizeRunProcess(runProcessCore(spawner, input), input);
 
   return ProcessRunner.of({

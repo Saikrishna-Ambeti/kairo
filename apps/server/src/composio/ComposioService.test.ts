@@ -8,6 +8,7 @@ import {
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 
@@ -31,15 +32,17 @@ const codexDriver = ProviderDriverKind.make("codex");
 const claudeDriver = ProviderDriverKind.make("claudeAgent");
 const opencodeDriver = ProviderDriverKind.make("opencode");
 
-function makeSecretStore(initial: string | null): ServerSecretStore.ServerSecretStoreShape {
-  let secret: Uint8Array | null = initial ? new TextEncoder().encode(initial) : null;
+function makeSecretStore(initial: string | null): ServerSecretStore.ServerSecretStore["Service"] {
+  let secret = initial ? Option.some(new TextEncoder().encode(initial)) : Option.none<Uint8Array>();
   return {
     get: () => Effect.succeed(secret),
-    set: (_name, value) => Effect.sync(() => void (secret = value)),
+    set: (_name, value) => Effect.sync(() => void (secret = Option.some(value))),
     create: () => Effect.void,
     getOrCreateRandom: () =>
-      Effect.succeed(secret ?? new TextEncoder().encode("generated-composio-key")),
-    remove: () => Effect.sync(() => void (secret = null)),
+      Effect.succeed(
+        Option.getOrElse(secret, () => new TextEncoder().encode("generated-composio-key")),
+      ),
+    remove: () => Effect.sync(() => void (secret = Option.none())),
   };
 }
 

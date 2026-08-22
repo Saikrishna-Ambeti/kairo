@@ -1,21 +1,22 @@
-import { ClaudeSettings, ProviderInstanceId } from "@kairo/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
+import { ClaudeSettings, ProviderInstanceId } from "@kairo/contracts";
+import { isHostWindows } from "@kairo/shared/hostProcess";
+import { createModelSelection } from "@kairo/shared/model";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import { createModelSelection } from "@kairo/shared/model";
 import { expect } from "vite-plus/test";
 
-import { ServerConfig } from "../config.ts";
-import { type TextGenerationShape } from "./TextGeneration.ts";
+import * as ServerConfig from "../config.ts";
+import * as TextGeneration from "./TextGeneration.ts";
 import { sanitizeThreadTitle } from "./TextGenerationUtils.ts";
 import { makeClaudeTextGeneration } from "./ClaudeTextGeneration.ts";
 const decodeClaudeSettings = Schema.decodeSync(ClaudeSettings);
 
-const ClaudeTextGenerationTestLayer = ServerConfig.layerTest(process.cwd(), {
+const ClaudeTextGenerationTestLayer = ServerConfig.ServerConfig.layerTest(process.cwd(), {
   prefix: "kairo-claude-text-generation-test-",
 }).pipe(Layer.provideMerge(NodeServices.layer));
 
@@ -23,47 +24,80 @@ function makeFakeClaudeBinary(dir: string) {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
+    const isWindows = yield* isHostWindows;
     const binDir = path.join(dir, "bin");
-    const claudePath = path.join(binDir, "claude");
+    const stubPath = path.join(binDir, "claude-stub.mjs");
     yield* fs.makeDirectory(binDir, { recursive: true });
 
+    // The stub behaviour lives in Node rather than a `#!/bin/sh` script so the
+    // same implementation is usable on Windows, where a shebang file is not
+    // executable and would fall through to the real Claude CLI on PATH.
     yield* fs.writeFileString(
-      claudePath,
+      stubPath,
       [
-        "#!/bin/sh",
-        'args="$*"',
-        'stdin_content="$(cat)"',
-        'if [ -n "$KAIRO_FAKE_CLAUDE_ARGS_MUST_CONTAIN" ]; then',
-        '  printf "%s" "$args" | grep -F -- "$KAIRO_FAKE_CLAUDE_ARGS_MUST_CONTAIN" >/dev/null || {',
-        '    printf "%s\\n" "args missing expected content" >&2',
-        "    exit 2",
+        'const args = process.argv.slice(2).join(" ");',
+        "",
+        "function fail(message, code) {",
+        '  process.stderr.write(message + "\\n");',
+        "  process.exit(code);",
+        "}",
+        "",
+        'let stdinContent = "";',
+        "if (!process.stdin.isTTY) {",
+        "  const chunks = [];",
+        "  for await (const chunk of process.stdin) {",
+        "    chunks.push(chunk);",
         "  }",
-        "fi",
-        'if [ -n "$KAIRO_FAKE_CLAUDE_ARGS_MUST_NOT_CONTAIN" ]; then',
-        '  if printf "%s" "$args" | grep -F -- "$KAIRO_FAKE_CLAUDE_ARGS_MUST_NOT_CONTAIN" >/dev/null; then',
-        '    printf "%s\\n" "args contained forbidden content" >&2',
-        "    exit 3",
-        "  fi",
-        "fi",
-        'if [ -n "$KAIRO_FAKE_CLAUDE_STDIN_MUST_CONTAIN" ]; then',
-        '  printf "%s" "$stdin_content" | grep -F -- "$KAIRO_FAKE_CLAUDE_STDIN_MUST_CONTAIN" >/dev/null || {',
-        '    printf "%s\\n" "stdin missing expected content" >&2',
-        "    exit 4",
-        "  }",
-        "fi",
-        'if [ -n "$KAIRO_FAKE_CLAUDE_HOME_MUST_BE" ] && [ "$HOME" != "$KAIRO_FAKE_CLAUDE_HOME_MUST_BE" ]; then',
-        '  printf "%s\\n" "HOME was $HOME" >&2',
-        "  exit 5",
-        "fi",
-        'if [ -n "$KAIRO_FAKE_CLAUDE_STDERR" ]; then',
-        '  printf "%s\\n" "$KAIRO_FAKE_CLAUDE_STDERR" >&2',
-        "fi",
-        'printf "%s" "$KAIRO_FAKE_CLAUDE_OUTPUT"',
-        'exit "${KAIRO_FAKE_CLAUDE_EXIT_CODE:-0}"',
+        '  stdinContent = Buffer.concat(chunks).toString("utf8");',
+        "}",
+        "",
+        "const argsMustContain = process.env.KAIRO_FAKE_CLAUDE_ARGS_MUST_CONTAIN;",
+        "if (argsMustContain && !args.includes(argsMustContain)) {",
+        '  fail("args missing expected content", 2);',
+        "}",
+        "",
+        "const argsMustNotContain = process.env.KAIRO_FAKE_CLAUDE_ARGS_MUST_NOT_CONTAIN;",
+        "if (argsMustNotContain && args.includes(argsMustNotContain)) {",
+        '  fail("args contained forbidden content", 3);',
+        "}",
+        "",
+        "const stdinMustContain = process.env.KAIRO_FAKE_CLAUDE_STDIN_MUST_CONTAIN;",
+        "if (stdinMustContain && !stdinContent.includes(stdinMustContain)) {",
+        '  fail("stdin missing expected content", 4);',
+        "}",
+        "",
+        "const configDirMustBe = process.env.KAIRO_FAKE_CLAUDE_CONFIG_DIR_MUST_BE;",
+        "if (configDirMustBe && process.env.CLAUDE_CONFIG_DIR !== configDirMustBe) {",
+        '  fail("CLAUDE_CONFIG_DIR was " + (process.env.CLAUDE_CONFIG_DIR ?? ""), 5);',
+        "}",
+        "",
+        "const stderrText = process.env.KAIRO_FAKE_CLAUDE_STDERR;",
+        "if (stderrText) {",
+        '  process.stderr.write(stderrText + "\\n");',
+        "}",
+        "",
+        'process.stdout.write(process.env.KAIRO_FAKE_CLAUDE_OUTPUT ?? "");',
+        "process.exitCode = Number(process.env.KAIRO_FAKE_CLAUDE_EXIT_CODE ?? 0);",
         "",
       ].join("\n"),
     );
-    yield* fs.chmod(claudePath, 0o755);
+
+    if (isWindows) {
+      // Windows resolves executables through PATHEXT, so the entry point has to
+      // carry a real extension. `resolveSpawnCommand` spawns `.cmd` via a shell.
+      yield* fs.writeFileString(
+        path.join(binDir, "claude.cmd"),
+        ["@echo off", 'node "%~dp0claude-stub.mjs" %*', "exit /b %ERRORLEVEL%", ""].join("\r\n"),
+      );
+    } else {
+      const claudePath = path.join(binDir, "claude");
+      yield* fs.writeFileString(
+        claudePath,
+        ["#!/bin/sh", 'exec node "$(dirname "$0")/claude-stub.mjs" "$@"', ""].join("\n"),
+      );
+      yield* fs.chmod(claudePath, 0o755);
+    }
+
     return binDir;
   });
 }
@@ -76,15 +110,16 @@ function withFakeClaudeEnv<A, E, R>(
     argsMustContain?: string;
     argsMustNotContain?: string;
     stdinMustContain?: string;
-    homeMustBe?: string;
+    configDirMustBe?: string;
     claudeConfig?: Partial<ClaudeSettings>;
   },
-  effectFn: (textGeneration: TextGenerationShape) => Effect.Effect<A, E, R>,
+  effectFn: (textGeneration: TextGeneration.TextGeneration["Service"]) => Effect.Effect<A, E, R>,
 ) {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const tempDir = yield* fs.makeTempDirectoryScoped({ prefix: "kairo-claude-text-" });
     const binDir = yield* makeFakeClaudeBinary(tempDir);
+    const pathDelimiter = (yield* isHostWindows) ? ";" : ":";
     const previousPath = process.env.PATH;
     const previousOutput = process.env.KAIRO_FAKE_CLAUDE_OUTPUT;
     const previousExitCode = process.env.KAIRO_FAKE_CLAUDE_EXIT_CODE;
@@ -92,11 +127,11 @@ function withFakeClaudeEnv<A, E, R>(
     const previousArgsMustContain = process.env.KAIRO_FAKE_CLAUDE_ARGS_MUST_CONTAIN;
     const previousArgsMustNotContain = process.env.KAIRO_FAKE_CLAUDE_ARGS_MUST_NOT_CONTAIN;
     const previousStdinMustContain = process.env.KAIRO_FAKE_CLAUDE_STDIN_MUST_CONTAIN;
-    const previousHomeMustBe = process.env.KAIRO_FAKE_CLAUDE_HOME_MUST_BE;
+    const previousConfigDirMustBe = process.env.KAIRO_FAKE_CLAUDE_CONFIG_DIR_MUST_BE;
 
     yield* Effect.acquireRelease(
       Effect.sync(() => {
-        process.env.PATH = `${binDir}:${previousPath ?? ""}`;
+        process.env.PATH = `${binDir}${pathDelimiter}${previousPath ?? ""}`;
         process.env.KAIRO_FAKE_CLAUDE_OUTPUT = input.output;
 
         if (input.exitCode !== undefined) {
@@ -129,10 +164,10 @@ function withFakeClaudeEnv<A, E, R>(
           delete process.env.KAIRO_FAKE_CLAUDE_STDIN_MUST_CONTAIN;
         }
 
-        if (input.homeMustBe !== undefined) {
-          process.env.KAIRO_FAKE_CLAUDE_HOME_MUST_BE = input.homeMustBe;
+        if (input.configDirMustBe !== undefined) {
+          process.env.KAIRO_FAKE_CLAUDE_CONFIG_DIR_MUST_BE = input.configDirMustBe;
         } else {
-          delete process.env.KAIRO_FAKE_CLAUDE_HOME_MUST_BE;
+          delete process.env.KAIRO_FAKE_CLAUDE_CONFIG_DIR_MUST_BE;
         }
       }),
       () =>
@@ -175,10 +210,10 @@ function withFakeClaudeEnv<A, E, R>(
             process.env.KAIRO_FAKE_CLAUDE_STDIN_MUST_CONTAIN = previousStdinMustContain;
           }
 
-          if (previousHomeMustBe === undefined) {
-            delete process.env.KAIRO_FAKE_CLAUDE_HOME_MUST_BE;
+          if (previousConfigDirMustBe === undefined) {
+            delete process.env.KAIRO_FAKE_CLAUDE_CONFIG_DIR_MUST_BE;
           } else {
-            process.env.KAIRO_FAKE_CLAUDE_HOME_MUST_BE = previousHomeMustBe;
+            process.env.KAIRO_FAKE_CLAUDE_CONFIG_DIR_MUST_BE = previousConfigDirMustBe;
           }
         }),
     );
@@ -264,7 +299,7 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGeneration", (it) => {
               '  "Reconnect failures after restart because the session state does not recover"  ',
           },
         }),
-        stdinMustContain: "You write concise thread titles for coding conversations.",
+        stdinMustContain: "Please investigate reconnect failures after restarting the session.",
       },
       (textGeneration) =>
         Effect.gen(function* () {
@@ -286,10 +321,10 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGeneration", (it) => {
     ),
   );
 
-  it.effect("runs Claude text generation with the configured Claude HOME", () =>
+  it.effect("runs Claude text generation with the configured CLAUDE_CONFIG_DIR", () =>
     Effect.gen(function* () {
       const path = yield* Path.Path;
-      const claudeHome = path.join(process.cwd(), ".claude-work-test");
+      const claudeConfigDir = path.join(process.cwd(), ".claude-work-test");
       return yield* withFakeClaudeEnv(
         {
           // @effect-diagnostics-next-line preferSchemaOverJson:off
@@ -298,8 +333,8 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGeneration", (it) => {
               title: "Use Claude home",
             },
           }),
-          homeMustBe: claudeHome,
-          claudeConfig: { homePath: claudeHome },
+          configDirMustBe: claudeConfigDir,
+          claudeConfig: { homePath: claudeConfigDir },
         },
         (textGeneration) =>
           Effect.gen(function* () {

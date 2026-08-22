@@ -10,6 +10,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import { ChildProcessSpawner } from "effect/unstable/process";
@@ -40,8 +41,9 @@ const codexDriver = ProviderDriverKind.make("codex");
 const claudeDriver = ProviderDriverKind.make("claudeAgent");
 const opencodeDriver = ProviderDriverKind.make("opencode");
 const cursorDriver = ProviderDriverKind.make("cursor");
-const decodeJsonString = Schema.decodeEffect(Schema.UnknownFromJsonString);
-const encodeJsonString = Schema.encodeEffect(Schema.UnknownFromJsonString);
+const UnknownFromJsonString = Schema.fromJsonString(Schema.Unknown);
+const decodeJsonString = Schema.decodeEffect(UnknownFromJsonString);
+const encodeJsonString = Schema.encodeEffect(UnknownFromJsonString);
 const NodeServicesTestLayer = NodeServices.layer;
 
 const makeTempCodexHome = Effect.fn("makeTempCodexHome")(function* (): Effect.fn.Return<
@@ -106,13 +108,14 @@ function objectField(value: unknown, key: string): unknown {
     : undefined;
 }
 
-const makeSecretStore = (secret: string | null): ServerSecretStore.ServerSecretStoreShape => {
-  const encoded = secret ? new TextEncoder().encode(secret) : null;
+const makeSecretStore = (secret: string | null): ServerSecretStore.ServerSecretStore["Service"] => {
+  const encoded = secret ? Option.some(new TextEncoder().encode(secret)) : Option.none();
   return {
     get: () => Effect.succeed(encoded),
     set: () => Effect.void,
     create: () => Effect.void,
-    getOrCreateRandom: () => Effect.succeed(encoded ?? new TextEncoder().encode("sm_generated")),
+    getOrCreateRandom: () =>
+      Effect.succeed(Option.getOrElse(encoded, () => new TextEncoder().encode("sm_generated"))),
     remove: () => Effect.void,
   };
 };
@@ -305,6 +308,8 @@ describe("Supermemory provider installer status", () => {
               timedOut: false,
               stdoutTruncated: false,
               stderrTruncated: false,
+              stdoutInvalidUtf8: false,
+              stderrInvalidUtf8: false,
             };
           }),
       });
@@ -373,6 +378,8 @@ describe("Supermemory provider installer status", () => {
               timedOut: false,
               stdoutTruncated: false,
               stderrTruncated: false,
+              stdoutInvalidUtf8: false,
+              stderrInvalidUtf8: false,
             };
           }),
       });

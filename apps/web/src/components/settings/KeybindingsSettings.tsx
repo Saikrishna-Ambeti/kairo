@@ -27,13 +27,29 @@ import {
   type ServerRemoveKeybindingInput,
   type ServerUpsertKeybindingInput,
 } from "@kairo/contracts";
+import { useAtomValue } from "@effect/atom-react";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@kairo/client-runtime/state/runtime";
 
 import { isElectron } from "../../env";
-import { openInPreferredEditor } from "../../editorPreferences";
+import { useOpenInPreferredEditor } from "../../editorPreferences";
 import { formatShortcutLabel } from "../../keybindings";
 import { cn } from "../../lib/utils";
-import { ensureLocalApi } from "../../localApi";
-import { useServerKeybindings, useServerKeybindingsConfigPath } from "../../rpc/serverState";
+import {
+  primaryServerAvailableEditorsAtom,
+  primaryServerKeybindingsAtom,
+  primaryServerKeybindingsConfigPathAtom,
+  serverEnvironment,
+} from "../../state/server";
+import { usePrimaryEnvironment } from "../../state/environments";
+import {
+  areDeveloperKeybindingsVisible,
+  isDiffViewerVisible,
+  isTerminalEnabled,
+  useProductSurfaceConfig,
+} from "../../productSurfaces";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Kbd, KbdGroup } from "../ui/kbd";
@@ -60,13 +76,9 @@ import {
   whenAstToExpression,
 } from "./KeybindingsSettings.logic";
 import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
+import { searchableSetting } from "./settingsSearch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import {
-  areDeveloperKeybindingsVisible,
-  isDiffViewerVisible,
-  isTerminalEnabled,
-  useProductSurfaceConfig,
-} from "../../productSurfaces";
+import { useAtomCommand } from "../../state/use-atom-command";
 
 function KeybindingPill({ value }: { value: string }) {
   const parts = value.split("+");
@@ -119,9 +131,8 @@ function ExpandableHeaderSearch({
             render={
               <Button
                 type="button"
-                size="icon-xs"
-                variant="ghost"
-                className="size-5 rounded-sm p-0 text-muted-foreground hover:text-foreground"
+                size="icon-micro"
+                variant="ghost-muted"
                 onClick={() => onOpenChange(true)}
                 aria-label="Search keybindings"
               >
@@ -138,10 +149,10 @@ function ExpandableHeaderSearch({
   return (
     <div className="relative">
       <SearchIcon className="pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2 text-muted-foreground" />
-      <input
+      <Input
         ref={inputRef}
         autoFocus
-        type="text"
+        type="search"
         value={query}
         onChange={(event) => onChange(event.currentTarget.value)}
         onBlur={() => {
@@ -156,7 +167,8 @@ function ExpandableHeaderSearch({
         }}
         placeholder="Search keybindings"
         aria-label="Search keybindings"
-        className="h-6 w-44 rounded-md border border-input bg-background pl-7 pr-2 text-[11px] text-foreground outline-none placeholder:text-muted-foreground/72 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/24"
+        className="w-44 [&_[data-slot=input]]:pl-7"
+        size="compact"
       />
     </div>
   );
@@ -320,10 +332,7 @@ function WhenVariableSelect({
 
   return (
     <Select value={value} onValueChange={(nextValue) => nextValue && onChange(nextValue)}>
-      <SelectTrigger
-        size="xs"
-        className="h-7 min-h-7 min-w-0 flex-1 rounded-md font-mono text-xs sm:h-7"
-      >
+      <SelectTrigger size="compact" className="min-w-0 flex-1 font-mono">
         <SelectValue placeholder="Condition" className="leading-7" />
         {unknownIdentifiers && unknownIdentifiers.length > 0 ? (
           <UnknownWhenVariableWarning identifiers={unknownIdentifiers} focusable={false} />
@@ -376,8 +385,8 @@ function WhenExpressionNodeEditor({
           onPressedChange={(pressed) => onChange(setConditionNegated(node, pressed))}
           aria-label={`Negate ${condition.identifier}`}
           variant="outline"
-          size="xs"
-          className="h-7 min-w-10 px-2 text-[11px] sm:h-7"
+          size="compact"
+          className="min-w-10"
         >
           Not
         </Toggle>
@@ -392,7 +401,7 @@ function WhenExpressionNodeEditor({
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="size-7 sm:size-7"
+            className="size-7"
             aria-label="Remove condition"
             onClick={onRemove}
           >
@@ -417,8 +426,8 @@ function WhenExpressionNodeEditor({
             onPressedChange={(pressed) => onChange(pressed ? node : node.node)}
             aria-label="Negate group"
             variant="outline"
-            size="xs"
-            className="h-7 min-w-10 px-2 text-[11px] sm:h-7"
+            size="compact"
+            className="min-w-10"
           >
             Not
           </Toggle>
@@ -427,7 +436,7 @@ function WhenExpressionNodeEditor({
               type="button"
               variant="ghost"
               size="icon-sm"
-              className="ml-auto size-7 sm:size-7"
+              className="ml-auto size-7"
               aria-label="Remove negated group"
               onClick={onRemove}
             >
@@ -520,7 +529,7 @@ function WhenExpressionNodeEditor({
     >
       <div className="flex flex-wrap items-center gap-2">
         <Select value={operator} onValueChange={(value) => setOperator(value as BooleanOperator)}>
-          <SelectTrigger size="xs" className="h-7 min-h-7 w-24 rounded-md text-xs sm:h-7">
+          <SelectTrigger size="compact" className="w-24">
             <SelectValue />
           </SelectTrigger>
           <SelectContent
@@ -537,17 +546,11 @@ function WhenExpressionNodeEditor({
             </SelectItem>
           </SelectContent>
         </Select>
-        <Button
-          type="button"
-          variant="outline"
-          size="xs"
-          className="h-7 sm:h-7"
-          onClick={addCondition}
-        >
+        <Button type="button" variant="outline" size="compact" onClick={addCondition}>
           <PlusIcon className="size-3.5" />
           Condition
         </Button>
-        <Button type="button" variant="outline" size="xs" className="h-7 sm:h-7" onClick={addGroup}>
+        <Button type="button" variant="outline" size="compact" onClick={addGroup}>
           <PlusIcon className="size-3.5" />
           Group
         </Button>
@@ -556,7 +559,7 @@ function WhenExpressionNodeEditor({
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="ml-auto size-7 sm:size-7"
+            className="ml-auto size-7"
             aria-label="Remove group"
             onClick={onRemove}
           >
@@ -651,23 +654,11 @@ function WhenExpressionBuilder({
           <div className="text-sm font-medium text-foreground">When</div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="xs"
-            className="h-7 sm:h-7"
-            onClick={addRootCondition}
-          >
+          <Button type="button" variant="outline" size="compact" onClick={addRootCondition}>
             <PlusIcon className="size-3.5" />
             Condition
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="xs"
-            className="h-7 sm:h-7"
-            onClick={addRootGroup}
-          >
+          <Button type="button" variant="outline" size="compact" onClick={addRootGroup}>
             <PlusIcon className="size-3.5" />
             Group
           </Button>
@@ -713,17 +704,11 @@ function WhenExpressionBuilder({
         ) : (
           <div className="rounded-md border border-dashed border-border/80 bg-muted/15 p-3">
             <div className="flex flex-wrap gap-2">
-              <Button type="button" size="xs" className="h-7 sm:h-7" onClick={addRootCondition}>
+              <Button type="button" size="compact" onClick={addRootCondition}>
                 <PlusIcon className="size-3.5" />
                 Condition
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="xs"
-                className="h-7 sm:h-7"
-                onClick={addRootGroup}
-              >
+              <Button type="button" variant="outline" size="compact" onClick={addRootGroup}>
                 <PlusIcon className="size-3.5" />
                 Group
               </Button>
@@ -858,6 +843,7 @@ function KeybindingTableRow({
           </button>
         ) : (
           <Input
+            data-keybinding-capture=""
             autoFocus={isRecording}
             aria-label={`Keybinding for ${commandLabel(row.command)}`}
             value={isRecording ? "" : keyDraft}
@@ -874,8 +860,7 @@ function KeybindingTableRow({
         )}
         {isDirty ? (
           <Button
-            size="xs"
-            className="h-7 sm:h-7"
+            size="compact"
             disabled={isSaving || keyDraft.trim().length === 0 || !isWhenDraftValid}
             onClick={save}
           >
@@ -1002,10 +987,7 @@ function NewKeybindingTableRow({
           value={commandDraft}
           onValueChange={(value) => setCommandDraft(value as KeybindingCommand)}
         >
-          <SelectTrigger
-            size="xs"
-            className="h-7 min-h-7 w-full max-w-60 rounded-md text-xs sm:h-7"
-          >
+          <SelectTrigger size="compact" className="w-full max-w-60">
             <SelectValue placeholder="Command" />
           </SelectTrigger>
           <SelectContent
@@ -1023,21 +1005,19 @@ function NewKeybindingTableRow({
       </div>
       <div className="flex min-w-0 items-center gap-2 pr-4">
         <Input
+          data-keybinding-capture=""
           aria-label={`Keybinding for ${commandLabelText}`}
           value={isRecording ? "" : keyDraft}
           placeholder={isRecording ? "Press shortcut" : "Unassigned"}
-          className={cn(
-            "h-7 w-44 rounded-md font-mono text-[12px] sm:h-7",
-            isRecording && "border-primary/70 bg-primary/5",
-          )}
+          size="compact"
+          className={cn("w-44 font-mono", isRecording && "border-primary/70 bg-primary/5")}
           onFocus={() => setDraft({ isRecording: true })}
           onBlur={() => setDraft({ isRecording: false })}
           onChange={(event) => setDraft({ keyDraft: event.currentTarget.value })}
           onKeyDown={captureKeybinding}
         />
         <Button
-          size="xs"
-          className="h-7 sm:h-7"
+          size="compact"
           disabled={isSaving || !commandDraft || keyDraft.trim().length === 0 || !isWhenDraftValid}
           onClick={save}
         >
@@ -1075,7 +1055,7 @@ function NewKeybindingTableRow({
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                className="size-7 text-muted-foreground hover:text-foreground sm:size-7"
+                className="size-7 text-muted-foreground hover:text-foreground"
                 disabled={isSaving}
                 aria-label="Cancel new keybinding"
                 onClick={onCancel}
@@ -1092,12 +1072,24 @@ function NewKeybindingTableRow({
 }
 
 export function KeybindingsSettingsPanel() {
-  const keybindings = useServerKeybindings();
-  const keybindingsConfigPath = useServerKeybindingsConfigPath();
+  const keybindings = useAtomValue(primaryServerKeybindingsAtom);
+  const keybindingsConfigPath = useAtomValue(primaryServerKeybindingsConfigPathAtom);
+  const availableEditors = useAtomValue(primaryServerAvailableEditorsAtom);
+  const primaryEnvironment = usePrimaryEnvironment();
   const surface = useProductSurfaceConfig();
   const showDeveloperKeybindings = areDeveloperKeybindingsVisible(surface);
   const showDiffViewer = isDiffViewerVisible(surface);
   const showTerminal = isTerminalEnabled(surface);
+  const upsertKeybinding = useAtomCommand(serverEnvironment.upsertKeybinding, {
+    reportFailure: false,
+  });
+  const removeKeybindingMutation = useAtomCommand(serverEnvironment.removeKeybinding, {
+    reportFailure: false,
+  });
+  const openInPreferredEditor = useOpenInPreferredEditor(
+    primaryEnvironment?.environmentId ?? null,
+    availableEditors,
+  );
   const [query, setQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -1164,56 +1156,76 @@ export function KeybindingsSettingsPanel() {
 
   const openKeybindingsFile = useCallback(() => {
     if (!keybindingsConfigPath) return;
-    void openInPreferredEditor(ensureLocalApi(), keybindingsConfigPath).catch((error: unknown) => {
+    void (async () => {
+      const result = await openInPreferredEditor(keybindingsConfigPath);
+      if (result._tag === "Success" || isAtomCommandInterrupted(result)) {
+        return;
+      }
+      const error = squashAtomCommandFailure(result);
       toastManager.add({
         title: "Unable to open keybindings file",
         description:
           error instanceof Error ? error.message : "The keybindings file was not opened.",
         type: "error",
       });
-    });
-  }, [keybindingsConfigPath]);
+    })();
+  }, [keybindingsConfigPath, openInPreferredEditor]);
 
-  const saveKeybinding = useCallback((input: ServerUpsertKeybindingInput) => {
-    setSavingCommand(input.command);
-    const payload: ServerUpsertKeybindingInput = {
-      command: input.command,
-      key: input.key.trim(),
-      ...(input.when?.trim() ? { when: input.when.trim() } : {}),
-      ...(input.replace ? { replace: input.replace } : {}),
-    };
-    void ensureLocalApi()
-      .server.upsertKeybinding(payload)
-      .then(() => {
-        setIsAddingBinding(false);
-      })
-      .catch((error: unknown) => {
-        toastManager.add({
-          title: "Unable to save keybinding",
-          description: error instanceof Error ? error.message : "The keybinding was not saved.",
-          type: "error",
+  const saveKeybinding = useCallback(
+    (input: ServerUpsertKeybindingInput) => {
+      if (!primaryEnvironment) return;
+      setSavingCommand(input.command);
+      const payload: ServerUpsertKeybindingInput = {
+        command: input.command,
+        key: input.key.trim(),
+        ...(input.when?.trim() ? { when: input.when.trim() } : {}),
+        ...(input.replace ? { replace: input.replace } : {}),
+      };
+      void (async () => {
+        const result = await upsertKeybinding({
+          environmentId: primaryEnvironment.environmentId,
+          input: payload,
         });
-      })
-      .finally(() => {
         setSavingCommand(null);
-      });
-  }, []);
+        if (result._tag === "Success") {
+          setIsAddingBinding(false);
+          return;
+        }
+        if (!isAtomCommandInterrupted(result)) {
+          const error = squashAtomCommandFailure(result);
+          toastManager.add({
+            title: "Unable to save keybinding",
+            description: error instanceof Error ? error.message : "The keybinding was not saved.",
+            type: "error",
+          });
+        }
+      })();
+    },
+    [primaryEnvironment, upsertKeybinding],
+  );
 
-  const removeKeybinding = useCallback((row: KeybindingRow) => {
-    setSavingCommand(row.command);
-    void ensureLocalApi()
-      .server.removeKeybinding(rowKeybindingTarget(row))
-      .catch((error: unknown) => {
-        toastManager.add({
-          title: "Unable to remove keybinding",
-          description: error instanceof Error ? error.message : "The keybinding was not removed.",
-          type: "error",
+  const removeKeybinding = useCallback(
+    (row: KeybindingRow) => {
+      if (!primaryEnvironment) return;
+      setSavingCommand(row.command);
+      void (async () => {
+        const result = await removeKeybindingMutation({
+          environmentId: primaryEnvironment.environmentId,
+          input: rowKeybindingTarget(row),
         });
-      })
-      .finally(() => {
         setSavingCommand(null);
-      });
-  }, []);
+        if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+          const error = squashAtomCommandFailure(result);
+          toastManager.add({
+            title: "Unable to remove keybinding",
+            description: error instanceof Error ? error.message : "The keybinding was not removed.",
+            type: "error",
+          });
+        }
+      })();
+    },
+    [primaryEnvironment, removeKeybindingMutation],
+  );
 
   const resetKeybinding = useCallback(
     (row: KeybindingRow) => {
@@ -1240,9 +1252,9 @@ export function KeybindingsSettingsPanel() {
   );
 
   return (
-    <SettingsPageContainer className="max-w-5xl">
+    <SettingsPageContainer width="wide">
       <SettingsSection
-        title="Keybindings"
+        {...searchableSetting("keybindings")}
         headerAction={
           <div className="flex items-center gap-1.5">
             <ExpandableHeaderSearch
@@ -1258,9 +1270,8 @@ export function KeybindingsSettingsPanel() {
                 render={
                   <Button
                     type="button"
-                    size="icon-xs"
-                    variant="ghost"
-                    className="size-5 rounded-sm p-0 text-muted-foreground hover:text-foreground"
+                    size="icon-micro"
+                    variant="ghost-muted"
                     onClick={() => setIsAddingBinding(true)}
                     aria-label="Add keybinding"
                   >
@@ -1275,9 +1286,8 @@ export function KeybindingsSettingsPanel() {
                 render={
                   <Button
                     type="button"
-                    size="icon-xs"
-                    variant="ghost"
-                    className="size-5 rounded-sm p-0 text-muted-foreground hover:text-foreground"
+                    size="icon-micro"
+                    variant="ghost-muted"
                     disabled={!keybindingsConfigPath}
                     onClick={openKeybindingsFile}
                     aria-label="Open keybindings.json"

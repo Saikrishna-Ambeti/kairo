@@ -12,8 +12,12 @@ import type {
   OrchestrationProject,
   OrchestrationProjectShell,
   OrchestrationReadModel,
+  OrchestrationSearchThreadsInput,
+  OrchestrationSearchThreadsResult,
   OrchestrationShellSnapshot,
   OrchestrationThread,
+  OrchestrationThreadDetailSnapshot,
+  OrchestrationThreadDetailWindow,
   OrchestrationThreadShell,
   ProjectId,
   ThreadId,
@@ -94,6 +98,14 @@ export interface ProjectionSnapshotQueryShape {
   >;
 
   /**
+   * Search active thread navigation metadata, user messages, and canonical
+   * assistant outputs without hydrating thread detail snapshots.
+   */
+  readonly searchThreads: (
+    input: OrchestrationSearchThreadsInput,
+  ) => Effect.Effect<OrchestrationSearchThreadsResult, ProjectionRepositoryError>;
+
+  /**
    * Read the latest projection snapshot sequence without hydrating read-model
    * entities.
    */
@@ -157,6 +169,23 @@ export interface ProjectionSnapshotQueryShape {
   readonly getThreadDetailById: (
     threadId: ThreadId,
   ) => Effect.Effect<Option.Option<OrchestrationThread>, ProjectionRepositoryError>;
+
+  /**
+   * Read a single active thread detail together with the projection snapshot
+   * sequence in one consistent transaction, so the returned `snapshotSequence`
+   * exactly matches the state reflected in `thread` (no interleaving projector
+   * update between the two reads).
+   *
+   * When `window` is provided, the thread's messages, activities, proposed
+   * plans, and checkpoints are bounded to a page of recent turns and the
+   * response carries `page` metadata (see `OrchestrationThreadDetailWindow`).
+   * Without a window the full thread is returned with no `page` field —
+   * pagination is strictly opt-in.
+   */
+  readonly getThreadDetailSnapshot: (
+    threadId: ThreadId,
+    window?: OrchestrationThreadDetailWindow,
+  ) => Effect.Effect<Option.Option<OrchestrationThreadDetailSnapshot>, ProjectionRepositoryError>;
 }
 
 /**

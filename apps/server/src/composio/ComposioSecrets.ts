@@ -1,5 +1,6 @@
 import { ComposioError } from "@kairo/contracts";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 
@@ -22,7 +23,10 @@ export const getComposioApiKey = (): Effect.Effect<
           (cause) => new ComposioError({ message: "Failed to read Composio API key.", cause }),
         ),
       );
-    return secret ? textDecoder.decode(secret) : null;
+    return Option.match(secret, {
+      onNone: () => null,
+      onSome: (value) => textDecoder.decode(value),
+    });
   });
 
 export const setComposioApiKey = (

@@ -1,11 +1,11 @@
 import "vite-plus/test/config";
 import { defineConfig } from "vite-plus";
-import { fileURLToPath } from "node:url";
+import * as NodeURL from "node:url";
 
 export default defineConfig({
   resolve: {
     alias: {
-      "~": fileURLToPath(new URL("./apps/web/src", import.meta.url)),
+      "~": NodeURL.fileURLToPath(new URL("./apps/web/src", import.meta.url)),
     },
   },
   test: {
@@ -20,11 +20,14 @@ export default defineConfig({
     hookTimeout: 60_000,
     testTimeout: 60_000,
   },
+  staged: {
+    // Formatter only for now — no lint or typecheck on commit.
+    "*": "vp fmt",
+  },
   fmt: {
     ignorePatterns: [
       ".reference",
       ".repos/**",
-      ".plans",
       ".alchemy",
       "dist",
       "dist-electron",
@@ -96,8 +99,29 @@ export default defineConfig({
       "typescript/require-array-sort-compare": "off",
       "typescript/restrict-template-expressions": "off",
       "typescript/unbound-method": "off",
+      "eslint/no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@kairo/client-runtime",
+              message:
+                "Import from an explicit @kairo/client-runtime/* subpath. The package has no root export.",
+            },
+            {
+              name: "@pierre/diffs/react",
+              importNames: ["CodeView"],
+              message:
+                "Use StyledDiffCodeView so web diff surfaces share styling and virtualized geometry.",
+            },
+          ],
+        },
+      ],
+      "kairo/no-global-process-runtime": "error",
       "kairo/no-inline-schema-compile": "warn",
       "kairo/no-manual-effect-runtime-in-tests": "error",
+      "kairo/no-native-title-tooltip": "error",
+      "kairo/namespace-node-imports": "error",
     },
     options: {
       // Revisit once Oxlint's tsgolint path can integrate with @effect/tsgo diagnostics.

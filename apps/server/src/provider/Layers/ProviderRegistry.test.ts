@@ -1,5 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, it, assert } from "@effect/vitest";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -32,22 +33,21 @@ import { applyServerSettingsPatch } from "@kairo/shared/serverSettings";
 
 import { checkCodexProviderStatus, type CodexAppServerProviderSnapshot } from "./CodexProvider.ts";
 import { checkClaudeProviderStatus } from "./ClaudeProvider.ts";
-import { OpenCodeRuntimeLive } from "../opencodeRuntime.ts";
-import { NoOpProviderEventLoggers, ProviderEventLoggers } from "./ProviderEventLoggers.ts";
+import * as BackgroundPolicy from "../../background/BackgroundPolicy.ts";
+import * as OpenCodeRuntime from "../opencodeRuntime.ts";
+import * as ProviderEventLoggers from "./ProviderEventLoggers.ts";
 import { ProviderInstanceRegistryHydrationLive } from "./ProviderInstanceRegistryHydration.ts";
 import {
   haveProvidersChanged,
   mergeProviderSnapshot,
-  mergeProviderSnapshots,
   ProviderRegistryLive,
-  selectProvidersByKind,
 } from "./ProviderRegistry.ts";
-import { ServerConfig } from "../../config.ts";
-import { ServerSettingsService, type ServerSettingsShape } from "../../serverSettings.ts";
+import * as ServerConfig from "../../config.ts";
+import * as ServerSettingsModule from "../../serverSettings.ts";
 import { readProviderStatusCache, resolveProviderStatusCachePath } from "../providerStatusCache.ts";
 import type { ProviderInstance } from "../ProviderDriver.ts";
-import { ProviderInstanceRegistry } from "../Services/ProviderInstanceRegistry.ts";
-import { ProviderRegistry } from "../Services/ProviderRegistry.ts";
+import * as ProviderInstanceRegistry from "../Services/ProviderInstanceRegistry.ts";
+import * as ProviderRegistry from "../Services/ProviderRegistry.ts";
 import { makeManualOnlyProviderMaintenanceCapabilities } from "../providerMaintenance.ts";
 const decodeServerSettings = Schema.decodeSync(ServerSettings);
 const encodeServerSettings = Schema.encodeSync(ServerSettings);
@@ -55,6 +55,7 @@ const encodedDefaultServerSettings = encodeServerSettings(DEFAULT_SERVER_SETTING
 
 const defaultClaudeSettings: ClaudeSettings = Schema.decodeSync(ClaudeSettings)({});
 const defaultCodexSettings: CodexSettings = Schema.decodeSync(CodexSettings)({});
+const decodeCodexSettings = Schema.decodeSync(CodexSettings);
 const disabledCodexSettings: CodexSettings = Schema.decodeSync(CodexSettings)({
   enabled: false,
 });
@@ -64,6 +65,7 @@ process.env.KAIRO_CURSOR_ENABLED = "1";
 // ── Test helpers ────────────────────────────────────────────────────
 
 const encoder = new TextEncoder();
+const TEST_EPOCH = DateTime.makeUnsafe("1970-01-01T00:00:00.000Z");
 
 const TestHttpClientLive = Layer.succeed(
   HttpClient.HttpClient,
@@ -71,6 +73,35 @@ const TestHttpClientLive = Layer.succeed(
     Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({ version: "0.0.0" }))),
   ),
 );
+
+const BackgroundPolicyAlwaysRunLayer = Layer.mock(BackgroundPolicy.BackgroundPolicy)({
+  reportClientActivity: () => Effect.void,
+  removeRpcClient: () => Effect.void,
+  reportHostPowerState: () => Effect.void,
+  snapshot: Effect.succeed({
+    hostPower: {
+      source: "unknown",
+      idle: "unknown",
+      idleSeconds: null,
+      locked: "unknown",
+      suspended: false,
+      onBattery: "unknown",
+      lowPowerMode: "unknown",
+      thermalState: "unknown",
+      stale: true,
+      updatedAt: TEST_EPOCH,
+    },
+    leases: [],
+    activeForegroundLeaseCount: 0,
+    activeScopeKeys: [],
+    shouldRunOpportunisticWork: true,
+    updatedAt: TEST_EPOCH,
+  }),
+  streamChanges: Stream.empty,
+  hasDemand: () => Effect.succeed(true),
+  shouldRunScopeWork: () => Effect.succeed(true),
+  shouldRunOpportunisticWork: Effect.succeed(true),
+});
 
 function selectDescriptor(
   id: string,
@@ -100,6 +131,7 @@ type TestClaudeCapabilities = {
   readonly email: string | undefined;
   readonly subscriptionType: string | undefined;
   readonly tokenSource: string | undefined;
+  readonly apiProvider: string | undefined;
   readonly slashCommands: ReadonlyArray<ServerProviderSlashCommand>;
 };
 
@@ -109,6 +141,7 @@ function claudeCapabilities(overrides: Partial<TestClaudeCapabilities> = {}) {
       email: undefined,
       subscriptionType: undefined,
       tokenSource: undefined,
+      apiProvider: undefined,
       slashCommands: [],
       ...overrides,
     });
@@ -294,11 +327,16 @@ function makeMutableServerSettingsService(
       get streamChanges() {
         return Stream.fromPubSub(changes);
       },
-    } satisfies ServerSettingsShape;
+      get subscribeChanges() {
+        return PubSub.subscribe(changes).pipe(
+          Effect.map((subscription) => Stream.fromSubscription(subscription)),
+        );
+      },
+    } satisfies ServerSettingsModule.ServerSettingsService["Service"];
   });
 }
 
-it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), TestHttpClientLive))(
+it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), TestHttpClientLive))(
   "ProviderRegistry",
   (it) => {
     describe("checkCodexProviderStatus", () => {
@@ -343,6 +381,21 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
               shortDescription: "Debug failing GitHub Actions checks",
             },
           ]);
+        }),
+      );
+
+      it.effect("passes configured launch args to the Codex provider probe", () =>
+        Effect.gen(function* () {
+          let observedLaunchArgs: string | undefined;
+          const settings = decodeCodexSettings({ launchArgs: "--strict-config --enable foo" });
+
+          const status = yield* checkCodexProviderStatus(settings, (input) => {
+            observedLaunchArgs = input.launchArgs;
+            return Effect.succeed(makeCodexProbeSnapshot());
+          });
+
+          assert.strictEqual(status.status, "ready");
+          assert.strictEqual(observedLaunchArgs, "--strict-config --enable foo");
         }),
       );
 
@@ -545,6 +598,176 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
         ]);
       });
 
+      it("drops stale OpenCode models missing from a successful refresh", () => {
+        const previousProvider = {
+          instanceId: ProviderInstanceId.make("opencode"),
+          driver: ProviderDriverKind.make("opencode"),
+          status: "ready",
+          enabled: true,
+          installed: true,
+          auth: { status: "authenticated" },
+          checkedAt: "2026-07-17T00:00:00.000Z",
+          version: "1.0.0",
+          models: [
+            {
+              slug: "github/gpt-5",
+              name: "GPT-5",
+              subProvider: "GitHub",
+              isCustom: false,
+              capabilities: null,
+            },
+            {
+              slug: "removed-plugin/model",
+              name: "Removed Plugin Model",
+              subProvider: "Removed Plugin",
+              isCustom: false,
+              capabilities: null,
+            },
+          ],
+          slashCommands: [],
+          skills: [],
+        } as const satisfies ServerProvider;
+        const refreshedProvider = {
+          ...previousProvider,
+          checkedAt: "2026-07-17T00:01:00.000Z",
+          models: [
+            {
+              slug: "github/gpt-5",
+              name: "GPT-5",
+              subProvider: "GitHub",
+              isCustom: false,
+              capabilities: null,
+            },
+          ],
+        } satisfies ServerProvider;
+
+        assert.deepStrictEqual(mergeProviderSnapshot(previousProvider, refreshedProvider).models, [
+          ...refreshedProvider.models,
+        ]);
+      });
+
+      it("retains stale OpenCode models when a refresh fails", () => {
+        const previousProvider = {
+          instanceId: ProviderInstanceId.make("opencode"),
+          driver: ProviderDriverKind.make("opencode"),
+          status: "ready",
+          enabled: true,
+          installed: true,
+          auth: { status: "authenticated" },
+          checkedAt: "2026-07-17T00:00:00.000Z",
+          version: "1.0.0",
+          models: [
+            {
+              slug: "github/gpt-5",
+              name: "GPT-5",
+              subProvider: "GitHub",
+              isCustom: false,
+              capabilities: null,
+            },
+          ],
+          slashCommands: [],
+          skills: [],
+        } as const satisfies ServerProvider;
+        const refreshedProvider = {
+          ...previousProvider,
+          status: "error",
+          auth: { status: "unknown" },
+          checkedAt: "2026-07-17T00:01:00.000Z",
+          models: [],
+          message: "Failed to refresh OpenCode models.",
+        } satisfies ServerProvider;
+
+        assert.deepStrictEqual(mergeProviderSnapshot(previousProvider, refreshedProvider).models, [
+          ...previousProvider.models,
+        ]);
+      });
+
+      it("classifies pending, logout, uninstall, and reconnect OpenCode inventories", () => {
+        const previousProvider = {
+          instanceId: ProviderInstanceId.make("opencode"),
+          driver: ProviderDriverKind.make("opencode"),
+          status: "ready",
+          enabled: true,
+          installed: true,
+          auth: { status: "authenticated" },
+          checkedAt: "2026-07-17T00:00:00.000Z",
+          version: "1.0.0",
+          models: [
+            {
+              slug: "github/gpt-5",
+              name: "GPT-5",
+              subProvider: "GitHub",
+              isCustom: false,
+              capabilities: null,
+            },
+            {
+              slug: "removed-plugin/model",
+              name: "Removed Plugin Model",
+              subProvider: "Removed Plugin",
+              isCustom: false,
+              capabilities: null,
+            },
+          ],
+          slashCommands: [],
+          skills: [],
+        } as const satisfies ServerProvider;
+        const pendingProvider = {
+          ...previousProvider,
+          status: "warning",
+          installed: false,
+          auth: { status: "unknown" },
+          checkedAt: "2026-07-17T00:01:00.000Z",
+          version: null,
+          models: [],
+          message: "OpenCode provider status has not been checked in this session yet.",
+        } satisfies ServerProvider;
+        const loggedOutProvider = {
+          ...previousProvider,
+          status: "warning",
+          auth: { status: "unknown" },
+          checkedAt: "2026-07-17T00:02:00.000Z",
+          models: [],
+          message: "OpenCode is available, but it did not report any connected upstream providers.",
+        } satisfies ServerProvider;
+        const missingProvider = {
+          ...previousProvider,
+          status: "error",
+          installed: false,
+          auth: { status: "unknown" },
+          checkedAt: "2026-07-17T00:03:00.000Z",
+          version: null,
+          models: [],
+          message: "OpenCode CLI (`opencode`) is not installed or not on PATH.",
+        } satisfies ServerProvider;
+        const authoritativeProvider = {
+          ...previousProvider,
+          checkedAt: "2026-07-17T00:04:00.000Z",
+          models: [previousProvider.models[0]!],
+        } satisfies ServerProvider;
+        const failedProvider = {
+          ...authoritativeProvider,
+          status: "error",
+          auth: { status: "unknown" },
+          checkedAt: "2026-07-17T00:05:00.000Z",
+          models: [],
+          message: "Failed to refresh OpenCode models.",
+        } satisfies ServerProvider;
+
+        assert.deepStrictEqual(mergeProviderSnapshot(previousProvider, pendingProvider).models, [
+          ...previousProvider.models,
+        ]);
+        assert.deepStrictEqual(
+          mergeProviderSnapshot(previousProvider, loggedOutProvider).models,
+          [],
+        );
+        assert.deepStrictEqual(mergeProviderSnapshot(previousProvider, missingProvider).models, []);
+
+        const afterRemoval = mergeProviderSnapshot(previousProvider, authoritativeProvider);
+        const afterFailure = mergeProviderSnapshot(afterRemoval, failedProvider);
+
+        assert.deepStrictEqual(afterFailure.models, [authoritativeProvider.models[0]!]);
+      });
+
       it("fills missing capabilities from the previous provider snapshot", () => {
         const previousProvider = {
           instanceId: ProviderInstanceId.make("cursor"),
@@ -636,14 +859,17 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
             adapter: {} as ProviderInstance["adapter"],
             textGeneration: {} as ProviderInstance["textGeneration"],
           } satisfies ProviderInstance;
-          const instanceRegistryLayer = Layer.succeed(ProviderInstanceRegistry, {
-            getInstance: (instanceId) =>
-              Effect.succeed(instanceId === codexInstanceId ? instance : undefined),
-            listInstances: Effect.succeed([instance]),
-            listUnavailable: Effect.succeed([]),
-            streamChanges: Stream.empty,
-            subscribeChanges: Effect.flatMap(PubSub.unbounded<void>(), PubSub.subscribe),
-          });
+          const instanceRegistryLayer = Layer.succeed(
+            ProviderInstanceRegistry.ProviderInstanceRegistry,
+            {
+              getInstance: (instanceId) =>
+                Effect.succeed(instanceId === codexInstanceId ? instance : undefined),
+              listInstances: Effect.succeed([instance]),
+              listUnavailable: Effect.succeed([]),
+              streamChanges: Stream.empty,
+              subscribeChanges: Effect.flatMap(PubSub.unbounded<void>(), PubSub.subscribe),
+            },
+          );
           const scope = yield* Scope.make();
           yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
           const runtimeServices = yield* Layer.build(
@@ -658,76 +884,12 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
             ),
           ).pipe(Scope.provide(scope));
           yield* Effect.gen(function* () {
-            const registry = yield* ProviderRegistry;
+            const registry = yield* ProviderRegistry.ProviderRegistry;
             assert.deepStrictEqual(yield* registry.getProviders, [initialProvider]);
             assert.strictEqual(yield* Ref.get(refreshCalls), 0);
           }).pipe(Effect.provide(runtimeServices));
         }),
       );
-
-      it("persists merged provider snapshots for the providers that were refreshed", () => {
-        const previousProviders = [
-          {
-            instanceId: ProviderInstanceId.make("cursor"),
-            driver: ProviderDriverKind.make("cursor"),
-            status: "ready",
-            enabled: true,
-            installed: true,
-            auth: { status: "authenticated" },
-            checkedAt: "2026-04-14T00:00:00.000Z",
-            version: "2026.04.09-f2b0fcd",
-            models: [
-              {
-                slug: "claude-opus-4-6",
-                name: "Opus 4.6",
-                isCustom: false,
-                capabilities: createModelCapabilities({
-                  optionDescriptors: [
-                    selectDescriptor("reasoning", "Reasoning", [
-                      { id: "high", label: "High", isDefault: true },
-                    ]),
-                    booleanDescriptor("fastMode", "Fast Mode"),
-                    booleanDescriptor("thinking", "Thinking"),
-                  ],
-                }),
-              },
-            ],
-            slashCommands: [],
-            skills: [],
-          },
-          {
-            instanceId: ProviderInstanceId.make("codex"),
-            driver: ProviderDriverKind.make("codex"),
-            status: "ready",
-            enabled: true,
-            installed: true,
-            auth: { status: "authenticated" },
-            checkedAt: "2026-04-14T00:00:00.000Z",
-            version: "1.0.0",
-            models: [],
-            slashCommands: [],
-            skills: [],
-          },
-        ] as const satisfies ReadonlyArray<ServerProvider>;
-        const refreshedCursor = {
-          ...previousProviders[0],
-          checkedAt: "2026-04-14T00:01:00.000Z",
-          models: [],
-        } satisfies ServerProvider;
-
-        const mergedProviders = mergeProviderSnapshots(previousProviders, [refreshedCursor]);
-        const persistedProviders = selectProvidersByKind(
-          mergedProviders,
-          new Set([ProviderDriverKind.make("cursor")]),
-        );
-
-        assert.deepStrictEqual(persistedProviders, [
-          {
-            ...refreshedCursor,
-            models: [...previousProviders[0].models],
-          },
-        ]);
-      });
 
       it.effect("persists the merged snapshot when a live update has empty models", () =>
         Effect.gen(function* () {
@@ -786,16 +948,19 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
             adapter: {} as ProviderInstance["adapter"],
             textGeneration: {} as ProviderInstance["textGeneration"],
           } satisfies ProviderInstance;
-          const instanceRegistryLayer = Layer.succeed(ProviderInstanceRegistry, {
-            getInstance: (instanceId) =>
-              Effect.succeed(instanceId === cursorInstanceId ? instance : undefined),
-            listInstances: Effect.succeed([instance]),
-            listUnavailable: Effect.succeed([]),
-            streamChanges: Stream.empty,
-            subscribeChanges: Effect.flatMap(PubSub.unbounded<void>(), (pubsub) =>
-              PubSub.subscribe(pubsub),
-            ),
-          });
+          const instanceRegistryLayer = Layer.succeed(
+            ProviderInstanceRegistry.ProviderInstanceRegistry,
+            {
+              getInstance: (instanceId) =>
+                Effect.succeed(instanceId === cursorInstanceId ? instance : undefined),
+              listInstances: Effect.succeed([instance]),
+              listUnavailable: Effect.succeed([]),
+              streamChanges: Stream.empty,
+              subscribeChanges: Effect.flatMap(PubSub.unbounded<void>(), (pubsub) =>
+                PubSub.subscribe(pubsub),
+              ),
+            },
+          );
           const scope = yield* Scope.make();
           yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
           const runtimeServices = yield* Layer.build(
@@ -806,13 +971,14 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
                   prefix: "kairo-provider-registry-merged-persist-",
                 }),
               ),
+              Layer.provideMerge(BackgroundPolicyAlwaysRunLayer),
               Layer.provideMerge(NodeServices.layer),
             ),
           ).pipe(Scope.provide(scope));
 
           yield* Effect.gen(function* () {
-            const registry = yield* ProviderRegistry;
-            const config = yield* ServerConfig;
+            const registry = yield* ProviderRegistry.ProviderRegistry;
+            const config = yield* ServerConfig.ServerConfig;
             const filePath = yield* resolveProviderStatusCachePath({
               cacheDir: config.providerStatusCacheDir,
               instanceId: cursorInstanceId,
@@ -840,6 +1006,144 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
             });
           }).pipe(Effect.provide(runtimeServices));
         }),
+      );
+
+      it.effect(
+        "persists authoritative OpenCode removals without resurrecting them on a failed live refresh",
+        () =>
+          Effect.gen(function* () {
+            const openCodeDriver = ProviderDriverKind.make("opencode");
+            const openCodeInstanceId = ProviderInstanceId.make("opencode");
+            const initialProvider = {
+              instanceId: openCodeInstanceId,
+              driver: openCodeDriver,
+              status: "ready",
+              enabled: true,
+              installed: true,
+              auth: { status: "authenticated" },
+              checkedAt: "2026-07-17T00:00:00.000Z",
+              version: "1.0.0",
+              models: [
+                {
+                  slug: "github/gpt-5",
+                  name: "GPT-5",
+                  subProvider: "GitHub",
+                  isCustom: false,
+                  capabilities: null,
+                },
+                {
+                  slug: "removed-plugin/model",
+                  name: "Removed Plugin Model",
+                  subProvider: "Removed Plugin",
+                  isCustom: false,
+                  capabilities: null,
+                },
+              ],
+              slashCommands: [],
+              skills: [],
+            } as const satisfies ServerProvider;
+            const authoritativeProvider = {
+              ...initialProvider,
+              checkedAt: "2026-07-17T00:01:00.000Z",
+              models: [initialProvider.models[0]!],
+            } satisfies ServerProvider;
+            const failedProvider = {
+              ...authoritativeProvider,
+              status: "error",
+              auth: { status: "unknown" },
+              checkedAt: "2026-07-17T00:02:00.000Z",
+              models: [],
+              message: "Failed to refresh OpenCode models.",
+            } satisfies ServerProvider;
+            const changes = yield* PubSub.unbounded<ServerProvider>();
+            const instance = {
+              instanceId: openCodeInstanceId,
+              driverKind: openCodeDriver,
+              continuationIdentity: {
+                driverKind: openCodeDriver,
+                continuationKey: "opencode:instance:opencode",
+              },
+              displayName: undefined,
+              enabled: true,
+              snapshot: {
+                maintenanceCapabilities: makeManualOnlyProviderMaintenanceCapabilities({
+                  provider: openCodeDriver,
+                  packageName: null,
+                }),
+                getSnapshot: Effect.succeed(initialProvider),
+                refresh: Effect.succeed(authoritativeProvider),
+                streamChanges: Stream.fromPubSub(changes),
+              },
+              adapter: {} as ProviderInstance["adapter"],
+              textGeneration: {} as ProviderInstance["textGeneration"],
+            } satisfies ProviderInstance;
+            const instanceRegistryLayer = Layer.succeed(
+              ProviderInstanceRegistry.ProviderInstanceRegistry,
+              {
+                getInstance: (instanceId) =>
+                  Effect.succeed(instanceId === openCodeInstanceId ? instance : undefined),
+                listInstances: Effect.succeed([instance]),
+                listUnavailable: Effect.succeed([]),
+                streamChanges: Stream.empty,
+                subscribeChanges: Effect.flatMap(PubSub.unbounded<void>(), (pubsub) =>
+                  PubSub.subscribe(pubsub),
+                ),
+              },
+            );
+            const scope = yield* Scope.make();
+            yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
+            const runtimeServices = yield* Layer.build(
+              ProviderRegistryLive.pipe(
+                Layer.provideMerge(instanceRegistryLayer),
+                Layer.provideMerge(
+                  ServerConfig.layerTest(process.cwd(), {
+                    prefix: "kairo-provider-registry-opencode-authoritative-persist-",
+                  }),
+                ),
+                Layer.provideMerge(NodeServices.layer),
+              ),
+            ).pipe(Scope.provide(scope));
+
+            yield* Effect.gen(function* () {
+              const registry = yield* ProviderRegistry.ProviderRegistry;
+              const config = yield* ServerConfig.ServerConfig;
+              const filePath = yield* resolveProviderStatusCachePath({
+                cacheDir: config.providerStatusCacheDir,
+                instanceId: openCodeInstanceId,
+              });
+
+              yield* PubSub.publish(changes, authoritativeProvider);
+
+              let cachedProvider = yield* readProviderStatusCache(filePath);
+              for (
+                let attempt = 0;
+                attempt < 50 && cachedProvider?.checkedAt !== authoritativeProvider.checkedAt;
+                attempt += 1
+              ) {
+                yield* TestClock.adjust("10 millis");
+                yield* Effect.yieldNow;
+                cachedProvider = yield* readProviderStatusCache(filePath);
+              }
+
+              assert.deepStrictEqual(cachedProvider?.models, [authoritativeProvider.models[0]!]);
+
+              yield* PubSub.publish(changes, failedProvider);
+              for (
+                let attempt = 0;
+                attempt < 50 && cachedProvider?.checkedAt !== failedProvider.checkedAt;
+                attempt += 1
+              ) {
+                yield* TestClock.adjust("10 millis");
+                yield* Effect.yieldNow;
+                cachedProvider = yield* readProviderStatusCache(filePath);
+              }
+
+              assert.deepStrictEqual(cachedProvider?.models, [authoritativeProvider.models[0]!]);
+              assert.deepStrictEqual((yield* registry.getProviders)[0]?.models, [
+                authoritativeProvider.models[0]!,
+              ]);
+            }).pipe(Effect.provide(runtimeServices));
+          }),
       );
 
       it.effect("returns the cached provider list when a manual refresh fails", () =>
@@ -880,16 +1184,19 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
             adapter: {} as ProviderInstance["adapter"],
             textGeneration: {} as ProviderInstance["textGeneration"],
           } satisfies ProviderInstance;
-          const instanceRegistryLayer = Layer.succeed(ProviderInstanceRegistry, {
-            getInstance: (instanceId) =>
-              Effect.succeed(instanceId === codexInstanceId ? instance : undefined),
-            listInstances: Effect.succeed([instance]),
-            listUnavailable: Effect.succeed([]),
-            streamChanges: Stream.empty,
-            subscribeChanges: Effect.flatMap(PubSub.unbounded<void>(), (pubsub) =>
-              PubSub.subscribe(pubsub),
-            ),
-          });
+          const instanceRegistryLayer = Layer.succeed(
+            ProviderInstanceRegistry.ProviderInstanceRegistry,
+            {
+              getInstance: (instanceId) =>
+                Effect.succeed(instanceId === codexInstanceId ? instance : undefined),
+              listInstances: Effect.succeed([instance]),
+              listUnavailable: Effect.succeed([]),
+              streamChanges: Stream.empty,
+              subscribeChanges: Effect.flatMap(PubSub.unbounded<void>(), (pubsub) =>
+                PubSub.subscribe(pubsub),
+              ),
+            },
+          );
           const scope = yield* Scope.make();
           yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
           const runtimeServices = yield* Layer.build(
@@ -900,12 +1207,13 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
                   prefix: "kairo-provider-registry-refresh-failure-",
                 }),
               ),
+              Layer.provideMerge(BackgroundPolicyAlwaysRunLayer),
               Layer.provideMerge(NodeServices.layer),
             ),
           ).pipe(Scope.provide(scope));
 
           yield* Effect.gen(function* () {
-            const registry = yield* ProviderRegistry;
+            const registry = yield* ProviderRegistry.ProviderRegistry;
 
             assert.deepStrictEqual(yield* registry.getProviders, [cachedProvider]);
             assert.deepStrictEqual(yield* registry.refresh(codexDriver), [cachedProvider]);
@@ -975,25 +1283,28 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
           const instancesRef = yield* Ref.make<ReadonlyArray<ProviderInstance>>([codexInstance]);
           const failNextList = yield* Ref.make(false);
           const wait = () => Effect.yieldNow;
-          const instanceRegistryLayer = Layer.succeed(ProviderInstanceRegistry, {
-            getInstance: (instanceId) =>
-              Ref.get(instancesRef).pipe(
-                Effect.map((instances) =>
-                  instances.find((instance) => instance.instanceId === instanceId),
+          const instanceRegistryLayer = Layer.succeed(
+            ProviderInstanceRegistry.ProviderInstanceRegistry,
+            {
+              getInstance: (instanceId) =>
+                Ref.get(instancesRef).pipe(
+                  Effect.map((instances) =>
+                    instances.find((instance) => instance.instanceId === instanceId),
+                  ),
                 ),
-              ),
-            listInstances: Effect.gen(function* () {
-              const shouldFail = yield* Ref.get(failNextList);
-              if (shouldFail) {
-                yield* Ref.set(failNextList, false);
-                return yield* Effect.die(new Error("simulated registry list failure"));
-              }
-              return yield* Ref.get(instancesRef);
-            }),
-            listUnavailable: Effect.succeed([]),
-            streamChanges: Stream.fromPubSub(changes),
-            subscribeChanges: PubSub.subscribe(changes),
-          });
+              listInstances: Effect.gen(function* () {
+                const shouldFail = yield* Ref.get(failNextList);
+                if (shouldFail) {
+                  yield* Ref.set(failNextList, false);
+                  return yield* Effect.die(new Error("simulated registry list failure"));
+                }
+                return yield* Ref.get(instancesRef);
+              }),
+              listUnavailable: Effect.succeed([]),
+              streamChanges: Stream.fromPubSub(changes),
+              subscribeChanges: PubSub.subscribe(changes),
+            },
+          );
           const scope = yield* Scope.make();
           yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
           const runtimeServices = yield* Layer.build(
@@ -1004,12 +1315,13 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
                   prefix: "kairo-provider-registry-sync-failure-",
                 }),
               ),
+              Layer.provideMerge(BackgroundPolicyAlwaysRunLayer),
               Layer.provideMerge(NodeServices.layer),
             ),
           ).pipe(Scope.provide(scope));
 
           yield* Effect.gen(function* () {
-            const registry = yield* ProviderRegistry;
+            const registry = yield* ProviderRegistry.ProviderRegistry;
             assert.deepStrictEqual(yield* registry.getProviders, [codexProvider]);
 
             yield* Ref.set(failNextList, true);
@@ -1039,7 +1351,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
 
       // This test intentionally avoids `mockCommandSpawnerLayer` so the real
       // `probeCodexAppServerProvider` path runs — including the full
-      // `codex app-server` RPC handshake via `CodexClient.layerCommand`.
+      // `codex app-server` RPC handshake via `CodexClient.layerChildProcess`.
       // We point `binaryPath` at a name that cannot exist on any machine so
       // the real `ChildProcessSpawner` deterministically returns ENOENT; the
       // probe wraps that as `CodexAppServerSpawnError` and
@@ -1092,15 +1404,23 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
           yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
           const providerRegistryLayer = ProviderRegistryLive.pipe(
             Layer.provideMerge(ProviderInstanceRegistryHydrationLive),
-            Layer.provideMerge(Layer.succeed(ServerSettingsService, serverSettings)),
+            Layer.provideMerge(
+              Layer.succeed(ServerSettingsModule.ServerSettingsService, serverSettings),
+            ),
             Layer.provideMerge(
               ServerConfig.layerTest(process.cwd(), {
                 prefix: "kairo-provider-registry-",
               }),
             ),
             Layer.provideMerge(TestHttpClientLive),
-            Layer.provideMerge(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
-            Layer.provideMerge(OpenCodeRuntimeLive),
+            Layer.provideMerge(
+              Layer.succeed(
+                ProviderEventLoggers.ProviderEventLoggers,
+                ProviderEventLoggers.NoOpProviderEventLoggers,
+              ),
+            ),
+            Layer.provideMerge(OpenCodeRuntime.OpenCodeRuntimeLive),
+            Layer.provideMerge(BackgroundPolicyAlwaysRunLayer),
             // NO spawner mock — `ChildProcessSpawner` is supplied by the
             // outer `NodeServices.layer` on `it.layer(...)` and will
             // genuinely spawn a subprocess. The missing-binary ENOENT is
@@ -1112,7 +1432,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
           );
 
           yield* Effect.gen(function* () {
-            const registry = yield* ProviderRegistry;
+            const registry = yield* ProviderRegistry.ProviderRegistry;
             let providers = yield* registry.getProviders;
             for (
               let attempts = 0;
@@ -1159,6 +1479,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
         Effect.gen(function* () {
           const firstMissing = `kairo_codex_first_`;
           const secondMissing = `kairo_codex_second_`;
+          const spawnedCommands: Array<string> = [];
           const serverSettings = yield* makeMutableServerSettingsService(
             decodeServerSettings(
               deepMerge(encodedDefaultServerSettings, {
@@ -1176,33 +1497,40 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
           yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
           const providerRegistryLayer = ProviderRegistryLive.pipe(
             Layer.provideMerge(ProviderInstanceRegistryHydrationLive),
-            Layer.provideMerge(Layer.succeed(ServerSettingsService, serverSettings)),
+            Layer.provideMerge(
+              Layer.succeed(ServerSettingsModule.ServerSettingsService, serverSettings),
+            ),
             Layer.provideMerge(
               ServerConfig.layerTest(process.cwd(), {
                 prefix: "kairo-provider-registry-",
               }),
             ),
             Layer.provideMerge(TestHttpClientLive),
-            Layer.provideMerge(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
-            Layer.provideMerge(OpenCodeRuntimeLive),
-            // `it.live` does not inherit layers from the outer `it.layer`
-            // wrapper, so provide `NodeServices.layer` inline. This is the
-            // same real `ChildProcessSpawner` + `FileSystem` + `Path`
-            // services that production uses.
+            Layer.provideMerge(
+              Layer.succeed(
+                ProviderEventLoggers.ProviderEventLoggers,
+                ProviderEventLoggers.NoOpProviderEventLoggers,
+              ),
+            ),
+            Layer.provideMerge(OpenCodeRuntime.OpenCodeRuntimeLive),
+            Layer.updateService(ChildProcessSpawner.ChildProcessSpawner, (spawner) =>
+              ChildProcessSpawner.make((command) => {
+                spawnedCommands.push((command as { readonly command: string }).command);
+                return spawner.spawn(command);
+              }),
+            ),
             Layer.provideMerge(NodeServices.layer),
+            Layer.provideMerge(BackgroundPolicyAlwaysRunLayer),
           );
           const runtimeServices = yield* Layer.build(providerRegistryLayer).pipe(
             Scope.provide(scope),
           );
 
           yield* Effect.gen(function* () {
-            const registry = yield* ProviderRegistry;
+            const registry = yield* ProviderRegistry.ProviderRegistry;
             // Boot-time probe: the default codex instance is enabled with
             // `firstMissing`, so the real spawner yields ENOENT and the
-            // snapshot should be `status: "error"`. What *distinguishes*
-            // the two probe runs is `checkedAt` — each probe stamps a
-            // fresh DateTime, so we capture it and assert it advances
-            // after the settings mutation.
+            // snapshot should be `status: "error"`.
             let initialProviders = yield* registry.getProviders;
             for (
               let attempts = 0;
@@ -1220,13 +1548,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
             );
             assert.strictEqual(initialCodex?.status, "error");
             assert.strictEqual(initialCodex?.installed, false);
-            const initialCheckedAt = initialCodex?.checkedAt;
-            assert.notStrictEqual(initialCheckedAt, undefined);
-
-            // The rebuilt instance may re-probe synchronously during the
-            // settings update. Advance the TestClock first so `checkedAt`
-            // can safely act as the fresh-probe marker this assertion uses.
-            yield* TestClock.adjust("1 second");
+            assert.deepStrictEqual(spawnedCommands, [firstMissing]);
 
             // Drive a settings change. The Hydration layer's
             // `SettingsWatcherLive` consumes this via `streamChanges`,
@@ -1242,8 +1564,9 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
               },
             });
 
-            // Poll with TestClock until `checkedAt` advances or we hit a
-            // generous virtual 3-second ceiling.
+            // Poll until the injected process boundary observes the new
+            // executable. This verifies the public settings-to-probe behavior
+            // without depending on timestamps assigned by TestClock.
             const refreshed = yield* Effect.gen(function* () {
               for (let attempts = 0; attempts < 60; attempts += 1) {
                 const providers = yield* registry.getProviders;
@@ -1251,7 +1574,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
                 if (
                   codex !== undefined &&
                   codex.status === "error" &&
-                  codex.checkedAt !== initialCheckedAt
+                  spawnedCommands.includes(secondMissing)
                 ) {
                   return providers;
                 }
@@ -1262,11 +1585,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
             });
 
             const reprobedCodex = refreshed.find((provider) => provider.instanceId === "codex");
-            assert.notStrictEqual(
-              reprobedCodex?.checkedAt,
-              initialCheckedAt,
-              "Expected a fresh probe after settings change, got the stale snapshot",
-            );
+            assert.deepStrictEqual(spawnedCommands, [firstMissing, secondMissing]);
             assert.strictEqual(reprobedCodex?.status, "error");
             assert.strictEqual(reprobedCodex?.installed, false);
           }).pipe(Effect.provide(runtimeServices));
@@ -1300,23 +1619,31 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
           yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
           const providerRegistryLayer = ProviderRegistryLive.pipe(
             Layer.provideMerge(ProviderInstanceRegistryHydrationLive),
-            Layer.provideMerge(Layer.succeed(ServerSettingsService, serverSettings)),
+            Layer.provideMerge(
+              Layer.succeed(ServerSettingsModule.ServerSettingsService, serverSettings),
+            ),
             Layer.provideMerge(
               ServerConfig.layerTest(process.cwd(), {
                 prefix: "kairo-provider-registry-",
               }),
             ),
             Layer.provideMerge(TestHttpClientLive),
-            Layer.provideMerge(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
-            Layer.provideMerge(OpenCodeRuntimeLive),
+            Layer.provideMerge(
+              Layer.succeed(
+                ProviderEventLoggers.ProviderEventLoggers,
+                ProviderEventLoggers.NoOpProviderEventLoggers,
+              ),
+            ),
+            Layer.provideMerge(OpenCodeRuntime.OpenCodeRuntimeLive),
             Layer.provideMerge(NodeServices.layer),
+            Layer.provideMerge(BackgroundPolicyAlwaysRunLayer),
           );
           const runtimeServices = yield* Layer.build(providerRegistryLayer).pipe(
             Scope.provide(scope),
           );
 
           yield* Effect.gen(function* () {
-            const registry = yield* ProviderRegistry;
+            const registry = yield* ProviderRegistry.ProviderRegistry;
             const providers = yield* registry.getProviders;
             const ghost = providers.find((provider) => provider.instanceId === "ghost_main");
 
@@ -1354,18 +1681,26 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
             yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
             const providerRegistryLayer = ProviderRegistryLive.pipe(
               Layer.provideMerge(ProviderInstanceRegistryHydrationLive),
-              Layer.provideMerge(Layer.succeed(ServerSettingsService, serverSettings)),
+              Layer.provideMerge(
+                Layer.succeed(ServerSettingsModule.ServerSettingsService, serverSettings),
+              ),
               Layer.provideMerge(
                 ServerConfig.layerTest(process.cwd(), {
                   prefix: "kairo-provider-registry-",
                 }),
               ),
               Layer.provideMerge(TestHttpClientLive),
-              Layer.provideMerge(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
-              Layer.provideMerge(OpenCodeRuntimeLive),
+              Layer.provideMerge(
+                Layer.succeed(
+                  ProviderEventLoggers.ProviderEventLoggers,
+                  ProviderEventLoggers.NoOpProviderEventLoggers,
+                ),
+              ),
+              Layer.provideMerge(OpenCodeRuntime.OpenCodeRuntimeLive),
+              Layer.provideMerge(BackgroundPolicyAlwaysRunLayer),
               Layer.provideMerge(
                 mockCommandSpawnerLayer((command, args) => {
-                  if (command === "agent") {
+                  if (command === "cursor-agent") {
                     cursorSpawned = true;
                   }
                   const joined = args.join(" ");
@@ -1389,13 +1724,13 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
             );
             const runtimeServices = yield* Layer.build(
               Layer.mergeAll(
-                Layer.succeed(ServerSettingsService, serverSettings),
+                Layer.succeed(ServerSettingsModule.ServerSettingsService, serverSettings),
                 providerRegistryLayer,
               ),
             ).pipe(Scope.provide(scope));
 
             yield* Effect.gen(function* () {
-              const registry = yield* ProviderRegistry;
+              const registry = yield* ProviderRegistry.ProviderRegistry;
               const providers = yield* registry.getProviders;
               const cursorProvider = providers.find(
                 (provider) => provider.instanceId === ProviderInstanceId.make("cursor"),
@@ -1446,6 +1781,86 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
             mockSpawnerLayer((args) => {
               const joined = args.join(" ");
               if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
+              if (joined === "auth status")
+                return {
+                  stdout: '{"loggedIn":true,"authMethod":"claude.ai"}\n',
+                  stderr: "",
+                  code: 0,
+                };
+              throw new Error(`Unexpected args: ${joined}`);
+            }),
+          ),
+        ),
+      );
+
+      it.effect("returns ready and labels Bedrock-backed Claude as authenticated", () =>
+        Effect.gen(function* () {
+          // Bedrock authenticates via external AWS credentials, so the SDK init
+          // reports only `apiProvider` with no subscription or token.
+          const status = yield* checkClaudeProviderStatus(
+            defaultClaudeSettings,
+            claudeCapabilities({ apiProvider: "bedrock" }),
+          );
+          assert.strictEqual(status.status, "ready");
+          assert.strictEqual(status.installed, true);
+          assert.strictEqual(status.auth.status, "authenticated");
+          assert.strictEqual(status.auth.type, "bedrock");
+          assert.strictEqual(status.auth.label, "Amazon Bedrock");
+        }).pipe(
+          Effect.provide(
+            mockSpawnerLayer((args) => {
+              const joined = args.join(" ");
+              if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
+              throw new Error(`Unexpected args: ${joined}`);
+            }),
+          ),
+        ),
+      );
+
+      it.effect("includes Claude Opus 5 on supported Claude Code versions", () =>
+        Effect.gen(function* () {
+          const status = yield* checkClaudeProviderStatus(
+            defaultClaudeSettings,
+            claudeCapabilities(),
+          );
+          const opus5 = status.models.find((model) => model.slug === "claude-opus-5");
+          assert.strictEqual(opus5?.name, "Claude Opus 5");
+        }).pipe(
+          Effect.provide(
+            mockSpawnerLayer((args) => {
+              const joined = args.join(" ");
+              if (joined === "--version") return { stdout: "2.1.219\n", stderr: "", code: 0 };
+              if (joined === "auth status")
+                return {
+                  stdout: '{"loggedIn":true,"authMethod":"claude.ai"}\n',
+                  stderr: "",
+                  code: 0,
+                };
+              throw new Error(`Unexpected args: ${joined}`);
+            }),
+          ),
+        ),
+      );
+
+      it.effect("hides Claude Opus 5 on older Claude Code versions", () =>
+        Effect.gen(function* () {
+          const status = yield* checkClaudeProviderStatus(
+            defaultClaudeSettings,
+            claudeCapabilities(),
+          );
+          assert.strictEqual(
+            status.models.some((model) => model.slug === "claude-opus-5"),
+            false,
+          );
+          assert.strictEqual(
+            status.message,
+            "Claude Code v2.1.218 is too old for Claude Opus 5. Upgrade to v2.1.219 or newer to access it.",
+          );
+        }).pipe(
+          Effect.provide(
+            mockSpawnerLayer((args) => {
+              const joined = args.join(" ");
+              if (joined === "--version") return { stdout: "2.1.218\n", stderr: "", code: 0 };
               if (joined === "auth status")
                 return {
                   stdout: '{"loggedIn":true,"authMethod":"claude.ai"}\n',
@@ -1685,8 +2100,8 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
         ),
       );
 
-      it.effect("runs Claude status probes with the configured Claude HOME", () => {
-        const claudeHome = "/tmp/kairo-claude-home";
+      it.effect("runs Claude status probes with the configured CLAUDE_CONFIG_DIR", () => {
+        const claudeConfigDir = "/tmp/kairo-claude-home";
         const recorded = recordingMockSpawnerLayer((args) => {
           const joined = args.join(" ");
           if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
@@ -1703,14 +2118,14 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
           const status = yield* checkClaudeProviderStatus(
             {
               ...defaultClaudeSettings,
-              homePath: claudeHome,
+              homePath: claudeConfigDir,
             },
             claudeCapabilities(),
           );
           assert.strictEqual(status.status, "ready");
           assert.deepStrictEqual(
-            recorded.commands.map((command) => command.env?.HOME),
-            [claudeHome],
+            recorded.commands.map((command) => command.env?.CLAUDE_CONFIG_DIR),
+            [claudeConfigDir],
           );
         }).pipe(Effect.provide(recorded.layer));
       });
@@ -1841,14 +2256,17 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
         }).pipe(Effect.provide(failingSpawnerLayer("spawn claude ENOENT"))),
       );
 
-      it.effect("returns error when version check fails with non-zero exit code", () =>
-        Effect.gen(function* () {
+      it.effect("returns error when version check fails with non-zero exit code", () => {
+        const secretStderr = "Something went wrong: secret-token-value";
+        return Effect.gen(function* () {
           const status = yield* checkClaudeProviderStatus(
             defaultClaudeSettings,
             claudeCapabilities(),
           );
           assert.strictEqual(status.status, "error");
           assert.strictEqual(status.installed, true);
+          assert.strictEqual(status.message, "Claude Agent CLI is installed but failed to run.");
+          assert.ok(!(status.message ?? "").includes(secretStderr));
         }).pipe(
           Effect.provide(
             mockSpawnerLayer((args) => {
@@ -1856,14 +2274,14 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
               if (joined === "--version")
                 return {
                   stdout: "",
-                  stderr: "Something went wrong",
+                  stderr: secretStderr,
                   code: 1,
                 };
               throw new Error(`Unexpected args: ${joined}`);
             }),
           ),
-        ),
-      );
+        );
+      });
 
       it.effect("returns warning when the Claude initialization result is unavailable", () =>
         Effect.gen(function* () {

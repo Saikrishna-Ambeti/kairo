@@ -23,6 +23,7 @@ import {
 import { ensureLocalApi } from "../../localApi";
 import { cn } from "../../lib/utils";
 import { useServerProviders } from "../../rpc/serverState";
+import { usePrimaryServerApi } from "../../state/primaryServerApi";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
@@ -654,6 +655,7 @@ function FinishStep({ onComplete }: { onComplete: () => void }) {
 }
 
 export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
+  const serverApi = usePrimaryServerApi();
   const serverProviders = useServerProviders();
   const providers = serverProviders;
   const [memoryStatus, setMemoryStatus] = useState<SupermemoryStatus | null>(null);
@@ -717,11 +719,10 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
   const refreshAll = useCallback(async () => {
     setBusy((current) => current ?? "refresh");
     try {
-      const localApi = ensureLocalApi();
       const [providerPayload, nextMemory, nextComposio] = await Promise.all([
-        localApi.server.refreshProviders(),
-        localApi.server.getMemoryStatus(),
-        localApi.server.getComposioStatus(),
+        serverApi.refreshProviders(),
+        serverApi.getMemoryStatus(),
+        serverApi.getComposioStatus(),
       ]);
       setMemoryStatus(nextMemory);
       setComposioStatus(nextComposio);
@@ -788,7 +789,7 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
     setBusy("install-agent");
     setBusyProviderInstanceId(provider.instanceId);
     try {
-      const next = await ensureLocalApi().server.updateProvider({
+      const next = await serverApi.updateProvider({
         provider: provider.driver,
         instanceId: provider.instanceId,
       });
@@ -842,7 +843,7 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
     setBusy("login-agent");
     setBusyProviderInstanceId(provider.instanceId);
     try {
-      const next = await ensureLocalApi().server.loginProvider({
+      const next = await serverApi.loginProvider({
         provider: provider.driver,
         instanceId: provider.instanceId,
       });
@@ -875,7 +876,7 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
     if (!trimmedApiKey || selectedMemoryProviderIds.size === 0) return;
     setBusy("save-memory");
     try {
-      const next = await ensureLocalApi().server.configureMemory({
+      const next = await serverApi.configureMemory({
         apiKey: trimmedApiKey,
         providerInstanceIds: [...selectedMemoryProviderIds],
       });
@@ -900,12 +901,11 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
     }
     setBusy("setup-composio");
     try {
-      const localApi = ensureLocalApi();
-      await localApi.server.configureComposio({
+      await serverApi.configureComposio({
         ...(trimmedApiKey ? { apiKey: trimmedApiKey } : {}),
         providerInstanceIds: [...selectedComposioProviderIds],
       });
-      const next = await localApi.server.testComposioConnection(
+      const next = await serverApi.testComposioConnection(
         trimmedApiKey ? { apiKey: trimmedApiKey } : {},
       );
       setComposioStatus(next);

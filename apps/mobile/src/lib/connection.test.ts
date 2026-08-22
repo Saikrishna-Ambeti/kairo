@@ -3,13 +3,13 @@ import { EnvironmentId } from "@kairo/contracts";
 
 import {
   isRelayManagedConnection,
-  mobileAuthClientMetadata,
+  authClientMetadata,
   redactPairingCredential,
   toStableSavedRemoteConnection,
 } from "./connection";
 
 vi.mock("./runtime", () => ({
-  mobileRuntime: {
+  runtime: {
     runPromise: vi.fn(),
   },
 }));
@@ -22,10 +22,18 @@ vi.mock("react-native", () => ({
 
 describe("mobile remote connection records", () => {
   it("identifies mobile token exchanges for authorized-client presentation", () => {
-    expect(mobileAuthClientMetadata()).toEqual({
+    expect(authClientMetadata()).toEqual({
       label: "Kairo Mobile",
       deviceType: "mobile",
       os: "iOS",
+      surface: "mobile",
+    });
+  });
+
+  it("includes the mobile app version when the client provides it", () => {
+    expect(authClientMetadata("1.2.3")).toMatchObject({
+      surface: "mobile",
+      appVersion: "1.2.3",
     });
   });
 

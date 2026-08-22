@@ -14,17 +14,18 @@ export default defineConfig({
   run: {
     tasks: {
       build: {
-        command: "vp pack",
+        command: "node scripts/build-preview-annotation-css.mjs && vp pack",
         dependsOn: ["kairo#build"],
         cache: false,
       },
       dev: {
-        command: "cross-env KAIRO_DESKTOP_DEV=1 vp pack --watch",
+        command:
+          "node scripts/build-preview-annotation-css.mjs && cross-env KAIRO_DESKTOP_DEV=1 vp pack --watch",
         dependsOn: ["kairo#build"],
         cache: false,
       },
       "dev:bundle": {
-        command: "vp pack --watch",
+        command: "node scripts/build-preview-annotation-css.mjs && vp pack --watch",
         cache: false,
       },
       "dev:electron": {
@@ -55,6 +56,29 @@ export default defineConfig({
       outExtensions: () => ({ js: ".cjs" }),
       define: publicConfigDefine,
       entry: ["src/preload.ts"],
+      deps: {
+        // Sandboxed Electron preloads cannot reliably resolve package imports
+        // from inside the packaged ASAR. Bundle Clerk's preload bridge into the
+        // preload artifact instead of leaving a runtime require() behind.
+        alwaysBundle: (id) => id === "@clerk/electron" || id.startsWith("@clerk/electron/"),
+      },
+    },
+    {
+      format: "cjs",
+      outDir: "dist-electron",
+      sourcemap: true,
+      outExtensions: () => ({ js: ".cjs" }),
+      entry: ["src/preview-pick-preload.ts"],
+      deps: {
+        alwaysBundle: (id) => id === "react-grab" || id.startsWith("react-grab/"),
+      },
+    },
+    {
+      format: "cjs",
+      outDir: "dist-electron",
+      sourcemap: true,
+      outExtensions: () => ({ js: ".cjs" }),
+      entry: ["src/preview-pip-preload.ts"],
     },
   ],
 });

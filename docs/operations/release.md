@@ -1,5 +1,7 @@
 # Release Checklist
 
+> For maintainers. Using Kairo? See [docs/user](../user/).
+
 This document covers the unified release workflow for stable and nightly desktop releases.
 
 ## What the workflow does
@@ -29,6 +31,18 @@ This document covers the unified release workflow for stable and nightly desktop
   - stable releases are aliased to the `latest` hosted app channel
   - nightly releases are aliased to the `nightly` hosted app channel
 - Signing is optional and auto-detected per platform from secrets.
+
+## Required release credentials
+
+Stable releases require these GitHub Actions secrets in addition to the platform and deployment
+credentials documented below:
+
+- `RELEASE_APP_ID`
+- `RELEASE_APP_PRIVATE_KEY`
+
+The finalize job uses them to commit and push aligned package versions to `main` as the Release App.
+GitHub Release publication uses the repository-scoped workflow token so it has a rate-limit quota
+independent from the shared Release App installation.
 
 ## Kairo Connect relay deployment
 
@@ -148,7 +162,8 @@ One-time Vercel dashboard setup:
   - manual `workflow_dispatch` with `channel=nightly`
 - Runs the same desktop quality gates and artifact matrix as the tagged release flow.
 - Publishes a GitHub prerelease only:
-  - tag format: `nightly-vX.Y.Z-nightly.YYYYMMDD.<run_number>`
+  - current tag format: `vX.Y.Z-nightly.YYYYMMDD.<run_number>`
+  - `nightly-v...` is accepted only as a legacy previous-nightly tag
   - release name includes the short commit SHA
   - `make_latest` is always `false`
 - Uses the next stable patch version as the nightly base. For example, `0.0.17` produces nightlies on `0.0.18-nightly.*`.
@@ -156,9 +171,33 @@ One-time Vercel dashboard setup:
 - Publishes the CLI package (`apps/server`, npm package `kairo`) to the `nightly` npm dist-tag using the same nightly version.
 - Does not commit version bumps back to `main`.
 
+## Server self-update release invariant
+
+Connected servers update to the client's exact version, not to an npm dist-tag. Every released
+desktop or hosted client version must therefore have a matching `kairo@<version>` package available on
+npm before users can receive that client.
+
+The workflow enforces this ordering:
+
+1. `publish_cli` publishes the exact stable or nightly version to npm.
+2. `release` depends on `publish_cli` before exposing desktop artifacts in GitHub Releases.
+3. `deploy_web` depends on `release` before moving the hosted channel to the new client.
+
+Preserve these dependencies when changing the release graph. Publishing a client first would leave
+the **Update server** action targeting a package version that does not exist yet.
+
+For a release smoke test, confirm `npm view kairo@<version> version` returns the expected version, then
+connect the new client to a server on the previous version and verify that the update action
+reconnects to the matching server. Use releases with identical migration manifests for the
+automatic path. When the manifest changed, verify that the remote action stops before restart and
+shows the exact local `npx kairo@<version> service update` command. Also test the manual or
+desktop-managed guidance when those environments are available.
+
 ## Desktop auto-update notes
 
-- Runtime updater: `electron-updater` in `apps/desktop/src/main.ts`.
+- Updater runtime: `apps/desktop/src/updates/DesktopUpdates.ts`.
+- `electron-updater` adapter: `apps/desktop/src/electron/ElectronUpdater.ts`.
+- `apps/desktop/src/main.ts` only wires the updater layers into the desktop runtime.
 - Update UX:
   - Background checks run on startup delay + interval.
   - No automatic download or install.
@@ -167,9 +206,6 @@ One-time Vercel dashboard setup:
 - Repository slug source:
   - `KAIRO_DESKTOP_UPDATE_REPOSITORY` (format `owner/repo`), if set.
   - otherwise `GITHUB_REPOSITORY` from GitHub Actions.
-- Temporary private-repo auth workaround:
-  - set `KAIRO_DESKTOP_UPDATE_GITHUB_TOKEN` (or `GH_TOKEN`) in the desktop app runtime environment.
-  - the app forwards it as an `Authorization: Bearer <token>` request header for updater HTTP calls.
 - Required release assets for updater:
   - platform installers (`.exe`, `.dmg`, `.AppImage`, plus macOS `.zip` for Squirrel.Mac update payloads)
   - channel metadata: `latest*.yml` for stable releases, `nightly*.yml` for nightly releases
@@ -178,10 +214,42 @@ One-time Vercel dashboard setup:
   - `electron-updater` reads `latest-mac.yml` on stable and `nightly-mac.yml` on nightly, for both Intel and Apple Silicon.
   - The workflow merges the per-arch mac manifests into one channel-specific mac manifest before publishing the GitHub Release.
 
+### Windows payload topology and update validation
+
+Windows packages the bundled server and only its runtime-external/native
+dependency closure in `resources/server.asar`. Native modules and helper
+executables declared as unpacked by that archive must be present at the matching
+paths below `resources/server.asar.unpacked`. The Windows-native backend reads
+the archive in place through Electron. WSL cannot read ASAR files, so enabling
+the WSL backend extracts the server tree once into the desktop state directory
+under `wsl-server-tree/<version>` and reuses the completed version until the app
+is updated.
+
+The artifact builder rejects a Windows package when any of these invariants
+break:
+
+- `resources/server.asar` is absent or does not contain the server entry.
+- Any file marked unpacked in the ASAR header is absent from
+  `resources/server.asar.unpacked`.
+- On same-architecture Windows builds, the packaged primary cannot load the fff
+  native library from inside `server.asar` through its `.unpacked` sibling.
+- The isolated, extracted sidecar cannot load the server entry with plain Node.
+- The external Windows resource monitor is absent.
+- The unpacked Windows application contains more than 80 files.
+
+Cross-architecture Windows builds retain every structural and extracted-sidecar
+check, but skip executing the target Electron binary. A same-architecture build
+for each release target must exercise the primary native-load probe.
+
+NSIS differential packaging remains enabled. A sidecar layout transition can
+produce a larger one-time download; subsequent small releases retain their
+blockmaps, with a 60 MB maximum for a representative sidecar-to-sidecar update.
+
 ## 0) npm OIDC trusted publishing setup (CLI)
 
-The workflow publishes the CLI with `npm publish` from `apps/server` after bumping
-the package version to the release tag version.
+The workflow invokes `node apps/server/scripts/cli.ts publish` after aligning package versions. That
+script temporarily prepares the `kairo` package, then runs `vp pm publish --filter kairo ...` from the
+repository root so workspace publish configuration is applied correctly.
 
 Checklist:
 
@@ -193,22 +261,27 @@ Checklist:
    - Environment (if used): match your npm trusted publishing config
 3. Ensure npm account and org policies allow trusted publishing for the package.
 4. Create release tag `vX.Y.Z` and push; workflow will:
-   - set `apps/server/package.json` version to `X.Y.Z`
+   - align the release package versions to `X.Y.Z`
    - build web + server
-   - run `npm publish --access public --tag latest`
-5. Nightly runs from the same workflow file publish with `npm publish --access public --tag nightly`.
+   - invoke the CLI publish script with npm dist-tag `latest`
+5. Nightly runs invoke the same publish script with npm dist-tag `nightly`.
 
-## 1) Dry-run release without signing
+## 1) Release validation and unsigned builds
 
-Use this first to validate the release pipeline.
+There is no dry-run tag path. Pushing any accepted non-nightly tag, including
+`v0.0.0-test.1`, classifies the run as the stable channel. It publishes `kairo` with npm dist-tag
+`latest`, creates a real GitHub Release, aliases the hosted app to `latest.app.kairo.codes` and
+`app.kairo.codes`, and can commit a version bump to `main` in the finalize job. Do not push a test tag
+to validate the workflow.
 
-1. Confirm no signing secrets are required for this test.
-2. Create a test tag:
-   - `git tag v0.0.0-test.1`
-   - `git push origin v0.0.0-test.1`
-3. Wait for `.github/workflows/release.yml` to finish.
-4. Verify the GitHub Release contains all platform artifacts.
-5. Download each artifact and sanity-check installation on each OS.
+The workflow has no non-publishing `workflow_dispatch` mode. Use normal CI or local quality gates to
+validate checks and builds without shipping. To exercise the complete release graph at lower stable
+risk, manually dispatch `channel=nightly`; this still publishes a real nightly npm package, GitHub
+prerelease, desktop updater release, and hosted nightly alias, but it does not update stable aliases or
+commit a version bump to `main`. Only run it when a real nightly release is acceptable.
+
+Manual `channel=stable` with a version input is also a real stable-channel release. Omitting signing
+secrets only makes platform artifacts unsigned; it does not prevent publication.
 
 ## 2) Apple signing + notarization setup (macOS)
 
@@ -219,26 +292,44 @@ Required secrets used by the workflow:
 - `APPLE_API_KEY`
 - `APPLE_API_KEY_ID`
 - `APPLE_API_ISSUER`
+- `MACOS_PROVISIONING_PROFILE` (base64-encoded provisioning profile with Associated Domains)
+
+Required repository variables:
+
+- `APPLE_TEAM_ID`
+
+Optional repository variables:
+
+- `CLERK_PASSKEY_RP_DOMAINS`: comma-separated RP-domain override. By default, the build derives the
+  domain from the production Clerk publishable key.
 
 Checklist:
 
 1. Apple Developer account access:
    - Team has rights to create Developer ID certificates.
-2. Create `Developer ID Application` certificate.
-3. Export certificate + private key as `.p12` from Keychain.
-4. Base64-encode the `.p12` and store as `CSC_LINK`.
-5. Store the `.p12` export password as `CSC_KEY_PASSWORD`.
-6. In App Store Connect, create an API key (Team key).
-7. Add API key values:
+2. Create an explicit App ID for `com.kairo.app` and enable Associated Domains.
+3. Create a `Developer ID Application` certificate and a compatible provisioning profile for that
+   App ID with Associated Domains enabled.
+4. Export the certificate + private key as `.p12` from Keychain.
+5. Base64-encode the `.p12` and store as `CSC_LINK`.
+6. Base64-encode the provisioning profile and store it as `MACOS_PROVISIONING_PROFILE`.
+7. Store the `.p12` export password as `CSC_KEY_PASSWORD`, and set `APPLE_TEAM_ID` to the
+   10-character Apple Developer Team ID.
+8. In App Store Connect, create an API key (Team key).
+9. Add API key values:
    - `APPLE_API_KEY`: contents of the downloaded `.p8`
    - `APPLE_API_KEY_ID`: Key ID
    - `APPLE_API_ISSUER`: Issuer ID
-8. Re-run a tag release and confirm macOS artifacts are signed/notarized.
+10. Complete the Clerk Native API and AASA setup in [Kairo Connect Clerk Setup](../internals/kairo-connect.md#desktop-passkeys).
+11. Re-run a tag release and confirm macOS artifacts are signed/notarized and contain the expected
+    `com.apple.developer.associated-domains` entitlement.
 
 Notes:
 
 - `APPLE_API_KEY` is stored as raw key text in secrets.
 - The workflow writes it to a temporary `AuthKey_<id>.p8` file at runtime.
+- The workflow decodes `MACOS_PROVISIONING_PROFILE`, validates it with `security cms`, and passes it
+  to the desktop packager.
 
 ## 3) Azure Trusted Signing setup (Windows)
 
@@ -275,13 +366,16 @@ Checklist:
 5. Verify workflow steps:
    - preflight passes
    - all matrix builds pass
+   - `publish_cli` publishes the exact release version before the release job
    - release job uploads expected files
 6. Smoke test downloaded artifacts.
 
 ## 5) Troubleshooting
 
 - macOS build unsigned when expected signed:
-  - Check all Apple secrets are populated and non-empty.
+  - Check all Apple secrets plus `APPLE_TEAM_ID` are populated and non-empty.
+  - Confirm the provisioning profile belongs to `APPLE_TEAM_ID.com.kairo.app` and includes
+    Associated Domains.
 - Windows build unsigned when expected signed:
   - Check all Azure ATS and auth secrets are populated and non-empty.
 - Build fails with signing error:
