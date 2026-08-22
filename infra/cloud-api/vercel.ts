@@ -8,7 +8,7 @@ export const config: VercelConfig = {
     "npm install -g vite-plus && vp install --ignore-scripts --filter 'kairo-cloud-api...'",
   functions: {
     "api/**/*.ts": {
-      includeFiles: "node_modules/@kairo/contracts/src/**",
+      includeFiles: "../../packages/contracts/src/**",
     },
   },
   rewrites: [routes.rewrite("/health", "/api/health"), routes.rewrite("/v1/(.*)", "/api/v1/$1")],
