@@ -31,7 +31,7 @@ export function ProfessionalRolePicker({
   readonly onOtherValueChange: (value: string) => void;
 }) {
   return (
-    <fieldset className="grid gap-2 text-left sm:grid-cols-2">
+    <fieldset className="grid gap-3 text-left sm:grid-cols-2">
       <legend className="sr-only">Professional role</legend>
       {PROFESSIONAL_ROLES.map((role) => {
         const Icon = ROLE_ICONS[role.value];
@@ -41,7 +41,7 @@ export function ProfessionalRolePicker({
           <label
             key={role.value}
             className={cn(
-              "group relative min-h-24 cursor-pointer rounded-xl border p-3.5 text-left outline-none transition-[border-color,background-color,box-shadow,transform] has-focus-visible:ring-2 has-focus-visible:ring-ring has-focus-visible:ring-offset-2 has-focus-visible:ring-offset-card",
+              "group relative min-h-32 cursor-pointer rounded-xl border p-5 text-left outline-none transition-[border-color,background-color,box-shadow,transform] has-focus-visible:ring-2 has-focus-visible:ring-ring has-focus-visible:ring-offset-2 has-focus-visible:ring-offset-card",
               selected
                 ? "border-primary/55 bg-primary/8 shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_18%,transparent)]"
                 : "border-border/80 bg-background/65 hover:-translate-y-px hover:border-primary/30 hover:bg-accent/45",
@@ -57,16 +57,16 @@ export function ProfessionalRolePicker({
             />
             <span
               className={cn(
-                "mb-3 flex size-8 items-center justify-center rounded-lg border",
+                "mb-4 flex size-10 items-center justify-center rounded-lg border",
                 selected
                   ? "border-primary/25 bg-primary/12 text-primary"
                   : "border-border bg-card text-muted-foreground group-hover:text-foreground",
               )}
             >
-              <Icon className="size-4" />
+              <Icon className="size-5" />
             </span>
-            <span className="block pr-6 text-sm font-semibold text-foreground">{role.label}</span>
-            <span className="mt-0.5 block text-xs leading-4 text-muted-foreground">
+            <span className="block pr-6 text-base font-semibold text-foreground">{role.label}</span>
+            <span className="mt-1 block text-sm leading-5 text-muted-foreground">
               {role.description}
             </span>
             <span
