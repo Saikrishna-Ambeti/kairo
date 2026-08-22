@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { ClerkProvider } from "@clerk/react";
-import { passkeys } from "@clerk/electron/passkeys";
+import { passkeys as electronPasskeys } from "@clerk/electron/passkeys";
 import { ClerkProvider as ElectronClerkProvider } from "@clerk/electron/react";
 import { createHashHistory, createBrowserHistory } from "@tanstack/react-router";
 
@@ -30,9 +30,12 @@ if (isElectron) {
 
 const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
 
-// First Clerk UI build containing https://github.com/clerk/javascript/pull/9500.
-const electronClerkUI = {
-  __internal_clerkUIVersion: "1.30.5-canary.v20260819050620",
+// Clerk's Electron bridge reports conditional passkey autofill as supported,
+// but Windows opens it as a modal prompt while the sign-in form mounts.
+// Keep explicit passkey sign-in available without starting autofill on load.
+const passkeys = {
+  ...electronPasskeys,
+  isAutoFillSupported: () => Promise.resolve(false),
 };
 
 const app = <AppRoot router={router} />;
@@ -42,7 +45,6 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     {clerkPublishableKey && hasCloudPublicConfig() ? (
       isElectron ? (
         <ElectronClerkProvider
-          {...electronClerkUI}
           appearance={clerkAppearance}
           publishableKey={clerkPublishableKey}
           passkeys={passkeys}
