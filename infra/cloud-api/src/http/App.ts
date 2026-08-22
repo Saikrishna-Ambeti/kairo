@@ -1,20 +1,24 @@
 import {
   KAIRO_CLOUD_REQUEST_BODY_MAX_BYTES,
   KairoCloudErrorResponse,
+  KairoCloudInstallationExchangeRequest,
   KairoCloudMemoryContextRequest,
   KairoCloudMemoryRecallRequest,
   KairoCloudMemorySaveRequest,
   type KairoCloudScope,
 } from "@kairo/contracts/cloud";
 import * as NodeCrypto from "node:crypto";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import { FetchHttpClient } from "effect/unstable/http";
 
 import * as CloudApiConfig from "../Config.ts";
 import { CloudApiRequestFailure } from "../Errors.ts";
+import * as ClerkSession from "../auth/ClerkSession.ts";
 import * as InstallationGrant from "../auth/InstallationGrant.ts";
 import * as Supermemory from "../supermemory/SupermemoryGateway.ts";
 
@@ -26,6 +30,9 @@ const decodeRecallRequest = Schema.decodeUnknownEffect(
 );
 const decodeContextRequest = Schema.decodeUnknownEffect(
   Schema.fromJsonString(KairoCloudMemoryContextRequest),
+);
+const decodeInstallationExchangeRequest = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(KairoCloudInstallationExchangeRequest),
 );
 const decodeErrorResponse = Schema.decodeUnknownSync(KairoCloudErrorResponse);
 
@@ -176,6 +183,55 @@ export const handleCloudApiRequest = Effect.fn("cloudApi.http.handleRequest")(fu
 
   const verifier = yield* InstallationGrant.InstallationGrantVerifier;
   const token = yield* readBearerToken(request, requestId);
+
+  if (request.method === "POST" && pathname === "/v1/installations/exchange") {
+    const configuration = yield* CloudApiConfig.CloudApiConfiguration;
+    const clerk = yield* ClerkSession.ClerkSessionVerifier;
+    const session = yield* clerk.verify(token).pipe(
+      Effect.mapError(() =>
+        requestFailure({
+          requestId,
+          code: "auth_invalid",
+          message: "Kairo account authentication failed.",
+          status: 401,
+        }),
+      ),
+    );
+    const payload = yield* readBody({
+      request,
+      requestId,
+      decode: decodeInstallationExchangeRequest,
+    });
+    const issuedAtEpochSeconds = Math.floor((yield* Clock.currentTimeMillis) / 1_000);
+    const expiresAtEpochSeconds = issuedAtEpochSeconds + 30 * 24 * 60 * 60;
+    const memoryNamespace = NodeCrypto.createHmac(
+      "sha256",
+      Redacted.value(configuration.namespaceHmacKey),
+    )
+      .update(`clerk-user:v1\0${session.subjectId}`)
+      .digest("base64url");
+    const accessToken = yield* InstallationGrant.issueInstallationGrant({
+      privateKey: Redacted.value(configuration.tokenPrivateKey),
+      issuer: configuration.tokenIssuer,
+      subjectId: `environment:${payload.environmentId}`,
+      tokenId: NodeCrypto.randomUUID(),
+      memoryNamespace,
+      scopes: ["memory:read", "memory:write"],
+      issuedAtEpochSeconds,
+      expiresAtEpochSeconds,
+    }).pipe(
+      Effect.mapError(() =>
+        requestFailure({
+          requestId,
+          code: "internal",
+          message: "Kairo Cloud access could not be provisioned.",
+          status: 500,
+        }),
+      ),
+    );
+    return responseJson({ accessToken, expiresAtEpochSeconds });
+  }
+
   const principal = yield* verifier.verify(token).pipe(
     Effect.mapError(() =>
       requestFailure({
@@ -254,14 +310,19 @@ const handleCloudApiRequestSafely = (request: Request) =>
 export function makeCloudApiHandler(
   configuration: CloudApiConfig.CloudApiConfigurationShape,
   fetchImplementation: typeof globalThis.fetch = globalThis.fetch,
+  clerkSessionVerifier?: ClerkSession.ClerkSessionVerifier["Service"],
 ) {
   const httpLayer = FetchHttpClient.layer.pipe(
     Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetchImplementation)),
   );
-  const runtimeLayer = Layer.mergeAll(InstallationGrant.layer, Supermemory.layer).pipe(
-    Layer.provideMerge(CloudApiConfig.layer(configuration)),
-    Layer.provideMerge(httpLayer),
-  );
+  const clerkSessionLayer = clerkSessionVerifier
+    ? Layer.succeed(ClerkSession.ClerkSessionVerifier, clerkSessionVerifier)
+    : ClerkSession.layer;
+  const runtimeLayer = Layer.mergeAll(
+    InstallationGrant.layer,
+    Supermemory.layer,
+    clerkSessionLayer,
+  ).pipe(Layer.provideMerge(CloudApiConfig.layer(configuration)), Layer.provideMerge(httpLayer));
   const runtime = ManagedRuntime.make(runtimeLayer);
   return {
     handler: (request: Request) => runtime.runPromise(handleCloudApiRequestSafely(request)),

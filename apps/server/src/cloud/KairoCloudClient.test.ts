@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import { KairoCloudMemorySaveRequest } from "@kairo/contracts";
+import { EnvironmentId } from "@kairo/contracts";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -9,9 +9,7 @@ import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 
 import { KairoCloudClient, layer as KairoCloudClientLayer } from "./KairoCloudClient.ts";
 
-const decodeSaveRequest = Schema.decodeUnknownSync(
-  Schema.fromJsonString(KairoCloudMemorySaveRequest),
-);
+const decodeUnknownJson = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
 
 describe("KairoCloudClient", () => {
   it.effect("uses the configured gateway and installation grant", () =>
@@ -27,7 +25,7 @@ describe("KairoCloudClient", () => {
           Effect.sync(() => {
             const body =
               request.body._tag === "Uint8Array"
-                ? decodeSaveRequest(new TextDecoder().decode(request.body.body))
+                ? decodeUnknownJson(new TextDecoder().decode(request.body.body))
                 : undefined;
             requests.push({
               url: request.url,
@@ -36,7 +34,11 @@ describe("KairoCloudClient", () => {
             });
             return HttpClientResponse.fromWeb(
               request,
-              Response.json({ id: "memory_1", status: "queued" }),
+              Response.json(
+                request.url.endsWith("/v1/installations/exchange")
+                  ? { accessToken: "installation_grant", expiresAtEpochSeconds: 2_000_000_000 }
+                  : { id: "memory_1", status: "queued" },
+              ),
             );
           }),
         ),
@@ -53,6 +55,10 @@ describe("KairoCloudClient", () => {
 
       const response = yield* Effect.gen(function* () {
         const client = yield* KairoCloudClient;
+        const grant = yield* client.exchangeInstallationGrant(Redacted.make("clerk_session"), {
+          environmentId: EnvironmentId.make("environment_test"),
+        });
+        expect(grant.accessToken).toBe("installation_grant");
         return yield* client.saveMemory(Redacted.make("installation_grant"), {
           content: "Prefers compact answers",
         });
@@ -60,6 +66,11 @@ describe("KairoCloudClient", () => {
 
       expect(response).toEqual({ id: "memory_1", status: "queued" });
       expect(requests).toEqual([
+        {
+          url: "https://memory-gateway.test/v1/installations/exchange",
+          authorization: "Bearer clerk_session",
+          body: { environmentId: "environment_test" },
+        },
         {
           url: "https://memory-gateway.test/v1/memory/save",
           authorization: "Bearer installation_grant",

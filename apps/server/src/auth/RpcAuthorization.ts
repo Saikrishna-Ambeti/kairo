@@ -52,6 +52,7 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.serverReportHostPowerState]: AuthOrchestrationOperateScope,
   [WS_METHODS.serverGetBackgroundPolicy]: AuthOrchestrationReadScope,
   [WS_METHODS.serverGetMemoryStatus]: AuthOrchestrationReadScope,
+  [WS_METHODS.serverProvisionMemoryAccess]: AuthOrchestrationOperateScope,
   [WS_METHODS.serverConfigureMemory]: AuthOrchestrationOperateScope,
   [WS_METHODS.serverDisableMemory]: AuthOrchestrationOperateScope,
   [WS_METHODS.serverGetComposioStatus]: AuthOrchestrationReadScope,

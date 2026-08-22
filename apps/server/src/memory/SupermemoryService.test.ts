@@ -1,12 +1,14 @@
 import { describe, expect, it } from "@effect/vitest";
-import { ProviderInstanceId, SupermemoryError } from "@kairo/contracts";
+import { EnvironmentId, ProviderInstanceId, SupermemoryError } from "@kairo/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import { KairoCloudClient } from "../cloud/KairoCloudClient.ts";
+import { ServerEnvironment } from "../environment/ServerEnvironment.ts";
 import { makeManualOnlyProviderMaintenanceCapabilities } from "../provider/providerMaintenance.ts";
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
@@ -15,6 +17,14 @@ import { makeSupermemoryService, SupermemoryService } from "./SupermemoryService
 
 const encoder = new TextEncoder();
 const codexInstanceId = ProviderInstanceId.make("codex");
+const environmentId = EnvironmentId.make("environment-memory-test");
+const environmentLayer = Layer.succeed(
+  ServerEnvironment,
+  ServerEnvironment.of({
+    getEnvironmentId: Effect.succeed(environmentId),
+    getDescriptor: Effect.die("unused"),
+  }),
+);
 
 const secretStore = ServerSecretStore.ServerSecretStore.of({
   get: (name) =>
@@ -52,14 +62,62 @@ function makeDependencies(cloud: KairoCloudClient["Service"]) {
     providerRegistry,
     Layer.succeed(ServerSecretStore.ServerSecretStore, secretStore),
     Layer.succeed(KairoCloudClient, cloud),
+    environmentLayer,
   );
 }
 
 describe("SupermemoryService", () => {
+  it.effect("exchanges the Clerk session and stores the installation grant", () =>
+    Effect.gen(function* () {
+      let storedGrant: string | null = null;
+      const provisioningSecretStore = ServerSecretStore.ServerSecretStore.of({
+        get: () => Effect.succeed(Option.none()),
+        set: (name, value) =>
+          Effect.sync(() => {
+            expect(name).toBe(KAIRO_CLOUD_ACCESS_TOKEN_SECRET);
+            storedGrant = new TextDecoder().decode(value);
+          }),
+        create: () => Effect.die("unused"),
+        getOrCreateRandom: () => Effect.die("unused"),
+        remove: () => Effect.die("unused"),
+      });
+      const cloud = KairoCloudClient.of({
+        exchangeInstallationGrant: (clerkToken, input) =>
+          Effect.sync(() => {
+            expect(Redacted.value(clerkToken)).toBe("clerk_session");
+            expect(input.environmentId).toBe(environmentId);
+            return { accessToken: "installation_grant_new", expiresAtEpochSeconds: 2_000_000_000 };
+          }),
+        getCapabilities: () => Effect.die("unused"),
+        saveMemory: () => Effect.die("unused"),
+        recallMemory: () => Effect.die("unused"),
+        getMemoryContext: () => Effect.die("unused"),
+      });
+      const dependencies = Layer.mergeAll(
+        ServerSettingsService.layerTest(),
+        providerRegistry,
+        Layer.succeed(ServerSecretStore.ServerSecretStore, provisioningSecretStore),
+        Layer.succeed(KairoCloudClient, cloud),
+        environmentLayer,
+      );
+      const serviceLayer = Layer.effect(SupermemoryService, makeSupermemoryService).pipe(
+        Layer.provideMerge(dependencies),
+      );
+
+      yield* Effect.gen(function* () {
+        const memory = yield* SupermemoryService;
+        yield* memory.provisionAccess("clerk_session");
+      }).pipe(Effect.provide(serviceLayer));
+
+      expect(storedGrant).toBe("installation_grant_new");
+    }),
+  );
+
   it.effect("sends semantic memory operations to Kairo Cloud", () =>
     Effect.gen(function* () {
       const calls: Array<{ readonly operation: string; readonly input: unknown }> = [];
       const cloud = KairoCloudClient.of({
+        exchangeInstallationGrant: () => Effect.die("unused"),
         getCapabilities: () => Effect.succeed({ memory: true, principal: "installation" }),
         saveMemory: (_token, input) =>
           Effect.sync(() => {
@@ -107,6 +165,7 @@ describe("SupermemoryService", () => {
   it.effect("does not enable memory when the Kairo Cloud grant fails validation", () =>
     Effect.gen(function* () {
       const cloud = KairoCloudClient.of({
+        exchangeInstallationGrant: () => Effect.die("unused"),
         getCapabilities: () => Effect.fail(new SupermemoryError({ message: "grant expired" })),
         saveMemory: () => Effect.die("unused"),
         recallMemory: () => Effect.die("unused"),
@@ -117,6 +176,7 @@ describe("SupermemoryService", () => {
         providerRegistry,
         Layer.succeed(ServerSecretStore.ServerSecretStore, secretStore),
         Layer.succeed(KairoCloudClient, cloud),
+        environmentLayer,
       );
       const serviceLayer = Layer.effect(SupermemoryService, makeSupermemoryService).pipe(
         Layer.provideMerge(dependencies),

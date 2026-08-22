@@ -3,11 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "issue-installation-grant": "node -- scripts/issue-installation-grant.ts",
     "test": "vp test run",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
+    "@clerk/backend": "catalog:",
     "@effect/platform-node": "catalog:",
     "@kairo/contracts": "workspace:*",
     "effect": "catalog:",
