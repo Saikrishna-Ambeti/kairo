@@ -2,6 +2,9 @@ import {
   DEFAULT_KAIRO_CLOUD_API_URL,
   KairoCloudCapabilitiesResponse,
   type KairoCloudCapabilitiesResponse as KairoCloudCapabilitiesResponseShape,
+  type KairoCloudInstallationExchangeRequest,
+  KairoCloudInstallationExchangeResponse,
+  type KairoCloudInstallationExchangeResponse as KairoCloudInstallationExchangeResponseShape,
   type KairoCloudMemoryContextRequest,
   KairoCloudMemoryContextResponse,
   type KairoCloudMemoryContextResponse as KairoCloudMemoryContextResponseShape,
@@ -22,6 +25,10 @@ import * as Schema from "effect/Schema";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 
 export interface KairoCloudClientShape {
+  readonly exchangeInstallationGrant: (
+    clerkToken: Redacted.Redacted<string>,
+    input: KairoCloudInstallationExchangeRequest,
+  ) => Effect.Effect<KairoCloudInstallationExchangeResponseShape, SupermemoryError>;
   readonly getCapabilities: (
     accessToken: Redacted.Redacted<string>,
   ) => Effect.Effect<KairoCloudCapabilitiesResponseShape, SupermemoryError>;
@@ -98,6 +105,15 @@ export const makeKairoCloudClient = Effect.gen(function* () {
   });
 
   return KairoCloudClient.of({
+    exchangeInstallationGrant: (clerkToken, body) =>
+      execute({
+        accessToken: clerkToken,
+        method: "POST",
+        operation: "access provisioning",
+        path: "/v1/installations/exchange",
+        body,
+        responseSchema: KairoCloudInstallationExchangeResponse,
+      }),
     getCapabilities: (accessToken) =>
       execute({
         accessToken,

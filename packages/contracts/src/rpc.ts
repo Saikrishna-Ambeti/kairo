@@ -311,6 +311,7 @@ export const WS_METHODS = {
   serverGetBackgroundPolicy: "server.getBackgroundPolicy",
   serverGetUsageSummary: "server.getUsageSummary",
   serverGetMemoryStatus: "server.getMemoryStatus",
+  serverProvisionMemoryAccess: "server.provisionMemoryAccess",
   serverConfigureMemory: "server.configureMemory",
   serverDisableMemory: "server.disableMemory",
   serverGetComposioStatus: "server.getComposioStatus",
@@ -499,6 +500,14 @@ const SupermemoryRpcError = Schema.Union([
   ServerSettingsError,
   EnvironmentAuthorizationError,
 ]);
+
+export const WsServerProvisionMemoryAccessRpc = Rpc.make(WS_METHODS.serverProvisionMemoryAccess, {
+  payload: Schema.Struct({
+    clerkToken: Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(16_384)),
+  }),
+  success: Schema.Struct({}),
+  error: SupermemoryRpcError,
+});
 
 export const WsServerGetMemoryStatusRpc = Rpc.make(WS_METHODS.serverGetMemoryStatus, {
   payload: Schema.Struct({}),
@@ -1152,6 +1161,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerReportHostPowerStateRpc,
   WsServerGetBackgroundPolicyRpc,
   WsServerGetMemoryStatusRpc,
+  WsServerProvisionMemoryAccessRpc,
   WsServerConfigureMemoryRpc,
   WsServerDisableMemoryRpc,
   WsServerGetComposioStatusRpc,

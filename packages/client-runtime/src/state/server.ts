@@ -35,6 +35,7 @@ import { EnvironmentRegistry } from "../connection/registry.ts";
 import { EnvironmentSupervisor } from "../connection/supervisor.ts";
 import { safeErrorLogAttributes } from "../errors/safeLog.ts";
 import { EnvironmentCacheStore } from "../platform/persistence.ts";
+import { CloudSession } from "../platform/capabilities.ts";
 import {
   isRpcClientError,
   request,
@@ -459,7 +460,7 @@ export function resolveServerConfigValue(
 }
 
 export function createServerEnvironmentAtoms<R, E>(
-  runtime: Atom.AtomRuntime<EnvironmentRegistry | EnvironmentCacheStore | R, E>,
+  runtime: Atom.AtomRuntime<EnvironmentRegistry | EnvironmentCacheStore | CloudSession | R, E>,
   options: {
     readonly initialConfigValueAtom: (
       environmentId: EnvironmentId,
@@ -715,6 +716,26 @@ export function createServerEnvironmentAtoms<R, E>(
         Effect.andThen(request(WS_METHODS.serverGetComposioStatus, {})),
       ),
   });
+  const provisionMemoryAccess = Effect.gen(function* () {
+    const cloudSession = yield* CloudSession;
+    const clerkToken = yield* cloudSession.clerkToken.pipe(Effect.option);
+    if (Option.isNone(clerkToken)) {
+      return;
+    }
+    yield* request(WS_METHODS.serverProvisionMemoryAccess, {
+      clerkToken: clerkToken.value,
+    }).pipe(Effect.ignore);
+  });
+  const getMemoryStatus = createEnvironmentCommand(runtime, {
+    label: "environment-data:server:memory-status",
+    execute: (input: EnvironmentRpcInput<typeof WS_METHODS.serverGetMemoryStatus>) =>
+      provisionMemoryAccess.pipe(Effect.andThen(request(WS_METHODS.serverGetMemoryStatus, input))),
+  });
+  const configureMemory = createEnvironmentCommand(runtime, {
+    label: "environment-data:server:memory-configure",
+    execute: (input: EnvironmentRpcInput<typeof WS_METHODS.serverConfigureMemory>) =>
+      provisionMemoryAccess.pipe(Effect.andThen(request(WS_METHODS.serverConfigureMemory, input))),
+  });
 
   return {
     configValueAtom,
@@ -798,14 +819,8 @@ export function createServerEnvironmentAtoms<R, E>(
       scheduler: configScheduler,
       concurrency: configConcurrency,
     }),
-    getMemoryStatus: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:server:memory-status",
-      tag: WS_METHODS.serverGetMemoryStatus,
-    }),
-    configureMemory: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:server:memory-configure",
-      tag: WS_METHODS.serverConfigureMemory,
-    }),
+    getMemoryStatus,
+    configureMemory,
     disableMemory: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:memory-disable",
       tag: WS_METHODS.serverDisableMemory,

@@ -31,6 +31,7 @@ const invocation = (capabilities: ReadonlySet<McpInvocationContext.McpCapability
 it.effect("routes memory tools only for sessions with the memory capability", () => {
   const saved: string[] = [];
   const service = SupermemoryService.of({
+    provisionAccess: () => Effect.die("unused"),
     getStatus: Effect.die("unused"),
     configure: () => Effect.die("unused"),
     disable: Effect.die("unused"),

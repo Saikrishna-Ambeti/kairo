@@ -1,3 +1,4 @@
+import { WS_METHODS } from "@kairo/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -11,6 +12,7 @@ import type {
 } from "./model.ts";
 import * as ConnectionResolver from "./resolver.ts";
 import * as RpcSession from "../rpc/session.ts";
+import { CloudSession } from "../platform/capabilities.ts";
 
 export type ConnectionDriverProgress =
   | {
@@ -36,9 +38,17 @@ export class ConnectionDriver extends Context.Service<
   }
 >()("@kairo/client-runtime/connection/driver/ConnectionDriver") {}
 
+export function provisionMemoryAccess<E, E2>(
+  clerkToken: Effect.Effect<string, E>,
+  provision: (clerkToken: string) => Effect.Effect<unknown, E2>,
+): Effect.Effect<void> {
+  return clerkToken.pipe(Effect.flatMap(provision), Effect.ignore);
+}
+
 export const make = Effect.gen(function* () {
   const resolver = yield* ConnectionResolver.ConnectionResolver;
   const sessions = yield* RpcSession.RpcSessionFactory;
+  const cloudSession = yield* CloudSession;
 
   const connect = Effect.fn("ConnectionDriver.connect")(function* (
     entry: ConnectionCatalogEntry,
@@ -55,6 +65,9 @@ export const make = Effect.gen(function* () {
     const session = yield* sessions.connect(prepared);
     yield* reportProgress({ stage: "synchronizing", prepared });
     yield* session.ready;
+    yield* provisionMemoryAccess(cloudSession.clerkToken, (clerkToken) =>
+      session.client[WS_METHODS.serverProvisionMemoryAccess]({ clerkToken }),
+    ).pipe(Effect.forkScoped);
     return { prepared, session } satisfies EnvironmentConnectionLease;
   });
 

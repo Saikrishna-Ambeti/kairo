@@ -4,8 +4,10 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import { KairoCloudMemorySaveRequest } from "@kairo/contracts/cloud";
+import { importSPKI, jwtVerify } from "jose";
 
 import type { CloudApiConfigurationShape } from "../Config.ts";
+import { ClerkSessionVerificationError, ClerkSessionVerifier } from "../auth/ClerkSession.ts";
 import { issueInstallationGrant } from "../auth/InstallationGrant.ts";
 import { makeCloudApiHandler } from "./App.ts";
 
@@ -15,8 +17,11 @@ const keyPair = NodeCrypto.generateKeyPairSync("ed25519", {
 });
 
 const configuration: CloudApiConfigurationShape = {
+  clerkSecretKey: Redacted.make("sk_test_clerk"),
+  clerkJwtAudience: "kairo-test",
   supermemoryApiKey: Redacted.make("sm_service_owned"),
   supermemoryApiUrl: new URL("https://api.supermemory.test"),
+  tokenPrivateKey: Redacted.make(keyPair.privateKey),
   tokenPublicKey: keyPair.publicKey,
   tokenIssuer: "kairo-cloud-test",
   namespaceHmacKey: Redacted.make("test-namespace-hmac-key-with-32-bytes"),
@@ -36,7 +41,92 @@ const issueTestGrant = issueInstallationGrant({
 const encodeSaveRequest = Schema.encodeSync(Schema.fromJsonString(KairoCloudMemorySaveRequest));
 const encodeUnknownJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 
+const clerkSessionVerifier = ClerkSessionVerifier.of({
+  verify: (token) =>
+    token.startsWith("clerk_")
+      ? Effect.succeed({ subjectId: token.slice("clerk_".length) })
+      : Effect.fail(new ClerkSessionVerificationError({ cause: "invalid" })),
+});
+
 describe("Kairo Cloud API", () => {
+  it.effect("exchanges a Clerk session for an account-scoped installation grant", () =>
+    Effect.gen(function* () {
+      const app = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          makeCloudApiHandler(configuration, globalThis.fetch, clerkSessionVerifier),
+        ),
+        (value) => Effect.promise(() => value.dispose()),
+      );
+      const exchange = (clerkToken: string, environmentId: string) =>
+        Effect.promise(() =>
+          app.handler(
+            new Request("https://cloud.test/v1/installations/exchange", {
+              method: "POST",
+              headers: {
+                authorization: `Bearer ${clerkToken}`,
+                "content-type": "application/json",
+              },
+              body: encodeUnknownJson({ environmentId }),
+            }),
+          ),
+        ).pipe(
+          Effect.flatMap((response) =>
+            Effect.promise(async () => ({ status: response.status, body: await response.json() })),
+          ),
+        );
+
+      const first = yield* exchange("clerk_user_one", "environment_one");
+      const second = yield* exchange("clerk_user_one", "environment_two");
+      const other = yield* exchange("clerk_user_two", "environment_three");
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(200);
+      expect(other.status).toBe(200);
+
+      const publicKey = yield* Effect.promise(() => importSPKI(keyPair.publicKey, "EdDSA"));
+      const firstClaims = yield* Effect.promise(() =>
+        jwtVerify((first.body as { accessToken: string }).accessToken, publicKey),
+      );
+      const secondClaims = yield* Effect.promise(() =>
+        jwtVerify((second.body as { accessToken: string }).accessToken, publicKey),
+      );
+      const otherClaims = yield* Effect.promise(() =>
+        jwtVerify((other.body as { accessToken: string }).accessToken, publicKey),
+      );
+
+      expect(firstClaims.payload.sub).toBe("environment:environment_one");
+      expect(firstClaims.payload.memoryNamespace).toBe(secondClaims.payload.memoryNamespace);
+      expect(firstClaims.payload.memoryNamespace).not.toBe(otherClaims.payload.memoryNamespace);
+    }),
+  );
+
+  it.effect("rejects an invalid Clerk session without issuing a grant", () =>
+    Effect.gen(function* () {
+      const app = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          makeCloudApiHandler(configuration, globalThis.fetch, clerkSessionVerifier),
+        ),
+        (value) => Effect.promise(() => value.dispose()),
+      );
+      const response = yield* Effect.promise(() =>
+        app.handler(
+          new Request("https://cloud.test/v1/installations/exchange", {
+            method: "POST",
+            headers: {
+              authorization: "Bearer invalid",
+              "content-type": "application/json",
+            },
+            body: encodeUnknownJson({ environmentId: "environment_one" }),
+          }),
+        ),
+      );
+
+      expect(response.status).toBe(401);
+      expect(yield* Effect.promise(() => response.json())).toMatchObject({
+        code: "auth_invalid",
+      });
+    }),
+  );
+
   it.effect("authenticates installation and injects service-owned Supermemory fields", () =>
     Effect.gen(function* () {
       const upstreamRequests: Array<{

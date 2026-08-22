@@ -2,12 +2,13 @@
 
 Kairo Cloud API is a small account-service boundary hosted separately from Kairo Connect relay. It
 owns third-party service credentials and exposes Kairo-shaped operations. Supermemory is its first
-integration; Clerk can later replace the temporary installation-grant issuer without changing the
-memory routes.
+integration. Clerk authenticates grant exchange without changing the semantic memory routes.
 
 ## Trust boundary
 
-- The Kairo server holds a signed installation grant.
+- The client sends its existing Clerk JWT through an operate-scoped provisioning RPC.
+- The Cloud API verifies the Clerk JWT and issues an account-scoped installation grant.
+- The Kairo server stores the grant in its secret store and renews it automatically.
 - The Cloud API verifies grant issuer, audience, type, key id, expiry, and scopes.
 - The grant names an opaque memory namespace, not an upstream container tag.
 - The Cloud API derives the container tag with HMAC and a server-only key.
@@ -17,6 +18,7 @@ memory routes.
 The public surface is intentionally narrow:
 
 - `GET /health`
+- `POST /v1/installations/exchange`
 - `GET /v1/capabilities`
 - `POST /v1/memory/save`
 - `POST /v1/memory/recall`
@@ -25,8 +27,6 @@ The public surface is intentionally narrow:
 There is no generic proxy route. Relay deployment, Cloudflare DNS, tunnels, and Tailscale are not
 required. A Vercel `*.vercel.app` hostname is sufficient.
 
-## Authentication evolution
-
-V1 uses operator-issued, 30-day Ed25519 installation grants. The token contains an installation
-subject, an opaque memory namespace, and explicit read/write scopes. Clerk should later mint or
-exchange equivalent grants; callers and semantic memory routes should remain unchanged.
+The exchange issues a 30-day Ed25519 grant. Its subject identifies the Kairo environment, its
+memory namespace is stable for the Clerk user across environments, and its scopes permit only
+memory reads and writes. The Supermemory routes accept the installation grant, never the Clerk JWT.

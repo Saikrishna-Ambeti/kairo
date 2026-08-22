@@ -5,11 +5,14 @@ domain works; buying or configuring a domain is optional.
 
 Set these runtime environment variables in Vercel:
 
-- `SUPERMEMORY_API_KEY` — sensitive
+- `CLERK_SECRET_KEY` is sensitive. Use the same Clerk instance as the Kairo clients.
+- `CLERK_JWT_AUDIENCE` must match the audience in the existing Kairo Clerk JWT template.
+- `SUPERMEMORY_API_KEY` is sensitive.
+- `KAIRO_CLOUD_TOKEN_PRIVATE_KEY` is sensitive.
 - `KAIRO_CLOUD_TOKEN_PUBLIC_KEY`
-- `KAIRO_MEMORY_NAMESPACE_HMAC_KEY` — sensitive, at least 32 random bytes
-- `KAIRO_CLOUD_ISSUER` — optional, defaults to `kairo-cloud`
-- `SUPERMEMORY_API_URL` — optional, defaults to `https://api.supermemory.ai`
+- `KAIRO_MEMORY_NAMESPACE_HMAC_KEY` is sensitive and needs at least 32 random bytes.
+- `KAIRO_CLOUD_ISSUER` is optional and defaults to `kairo-cloud`.
+- `SUPERMEMORY_API_URL` is optional and defaults to `https://api.supermemory.ai`.
 
 Generate an Ed25519 key pair:
 
@@ -19,23 +22,15 @@ openssl pkey -in kairo-cloud-private.pem -pubout -out kairo-cloud-public.pem
 openssl rand -base64 32
 ```
 
-Put the public key and random namespace key in Vercel. Keep the private key outside Vercel and the
-repository. Issue an invite grant locally:
+Put both key-pair values and the random namespace key in Vercel. The private key never enters the
+repository or a client build. Kairo exchanges the signed-in user's existing Clerk token and stores
+the returned installation grant automatically. Users do not add an environment variable, GitHub
+secret, Supermemory key, or Clerk key.
 
-```sh
-KAIRO_CLOUD_TOKEN_PRIVATE_KEY="$(<kairo-cloud-private.pem)" \
-  KAIRO_CLOUD_SUBJECT_ID="installation_<stable-random-id>" \
-  KAIRO_CLOUD_MEMORY_NAMESPACE="memory_<stable-random-id>" \
-  vp run --filter kairo-cloud-api issue-installation-grant
-```
-
-Record the subject and memory namespace. Use the same values when renewing the 30-day grant or the
-installation will no longer address its existing memories.
-
-On the machine running Kairo, set the printed value as `KAIRO_CLOUD_ACCESS_TOKEN`. Self-hosters
-using a different deployment also set `KAIRO_CLOUD_API_URL` to its HTTPS origin. Alternatively,
-store the raw token bytes under the `kairo.cloud.accessToken` key in Kairo's secret store.
+The web, desktop, and mobile builds keep using their existing Clerk publishable key and JWT
+template configuration. Do not add a Cloud API secret to an app build. Self-hosted Kairo servers
+set `KAIRO_CLOUD_API_URL` only when targeting a non-default Cloud API deployment.
 
 The GitHub deployment workflow needs `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and
-`VERCEL_CLOUD_API_PROJECT_ID`. Do not put `SUPERMEMORY_API_KEY` in GitHub: it is a runtime secret in
-Vercel, not a build or deployment secret.
+`VERCEL_CLOUD_API_PROJECT_ID`. No Cloud API runtime secret belongs in GitHub; those values live only
+in the Vercel project.
