@@ -13,6 +13,7 @@ import {
   buildCodexDeveloperInstructions,
   codexDefaultModeDeveloperInstructions,
   codexPlanModeDeveloperInstructions,
+  codexStudyModeDeveloperInstructions,
 } from "../CodexDeveloperInstructions.ts";
 import { codexSessionAppServerArgs } from "./codexLaunchArgs.ts";
 import {
@@ -271,6 +272,16 @@ describe("buildCodexDeveloperInstructions", () => {
     NodeAssert.match(instructions, /as gpt-5\.3-codex with medium reasoning effort/);
   });
 
+  it("includes tutor instructions in study mode", () => {
+    const instructions = buildCodexDeveloperInstructions("study", {
+      model: "gpt-5.3-codex",
+      reasoningEffort: "medium",
+    });
+
+    NodeAssert.ok(instructions.startsWith(codexStudyModeDeveloperInstructions(true)));
+    NodeAssert.match(instructions, /patient coding tutor/);
+  });
+
   it("varies with the model and effort of each turn", () => {
     const first = buildCodexDeveloperInstructions("default", {
       model: "gpt-5.3-codex",
@@ -296,10 +307,11 @@ describe("buildCodexDeveloperInstructions", () => {
 });
 
 describe("Kairo browser developer instructions", () => {
-  it("prefers the product-native preview tools in both collaboration modes", () => {
+  it("prefers the product-native preview tools in every collaboration mode", () => {
     for (const instructions of [
       codexDefaultModeDeveloperInstructions(true),
       codexPlanModeDeveloperInstructions(true),
+      codexStudyModeDeveloperInstructions(true),
     ]) {
       NodeAssert.match(instructions, /kairo-code/);
       NodeAssert.match(instructions, /preview_status/);

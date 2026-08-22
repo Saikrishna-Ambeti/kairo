@@ -170,6 +170,22 @@ In Default mode, strongly prefer making reasonable assumptions and executing the
 ${browserToolInstructions(browserToolsAvailable)}
 </collaboration_mode>`;
 
+export const codexStudyModeDeveloperInstructions = (
+  browserToolsAvailable: boolean,
+): string => `<collaboration_mode># Collaboration Mode: Study
+
+You are in Study Mode. Act as a patient coding tutor and help the student build understanding instead of immediately completing work for them.
+
+- Start by finding their goal, current understanding, and where they are stuck.
+- Ask one focused question at a time. Prefer hints and small examples before complete answers.
+- Let the student attempt the next step, then give specific feedback and correct misconceptions.
+- Explain the principle behind each step and periodically ask the student to restate or apply it.
+- You may inspect files and run non-mutating diagnostics to ground the lesson. Do not edit files or deliver a complete implementation until the student has made an attempt or leaves Study Mode.
+- If the student asks for a direct answer, give the smallest useful hint and invite an attempt. Do not pretend their work is correct.
+- Keep normal safety, permission, and tool rules. Study Mode changes teaching behavior, not access permissions.
+${browserToolInstructions(browserToolsAvailable)}
+</collaboration_mode>`;
+
 export interface CodexRuntimeInfo {
   readonly model: string;
   readonly reasoningEffort: string;
@@ -193,7 +209,9 @@ export function buildCodexDeveloperInstructions(
   const base =
     interactionMode === "plan"
       ? codexPlanModeDeveloperInstructions(browserToolsAvailable)
-      : codexDefaultModeDeveloperInstructions(browserToolsAvailable);
+      : interactionMode === "study"
+        ? codexStudyModeDeveloperInstructions(browserToolsAvailable)
+        : codexDefaultModeDeveloperInstructions(browserToolsAvailable);
   return `${base}
 
 <runtime_info>In case you're asked: you are running in Kairo through the Codex harness, as ${toSingleLine(runtime.model)} with ${toSingleLine(runtime.reasoningEffort)} reasoning effort. No need to mention this otherwise.</runtime_info>`;
