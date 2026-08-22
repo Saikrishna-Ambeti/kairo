@@ -1,4 +1,4 @@
-import { useAuth, useClerk } from "@clerk/react";
+import { ClerkFailed, ClerkLoaded, ClerkLoading, useAuth, useClerk } from "@clerk/react";
 import {
   ProviderDriverKind as ProviderDriverKindSchema,
   isProviderAvailable,
@@ -282,6 +282,24 @@ function LocalSignInStep({ onContinue }: { readonly onContinue: () => void }) {
       <Button className="mt-6 min-w-40" onClick={onContinue}>
         Continue
         <ArrowRightIcon className="size-4" />
+      </Button>
+    </section>
+  );
+}
+
+function ClerkLoadErrorStep({ onRetry }: { readonly onRetry: () => void }) {
+  return (
+    <section className="mx-auto flex min-h-80 max-w-lg flex-col items-center justify-center text-center">
+      <span className="mb-5 flex size-12 items-center justify-center rounded-xl border border-destructive/25 bg-destructive/10 text-destructive">
+        <RefreshCwIcon className="size-5" />
+      </span>
+      <h2 className="text-2xl font-semibold tracking-[-0.025em]">Sign-in could not load</h2>
+      <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+        Check your connection, then retry. Your onboarding will stay here.
+      </p>
+      <Button className="mt-6 min-w-40" onClick={onRetry}>
+        Retry sign-in
+        <RefreshCwIcon className="size-4" />
       </Button>
     </section>
   );
@@ -618,7 +636,7 @@ function useProfessionSelection() {
   return { role, setRole, otherRole, setOtherRole };
 }
 
-function CloudOnboardingGate({ onComplete }: { readonly onComplete: () => void }) {
+function CloudOnboardingFlow({ onComplete }: { readonly onComplete: () => void }) {
   const clerk = useClerk();
   const { isLoaded, isSignedIn } = useAuth({ treatPendingAsSignedOut: false });
   const { role, setRole, otherRole, setOtherRole } = useProfessionSelection();
@@ -670,6 +688,31 @@ function CloudOnboardingGate({ onComplete }: { readonly onComplete: () => void }
       onProfessionEdit={() => setActiveStep("profession")}
       onComplete={onComplete}
     />
+  );
+}
+
+function CloudOnboardingGate({ onComplete }: { readonly onComplete: () => void }) {
+  return (
+    <>
+      <ClerkLoading>
+        <OnboardingFrame activeStep="sign-in">
+          <SignInStep
+            loading
+            signedIn={false}
+            onSignIn={() => undefined}
+            onContinue={() => undefined}
+          />
+        </OnboardingFrame>
+      </ClerkLoading>
+      <ClerkFailed>
+        <OnboardingFrame activeStep="sign-in">
+          <ClerkLoadErrorStep onRetry={() => window.location.reload()} />
+        </OnboardingFrame>
+      </ClerkFailed>
+      <ClerkLoaded>
+        <CloudOnboardingFlow onComplete={onComplete} />
+      </ClerkLoaded>
+    </>
   );
 }
 
