@@ -200,6 +200,13 @@ import {
   SourceControlRepositoryLookupInput,
 } from "./sourceControl.ts";
 import { VcsError } from "./vcs.ts";
+import {
+  ScheduledTaskCommand,
+  ScheduledTaskDispatchResult,
+  ScheduledTaskError,
+  ScheduledTaskExternalTriggerInput,
+  ScheduledTaskSnapshot,
+} from "./scheduledTasks.ts";
 
 const SourceControlRepositoryRpcError = Schema.Union([
   SourceControlRepositoryError,
@@ -314,6 +321,11 @@ export const WS_METHODS = {
   serverConfigureComposio: "server.configureComposio",
   serverTestComposioConnection: "server.testComposioConnection",
   serverDisableComposio: "server.disableComposio",
+
+  // Scheduled tasks
+  scheduledTasksGetSnapshot: "scheduledTasks.getSnapshot",
+  scheduledTasksDispatch: "scheduledTasks.dispatch",
+  scheduledTasksFireExternal: "scheduledTasks.fireExternal",
 
   // Cloud environment methods
   cloudGetRelayClientStatus: "cloud.getRelayClientStatus",
@@ -1054,6 +1066,24 @@ export const WsOrchestrationSubscribeThreadRpc = Rpc.make(
   },
 );
 
+export const WsScheduledTasksGetSnapshotRpc = Rpc.make(WS_METHODS.scheduledTasksGetSnapshot, {
+  payload: Schema.Struct({}),
+  success: ScheduledTaskSnapshot,
+  error: Schema.Union([ScheduledTaskError, EnvironmentAuthorizationError]),
+});
+
+export const WsScheduledTasksDispatchRpc = Rpc.make(WS_METHODS.scheduledTasksDispatch, {
+  payload: ScheduledTaskCommand,
+  success: ScheduledTaskDispatchResult,
+  error: Schema.Union([ScheduledTaskError, EnvironmentAuthorizationError]),
+});
+
+export const WsScheduledTasksFireExternalRpc = Rpc.make(WS_METHODS.scheduledTasksFireExternal, {
+  payload: ScheduledTaskExternalTriggerInput,
+  success: ScheduledTaskDispatchResult,
+  error: Schema.Union([ScheduledTaskError, EnvironmentAuthorizationError]),
+});
+
 export const WsSubscribeTerminalEventsRpc = Rpc.make(WS_METHODS.subscribeTerminalEvents, {
   payload: Schema.Struct({}),
   success: TerminalEvent,
@@ -1212,4 +1242,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationGetArchivedShellSnapshotRpc,
   WsOrchestrationSubscribeShellRpc,
   WsOrchestrationSubscribeThreadRpc,
+  WsScheduledTasksGetSnapshotRpc,
+  WsScheduledTasksDispatchRpc,
+  WsScheduledTasksFireExternalRpc,
 );

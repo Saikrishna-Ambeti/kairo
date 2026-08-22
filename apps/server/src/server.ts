@@ -110,6 +110,7 @@ import * as ResourceAttribution from "./resourceTelemetry/ResourceAttribution.ts
 import * as ResourceMonitorBinary from "./resourceTelemetry/ResourceMonitorBinary.ts";
 import * as ResourceTelemetry from "./resourceTelemetry/ResourceTelemetry.ts";
 import * as UsageService from "./usage/UsageService.ts";
+import * as ScheduledTaskService from "./scheduledTasks/ScheduledTaskService.ts";
 import { OrchestrationLayerLive } from "./orchestration/runtimeLayer.ts";
 import {
   clearPersistedServerRuntimeState,
@@ -354,6 +355,7 @@ const ProjectFaviconResolverLayerLive = ProjectFaviconResolver.layer.pipe(
 
 const AuthLayerLive = EnvironmentAuth.layer.pipe(
   Layer.provideMerge(PersistenceLayerLive),
+  Layer.provideMerge(ScheduledTaskService.layer),
   Layer.provide(ServerSecretStore.layer),
 );
 

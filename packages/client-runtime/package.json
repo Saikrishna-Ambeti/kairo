@@ -107,6 +107,10 @@
       "types": "./src/state/runtime.ts",
       "default": "./src/state/runtime.ts"
     },
+    "./state/scheduled-tasks": {
+      "types": "./src/state/scheduledTasks.ts",
+      "default": "./src/state/scheduledTasks.ts"
+    },
     "./state/server": {
       "types": "./src/state/server.ts",
       "default": "./src/state/server.ts"
