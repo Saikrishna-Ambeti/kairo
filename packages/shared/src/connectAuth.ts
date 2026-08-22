@@ -14,7 +14,7 @@ const CONNECT_CALLBACK_PATH = "/connect/callback";
  * decide whether it is the hosted deployment — the two must agree, so the
  * default lives here.
  */
-export const DEFAULT_HOSTED_APP_URL = "https://app.kairo.codes";
+export const DEFAULT_HOSTED_APP_URL = "https://kairo-web-ebon-three.vercel.app";
 
 /**
  * Requested at authorize time by the hosted page and honored by the CLI's

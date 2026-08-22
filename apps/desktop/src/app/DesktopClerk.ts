@@ -7,6 +7,8 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 
+import * as Electron from "electron";
+
 import { clerkFrontendApiHostnameFromPublishableKey } from "@kairo/shared/relayAuth";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronProtocol from "../electron/ElectronProtocol.ts";
@@ -50,6 +52,7 @@ export class DesktopClerk extends Context.Service<
       never,
       ElectronApp.ElectronApp | ElectronWindow.ElectronWindow | Scope.Scope
     >;
+    readonly configureSession: Effect.Effect<void, never, Scope.Scope>;
   }
 >()("@kairo/desktop/app/DesktopClerk") {}
 
@@ -71,6 +74,76 @@ export const desktopClerkFrontendApiHostname = resolveDesktopClerkFrontendApiHos
     ? undefined
     : __KAIRO_BUILD_CLERK_PUBLISHABLE_KEY__,
 );
+
+function isDesktopClerkNativeRequest(url: string): boolean {
+  try {
+    return new URL(url).searchParams.get("_is_native") === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function normalizeDesktopClerkNativeRequestHeaders(
+  url: string,
+  requestHeaders: Readonly<Record<string, string>>,
+): Record<string, string> {
+  const headerNames = Object.keys(requestHeaders);
+  const originHeader = headerNames.find((name) => name.toLowerCase() === "origin");
+  const hasAuthorization = headerNames.some((name) => name.toLowerCase() === "authorization");
+  if (!isDesktopClerkNativeRequest(url) || originHeader === undefined || !hasAuthorization) {
+    return { ...requestHeaders };
+  }
+
+  const normalizedHeaders = { ...requestHeaders };
+  delete normalizedHeaders[originHeader];
+  return normalizedHeaders;
+}
+
+export function normalizeDesktopClerkNativeResponseHeaders(
+  url: string,
+  rendererOrigin: string,
+  responseHeaders: Readonly<Record<string, string[]>>,
+): Record<string, string[]> {
+  if (!isDesktopClerkNativeRequest(url)) return { ...responseHeaders };
+
+  const normalizedHeaders = { ...responseHeaders };
+  const existingHeader = Object.keys(normalizedHeaders).find(
+    (name) => name.toLowerCase() === "access-control-allow-origin",
+  );
+  if (existingHeader !== undefined) delete normalizedHeaders[existingHeader];
+  normalizedHeaders["Access-Control-Allow-Origin"] = [rendererOrigin];
+  return normalizedHeaders;
+}
+
+export function registerDesktopClerkNativeSessionFilters(
+  webRequest: Electron.WebRequest,
+  frontendApiHostname: string,
+  rendererOrigin: string,
+): () => void {
+  const filter = { urls: [`https://${frontendApiHostname}/*`] };
+  webRequest.onBeforeSendHeaders(filter, (details, callback) => {
+    callback({
+      requestHeaders: normalizeDesktopClerkNativeRequestHeaders(
+        details.url,
+        details.requestHeaders,
+      ),
+    });
+  });
+  webRequest.onHeadersReceived(filter, (details, callback) => {
+    callback({
+      responseHeaders: normalizeDesktopClerkNativeResponseHeaders(
+        details.url,
+        rendererOrigin,
+        details.responseHeaders ?? {},
+      ),
+    });
+  });
+
+  return () => {
+    webRequest.onBeforeSendHeaders(null);
+    webRequest.onHeadersReceived(null);
+  };
+}
 
 export function createDesktopClerkBridge(stateDir: string, isDevelopment: boolean) {
   return createClerkBridge({
@@ -146,6 +219,19 @@ export const make = Effect.gen(function* () {
         );
       });
     }).pipe(Effect.withSpan("desktop.clerk.configure")),
+    configureSession:
+      desktopClerkFrontendApiHostname === undefined
+        ? Effect.void
+        : Effect.acquireRelease(
+            Effect.sync(() =>
+              registerDesktopClerkNativeSessionFilters(
+                Electron.session.defaultSession.webRequest,
+                desktopClerkFrontendApiHostname,
+                ElectronProtocol.getDesktopOrigin(environment.isDevelopment),
+              ),
+            ),
+            (cleanup) => Effect.sync(cleanup),
+          ).pipe(Effect.asVoid, Effect.withSpan("desktop.clerk.configureSession")),
   });
 });
 

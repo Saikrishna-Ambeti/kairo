@@ -14,22 +14,24 @@ For the wider system diagram, see
 
 ## Application Keys
 
-Kairo Connect is disabled in a fresh clone. To enable it for source builds against the production
-deployment, copy the repository-root example file:
+Cloud identity is disabled in a fresh clone. To enable Clerk sign-in and the hosted Cloud API for
+source builds, copy the repository-root example file:
 
 ```sh
 cp .env.example .env
 ```
 
-`.env.example` carries the production public identifiers (the same values baked into official
-release builds). To target a different Clerk application or relay, set the values yourself in a
-repository-root `.env` or `.env.local` file:
+`.env.example` carries the configured development Clerk publishable key and hosted deployment URLs.
+Managed relay remains disabled until its URL and Clerk OAuth client ID are supplied. To target a
+different Clerk application or relay, set the values in a repository-root `.env` or `.env.local`:
 
 ```dotenv
 KAIRO_CLERK_PUBLISHABLE_KEY=<publishable key>
 KAIRO_CLERK_JWT_TEMPLATE=<JWT template name>
 KAIRO_CLERK_CLI_OAUTH_CLIENT_ID=<public OAuth application client ID>
 KAIRO_RELAY_URL=https://relay.example.com
+KAIRO_HOSTED_APP_URL=https://hosted-app.example.com
+KAIRO_CLOUD_API_URL=https://cloud-api.example.com
 ```
 
 The shared client loader projects these canonical values into framework-specific `VITE_*` and
@@ -89,7 +91,7 @@ In **Clerk Dashboard > OAuth applications**:
 2. Enable the **Public** option so authorization-code exchange uses PKCE.
 3. Add **both** allowed redirect URIs:
    - `http://127.0.0.1:34338/callback` for the loopback listener;
-   - `https://app.kairo.codes/connect/callback` for the hosted out-of-band flow. This is
+   - `https://kairo-web-ebon-three.vercel.app/connect/callback` for the hosted out-of-band flow. This is
      `connectCallbackUrl(DEFAULT_HOSTED_APP_URL)` from `packages/shared/src/connectAuth.ts`, so a
      custom `KAIRO_HOSTED_APP_URL` means `$KAIRO_HOSTED_APP_URL/connect/callback` instead.
      Omitting it breaks headless and SSH authorization.
