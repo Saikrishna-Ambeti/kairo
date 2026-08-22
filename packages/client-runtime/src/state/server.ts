@@ -806,14 +806,6 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:server:memory-configure",
       tag: WS_METHODS.serverConfigureMemory,
     }),
-    testMemoryConnection: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:server:memory-test",
-      tag: WS_METHODS.serverTestMemoryConnection,
-    }),
-    installMemoryProviders: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:server:memory-install-providers",
-      tag: WS_METHODS.serverInstallMemoryProviders,
-    }),
     disableMemory: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:memory-disable",
       tag: WS_METHODS.serverDisableMemory,

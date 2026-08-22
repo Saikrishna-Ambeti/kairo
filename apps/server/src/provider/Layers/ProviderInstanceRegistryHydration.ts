@@ -49,11 +49,8 @@ import {
 } from "@kairo/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 
-import * as ServerSecretStore from "../../auth/ServerSecretStore.ts";
-import { applySupermemoryProviderBindings } from "../../memory/SupermemoryProviderBindings.ts";
 import { applyComposioProviderBindings } from "../../composio/ComposioProviderBindings.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { BUILT_IN_DRIVERS, type BuiltInDriversEnv } from "../builtInDrivers.ts";
@@ -111,23 +108,9 @@ const deriveEffectiveProviderInstanceConfigMap = (
 ): Effect.Effect<ProviderInstanceConfigMap, never> =>
   Effect.gen(function* () {
     const baseConfigMap = deriveProviderInstanceConfigMap(settings);
-    let effectiveConfigMap = settings.integrations.composio.enabled
+    return settings.integrations.composio.enabled
       ? yield* applyComposioProviderBindings(settings, baseConfigMap)
       : baseConfigMap;
-
-    if (!settings.memory.supermemory.enabled) {
-      return effectiveConfigMap;
-    }
-
-    const secretStoreOption = yield* Effect.serviceOption(ServerSecretStore.ServerSecretStore);
-    if (Option.isNone(secretStoreOption)) {
-      return effectiveConfigMap;
-    }
-
-    effectiveConfigMap = yield* applySupermemoryProviderBindings(settings, effectiveConfigMap).pipe(
-      Effect.provideService(ServerSecretStore.ServerSecretStore, secretStoreOption.value),
-    );
-    return effectiveConfigMap;
   });
 
 /**

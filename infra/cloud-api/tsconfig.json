@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM", "esnext.disposable"],
+    "types": ["node"]
+  },
+  "include": ["api/**/*.ts", "scripts/**/*.ts", "src/**/*.ts", "vercel.ts"]
+}

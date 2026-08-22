@@ -1,0 +1,67 @@
+name: Deploy Kairo Cloud API
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - infra/cloud-api/**
+      - packages/contracts/**
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - .github/workflows/deploy-cloud-api.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloud-api-production
+  cancel-in-progress: false
+
+jobs:
+  deploy_cloud_api:
+    name: Deploy production Cloud API
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 10
+    environment:
+      name: production
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_CLOUD_API_PROJECT_ID }}
+      VERCEL_TEAM_SLUG: ${{ vars.VERCEL_TEAM_SLUG }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: |
+            args:
+              - --filter=kairo-cloud-api...
+
+      - name: Deploy production
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${VERCEL_TOKEN:-}" || -z "${VERCEL_ORG_ID:-}" || -z "${VERCEL_PROJECT_ID:-}" ]]; then
+            echo "Missing Vercel deployment credentials." >&2
+            exit 1
+          fi
+
+          vercel_scope="${VERCEL_TEAM_SLUG:-$VERCEL_ORG_ID}"
+          vp dlx vercel@53.1.1 deploy \
+            --archive=tgz \
+            --prod \
+            --yes \
+            --token "$VERCEL_TOKEN" \
+            --scope "$vercel_scope"

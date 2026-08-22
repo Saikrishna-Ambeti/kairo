@@ -1,13 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 
-import {
-  ConfigureMemoryInput,
-  DEFAULT_MEMORY_SETTINGS,
-  InstallMemoryProvidersInput,
-  SupermemoryStatus,
-  TestMemoryConnectionInput,
-} from "./memory.ts";
+import { ConfigureMemoryInput, DEFAULT_MEMORY_SETTINGS, SupermemoryStatus } from "./memory.ts";
 import { ProviderDriverKind, ProviderInstanceId } from "./providerInstance.ts";
 import {
   ClientSettingsSchema,
@@ -25,8 +19,6 @@ const decodeServerSettings = Schema.decodeUnknownSync(ServerSettings);
 const decodeServerSettingsPatch = Schema.decodeUnknownSync(ServerSettingsPatch);
 const encodeServerSettings = Schema.encodeSync(ServerSettings);
 const decodeConfigureMemoryInput = Schema.decodeUnknownSync(ConfigureMemoryInput);
-const decodeTestMemoryConnectionInput = Schema.decodeUnknownSync(TestMemoryConnectionInput);
-const decodeInstallMemoryProvidersInput = Schema.decodeUnknownSync(InstallMemoryProvidersInput);
 const decodeSupermemoryStatus = Schema.decodeUnknownSync(SupermemoryStatus);
 
 describe("ClientSettings word wrap", () => {
@@ -369,9 +361,6 @@ describe("ServerSettings.memory", () => {
       mode: "hosted",
       scope: "user",
       providerInstanceIds: [],
-      hosted: {
-        apiUrl: "https://api.supermemory.ai",
-      },
     });
     expect(DEFAULT_SERVER_SETTINGS.memory).toEqual(DEFAULT_MEMORY_SETTINGS);
   });
@@ -418,34 +407,23 @@ describe("ServerSettings.memory", () => {
 });
 
 describe("memory RPC schemas", () => {
-  it("decodes configure/test/install payloads", () => {
+  it("decodes a provider-only configure payload", () => {
     expect(
       decodeConfigureMemoryInput({
-        apiKey: "sm_test",
         providerInstanceIds: ["codex"],
       }),
     ).toEqual({
-      apiKey: "sm_test",
-      providerInstanceIds: [ProviderInstanceId.make("codex")],
-    });
-
-    expect(decodeTestMemoryConnectionInput({ apiKey: "sm_test" })).toEqual({
-      apiKey: "sm_test",
-    });
-
-    expect(decodeInstallMemoryProvidersInput({ providerInstanceIds: ["codex"] })).toEqual({
       providerInstanceIds: [ProviderInstanceId.make("codex")],
     });
   });
 
-  it("decodes redacted Supermemory status without API key material", () => {
+  it("decodes hosted service availability without API key material", () => {
     const decoded = decodeSupermemoryStatus({
       enabled: true,
       mode: "hosted",
       scope: "user",
-      auth: {
-        hasApiKey: true,
-        lastTestedAt: "2026-06-13T00:00:00.000Z",
+      service: {
+        available: true,
       },
       providers: [
         {
@@ -459,7 +437,7 @@ describe("memory RPC schemas", () => {
       ],
     });
 
-    expect(decoded.auth.hasApiKey).toBe(true);
+    expect(decoded.service.available).toBe(true);
     expect(decoded.providers[0]?.instanceId).toBe(ProviderInstanceId.make("codex"));
     expect(decoded).not.toHaveProperty("apiKey");
   });
