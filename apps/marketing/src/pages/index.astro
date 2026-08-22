@@ -1,55 +1,66 @@
 ---
 import Layout from "../layouts/Layout.astro";
+import { GITHUB_REPOSITORY_URL } from "../lib/site";
 
 const providers = [
   {
     name: "Claude Code",
-    tagline: "Anthropic Claude 3.7 Sonnet with native subagents & deep reasoning",
+    tagline: "Use your existing Claude Code installation and subscription",
     cmd: "claude auth login",
   },
   {
     name: "Codex CLI",
-    tagline: "OpenAI Codex agent with native JSON-RPC app-server support",
+    tagline: "Use your existing OpenAI Codex CLI installation and account",
     cmd: "codex login",
   },
   {
     name: "OpenCode",
-    tagline: "Open-source, self-hosted LLM endpoints and local models",
+    tagline: "Connect OpenCode and the models configured in its CLI",
     cmd: "opencode auth login",
+  },
+  {
+    name: "Cursor",
+    tagline: "Run Cursor CLI threads from the same Kairo workspace",
+    cmd: "agent login",
+  },
+  {
+    name: "Grok",
+    tagline: "Connect the Grok Build CLI without changing your workflow",
+    cmd: "grok login",
   },
 ];
 
 const appModes = [
   {
     id: "canvas",
-    name: "Calm Canvas",
-    label: "Minimal",
-    desc: "A distraction-free prompt bar with memory suggestions.",
+    name: "Chat Workspace",
+    label: "Agents",
+    desc: "Run coding agents, inspect tool activity, and attach project files.",
   },
   {
     id: "workspace",
-    name: "Workspace Rails",
-    label: "Threads & Memory",
-    desc: "Multi-thread sidebar with persistent memory tags always visible.",
+    name: "Projects & Threads",
+    label: "Organize",
+    desc: "Keep durable threads grouped by project and environment.",
   },
   {
     id: "briefing",
-    name: "Today Briefing",
-    label: "Action Cards",
-    desc: "Actionable cards for pending replies, meeting prep, and weekly tasks.",
+    name: "Pull Request Review",
+    label: "Review",
+    desc: "Inspect diffs, review pull requests, and send line-level requests to an agent.",
   },
   {
     id: "split",
-    name: "Split Inspector",
-    label: "Traceable AI",
-    desc: "Synthesized answers on the left, citations and verified memory on the right.",
+    name: "Browser & Terminal",
+    label: "Tools",
+    desc: "Keep browser previews and a real terminal beside the conversation.",
   },
 ];
 ---
 
 <Layout
-  title="Kairo · A calmer way to get through everyday work"
-  description="One place to ask for help, keep useful context in persistent memory, and connect the assistant to the tools you already use."
+  title="Kairo · Open-source control plane for coding agents"
+  description="Run Claude Code, Codex, Cursor, Grok, and OpenCode from one fast, local-first workspace on web, desktop, and mobile."
 >
   <!-- ══════════════════════════════════════════════════════════
        1. HERO SECTION
@@ -61,18 +72,18 @@ const appModes = [
           <!-- Status Badge -->
           <div class="k-live-badge k-reveal">
             <span class="k-pulse-dot"></span>
-            <span class="k-badge-text">AGENTIC CONTROL PLANE &middot; ONLINE</span>
+            <span class="k-badge-text">OPEN-SOURCE AGENT CONTROL PLANE</span>
           </div>
 
           <!-- Headline -->
           <h1 class="k-hero-title k-reveal">
-            A calmer way to get<br />
-            <span class="k-title-gradient">through everyday work.</span>
+            One workspace for<br />
+            <span class="k-title-gradient">every coding agent.</span>
           </h1>
 
           <!-- Subtitle -->
           <p class="k-hero-subtitle k-reveal">
-            One place to ask for help, keep useful context in persistent memory, and connect your assistant directly to the tools you already use.
+            Run Claude Code, Codex, Cursor, Grok, and OpenCode from one surface. Bring your own subscription. Keep the source.
           </p>
 
           <!-- CTA Action Buttons -->
@@ -84,9 +95,9 @@ const appModes = [
           </div>
 
           <div class="k-hero-trust-row k-reveal">
-            <span class="k-trust-item"><span class="symbol icon-blue" style="font-size:16px">verified</span> Zero token markup</span>
-            <span class="k-trust-item"><span class="symbol icon-green" style="font-size:16px">lock</span> Local stdio security</span>
-            <span class="k-trust-item"><span class="symbol icon-purple" style="font-size:16px">sync</span> Persistent memory</span>
+            <span class="k-trust-item"><span class="symbol icon-blue" style="font-size:16px">verified</span> Bring your own subscription</span>
+            <span class="k-trust-item"><span class="symbol icon-green" style="font-size:16px">lock</span> Local-first server</span>
+            <span class="k-trust-item"><span class="symbol icon-purple" style="font-size:16px">sync</span> Web, desktop, and mobile</span>
           </div>
         </div>
 
@@ -100,7 +111,7 @@ const appModes = [
                 <span class="dot green"></span>
               </div>
               <div class="k-sim-engine-pills">
-                <button class="k-engine-pill active" data-engine="Claude Code 3.7">Claude 3.7</button>
+                <button class="k-engine-pill active" data-engine="Claude Code">Claude Code</button>
                 <button class="k-engine-pill" data-engine="Codex CLI">Codex</button>
                 <button class="k-engine-pill" data-engine="OpenCode">OpenCode</button>
               </div>
@@ -113,7 +124,7 @@ const appModes = [
                 type="text"
                 id="k-sim-input"
                 class="k-sim-text-input"
-                value="Summarize my unread emails and draft replies in my voice"
+                value="Review this branch and fix the failing tests"
                 readonly
               />
               <button class="k-sim-send-btn" id="k-sim-send" title="Run prompt">
@@ -122,20 +133,20 @@ const appModes = [
             </div>
             <div class="k-prompt-chips">
               <span class="k-chip-label">Quick suggestions:</span>
-              <button class="k-prompt-chip active" data-prompt="Summarize my unread emails and draft replies in my voice">summarize inbox</button>
-              <button class="k-prompt-chip" data-prompt="Draft a calm vendor negotiation response using last week's contract notes">draft reply</button>
-              <button class="k-prompt-chip" data-prompt="Plan my sprint schedule based on Linear tickets and upcoming calendar meetings">plan my week</button>
+              <button class="k-prompt-chip active" data-prompt="Review this branch and fix the failing tests">fix failing tests</button>
+              <button class="k-prompt-chip" data-prompt="Explain the authentication flow in this repository">explain a code path</button>
+              <button class="k-prompt-chip" data-prompt="Prepare this branch for pull request review">prepare a pull request</button>
             </div>
             <div class="k-prompt-sim-result" id="k-sim-result">
               <div class="k-sim-res-header">
                 <span class="k-memory-tag">
                   <span class="symbol" style="font-size:12px">save</span>
-                  <span>Using memory: Prefers concise bullet points &middot; PST timezone</span>
+                  <span>Working in project: kairo &middot; branch: feature/auth</span>
                 </span>
                 <span class="k-sim-time">Just now</span>
               </div>
               <p class="k-sim-res-text" id="k-sim-text">
-                Found <strong>4 actionable emails</strong>. Prepared 2 quick drafts ready for review, flagged 1 urgent contract update from finance, and cleared the remaining 5 notifications.
+                Found <strong>2 failing tests</strong>. Updated the session boundary, reran the focused suite, and left the diff ready for review.
               </p>
             </div>
           </div>
@@ -153,7 +164,7 @@ const appModes = [
         <span class="k-section-pill">60-Second Overview</span>
         <h2 class="k-section-heading">See Kairo in a minute</h2>
         <p class="k-section-lead">
-          Ask for help, keep context forever, connect your daily tools. Zero setup theatre.
+          Start an agent, follow its work, review the diff, and keep going from another device.
         </p>
       </div>
 
@@ -179,24 +190,24 @@ const appModes = [
           <div class="k-bullet-icon">
             <span class="symbol">bolt</span>
           </div>
-          <h4>Zero Token Markup</h4>
-          <p>Connect directly to your existing API keys and local CLI agents via standard stdio JSON-RPC.</p>
+          <h4>Bring your own subscription</h4>
+          <p>Kairo runs the provider CLIs you already install and authenticate.</p>
         </div>
 
         <div class="k-bullet-card k-reveal">
           <div class="k-bullet-icon">
             <span class="symbol">memory</span>
           </div>
-          <h4>Supermemory Engine</h4>
-          <p>Context, rules, and preferences persist effortlessly across conversations and restarts.</p>
+          <h4>Durable agent threads</h4>
+          <p>Projects, conversations, tool activity, and checkpoints stay available across sessions.</p>
         </div>
 
         <div class="k-bullet-card k-reveal">
           <div class="k-bullet-icon">
             <span class="symbol">security</span>
           </div>
-          <h4>Local-First &amp; Private</h4>
-          <p>Files, credentials, and code never pass through proprietary proxy servers. You stay in control.</p>
+          <h4>Remote when you need it</h4>
+          <p>Use Kairo locally, over your network, or through its remote connection flow.</p>
         </div>
       </div>
     </div>
@@ -209,11 +220,11 @@ const appModes = [
     <div class="k-container">
       <div class="k-features-top-bar k-reveal">
         <div>
-          <span class="k-section-pill">Core Intelligence</span>
-          <h2 class="k-section-heading">Engineered for deep work &amp; everyday tasks</h2>
+          <span class="k-section-pill">Coding Agent Workspace</span>
+          <h2 class="k-section-heading">Built around real agent workflows</h2>
         </div>
         <p class="k-features-subhead">
-          Calm, traceable, and private. Connect your tools, retain context effortlessly, and execute with precision.
+          Run multiple providers, inspect their work, manage source control, and reconnect from any Kairo client.
         </p>
       </div>
 
@@ -226,19 +237,19 @@ const appModes = [
             </div>
             <span class="k-card-tag">Document Intelligence</span>
           </div>
-          <h3 class="k-card-title">Understand complex files</h3>
+          <h3 class="k-card-title">Work inside real codebases</h3>
           <p class="k-card-desc">
-            Drop in spreadsheets, PDFs, or repositories to extract actionable insights in milliseconds without manual reading.
+            Give an agent a project, attach files or screenshots, and follow every tool call without leaving the conversation.
           </p>
 
           <!-- Rich Document Preview Widget -->
           <div class="k-doc-preview-widget">
             <div class="k-doc-header-row">
               <div class="k-doc-file-info">
-                <span class="symbol k-pdf-icon">picture_as_pdf</span>
+                  <span class="symbol k-pdf-icon">description</span>
                 <div>
-                  <strong class="k-doc-filename">Q3_Vendor_SLA_Audit.pdf</strong>
-                  <span class="k-doc-meta">42 pages &middot; 1.8 MB &middot; Verified</span>
+                  <strong class="k-doc-filename">auth-session.ts</strong>
+                  <span class="k-doc-meta">Project file &middot; Working tree</span>
                 </div>
               </div>
               <span class="k-status-badge-green">Parsed</span>
@@ -246,20 +257,20 @@ const appModes = [
             <div class="k-doc-insights-list">
               <div class="k-insight-item">
                 <span class="symbol k-check-icon">check_circle</span>
-                <span>Guaranteed 99.95% uptime SLA clause confirmed</span>
+                <span>Traced the session lifecycle across client and server</span>
               </div>
               <div class="k-insight-item">
                 <span class="symbol k-check-icon">check_circle</span>
-                <span>Rate lock secured through Q4 2027 ($12.4k savings)</span>
+                <span>Updated the typed contract and both consumers</span>
               </div>
               <div class="k-insight-item">
                 <span class="symbol k-check-icon">check_circle</span>
-                <span>Automatic egress fee waiver for cross-region backup</span>
+                <span>Focused tests pass; diff is ready to review</span>
               </div>
             </div>
             <div class="k-doc-footer-meta">
               <span class="symbol">bolt</span>
-              <span>Extraction completed in 240ms &middot; 99.4% confidence</span>
+              <span>3 files changed &middot; +42 / −18</span>
             </div>
           </div>
         </div>
@@ -272,27 +283,27 @@ const appModes = [
             </div>
             <span class="k-card-tag">Smart Synthesis</span>
           </div>
-          <h3 class="k-card-title">Draft in your exact voice</h3>
+          <h3 class="k-card-title">Review before changes land</h3>
           <p class="k-card-desc">
-            Replies, briefs, notes, and action plans synthesized to match your custom communication style and audience.
+            Inspect agent diffs, pull request details, review verdicts, and line-level feedback in the same workspace.
           </p>
 
           <!-- Rich Tone Switcher Widget -->
           <div class="k-tone-widget">
             <div class="k-tone-switcher">
-              <button class="k-tone-btn active" data-tone="short">Short</button>
-              <button class="k-tone-btn" data-tone="detailed">Detailed</button>
-              <button class="k-tone-btn" data-tone="casual">Casual</button>
-              <button class="k-tone-btn" data-tone="executive">Executive</button>
+              <button class="k-tone-btn active" data-tone="short">Summary</button>
+              <button class="k-tone-btn" data-tone="detailed">Findings</button>
+              <button class="k-tone-btn" data-tone="casual">Request</button>
+              <button class="k-tone-btn" data-tone="executive">Verdict</button>
             </div>
             <div class="k-tone-preview-box">
               <div class="k-tone-quote-row">
                 <span class="symbol icon-blue" style="font-size:16px">format_quote</span>
                 <span class="k-tone-meta-pill" id="k-tone-word-count">14 words &middot; ~2s read</span>
               </div>
-              <p id="k-tone-preview-text">"Thanks for the update. All approved for Thursday's deploy."</p>
+              <p id="k-tone-preview-text">"Three files changed. Focused tests pass. Ready for review."</p>
               <div class="k-tone-preview-footer">
-                <span class="k-tone-tone-label">Tone: Direct &amp; Concise</span>
+                <span class="k-tone-tone-label">Review: Summary</span>
                 <button class="k-copy-snippet-btn" id="k-copy-tone-btn" title="Copy preview text">
                   <span class="symbol">content_copy</span>
                   <span>Copy</span>
@@ -302,56 +313,56 @@ const appModes = [
           </div>
         </div>
 
-        <!-- Feature 3: Persistent Supermemory -->
+        <!-- Feature 3: Durable Threads -->
         <div class="k-bento-card k-reveal" data-spotlight>
           <div class="k-card-header">
             <div class="k-icon-box k-icon-green">
               <span class="symbol">psychology</span>
             </div>
-            <span class="k-card-tag">Persistent Supermemory</span>
+            <span class="k-card-tag">Durable Threads</span>
           </div>
-          <h3 class="k-card-title">Context that endures</h3>
+          <h3 class="k-card-title">Threads that survive restarts</h3>
           <p class="k-card-desc">
-            Preferences, style guides, and domain constraints persist automatically across conversations and IDE restarts.
+            Kairo keeps project threads, provider activity, and checkpoints durable so work can resume where it stopped.
           </p>
 
-          <!-- Rich Supermemory Chips Widget -->
+          <!-- Durable Thread Context Widget -->
           <div class="k-memory-widget">
             <div class="k-memory-chips-demo">
               <div class="k-mem-pill active" data-mem-pill>
                 <div class="k-mem-pill-left">
                   <span class="symbol mem-icon">check</span>
                   <div>
-                    <strong class="k-mem-key">Format Style:</strong>
-                    <span class="k-mem-val">Concise bullet points &middot; No fluff</span>
+                    <strong class="k-mem-key">Project:</strong>
+                    <span class="k-mem-val">kairo &middot; apps/web</span>
                   </div>
                 </div>
-                <span class="k-mem-category-tag">Persona</span>
+                <span class="k-mem-category-tag">Project</span>
               </div>
               <div class="k-mem-pill active" data-mem-pill>
                 <div class="k-mem-pill-left">
                   <span class="symbol mem-icon">check</span>
                   <div>
-                    <strong class="k-mem-key">Timezone:</strong>
-                    <span class="k-mem-val">PST (UTC-8) &middot; Morning brief 8:30 AM</span>
+                    <strong class="k-mem-key">Provider:</strong>
+                    <span class="k-mem-val">Codex &middot; Thread connected</span>
                   </div>
                 </div>
-                <span class="k-mem-category-tag">Env</span>
+                <span class="k-mem-category-tag">Agent</span>
               </div>
               <div class="k-mem-pill" data-mem-pill>
                 <div class="k-mem-pill-left">
                   <span class="symbol mem-icon">add</span>
                   <div>
-                    <strong class="k-mem-key">CI Rule:</strong>
-                    <span class="k-mem-val">Require typecheck before merge</span>
+                    <strong class="k-mem-key">Checkpoint:</strong>
+                    <span class="k-mem-val">Latest turn saved</span>
                   </div>
                 </div>
-                <span class="k-mem-category-tag">Rules</span>
+                <span class="k-mem-category-tag">Git</span>
               </div>
             </div>
             <div class="k-memory-footer-note">
               <span class="symbol">sync</span>
-              <span>Encrypted local storage &middot; Click pill to toggle active context</span>
+              <span>Durable local state &middot; Resume from web, desktop, or mobile</span>
             </div>
           </div>
         </div>
@@ -364,9 +375,9 @@ const appModes = [
             </div>
             <span class="k-card-tag">Direct Integrations</span>
           </div>
-          <h3 class="k-card-title">Connected tools ecosystem</h3>
+          <h3 class="k-card-title">The tools agents actually need</h3>
           <p class="k-card-desc">
-            Read issues, inspect commits, and draft pull requests without proxy servers or external token markups.
+            Keep Git, pull requests, a browser, previews, and a terminal beside the active thread.
           </p>
 
           <!-- Rich Tools Ecosystem Widget -->
@@ -374,39 +385,39 @@ const appModes = [
             <div class="k-tool-chip">
               <span class="symbol icon-blue">terminal</span>
               <div class="k-tool-info">
-                <strong>GitHub</strong>
-                <span>Live repo sync</span>
+                <strong>Git</strong>
+                <span>Diffs &amp; checkpoints</span>
               </div>
               <span class="k-tool-status-dot active"></span>
             </div>
             <div class="k-tool-chip">
               <span class="symbol icon-purple">linear_scale</span>
               <div class="k-tool-info">
-                <strong>Linear</strong>
-                <span>Sprint roadmap</span>
+                <strong>Pull Requests</strong>
+                <span>Review &amp; update</span>
               </div>
               <span class="k-tool-status-dot active"></span>
             </div>
             <div class="k-tool-chip">
               <span class="symbol icon-green">forum</span>
               <div class="k-tool-info">
-                <strong>Slack</strong>
-                <span>Unread briefs</span>
+                <strong>Terminal</strong>
+                <span>Interactive sessions</span>
               </div>
               <span class="k-tool-status-dot active"></span>
             </div>
             <div class="k-tool-chip">
               <span class="symbol icon-yellow">cloud</span>
               <div class="k-tool-info">
-                <strong>Google Drive</strong>
-                <span>12 indexed files</span>
+                <strong>Browser</strong>
+                <span>Local previews</span>
               </div>
               <span class="k-tool-status-dot active"></span>
             </div>
           </div>
           <div class="k-tools-footer-badge">
             <span class="symbol">lock</span>
-            <span>Local stdio subprocess access &middot; Zero third-party proxy</span>
+            <span>Agent tools stay attached to the project environment</span>
           </div>
         </div>
 
@@ -420,22 +431,22 @@ const appModes = [
                 </div>
                 <span class="k-card-tag">Unified Control Plane</span>
               </div>
-              <h3 class="k-card-title">Multi-provider agentic orchestration</h3>
+              <h3 class="k-card-title">Choose the right agent for each thread</h3>
               <p class="k-card-desc">
-                Coordinate leading LLM engines under one interface with zero configuration overhead or lock-in.
+                Use Claude Code, Codex, Cursor, Grok, or OpenCode without moving your projects into another editor.
               </p>
               <div class="k-wide-metrics-row">
                 <div class="k-metric-pill">
-                  <strong>0%</strong>
-                  <span>Token Markup</span>
+                  <strong>5</strong>
+                  <span>Agent Providers</span>
                 </div>
                 <div class="k-metric-pill">
-                  <strong>&lt;5ms</strong>
-                  <span>Socket Latency</span>
+                  <strong>3</strong>
+                  <span>Client Surfaces</span>
                 </div>
                 <div class="k-metric-pill">
-                  <strong>100%</strong>
-                  <span>Local Stdio</span>
+                  <strong>MIT</strong>
+                  <span>Open Source</span>
                 </div>
               </div>
             </div>
@@ -464,7 +475,7 @@ const appModes = [
       <div class="k-info-banner k-reveal">
         <span class="symbol icon-purple">lightbulb</span>
         <div>
-          <strong>Kairo 2.0 is actively evolving</strong> &middot; Transitioning from a developer-focused workbench into an everyday calming assistant experience.
+          <strong>Kairo evolves in the open</strong> &middot; Recent releases expanded pull request review, remote environments, usage insights, file drops, themes, and mobile workflows.
         </div>
       </div>
     </div>
@@ -476,10 +487,10 @@ const appModes = [
   <section class="k-section k-modes-section" id="modes">
     <div class="k-container">
       <div class="k-section-header k-text-center k-reveal">
-        <span class="k-section-pill">Interactive Experience</span>
-        <h2 class="k-section-heading">Explore the 4 interface paradigms</h2>
+        <span class="k-section-pill">Multi-Surface Workflow</span>
+        <h2 class="k-section-heading">One workspace from prompt to pull request</h2>
         <p class="k-section-lead">
-          Designed to adapt to how you work — from deep focus to high-level daily briefings.
+          Chat, projects, review tools, browser previews, and terminals stay connected to the same environment.
         </p>
       </div>
 
@@ -507,27 +518,27 @@ const appModes = [
               <div class="k-app-brand">
                 <img src="/logo.png" alt="Kairo" width="18" height="18" style="border-radius: 4px; object-fit: cover;" />
                 <span>kairo</span>
-                <span class="k-canvas-mode-tag">Calm Canvas</span>
+                <span class="k-canvas-mode-tag">Chat Workspace</span>
               </div>
               <div class="k-canvas-actions">
-                <span class="k-status-indicator"><span class="k-pulse-dot-sm"></span> Supermemory Connected</span>
+                <span class="k-status-indicator"><span class="k-pulse-dot-sm"></span> Agent Connected</span>
                 <span class="symbol">tune</span>
               </div>
             </div>
             <div class="k-canvas-body">
               <div class="k-canvas-intro">
-                <span class="k-canvas-eyebrow">Good morning</span>
-                <h3 class="k-canvas-greeting">What's on your plate today?</h3>
+                <span class="k-canvas-eyebrow">Project: kairo</span>
+                <h3 class="k-canvas-greeting">What should the agent change?</h3>
               </div>
               <div class="k-canvas-input-box">
                 <div class="k-canvas-input-top">
                   <span class="symbol icon-purple" style="font-size:18px">auto_awesome</span>
-                  <input type="text" placeholder="Ask a question, analyze a file, or describe a workflow..." value="Summarize unread engineering PRs and draft my weekly retro" readonly />
+                  <input type="text" placeholder="Ask about the codebase or describe a change..." value="Fix the auth regression and run the focused tests" readonly />
                 </div>
                 <div class="k-canvas-bottom-bar">
                   <div class="k-canvas-tools">
                     <span class="k-tool-btn"><span class="symbol">attach_file</span> Add File</span>
-                    <span class="k-tool-btn"><span class="symbol">psychology</span> Memory Active</span>
+                    <span class="k-tool-btn"><span class="symbol">terminal</span> Terminal Ready</span>
                   </div>
                   <button class="k-canvas-send-btn" title="Submit prompt">
                     <span class="symbol">arrow_forward</span>
@@ -535,18 +546,18 @@ const appModes = [
                 </div>
               </div>
               <div class="k-canvas-chips-row">
-                <span class="k-prompt-chip active">summarize my inbox</span>
-                <span class="k-prompt-chip">draft a reply</span>
-                <span class="k-prompt-chip">plan my week</span>
-                <span class="k-prompt-chip">audit vendor contract</span>
+                <span class="k-prompt-chip active">fix failing tests</span>
+                <span class="k-prompt-chip">review this diff</span>
+                <span class="k-prompt-chip">explain this code</span>
+                <span class="k-prompt-chip">prepare a PR</span>
               </div>
               <div class="k-canvas-result-card">
                 <div class="k-canvas-result-head">
-                  <span class="k-memory-tag"><span class="symbol" style="font-size:12px">verified</span> Context Synthesized</span>
+                  <span class="k-memory-tag"><span class="symbol" style="font-size:12px">verified</span> Focused tests passed</span>
                   <span class="k-sim-time">Just now</span>
                 </div>
                 <p class="k-canvas-result-desc">
-                  Found <strong>3 pending PR reviews</strong> and <strong>2 blockers in Linear</strong>. Prepared draft review notes highlighting schema contract changes.
+                  Fixed the session boundary, updated <strong>3 files</strong>, and left the working-tree diff ready for review.
                 </p>
               </div>
             </div>
@@ -583,7 +594,7 @@ const appModes = [
                 <div class="k-thread-item">
                   <div class="k-thread-title-row">
                     <span class="k-thread-status-dot blue"></span>
-                    <span class="k-thread-name">Codebase Memory Sync</span>
+                    <span class="k-thread-name">Provider reconnect handling</span>
                   </div>
                   <span class="k-thread-time">Yesterday</span>
                 </div>
@@ -591,8 +602,8 @@ const appModes = [
               <div class="k-ws-bottom-connected">
                 <span class="k-conn-label">Connected Tools &middot; Online</span>
                 <div class="k-conn-chips-list">
-                  <span class="k-conn-badge"><span class="symbol">code</span> GitHub</span>
-                  <span class="k-conn-badge"><span class="symbol">forum</span> Slack</span>
+                  <span class="k-conn-badge"><span class="symbol">code</span> Git</span>
+                  <span class="k-conn-badge"><span class="symbol">terminal</span> Terminal</span>
                 </div>
               </div>
             </div>
@@ -600,29 +611,29 @@ const appModes = [
               <div class="k-ws-chat-area">
                 <div class="k-chat-bubble user">
                   <div class="k-bubble-author">You &middot; 10:42 AM</div>
-                  Compare AWS S3 vs Cloudflare R2 storage pricing for our 12TB database archive.
+                  Trace the reconnect regression and update the focused tests.
                 </div>
                 <div class="k-chat-bubble assistant">
                   <div class="k-bubble-author-row">
-                    <span class="k-bubble-author">Kairo &middot; Claude 3.7</span>
-                    <span class="k-badge badge-green">Direct stdio</span>
+                    <span class="k-bubble-author">Kairo &middot; Claude Code</span>
+                    <span class="k-badge badge-green">Agent running</span>
                   </div>
-                  <p>Based on your 12TB footprint with ~2TB/month egress:</p>
+                  <p>The reconnect path crosses two client states and one server receipt:</p>
                   <div class="k-ws-pricing-table">
                     <div class="k-pricing-row highlight">
-                      <span class="k-provider-name">Cloudflare R2</span>
-                      <span class="k-provider-cost">~$180 / mo</span>
-                      <span class="k-provider-note">Zero egress fees</span>
+                      <span class="k-provider-name">Client runtime</span>
+                      <span class="k-provider-cost">Updated</span>
+                      <span class="k-provider-note">Reconnect state</span>
                     </div>
                     <div class="k-pricing-row">
-                      <span class="k-provider-name">AWS S3 Standard</span>
-                      <span class="k-provider-cost">~$456 / mo</span>
-                      <span class="k-provider-note">$276 storage + $180 egress</span>
+                      <span class="k-provider-name">Server receipt</span>
+                      <span class="k-provider-cost">Verified</span>
+                      <span class="k-provider-note">Focused test passed</span>
                     </div>
                   </div>
                   <div class="k-ws-saved-memory-alert">
                     <span class="symbol">bookmark</span>
-                    <span>Saved to memory: Prioritizes zero-egress cloud storage solutions</span>
+                    <span>Checkpoint saved: working tree ready for review</span>
                   </div>
                 </div>
               </div>
@@ -639,40 +650,40 @@ const appModes = [
           <div class="k-briefing-inner">
             <div class="k-briefing-top">
               <div>
-                <div class="k-date-title" id="k-live-briefing-date">Daily Briefing &middot; Today</div>
-                <span class="k-briefing-subtitle">3 priority action items identified from your connected feeds</span>
+                <div class="k-date-title" id="k-live-briefing-date">Pull Request Review</div>
+                <span class="k-briefing-subtitle">Review the branch, request changes, and update it in place</span>
               </div>
               <div class="k-briefing-actions">
-                <span class="k-status-badge-green">All Feeds Synced</span>
+                <span class="k-status-badge-green">Branch up to date</span>
               </div>
             </div>
             <div class="k-briefing-cards-grid">
               <div class="k-brief-card">
-                <div class="k-brief-badge red">Needs Reply</div>
-                <h4>Engineering PR #412</h4>
-                <p>Waiting on your review for schema migration bindings and JSON-RPC protocol guards.</p>
+                <div class="k-brief-badge red">Needs Review</div>
+                <h4>Authentication reconnect fix</h4>
+                <p>Three files changed across the client runtime, server receipt, and focused test.</p>
                 <div class="k-brief-card-footer">
-                  <button class="k-brief-action-btn">Draft review &rarr;</button>
-                  <span class="k-brief-time">Due in 2h</span>
+                  <button class="k-brief-action-btn">Review diff &rarr;</button>
+                  <span class="k-brief-time">+42 / −18</span>
                 </div>
               </div>
 
               <div class="k-brief-card">
-                <div class="k-brief-badge blue">Meeting Prep</div>
-                <h4>Product Roadmap Sync</h4>
-                <p>3 key updates compiled from Linear tickets and unread Slack engineering threads.</p>
+                <div class="k-brief-badge blue">Agent Request</div>
+                <h4>Guard the expired-token path</h4>
+                <p>Send a line-level request back to the active agent without leaving review.</p>
                 <div class="k-brief-card-footer">
-                  <button class="k-brief-action-btn">Open briefing &rarr;</button>
-                  <span class="k-brief-time">At 2:00 PM</span>
+                  <button class="k-brief-action-btn">Request change &rarr;</button>
+                  <span class="k-brief-time">Line 128</span>
                 </div>
               </div>
 
               <div class="k-brief-card wide">
-                <div class="k-brief-badge purple">Contract Intelligence</div>
-                <h4>Vendor renewal contract analysis</h4>
-                <p>Kairo finished cross-referencing SLA clauses with historical uptime metrics and identified $12.4k in potential annual savings.</p>
+                <div class="k-brief-badge purple">Checks</div>
+                <h4>Focused verification complete</h4>
+                <p>The targeted typecheck and reconnect tests pass on the current branch.</p>
                 <div class="k-brief-card-footer">
-                  <button class="k-brief-action-btn">View comparison report &rarr;</button>
+                  <button class="k-brief-action-btn">View checks &rarr;</button>
                   <span class="k-brief-time">Completed</span>
                 </div>
               </div>
@@ -685,14 +696,14 @@ const appModes = [
           <div class="k-split-inner">
             <div class="k-split-left">
               <div class="k-split-pane-header">
-                <h4>Synthesized Intelligence</h4>
-                <span class="k-badge badge-blue">Verified Output</span>
+                <h4>Agent Conversation</h4>
+                <span class="k-badge badge-blue">Codex</span>
               </div>
-              <p class="k-split-lead">Here is what Kairo analyzed across your active repositories and documentation:</p>
+              <p class="k-split-lead">The active thread stays visible while its tools open beside it:</p>
               <div class="k-answer-box">
-                <p>All contract schemas conform to <code>@kairo/contracts</code>. The stdio JSON-RPC server handles reconnect events gracefully without losing active thread contexts.</p>
+                <p>I updated the reconnect contract and both consumers. The focused suite now covers expired and refreshed pairing tokens.</p>
                 <div class="k-code-snippet-box">
-                  <code>export const SessionEvent = Schema.Union(TaskCreated, SessionRestarted);</code>
+                  <code>export const ConnectionState = Schema.Union(Connected, Reconnecting);</code>
                 </div>
                 <div class="k-answer-actions">
                   <button class="k-btn k-btn--sm"><span class="symbol">content_copy</span> Copy code</button>
@@ -702,32 +713,32 @@ const appModes = [
             </div>
             <div class="k-split-right">
               <div class="k-split-pane-header">
-                <h4>Traceable Sources (2)</h4>
-                <span class="k-badge badge-green">100% Local</span>
+                <h4>Open Tools (2)</h4>
+                <span class="k-badge badge-green">Project Local</span>
               </div>
               <div class="k-source-item">
                 <span class="symbol icon-purple">article</span>
                 <div>
-                  <strong>schema.ts</strong>
-                  <span>packages/contracts/src/schema.ts:14-28</span>
+                  <strong>Browser preview</strong>
+                  <span>localhost · development app</span>
                 </div>
               </div>
               <div class="k-source-item">
                 <span class="symbol icon-blue">terminal</span>
                 <div>
-                  <strong>stdio-session.ts</strong>
-                  <span>apps/server/src/stdio-session.ts:89-104</span>
+                  <strong>Terminal</strong>
+                  <span>focused tests · completed</span>
                 </div>
               </div>
 
               <div class="k-split-pane-header" style="margin-top: 20px;">
-                <h4>Supermemory Applied</h4>
+                <h4>Active Environment</h4>
               </div>
               <div class="k-mem-used-box">
                 <span class="symbol icon-green">psychology</span>
                 <div>
-                  <strong>TypeScript 5.8 &middot; Strict Mode</strong>
-                  <span>Enforce type safety across all schema serializers</span>
+                  <strong>kairo &middot; feature/auth</strong>
+                  <span>Web client connected to the local server</span>
                 </div>
               </div>
             </div>
@@ -748,7 +759,7 @@ const appModes = [
           <span class="k-section-pill">Cross-Platform Desktop Apps</span>
           <h2 class="k-section-heading">Install Kairo on your machine</h2>
           <p class="k-download-lead">
-            Available natively for Windows, macOS, and Linux. Built with local stdio for unmatched security and zero network token proxy latency.
+            Install the desktop client for Windows, macOS, or Linux, or run the local web app with <code>npx kairo@latest</code>.
           </p>
 
           <div class="k-os-cards-grid">
@@ -776,7 +787,7 @@ const appModes = [
           </div>
 
           <div class="k-github-releases-row k-reveal">
-            <a href="https://github.com/pingdotgg/kairo/releases" target="_blank" rel="noreferrer" class="k-gh-link">
+            <a href={`${GITHUB_REPOSITORY_URL}/releases`} target="_blank" rel="noreferrer" class="k-gh-link">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 007.86 10.93c.58.1.79-.25.79-.56v-2c-3.2.69-3.88-1.37-3.88-1.37-.52-1.33-1.27-1.69-1.27-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.76 2.68 1.25 3.33.96.1-.75.4-1.25.72-1.54-2.55-.29-5.24-1.27-5.24-5.67 0-1.25.45-2.28 1.18-3.08-.12-.29-.51-1.45.11-3.02 0 0 .96-.31 3.15 1.18a10.96 10.96 0 015.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.57.23 2.73.11 3.02.74.8 1.18 1.83 1.18 3.08 0 4.41-2.7 5.38-5.27 5.66.41.36.78 1.06.78 2.13v3.16c0 .31.21.67.8.56A11.5 11.5 0 0023.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>
               <span>Explore all release packages, source code, and changelogs on GitHub</span>
               <span class="symbol">arrow_forward</span>
@@ -833,14 +844,14 @@ const appModes = [
     <div class="k-container">
       <div class="k-cta-box k-reveal-scale">
         <div class="k-cta-glow"></div>
-        <h2>Experience a calmer, faster way to work.</h2>
-        <p>Get started in seconds. No credit card required. Free and open source.</p>
+        <h2>Run your agents on your terms.</h2>
+        <p>Bring an existing provider subscription. Kairo is free, MIT licensed, and open source.</p>
         <div class="k-cta-btn-row">
           <a href="#download" class="k-btn k-btn--primary k-btn--lg">
             <span class="symbol">rocket_launch</span>
-            <span>Download Kairo 2.0</span>
+            <span>Download Kairo</span>
           </a>
-          <a href="https://github.com/pingdotgg/kairo" target="_blank" class="k-btn k-btn--glass k-btn--lg">
+          <a href={GITHUB_REPOSITORY_URL} target="_blank" rel="noopener noreferrer" class="k-btn k-btn--glass k-btn--lg">
             <span class="symbol">star</span>
             <span>Star on GitHub</span>
           </a>
@@ -888,9 +899,9 @@ const appModes = [
     };
 
     const promptResponses = {
-      "Summarize my unread emails and draft replies in my voice": "Found 4 actionable emails. Prepared 2 quick drafts ready for review, flagged 1 urgent contract update from finance, and cleared the remaining 5 notifications.",
-      "Draft a calm vendor negotiation response using last week's contract notes": "Drafted a polite, firm renewal note highlighting our 12-month commitment and requesting the standard 15% tier discount cited in last quarter's notes.",
-      "Plan my sprint schedule based on Linear tickets and upcoming calendar meetings": "Sprint mapped into 3 focused deep-work blocks on Tue/Thu morning, leaving Friday afternoon free for code review and release verification."
+      "Review this branch and fix the failing tests": "Found two failing reconnect tests. Updated the session boundary, reran the focused suite, and left the diff ready for review.",
+      "Explain the authentication flow in this repository": "Traced pairing from the client request through the server receipt and summarized the expiration and recovery paths.",
+      "Prepare this branch for pull request review": "Reviewed the working tree, ran targeted checks, and prepared a concise summary of the files and behavior changed."
     };
 
     simChips.forEach((chip) => {
@@ -900,7 +911,7 @@ const appModes = [
         const p = chip.getAttribute('data-prompt');
         if (p && simInput && simText) {
           simInput.value = p;
-          streamResponse(promptResponses[p] || "Ready to execute with persistent context retention.");
+          streamResponse(promptResponses[p] || "Ready to work in the active project.");
         }
       });
     });
@@ -1043,7 +1054,7 @@ const appModes = [
 
 
 
-    // 6. Interactive Tone Presets Switcher
+    // 6. Interactive Review Presets Switcher
     const toneButtons = document.querySelectorAll('.k-tone-btn');
     const tonePreviewText = document.getElementById('k-tone-preview-text');
     const toneWordCount = document.getElementById('k-tone-word-count');
@@ -1052,24 +1063,24 @@ const appModes = [
 
     const toneSamples = {
       short: {
-        text: '"Thanks for the update. All approved for Thursday\'s deploy."',
-        meta: '14 words · ~2s read',
-        label: 'Tone: Direct & Concise'
+        text: '"Three files changed. Focused tests pass. Ready for review."',
+        meta: '9 words · summary',
+        label: 'Review: Summary'
       },
       detailed: {
-        text: '"Reviewed the Q3 contract clauses and vendor metrics. Prepared a 3-point counter-proposal covering rate lock, SLA guarantees, and payment terms for review."',
-        meta: '23 words · ~4s read',
-        label: 'Tone: Thorough & Structured'
+        text: '"The reconnect guard now handles expired pairing tokens before restoring the active thread. Two focused tests cover recovery."',
+        meta: '18 words · findings',
+        label: 'Review: Findings'
       },
       casual: {
-        text: '"Looks awesome! Dropped a few quick notes on Slack — ship it whenever you\'re ready 🚀"',
-        meta: '15 words · ~2s read',
-        label: 'Tone: Friendly & Collaborative'
+        text: '"Please add a regression case for a token that expires while the client is reconnecting."',
+        meta: '14 words · request',
+        label: 'Review: Change request'
       },
       executive: {
-        text: '"Summary: Strategic objectives on track for Q4. Resource allocation rebalanced to prioritize core reliability milestones."',
-        meta: '16 words · ~3s read',
-        label: 'Tone: Executive Briefing'
+        text: '"Approve after the reconnect race has a focused regression test."',
+        meta: '10 words · verdict',
+        label: 'Review: Verdict'
       }
     };
 
@@ -1101,7 +1112,7 @@ const appModes = [
       });
     }
 
-    // 7. Interactive Memory Pills Toggle
+    // 7. Interactive Thread Context Pills Toggle
     const memPills = document.querySelectorAll('[data-mem-pill]');
     memPills.forEach((pill) => {
       pill.addEventListener('click', () => {
@@ -1127,7 +1138,7 @@ const appModes = [
 
     // 9. Client Platform OS Detection (No recommendation tag)
 
-    // 10. Interactive Briefing Action Check-offs
+    // 10. Interactive Review Action Check-offs
     document.querySelectorAll('.k-brief-action-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         const card = btn.closest('.k-brief-card');
@@ -1136,7 +1147,7 @@ const appModes = [
           if (card.classList.contains('is-completed')) {
             btn.innerHTML = '<span class="symbol" style="color:#4ade80; font-size:13px">check_circle</span> Done';
           } else {
-            btn.innerHTML = 'Draft review &rarr;';
+            btn.innerHTML = 'Open review &rarr;';
           }
         }
       });
@@ -1163,16 +1174,7 @@ const appModes = [
       });
     }, { passive: true });
 
-    // 12. Dynamic Real-Time Date & Greeting in Today Briefing
-    const briefingDateEl = document.getElementById('k-live-briefing-date');
-    if (briefingDateEl) {
-      const now = new Date();
-      const options = { weekday: 'long', day: 'numeric', month: 'long' };
-      const formattedDate = now.toLocaleDateString('en-US', options);
-      briefingDateEl.textContent = `${formattedDate} · Daily Briefing`;
-    }
-
-    // 13. Hero Simulator Engine Selector Tabs
+    // 12. Hero Simulator Engine Selector Tabs
     const enginePills = document.querySelectorAll('.k-engine-pill');
     enginePills.forEach((pill) => {
       pill.addEventListener('click', () => {

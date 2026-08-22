@@ -1,4 +1,6 @@
 ---
+import { GITHUB_REPOSITORY_URL } from "../lib/site";
+
 interface Props {
   title?: string;
   description?: string;
@@ -6,8 +8,8 @@ interface Props {
 }
 
 const {
-  title = "Kairo. The agentic control plane for coding agents",
-  description = "Experience liftoff with Kairo. Coordinate Claude Code, Codex CLI, and OpenCode with direct local stdio, zero token markup, and persistent memory.",
+  title = "Kairo · Open-source control plane for coding agents",
+  description = "Run Claude Code, Codex, Cursor, Grok, and OpenCode from one fast, local-first workspace on web, desktop, and mobile.",
   pageClass,
 } = Astro.props;
 ---
@@ -64,7 +66,7 @@ const {
               style="border-radius: 7px; object-fit: cover;"
             />
             <span class="ag-brand-text">kairo</span>
-            <span class="ag-version-badge">2.0</span>
+            <span class="ag-version-badge">OSS</span>
           </a>
 
           <!-- Desktop Navigation -->
@@ -73,7 +75,7 @@ const {
               <span>Features</span>
             </a>
             <a href="#modes" class="ag-nav-btn">
-              <span>App Modes</span>
+              <span>Workspace</span>
             </a>
             <a href="#download" class="ag-nav-btn">
               <span>Downloads</span>
@@ -91,7 +93,7 @@ const {
 
           <a
             class="ag-ghost-btn"
-            href="https://github.com/pingdotgg/kairo"
+            href={GITHUB_REPOSITORY_URL}
             target="_blank"
             rel="noopener noreferrer"
             aria-label="GitHub Repository"
@@ -118,13 +120,13 @@ const {
       <div class="footer-container k-reveal">
         <div class="footer-upper">
           <div class="footer-pitch k-reveal">
-            <h3 class="footer-headline">Experience liftoff.</h3>
+            <h3 class="footer-headline">Your agents. One workspace.</h3>
             <p class="footer-desc">
-              The agentic control plane built for developer trust. Zero token markup, direct stdio JSON-RPC, and persistent memory across sessions.
+              Run your existing coding-agent subscriptions locally, then keep working from the web, desktop, or mobile client.
             </p>
             <div class="footer-status-pill" id="footer-telemetry">
               <span class="live-dot"></span>
-              <span id="footer-status-text">All systems operational &middot; 14ms stdio latency &middot; v2.0.4</span>
+              <span id="footer-status-text">Open source &middot; Local-first &middot; Remote-ready</span>
             </div>
           </div>
 
@@ -132,23 +134,23 @@ const {
             <div class="footer-col">
               <h4>Product</h4>
               <a href="#features">Features</a>
-              <a href="#features">Supermemory</a>
-              <a href="#modes">4 App Modes</a>
-              <a href="#providers">Providers Matrix</a>
+              <a href="#features">Agent workflows</a>
+              <a href="#modes">Workspace</a>
+              <a href="#download">Provider setup</a>
               <a href="#download">Downloads</a>
             </div>
             <div class="footer-col">
               <h4>Engines</h4>
-              <a href="https://claude.com/product/claude-code" target="_blank" rel="noopener noreferrer">Claude Code 3.7</a>
-              <a href="https://developers.openai.com/codex" target="_blank" rel="noopener noreferrer">OpenAI Codex CLI</a>
+              <a href="https://claude.com/product/claude-code" target="_blank" rel="noopener noreferrer">Claude Code</a>
+              <a href="https://developers.openai.com/codex" target="_blank" rel="noopener noreferrer">OpenAI Codex</a>
               <a href="https://opencode.ai" target="_blank" rel="noopener noreferrer">OpenCode</a>
             </div>
             <div class="footer-col">
               <h4>Resources</h4>
-              <a href="https://github.com/pingdotgg/kairo" target="_blank" rel="noopener noreferrer">GitHub repo</a>
-              <a href="https://github.com/pingdotgg/kairo/releases" target="_blank" rel="noopener noreferrer">Releases</a>
+              <a href={GITHUB_REPOSITORY_URL} target="_blank" rel="noopener noreferrer">GitHub repo</a>
+              <a href={`${GITHUB_REPOSITORY_URL}/releases`} target="_blank" rel="noopener noreferrer">Releases</a>
               <a href="https://discord.gg/jn4EGJjrvv" target="_blank" rel="noopener noreferrer">Discord community</a>
-              <a href="https://github.com/pingdotgg/kairo/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
+              <a href={`${GITHUB_REPOSITORY_URL}/blob/main/LICENSE`} target="_blank" rel="noopener noreferrer">MIT License</a>
             </div>
           </div>
         </div>
@@ -158,7 +160,7 @@ const {
             &copy; {new Date().getFullYear()} Kairo Authors. Google Antigravity design. MIT Licensed.
           </div>
           <div class="footer-bottom-links">
-            <a href="https://github.com/pingdotgg/kairo" target="_blank" rel="noopener noreferrer">Source code</a>
+            <a href={GITHUB_REPOSITORY_URL} target="_blank" rel="noopener noreferrer">Source code</a>
             <span>&middot;</span>
             <a href="https://discord.gg/jn4EGJjrvv" target="_blank" rel="noopener noreferrer">Community</a>
             <span>&middot;</span>
@@ -181,7 +183,7 @@ const {
           <a href="#hero" class="ag-cmd-item active" data-cmd-item>
             <span class="symbol">rocket_launch</span>
             <div>
-              <strong>Liftoff Hero</strong>
+              <strong>Agent Workspace</strong>
               <small>Overview and quick start</small>
             </div>
           </a>
@@ -189,14 +191,14 @@ const {
             <span class="symbol">tune</span>
             <div>
               <strong>Features &amp; Intelligence</strong>
-              <small>Document intelligence, Supermemory, and connected tools</small>
+              <small>Providers, durable threads, review tools, and remote access</small>
             </div>
           </a>
           <a href="#modes" class="ag-cmd-item" data-cmd-item>
             <span class="symbol">view_quilt</span>
             <div>
-              <strong>4 App Modes Matrix</strong>
-              <small>Calm Canvas, Rails, Briefings, and Split Inspector</small>
+              <strong>Workspace Tour</strong>
+              <small>Chat, projects, pull request review, browser, and terminal</small>
             </div>
           </a>
           <a href="#trailer" class="ag-cmd-item" data-cmd-item>
@@ -371,7 +373,7 @@ const {
       // 4. Fetch live GitHub stars
       async function loadStars() {
         try {
-          const res = await fetch("https://api.github.com/repos/pingdotgg/kairo");
+          const res = await fetch("https://api.github.com/repos/Saikrishna-Ambeti/kairo");
           if (!res.ok) return;
           const data = await res.json();
           const count = data.stargazers_count;

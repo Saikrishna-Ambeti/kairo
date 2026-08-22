@@ -3,7 +3,7 @@ import Layout from "../layouts/Layout.astro";
 import { RELEASES_URL } from "../lib/releases";
 ---
 
-<Layout title="Download Kairo. Experience Liftoff" description="Download native binaries of Kairo for macOS, Windows, and Linux.">
+<Layout title="Download Kairo for macOS, Windows, or Linux" description="Download Kairo desktop, then connect Claude Code, Codex, Cursor, Grok, or OpenCode.">
   <div class="download-page ag-container">
     <div class="download-header-center">
       <span class="ag-eyebrow">INSTALLATION</span>
@@ -76,7 +76,7 @@ import { RELEASES_URL } from "../lib/releases";
 
     <p class="releases-link-note">
       Looking for previous versions or source code? Check the
-      <a href="https://github.com/pingdotgg/kairo/releases" target="_blank" rel="noopener noreferrer">
+      <a href={RELEASES_URL} target="_blank" rel="noopener noreferrer">
         GitHub releases archive
       </a>.
     </p>
