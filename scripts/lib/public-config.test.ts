@@ -103,6 +103,19 @@ describe("loadRepoEnv", () => {
     });
   });
 
+  it("accepts the publishable key written by Clerk CLI", () => {
+    expect(
+      loadRepoEnv({
+        baseEnv: { CLERK_PUBLISHABLE_KEY: "pk_from_clerk_cli" },
+        repoRoot: makeTemporaryDirectory(),
+      }),
+    ).toMatchObject({
+      KAIRO_CLERK_PUBLISHABLE_KEY: "pk_from_clerk_cli",
+      VITE_CLERK_PUBLISHABLE_KEY: "pk_from_clerk_cli",
+      EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_from_clerk_cli",
+    });
+  });
+
   it("projects canonical relay client tracing values to web build aliases", () => {
     expect(
       loadRepoEnv({
