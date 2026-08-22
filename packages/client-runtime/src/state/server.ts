@@ -1,5 +1,4 @@
 import {
-  type ComposioOperationProgressEvent,
   type EnvironmentId,
   type ServerConfig,
   type ServerConfigStreamEvent,
@@ -35,6 +34,7 @@ import { EnvironmentRegistry } from "../connection/registry.ts";
 import { EnvironmentSupervisor } from "../connection/supervisor.ts";
 import { safeErrorLogAttributes } from "../errors/safeLog.ts";
 import { EnvironmentCacheStore } from "../platform/persistence.ts";
+import { CloudSession } from "../platform/capabilities.ts";
 import {
   isRpcClientError,
   request,
@@ -459,7 +459,7 @@ export function resolveServerConfigValue(
 }
 
 export function createServerEnvironmentAtoms<R, E>(
-  runtime: Atom.AtomRuntime<EnvironmentRegistry | EnvironmentCacheStore | R, E>,
+  runtime: Atom.AtomRuntime<EnvironmentRegistry | EnvironmentCacheStore | CloudSession | R, E>,
   options: {
     readonly initialConfigValueAtom: (
       environmentId: EnvironmentId,
@@ -682,38 +682,25 @@ export function createServerEnvironmentAtoms<R, E>(
     ),
   );
 
-  const composioInstallAndLogin = createEnvironmentCommand(runtime, {
-    label: "environment-data:server:composio-install-and-login",
-    execute: (operation: {
-      readonly input: EnvironmentRpcInput<typeof WS_METHODS.serverInstallAndLoginComposio>;
-      readonly onProgress?: (event: ComposioOperationProgressEvent) => void;
-    }) =>
-      runStream(WS_METHODS.serverInstallAndLoginComposio, operation.input).pipe(
-        Stream.runForEach((event) => Effect.sync(() => operation.onProgress?.(event))),
-        Effect.andThen(request(WS_METHODS.serverGetComposioStatus, {})),
-      ),
+  const provisionMemoryAccess = Effect.gen(function* () {
+    const cloudSession = yield* CloudSession;
+    const clerkToken = yield* cloudSession.clerkToken.pipe(Effect.option);
+    if (Option.isNone(clerkToken)) {
+      return;
+    }
+    yield* request(WS_METHODS.serverProvisionMemoryAccess, {
+      clerkToken: clerkToken.value,
+    }).pipe(Effect.ignore);
   });
-  const composioLogin = createEnvironmentCommand(runtime, {
-    label: "environment-data:server:composio-login",
-    execute: (operation: {
-      readonly input: EnvironmentRpcInput<typeof WS_METHODS.serverLoginComposio>;
-      readonly onProgress?: (event: ComposioOperationProgressEvent) => void;
-    }) =>
-      runStream(WS_METHODS.serverLoginComposio, operation.input).pipe(
-        Stream.runForEach((event) => Effect.sync(() => operation.onProgress?.(event))),
-        Effect.andThen(request(WS_METHODS.serverGetComposioStatus, {})),
-      ),
+  const getMemoryStatus = createEnvironmentCommand(runtime, {
+    label: "environment-data:server:memory-status",
+    execute: (input: EnvironmentRpcInput<typeof WS_METHODS.serverGetMemoryStatus>) =>
+      provisionMemoryAccess.pipe(Effect.andThen(request(WS_METHODS.serverGetMemoryStatus, input))),
   });
-  const composioLinkToolkit = createEnvironmentCommand(runtime, {
-    label: "environment-data:server:composio-link-toolkit",
-    execute: (operation: {
-      readonly input: EnvironmentRpcInput<typeof WS_METHODS.serverLinkComposioToolkit>;
-      readonly onProgress?: (event: ComposioOperationProgressEvent) => void;
-    }) =>
-      runStream(WS_METHODS.serverLinkComposioToolkit, operation.input).pipe(
-        Stream.runForEach((event) => Effect.sync(() => operation.onProgress?.(event))),
-        Effect.andThen(request(WS_METHODS.serverGetComposioStatus, {})),
-      ),
+  const configureMemory = createEnvironmentCommand(runtime, {
+    label: "environment-data:server:memory-configure",
+    execute: (input: EnvironmentRpcInput<typeof WS_METHODS.serverConfigureMemory>) =>
+      provisionMemoryAccess.pipe(Effect.andThen(request(WS_METHODS.serverConfigureMemory, input))),
   });
 
   return {
@@ -803,14 +790,8 @@ export function createServerEnvironmentAtoms<R, E>(
       scheduler: configScheduler,
       concurrency: configConcurrency,
     }),
-    getMemoryStatus: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:server:memory-status",
-      tag: WS_METHODS.serverGetMemoryStatus,
-    }),
-    configureMemory: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:server:memory-configure",
-      tag: WS_METHODS.serverConfigureMemory,
-    }),
+    getMemoryStatus,
+    configureMemory,
     disableMemory: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:memory-disable",
       tag: WS_METHODS.serverDisableMemory,
@@ -819,16 +800,13 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:server:composio-status",
       tag: WS_METHODS.serverGetComposioStatus,
     }),
-    listComposioToolkits: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:server:composio-list-toolkits",
-      tag: WS_METHODS.serverListComposioToolkits,
+    configureComposio: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:composio-configure",
+      tag: WS_METHODS.serverConfigureComposio,
     }),
-    composioInstallAndLogin,
-    composioLogin,
-    composioLinkToolkit,
-    installComposioAgentSupport: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:server:composio-install-agent-support",
-      tag: WS_METHODS.serverInstallComposioAgentSupport,
+    testComposioConnection: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:composio-test",
+      tag: WS_METHODS.serverTestComposioConnection,
     }),
     disableComposio: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:composio-disable",

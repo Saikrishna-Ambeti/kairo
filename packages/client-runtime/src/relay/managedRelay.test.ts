@@ -13,7 +13,7 @@ import { remoteHttpClientLayer } from "../rpc/http.ts";
 
 function managedRelayTestLayer(
   fetchFn: typeof globalThis.fetch,
-  relayUrl = "https://relay.example.test",
+  relayUrl: string | null = "https://relay.example.test",
   accessTokenStore?: ManagedRelay.ManagedRelayAccessTokenStore,
 ) {
   const httpClientLayer = remoteHttpClientLayer(fetchFn);
@@ -39,6 +39,23 @@ function clerkToken(subject: string, nonce: string): string {
 }
 
 describe("ManagedRelayClient", () => {
+  it.effect("does not send requests when relay configuration is absent", () => {
+    let requestCount = 0;
+    const fetchFn = (() => {
+      requestCount += 1;
+      return Promise.resolve(Response.json({}));
+    }) satisfies typeof globalThis.fetch;
+
+    return Effect.gen(function* () {
+      const relayClient = yield* ManagedRelay.ManagedRelayClient;
+      expect(relayClient.relayUrl).toBeNull();
+
+      yield* relayClient.listEnvironments({ clerkToken: "clerk-token" }).pipe(Effect.flip);
+
+      expect(requestCount).toBe(0);
+    }).pipe(Effect.provide(managedRelayTestLayer(fetchFn, null)));
+  });
+
   it.effect("owns tracing at service and implementation boundaries", () => {
     const spanNames: Array<string> = [];
     const tracer = Tracer.make({

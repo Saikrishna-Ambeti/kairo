@@ -1,7 +1,7 @@
 import * as Context from "effect/Context";
 import * as Schema from "effect/Schema";
 
-import { TrimmedNonEmptyString } from "./baseSchemas.ts";
+import { EnvironmentId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 
 export const DEFAULT_KAIRO_CLOUD_API_URL = "https://kairo-cloud-api.vercel.app";
 
@@ -53,6 +53,19 @@ export const KairoCloudCapabilitiesResponse = Schema.Struct({
   principal: Schema.Literal("installation"),
 });
 export type KairoCloudCapabilitiesResponse = typeof KairoCloudCapabilitiesResponse.Type;
+
+export const KairoCloudInstallationExchangeRequest = Schema.Struct({
+  environmentId: EnvironmentId,
+});
+export type KairoCloudInstallationExchangeRequest =
+  typeof KairoCloudInstallationExchangeRequest.Type;
+
+export const KairoCloudInstallationExchangeResponse = Schema.Struct({
+  accessToken: TrimmedNonEmptyString,
+  expiresAtEpochSeconds: Schema.Int.check(Schema.isGreaterThan(0)),
+});
+export type KairoCloudInstallationExchangeResponse =
+  typeof KairoCloudInstallationExchangeResponse.Type;
 
 export const KairoCloudMemorySaveResponse = Schema.Struct({
   id: TrimmedNonEmptyString,

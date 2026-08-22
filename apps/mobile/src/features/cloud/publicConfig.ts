@@ -73,9 +73,16 @@ export function resolveCloudPublicConfig(extra: ExpoExtra = Constants.expoConfig
   } satisfies CloudPublicConfig;
 }
 
-export function hasCloudPublicConfig(): boolean {
-  const config = resolveCloudPublicConfig();
-  return Boolean(config.clerk.publishableKey && config.clerk.jwtTemplate && config.relay.url);
+export function hasCloudIdentityConfig(
+  config: CloudPublicConfig = resolveCloudPublicConfig(),
+): boolean {
+  return Boolean(config.clerk.publishableKey && config.clerk.jwtTemplate);
+}
+
+export function hasManagedRelayConfig(
+  config: CloudPublicConfig = resolveCloudPublicConfig(),
+): boolean {
+  return hasCloudIdentityConfig(config) && config.relay.url !== null;
 }
 
 type Configured<T> = {
@@ -96,7 +103,7 @@ export function hasTracingPublicConfig(
   );
 }
 
-export function resolveRelayClerkTokenOptions() {
+export function resolveCloudClerkTokenOptions() {
   const { jwtTemplate } = resolveCloudPublicConfig().clerk;
   if (!jwtTemplate) {
     throw new CloudPublicConfigMissingError({ key: "KAIRO_CLERK_JWT_TEMPLATE" });

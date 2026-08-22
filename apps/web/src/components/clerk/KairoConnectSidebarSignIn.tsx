@@ -1,25 +1,29 @@
 import { UserButton, useAuth } from "@clerk/react";
 import { LogInIcon, ServerIcon, SmartphoneIcon } from "lucide-react";
 
-import { hasCloudPublicConfig } from "../../cloud/publicConfig";
+import { hasCloudIdentityConfig, hasManagedRelayConfig } from "../../cloud/publicConfig";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
 import { MobileClientsUserProfilePage } from "./MobileClientsUserProfilePage";
 import { KairoConnectUserProfilePage } from "./KairoConnectUserProfilePage";
 import { useKairoConnectAuthPrompt } from "./useKairoConnectAuthPrompt";
 
 export function KairoConnectSidebarSignIn() {
-  if (!hasCloudPublicConfig()) return null;
+  if (!hasCloudIdentityConfig()) return null;
 
-  return <ConfiguredKairoConnectSidebarSignIn />;
+  return <ConfiguredKairoConnectSidebarSignIn managedRelayEnabled={hasManagedRelayConfig()} />;
 }
 
 export function KairoConnectSidebarAvatar() {
-  if (!hasCloudPublicConfig()) return null;
+  if (!hasCloudIdentityConfig()) return null;
 
-  return <ConfiguredKairoConnectSidebarAvatar />;
+  return <ConfiguredKairoConnectSidebarAvatar managedRelayEnabled={hasManagedRelayConfig()} />;
 }
 
-function ConfiguredKairoConnectSidebarAvatar() {
+function ConfiguredKairoConnectSidebarAvatar({
+  managedRelayEnabled,
+}: {
+  readonly managedRelayEnabled: boolean;
+}) {
   const { isLoaded, isSignedIn } = useAuth();
 
   if (!isLoaded || !isSignedIn) return null;
@@ -33,25 +37,33 @@ function ConfiguredKairoConnectSidebarAvatar() {
         },
       }}
     >
-      <UserButton.UserProfilePage
-        label="Mobile clients"
-        labelIcon={<SmartphoneIcon className="size-4" />}
-        url="mobile-clients"
-      >
-        <MobileClientsUserProfilePage />
-      </UserButton.UserProfilePage>
-      <UserButton.UserProfilePage
-        label="Kairo Connect"
-        labelIcon={<ServerIcon className="size-4" />}
-        url="kairo-connect"
-      >
-        <KairoConnectUserProfilePage />
-      </UserButton.UserProfilePage>
+      {managedRelayEnabled ? (
+        <UserButton.UserProfilePage
+          label="Mobile clients"
+          labelIcon={<SmartphoneIcon className="size-4" />}
+          url="mobile-clients"
+        >
+          <MobileClientsUserProfilePage />
+        </UserButton.UserProfilePage>
+      ) : null}
+      {managedRelayEnabled ? (
+        <UserButton.UserProfilePage
+          label="Kairo Connect"
+          labelIcon={<ServerIcon className="size-4" />}
+          url="kairo-connect"
+        >
+          <KairoConnectUserProfilePage />
+        </UserButton.UserProfilePage>
+      ) : null}
     </UserButton>
   );
 }
 
-function ConfiguredKairoConnectSidebarSignIn() {
+function ConfiguredKairoConnectSidebarSignIn({
+  managedRelayEnabled,
+}: {
+  readonly managedRelayEnabled: boolean;
+}) {
   const { isLoaded, isSignedIn } = useAuth();
   const { authPrompt, openAuthPrompt } = useKairoConnectAuthPrompt();
 
@@ -63,7 +75,7 @@ function ConfiguredKairoConnectSidebarSignIn() {
         <SidebarMenuItem>
           <SidebarMenuButton onClick={openAuthPrompt}>
             <LogInIcon />
-            <span>Sign in to Kairo Connect</span>
+            <span>{managedRelayEnabled ? "Sign in to Kairo Connect" : "Sign in to Kairo"}</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>

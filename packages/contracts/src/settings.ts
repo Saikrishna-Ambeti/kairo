@@ -527,16 +527,11 @@ export const ObservabilitySettings = Schema.Struct({
 });
 export type ObservabilitySettings = typeof ObservabilitySettings.Type;
 
-export const DEFAULT_COMPOSIO_TOOLKITS = [] as const;
-
 export const IntegrationsSettings = Schema.Struct({
   composio: Schema.Struct({
     enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
     providerInstanceIds: Schema.Array(ProviderInstanceId).pipe(
       Schema.withDecodingDefault(Effect.succeed([])),
-    ),
-    preferredToolkits: Schema.Array(TrimmedNonEmptyString).pipe(
-      Schema.withDecodingDefault(Effect.succeed([...DEFAULT_COMPOSIO_TOOLKITS])),
     ),
   }).pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 }).pipe(Schema.withDecodingDefault(Effect.succeed({})));
@@ -882,7 +877,6 @@ export const ServerSettingsPatch = Schema.Struct({
         Schema.Struct({
           enabled: Schema.optionalKey(Schema.Boolean),
           providerInstanceIds: Schema.optionalKey(Schema.Array(ProviderInstanceId)),
-          preferredToolkits: Schema.optionalKey(Schema.Array(TrimmedNonEmptyString)),
         }),
       ),
     }),

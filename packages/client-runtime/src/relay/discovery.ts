@@ -101,10 +101,13 @@ function relayAccountId(clerkToken: string): Option.Option<string> {
 
 export const make = Effect.fn("RelayEnvironmentDiscovery.make")(function* () {
   const relay = yield* ManagedRelay.ManagedRelayClient;
+  const state = yield* SubscriptionRef.make(EMPTY_RELAY_ENVIRONMENT_DISCOVERY_STATE);
+  if (relay.relayUrl === null) {
+    return RelayEnvironmentDiscovery.of({ state, refresh: Effect.void });
+  }
   const session = yield* ClientCapabilities.CloudSession;
   const connectivity = yield* Connectivity.Connectivity;
   const wakeups = yield* ConnectionWakeups.ConnectionWakeups;
-  const state = yield* SubscriptionRef.make(EMPTY_RELAY_ENVIRONMENT_DISCOVERY_STATE);
   const refreshLock = yield* Semaphore.make(1);
   const hasRefreshed = yield* Ref.make(false);
   const accountGeneration = yield* Ref.make(0);

@@ -13,6 +13,7 @@ import { Route as ChatRouteImport } from './routes/_chat'
 import { Route as ConnectRouteImport } from './routes/connect'
 import { Route as LibraryRouteImport } from './routes/library'
 import { Route as PairRouteImport } from './routes/pair'
+import { Route as ScheduledTasksRouteImport } from './routes/scheduled-tasks'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as UsageRouteImport } from './routes/usage'
 import { Route as ChatIndexRouteImport } from './routes/_chat.index'
@@ -50,6 +51,11 @@ const LibraryRoute = LibraryRouteImport.update({
 const PairRoute = PairRouteImport.update({
   id: '/pair',
   path: '/pair',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ScheduledTasksRoute = ScheduledTasksRouteImport.update({
+  id: '/scheduled-tasks',
+  path: '/scheduled-tasks',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -155,6 +161,7 @@ export interface FileRoutesByFullPath {
   '/connect': typeof ConnectRoute
   '/library': typeof LibraryRoute
   '/pair': typeof PairRoute
+  '/scheduled-tasks': typeof ScheduledTasksRoute
   '/settings': typeof SettingsRouteWithChildren
   '/usage': typeof UsageRoute
   '/pull-requests': typeof ChatPullRequestsRoute
@@ -178,6 +185,7 @@ export interface FileRoutesByTo {
   '/connect': typeof ConnectRoute
   '/library': typeof LibraryRoute
   '/pair': typeof PairRoute
+  '/scheduled-tasks': typeof ScheduledTasksRoute
   '/settings': typeof SettingsRouteWithChildren
   '/usage': typeof UsageRoute
   '/pull-requests': typeof ChatPullRequestsRoute
@@ -204,6 +212,7 @@ export interface FileRoutesById {
   '/connect': typeof ConnectRoute
   '/library': typeof LibraryRoute
   '/pair': typeof PairRoute
+  '/scheduled-tasks': typeof ScheduledTasksRoute
   '/settings': typeof SettingsRouteWithChildren
   '/usage': typeof UsageRoute
   '/_chat/pull-requests': typeof ChatPullRequestsRoute
@@ -231,6 +240,7 @@ export interface FileRouteTypes {
     | '/connect'
     | '/library'
     | '/pair'
+    | '/scheduled-tasks'
     | '/settings'
     | '/usage'
     | '/pull-requests'
@@ -254,6 +264,7 @@ export interface FileRouteTypes {
     | '/connect'
     | '/library'
     | '/pair'
+    | '/scheduled-tasks'
     | '/settings'
     | '/usage'
     | '/pull-requests'
@@ -279,6 +290,7 @@ export interface FileRouteTypes {
     | '/connect'
     | '/library'
     | '/pair'
+    | '/scheduled-tasks'
     | '/settings'
     | '/usage'
     | '/_chat/pull-requests'
@@ -305,6 +317,7 @@ export interface RootRouteChildren {
   ConnectRoute: typeof ConnectRoute
   LibraryRoute: typeof LibraryRoute
   PairRoute: typeof PairRoute
+  ScheduledTasksRoute: typeof ScheduledTasksRoute
   SettingsRoute: typeof SettingsRouteWithChildren
   UsageRoute: typeof UsageRoute
   ConnectCallbackRoute: typeof ConnectCallbackRoute
@@ -339,6 +352,13 @@ declare module '@tanstack/react-router' {
       path: '/pair'
       fullPath: '/pair'
       preLoaderRoute: typeof PairRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/scheduled-tasks': {
+      id: '/scheduled-tasks'
+      path: '/scheduled-tasks'
+      fullPath: '/scheduled-tasks'
+      preLoaderRoute: typeof ScheduledTasksRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -530,6 +550,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConnectRoute: ConnectRoute,
   LibraryRoute: LibraryRoute,
   PairRoute: PairRoute,
+  ScheduledTasksRoute: ScheduledTasksRoute,
   SettingsRoute: SettingsRouteWithChildren,
   UsageRoute: UsageRoute,
   ConnectCallbackRoute: ConnectCallbackRoute,

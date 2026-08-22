@@ -73,6 +73,8 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
+import { buildComposioMcpHeaders } from "../../composio/ComposioMcp.ts";
+import { COMPOSIO_MCP_URL } from "../../composio/ComposioProviderBindings.ts";
 import { ServerConfig } from "../../config.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import { resolveClaudeSdkExecutablePath } from "../Drivers/ClaudeExecutable.ts";
@@ -4143,6 +4145,27 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         ...(ultracode ? { ultracode: true } : {}),
       };
       const mcpSession = McpProviderSession.readMcpProviderSession(input.threadId);
+      const composioMcpHeaders = buildComposioMcpHeaders(claudeEnvironment);
+      const mcpServers = {
+        ...(mcpSession
+          ? {
+              "kairo-code": {
+                type: "http" as const,
+                url: mcpSession.endpoint,
+                headers: { Authorization: mcpSession.authorizationHeader },
+              },
+            }
+          : {}),
+        ...(composioMcpHeaders
+          ? {
+              composio: {
+                type: "http" as const,
+                url: COMPOSIO_MCP_URL,
+                headers: composioMcpHeaders,
+              },
+            }
+          : {}),
+      };
       // The attachments dir grant lets the agent Read/copy pasted images at
       // the paths ProviderService injects into the turn text, without an
       // approval prompt. It is a leaf directory holding only attachment
@@ -4176,19 +4199,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         env: claudeEnvironment,
         additionalDirectories,
         ...(Object.keys(extraArgs).length > 0 ? { extraArgs } : {}),
-        ...(mcpSession
-          ? {
-              mcpServers: {
-                "kairo-code": {
-                  type: "http",
-                  url: mcpSession.endpoint,
-                  headers: {
-                    Authorization: mcpSession.authorizationHeader,
-                  },
-                },
-              },
-            }
-          : {}),
+        ...(Object.keys(mcpServers).length > 0 ? { mcpServers } : {}),
       };
 
       yield* Effect.annotateCurrentSpan({

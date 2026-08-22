@@ -16,7 +16,7 @@ import {
   updatePrimaryEnvironmentPreferences as updatePrimaryEnvironmentPreferencesAtom,
 } from "./linkEnvironmentAtoms";
 import { usePrimaryCloudLinkState } from "./primaryCloudLinkState";
-import { resolveRelayClerkTokenOptions } from "./publicConfig";
+import { resolveCloudClerkTokenOptions } from "./publicConfig";
 
 export interface CloudLinkDesiredState {
   readonly managedTunnel: boolean;
@@ -85,7 +85,7 @@ export function useCloudLinkController() {
       reportUpdateFailure(new Error("Local environment is not ready yet."));
       return false;
     }
-    const tokenResult = await settlePromise(() => getToken(resolveRelayClerkTokenOptions()));
+    const tokenResult = await settlePromise(() => getToken(resolveCloudClerkTokenOptions()));
     const wantsLink = desired.managedTunnel || desired.publish;
 
     // A failure after this point may follow a partially applied mutation (e.g.

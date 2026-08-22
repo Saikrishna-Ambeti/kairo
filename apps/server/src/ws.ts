@@ -1710,6 +1710,14 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.serverGetMemoryStatus, supermemory.getStatus, {
             "rpc.aggregate": "server.memory",
           }),
+        [WS_METHODS.serverProvisionMemoryAccess]: ({ clerkToken }) =>
+          observeRpcEffect(
+            WS_METHODS.serverProvisionMemoryAccess,
+            supermemory.provisionAccess(clerkToken).pipe(Effect.as({})),
+            {
+              "rpc.aggregate": "server.memory",
+            },
+          ),
         [WS_METHODS.serverConfigureMemory]: (input) =>
           observeRpcEffect(WS_METHODS.serverConfigureMemory, supermemory.configure(input), {
             "rpc.aggregate": "server.memory",
@@ -1722,28 +1730,14 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.serverGetComposioStatus, composio.getStatus, {
             "rpc.aggregate": "server.composio",
           }),
-        [WS_METHODS.serverListComposioToolkits]: (input) =>
-          observeRpcEffect(WS_METHODS.serverListComposioToolkits, composio.listToolkits(input), {
+        [WS_METHODS.serverConfigureComposio]: (input) =>
+          observeRpcEffect(WS_METHODS.serverConfigureComposio, composio.configure(input), {
             "rpc.aggregate": "server.composio",
           }),
-        [WS_METHODS.serverInstallAndLoginComposio]: (input) =>
-          observeRpcStream(
-            WS_METHODS.serverInstallAndLoginComposio,
-            composio.installAndLogin(input),
-            { "rpc.aggregate": "server.composio" },
-          ),
-        [WS_METHODS.serverLoginComposio]: (input) =>
-          observeRpcStream(WS_METHODS.serverLoginComposio, composio.login(input), {
-            "rpc.aggregate": "server.composio",
-          }),
-        [WS_METHODS.serverLinkComposioToolkit]: (input) =>
-          observeRpcStream(WS_METHODS.serverLinkComposioToolkit, composio.linkToolkit(input), {
-            "rpc.aggregate": "server.composio",
-          }),
-        [WS_METHODS.serverInstallComposioAgentSupport]: (input) =>
+        [WS_METHODS.serverTestComposioConnection]: (input) =>
           observeRpcEffect(
-            WS_METHODS.serverInstallComposioAgentSupport,
-            composio.installAgentSupport(input),
+            WS_METHODS.serverTestComposioConnection,
+            composio.testConnection(input),
             { "rpc.aggregate": "server.composio" },
           ),
         [WS_METHODS.serverDisableComposio]: (_input) =>

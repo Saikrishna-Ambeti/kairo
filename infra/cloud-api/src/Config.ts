@@ -7,7 +7,10 @@ const NonEmptyString = Schema.String.check(Schema.isNonEmpty());
 const NamespaceHmacKey = Schema.String.check(Schema.isMinLength(32));
 
 const CloudApiEnvironment = Schema.Struct({
+  CLERK_SECRET_KEY: NonEmptyString,
+  CLERK_JWT_AUDIENCE: NonEmptyString,
   SUPERMEMORY_API_KEY: NonEmptyString,
+  KAIRO_CLOUD_TOKEN_PRIVATE_KEY: NonEmptyString,
   KAIRO_CLOUD_TOKEN_PUBLIC_KEY: NonEmptyString,
   KAIRO_MEMORY_NAMESPACE_HMAC_KEY: NamespaceHmacKey,
   KAIRO_CLOUD_ISSUER: Schema.optionalKey(NonEmptyString),
@@ -16,8 +19,11 @@ const CloudApiEnvironment = Schema.Struct({
 const decodeCloudApiEnvironment = Schema.decodeUnknownSync(CloudApiEnvironment);
 
 export interface CloudApiConfigurationShape {
+  readonly clerkSecretKey: Redacted.Redacted<string>;
+  readonly clerkJwtAudience: string;
   readonly supermemoryApiKey: Redacted.Redacted<string>;
   readonly supermemoryApiUrl: URL;
+  readonly tokenPrivateKey: Redacted.Redacted<string>;
   readonly tokenPublicKey: string;
   readonly tokenIssuer: string;
   readonly namespaceHmacKey: Redacted.Redacted<string>;
@@ -38,7 +44,10 @@ export function fromEnv(
   env: Readonly<Record<string, string | undefined>>,
 ): CloudApiConfigurationShape {
   const decoded = decodeCloudApiEnvironment({
+    CLERK_SECRET_KEY: env.CLERK_SECRET_KEY,
+    CLERK_JWT_AUDIENCE: env.CLERK_JWT_AUDIENCE,
     SUPERMEMORY_API_KEY: env.SUPERMEMORY_API_KEY,
+    KAIRO_CLOUD_TOKEN_PRIVATE_KEY: env.KAIRO_CLOUD_TOKEN_PRIVATE_KEY,
     KAIRO_CLOUD_TOKEN_PUBLIC_KEY: env.KAIRO_CLOUD_TOKEN_PUBLIC_KEY,
     KAIRO_MEMORY_NAMESPACE_HMAC_KEY: env.KAIRO_MEMORY_NAMESPACE_HMAC_KEY,
     ...(env.KAIRO_CLOUD_ISSUER ? { KAIRO_CLOUD_ISSUER: env.KAIRO_CLOUD_ISSUER } : {}),
@@ -46,8 +55,11 @@ export function fromEnv(
   });
 
   return make({
+    clerkSecretKey: Redacted.make(decoded.CLERK_SECRET_KEY),
+    clerkJwtAudience: decoded.CLERK_JWT_AUDIENCE,
     supermemoryApiKey: Redacted.make(decoded.SUPERMEMORY_API_KEY),
     supermemoryApiUrl: decoded.SUPERMEMORY_API_URL ?? new URL("https://api.supermemory.ai"),
+    tokenPrivateKey: Redacted.make(decoded.KAIRO_CLOUD_TOKEN_PRIVATE_KEY.replace(/\\n/gu, "\n")),
     tokenPublicKey: decoded.KAIRO_CLOUD_TOKEN_PUBLIC_KEY.replace(/\\n/gu, "\n"),
     tokenIssuer: decoded.KAIRO_CLOUD_ISSUER ?? "kairo-cloud",
     namespaceHmacKey: Redacted.make(decoded.KAIRO_MEMORY_NAMESPACE_HMAC_KEY),

@@ -134,9 +134,11 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
           ? "usage"
           : location.pathname === "/library"
             ? "library"
-            : location.pathname === "/pull-requests"
-              ? "pull-requests"
-              : null,
+            : location.pathname === "/scheduled-tasks"
+              ? "scheduled-tasks"
+              : location.pathname === "/pull-requests"
+                ? "pull-requests"
+                : null,
   });
   const closeMobileSidebar = useCallback(() => {
     if (isMobile) {

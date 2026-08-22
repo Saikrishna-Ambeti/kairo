@@ -123,7 +123,7 @@ const capabilitiesLayer = Layer.effectContext(
           if (session === null) {
             return yield* new ConnectionBlockedError({
               reason: "authentication",
-              detail: "Sign in to Kairo Connect to connect this environment.",
+              detail: "Sign in to Kairo to use cloud services.",
             });
           }
           const token = yield* session.readClerkToken().pipe(
@@ -138,7 +138,7 @@ const capabilitiesLayer = Layer.effectContext(
           if (token === null) {
             return yield* new ConnectionBlockedError({
               reason: "authentication",
-              detail: "The Kairo Connect session is unavailable.",
+              detail: "The Kairo Cloud session is unavailable.",
             });
           }
           return token;

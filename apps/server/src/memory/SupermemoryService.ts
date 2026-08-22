@@ -9,15 +9,16 @@ import {
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type * as Redacted from "effect/Redacted";
+import * as Redacted from "effect/Redacted";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import { KairoCloudClient } from "../cloud/KairoCloudClient.ts";
 import * as KairoCloudClientLive from "../cloud/KairoCloudClient.ts";
+import { ServerEnvironment } from "../environment/ServerEnvironment.ts";
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 import { computeProviderMemoryStatus } from "./SupermemoryMcp.ts";
-import { getKairoCloudAccessToken } from "./SupermemorySecrets.ts";
+import { getKairoCloudAccessToken, KAIRO_CLOUD_ACCESS_TOKEN_SECRET } from "./SupermemorySecrets.ts";
 
 type SupermemoryServiceError = SupermemoryError | ServerSettingsError;
 
@@ -31,6 +32,7 @@ export interface SupermemoryContextInput {
 }
 
 export interface SupermemoryServiceShape {
+  readonly provisionAccess: (clerkToken: string) => Effect.Effect<void, SupermemoryError>;
   readonly getStatus: Effect.Effect<SupermemoryStatus, SupermemoryServiceError>;
   readonly configure: (
     input: ConfigureMemoryInput,
@@ -77,10 +79,31 @@ export const makeSupermemoryService = Effect.gen(function* () {
   const providerRegistry = yield* ProviderRegistry;
   const secretStore = yield* ServerSecretStore.ServerSecretStore;
   const cloud = yield* KairoCloudClient;
+  const environment = yield* ServerEnvironment;
 
   const readAccessToken = getKairoCloudAccessToken().pipe(
     Effect.provideService(ServerSecretStore.ServerSecretStore, secretStore),
   );
+
+  const provisionAccess: SupermemoryServiceShape["provisionAccess"] = Effect.fn(
+    "SupermemoryService.provisionAccess",
+  )(function* (clerkToken) {
+    const environmentId = yield* environment.getEnvironmentId;
+    const grant = yield* cloud.exchangeInstallationGrant(Redacted.make(clerkToken), {
+      environmentId,
+    });
+    yield* secretStore
+      .set(KAIRO_CLOUD_ACCESS_TOKEN_SECRET, new TextEncoder().encode(grant.accessToken))
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new SupermemoryError({
+              message: "Failed to store Kairo Cloud access.",
+              cause,
+            }),
+        ),
+      );
+  });
 
   const request = <A>(input: {
     readonly providerInstanceId: ProviderInstanceId;
@@ -208,6 +231,7 @@ export const makeSupermemoryService = Effect.gen(function* () {
   });
 
   return {
+    provisionAccess,
     getStatus: buildStatus,
     configure,
     disable,

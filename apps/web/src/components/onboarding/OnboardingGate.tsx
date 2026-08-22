@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { hasCloudPublicConfig } from "../../cloud/publicConfig";
+import { hasCloudIdentityConfig } from "../../cloud/publicConfig";
 import { isElectron } from "../../env";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { cn } from "../../lib/utils";
@@ -797,7 +797,7 @@ function LocalOnboardingGate({ onComplete }: { readonly onComplete: () => void }
 }
 
 export function OnboardingGate({ onComplete }: { readonly onComplete: () => void }) {
-  if (!hasCloudPublicConfig()) {
+  if (!hasCloudIdentityConfig()) {
     return <LocalOnboardingGate onComplete={onComplete} />;
   }
 

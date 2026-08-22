@@ -36,6 +36,7 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import * as Option from "effect/Option";
 import {
   ArrowLeftIcon,
+  CalendarClockIcon,
   CornerLeftUpIcon,
   FileSearchIcon,
   FolderIcon,
@@ -1629,6 +1630,18 @@ function OpenCommandPaletteDialog(props: {
     icon: <SettingsIcon className={ITEM_ICON_CLASS} />,
     run: async () => {
       await navigate({ to: "/settings" });
+    },
+  });
+
+  actionItems.push({
+    kind: "action",
+    value: "action:scheduled-tasks",
+    searchTerms: ["scheduled", "tasks", "student", "study", "assignments", "revision"],
+    title: "Open scheduled tasks",
+    description: "Student study routines and deadline check-ins",
+    icon: <CalendarClockIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/scheduled-tasks" });
     },
   });
 

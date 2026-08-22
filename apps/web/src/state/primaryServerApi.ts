@@ -3,14 +3,11 @@ import {
   squashAtomCommandFailure,
 } from "@kairo/client-runtime/state/runtime";
 import type {
-  ComposioOperationProgressEvent,
+  ConfigureComposioInput,
   ConfigureMemoryInput,
-  InstallComposioAgentSupportInput,
-  InstallComposioInput,
-  LinkComposioToolkitInput,
-  ListComposioToolkitsInput,
   ProviderInstanceId,
   ServerProviderUpdateInput,
+  TestComposioConnectionInput,
 } from "@kairo/contracts";
 import { useCallback } from "react";
 
@@ -44,20 +41,12 @@ export function usePrimaryServerApi() {
   const getComposioStatus = useAtomCommand(serverEnvironment.getComposioStatus, {
     reportFailure: false,
   });
-  const listComposioToolkits = useAtomCommand(serverEnvironment.listComposioToolkits, {
+  const configureComposio = useAtomCommand(serverEnvironment.configureComposio, {
     reportFailure: false,
   });
-  const installAndLoginComposio = useAtomCommand(serverEnvironment.composioInstallAndLogin, {
+  const testComposioConnection = useAtomCommand(serverEnvironment.testComposioConnection, {
     reportFailure: false,
   });
-  const loginComposio = useAtomCommand(serverEnvironment.composioLogin, { reportFailure: false });
-  const linkComposioToolkit = useAtomCommand(serverEnvironment.composioLinkToolkit, {
-    reportFailure: false,
-  });
-  const installComposioAgentSupport = useAtomCommand(
-    serverEnvironment.installComposioAgentSupport,
-    { reportFailure: false },
-  );
   const disableComposio = useAtomCommand(serverEnvironment.disableComposio, {
     reportFailure: false,
   });
@@ -82,40 +71,10 @@ export function usePrimaryServerApi() {
       runCommand(disableMemory({ environmentId: requireEnvironmentId(), input: {} })),
     getComposioStatus: () =>
       runCommand(getComposioStatus({ environmentId: requireEnvironmentId(), input: {} })),
-    listComposioToolkits: (input: ListComposioToolkitsInput) =>
-      runCommand(listComposioToolkits({ environmentId: requireEnvironmentId(), input })),
-    installAndLoginComposio: (
-      input: InstallComposioInput,
-      onProgress?: (event: ComposioOperationProgressEvent) => void,
-    ) =>
-      runCommand(
-        installAndLoginComposio({
-          environmentId: requireEnvironmentId(),
-          input: { input, ...(onProgress ? { onProgress } : {}) },
-        }),
-      ),
-    loginComposio: (
-      input: InstallComposioInput,
-      onProgress?: (event: ComposioOperationProgressEvent) => void,
-    ) =>
-      runCommand(
-        loginComposio({
-          environmentId: requireEnvironmentId(),
-          input: { input, ...(onProgress ? { onProgress } : {}) },
-        }),
-      ),
-    linkComposioToolkit: (
-      input: LinkComposioToolkitInput,
-      onProgress?: (event: ComposioOperationProgressEvent) => void,
-    ) =>
-      runCommand(
-        linkComposioToolkit({
-          environmentId: requireEnvironmentId(),
-          input: { input, ...(onProgress ? { onProgress } : {}) },
-        }),
-      ),
-    installComposioAgentSupport: (input: InstallComposioAgentSupportInput) =>
-      runCommand(installComposioAgentSupport({ environmentId: requireEnvironmentId(), input })),
+    configureComposio: (input: ConfigureComposioInput) =>
+      runCommand(configureComposio({ environmentId: requireEnvironmentId(), input })),
+    testComposioConnection: (input: TestComposioConnectionInput = {}) =>
+      runCommand(testComposioConnection({ environmentId: requireEnvironmentId(), input })),
     disableComposio: () =>
       runCommand(disableComposio({ environmentId: requireEnvironmentId(), input: {} })),
   };

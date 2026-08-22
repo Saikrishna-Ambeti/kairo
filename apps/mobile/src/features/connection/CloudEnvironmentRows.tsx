@@ -21,7 +21,7 @@ import { copyTextWithHaptic } from "../../lib/copyTextWithHaptic";
 import { useThemeColor } from "../../lib/useThemeColor";
 import type { ConnectedEnvironmentSummary } from "../../state/remote-runtime-types";
 import { availableCloudEnvironmentPresentation } from "../cloud/cloudEnvironmentPresentation";
-import { hasCloudPublicConfig } from "../cloud/publicConfig";
+import { hasManagedRelayConfig } from "../cloud/publicConfig";
 import { ConnectionStatusDot } from "./ConnectionStatusDot";
 import { type RelayEnvironmentView, useConnectionController } from "./useConnectionController";
 
@@ -56,8 +56,9 @@ export function CloudEnvironmentRows(props: CloudEnvironmentRowsProps) {
   if (props.showcaseSignedIn !== undefined) {
     return props.showcaseSignedIn ? <CloudEnvironmentRowsContent {...props} /> : null;
   }
-  // No cloud config means no `ClerkProvider` either, so `useAuth` would throw.
-  if (!hasCloudPublicConfig()) {
+  // Without managed relay config, discovery must stay hidden. Clerk may still
+  // be mounted for Kairo Cloud identity and hosted memory.
+  if (!hasManagedRelayConfig()) {
     return <ConnectedOnlyCloudEnvironmentRows {...props} />;
   }
   return <SignedInCloudEnvironmentRows {...props} />;

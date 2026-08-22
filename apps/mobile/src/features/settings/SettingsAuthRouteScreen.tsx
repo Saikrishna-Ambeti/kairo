@@ -4,18 +4,18 @@ import { StackActions, useNavigation } from "@react-navigation/native";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { View } from "react-native";
 
-import { hasCloudPublicConfig } from "../cloud/publicConfig";
+import { hasCloudIdentityConfig } from "../cloud/publicConfig";
 
 export function SettingsAuthRouteScreen() {
   const navigation = useNavigation();
 
   useLayoutEffect(() => {
-    if (!hasCloudPublicConfig()) {
+    if (!hasCloudIdentityConfig()) {
       navigation.dispatch(StackActions.replace("SettingsContent"));
     }
   }, [navigation]);
 
-  return hasCloudPublicConfig() ? <ConfiguredSettingsAuthRouteScreen /> : null;
+  return hasCloudIdentityConfig() ? <ConfiguredSettingsAuthRouteScreen /> : null;
 }
 
 function ConfiguredSettingsAuthRouteScreen() {

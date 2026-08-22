@@ -152,11 +152,11 @@ Read methods require orchestration-read permission; mutating methods require orc
 
 ## 3. Composio connected-app integrations
 
-Add optional Composio management for connected platform toolkits. CLI operations run on server machine, not browser; progress is streamed to client.
+Add optional Composio Connect access through its hosted MCP endpoint. Kairo never installs or runs a local Composio runtime.
 
 ### Contracts and settings
 
-Create/export `packages/contracts/src/composio.ts`. Define CLI/auth/toolkit/catalog/agent-support/operation status schemas, typed errors, setup inputs, and progress event.
+Create/export `packages/contracts/src/composio.ts`. Define cloud auth, agent-support, status, configuration, connection-test, and typed error schemas.
 
 Extend settings with `integrations.composio`:
 
@@ -164,47 +164,36 @@ Extend settings with `integrations.composio`:
 {
   enabled: boolean;
   providerInstanceIds: ProviderInstanceId[];
-  preferredToolkits: string[];
 }
 ```
 
-Defaults must leave feature disabled with no selected providers/toolkits.
+Defaults must leave the feature disabled with no selected providers.
 
 ### Server service
 
-Implement `apps/server/src/composio/ComposioService.ts` plus `ComposioProviderBindings.ts`.
+Implement `apps/server/src/composio/ComposioService.ts`, `ComposioSecrets.ts`, `ComposioMcp.ts`, and `ComposioProviderBindings.ts`.
 
-- Detect CLI via `composio --version`, then `COMPOSIO_INSTALL_DIR` or `~/.composio/composio` (`.exe` on Windows).
-- Install CLI with `curl -fsSL https://composio.dev/install | bash` on macOS/Linux. On Windows run PowerShell `npm install -g @composio/cli`, failing clearly if `npm` is absent.
-- Sign in with `composio login`; allow 10 minutes and pass any authentication URL/progress through stream events.
-- Discover account via CLI status and toolkit state with `composio link <toolkit> --list`. Parse JSON where possible and table output as fallback.
-- Load full toolkit catalog through CLI when authenticated. When unavailable, provide a curated fallback catalog covering productivity, communication, Google Workspace, and other integrations with a message stating why results are limited.
-- Link toolkit via `composio link <toolkit>`, then persist its name in deduplicated `preferredToolkits`.
-- Persist selected provider IDs when setup/login/agent-support starts. `disable` clears enabled and selected providers but may retain preferred toolkit history only if desired by current upstream settings semantics; captured branch clears selected provider IDs.
-- Expose single in-flight operation status. Emit `running`, stage updates, stdout/stderr snippets, optional auth URL, success/failure. Bound process output and use redacted error messages.
-
-Provider bindings prepend install directory to `PATH` and set non-sensitive `COMPOSIO_INSTALL_DIR` only on selected provider instances. Replace generated `PATH`/`COMPOSIO_INSTALL_DIR` entries without deleting unrelated user values. Apply Composio binding before Supermemory binding in provider config hydration.
-
-Agent status: Codex uses CLI from `PATH`; Claude reports needs-install guidance; other drivers report native skill discovery unverified. `installComposioAgentSupport` persists selection and returns refreshed status.
+- Store the Composio Connect consumer API key in `ServerSecretStore`; never return it in status payloads.
+- Test credentials against `https://connect.composio.dev/mcp` with a bounded MCP initialize request and redacted errors.
+- Persist only enabled state and selected provider IDs in settings. Disabling removes the saved key and selection.
+- Add a sensitive generated environment variable only to selected, supported provider instances.
+- Configure the hosted MCP endpoint at session startup for Codex, Claude, and ACP providers. Codex reads the request header from the generated environment variable so the key never appears in process arguments.
+- Report unsupported providers explicitly and apply changes to new sessions.
 
 ### RPC and UI
 
-Add service live layer, WebSocket handlers/authorization/instrumentation under `server.composio`, contract RPC declarations, client runtime wrappers, and local API bridge:
+Add service live layer, WebSocket handlers/authorization/instrumentation under `server.composio`, contract RPC declarations, client runtime wrappers, and local API bridge for `getComposioStatus`, `configureComposio`, `testComposioConnection`, and `disableComposio`.
 
-- Unary: `server.getComposioStatus`, `server.listComposioToolkits`, `server.installComposioAgentSupport`, `server.disableComposio`.
-- Streams: `server.installAndLoginComposio`, `server.loginComposio`, `server.linkComposioToolkit`.
-
-Add settings navigation plus routes `/settings/integrations` and `/settings/integrations/apps`. Build `IntegrationsSettings.tsx`, `ComposioAppsSettings.tsx`, and pure `IntegrationsSettings.logic.ts`.
+Keep settings navigation and routes `/settings/integrations` and `/settings/integrations/apps`. The apps route hands management off to Composio Dashboard.
 
 UI requirements:
 
-- clear primary action based on CLI/auth state: install and sign in, sign in, or none;
-- show streamed setup state/dialog and recoverable failures;
-- show provider selection and agent-support installation state;
-- search catalog, show connected apps separately, and launch toolkit link flow;
-- use fallback catalog safely when backend CLI is missing or unauthenticated.
+- accept, replace, test, and remove the hosted API key;
+- show provider selection and remote MCP support state;
+- explain that app authorization and management live in Composio Dashboard;
+- surface connection failures without exposing secrets.
 
-Test CLI probing/installation/login/link failures, table/JSON parsing, catalog fallbacks, provider environment merging, service operation streaming, selection logic, routes, RPC authorization, and local API callbacks.
+Test credential redaction, remote connection failures, provider environment merging, MCP session configuration, RPC authorization, and local API callbacks.
 
 ## 4. First-run onboarding
 

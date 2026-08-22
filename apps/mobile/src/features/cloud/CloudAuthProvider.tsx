@@ -19,7 +19,12 @@ import {
   unregisterAgentAwarenessDeviceForCurrentUser,
 } from "../agent-awareness/remoteRegistration";
 import { clearConnectOnboardingRequest, requestConnectOnboarding } from "./connectOnboarding";
-import { resolveCloudPublicConfig, resolveRelayClerkTokenOptions } from "./publicConfig";
+import {
+  hasCloudIdentityConfig,
+  hasManagedRelayConfig,
+  resolveCloudClerkTokenOptions,
+  resolveCloudPublicConfig,
+} from "./publicConfig";
 
 function resetManagedRelayTokenCache() {
   return settleAsyncResult(() =>
@@ -29,23 +34,31 @@ function resetManagedRelayTokenCache() {
   );
 }
 
-export function deactivateCloudRelayAccount(): void {
+export function deactivateCloudAccount(): void {
   setAgentAwarenessRelayTokenProvider(null);
   setManagedRelaySession(appAtomRegistry, null);
 }
 
-export function activateCloudRelayAccount(
+export function activateCloudAccount(
   accountId: string,
   tokenProvider: () => Promise<string | null>,
+  managedRelayEnabled = true,
 ): void {
-  setAgentAwarenessRelayTokenProvider(tokenProvider, accountId);
+  if (managedRelayEnabled) {
+    setAgentAwarenessRelayTokenProvider(tokenProvider, accountId);
+  } else {
+    setAgentAwarenessRelayTokenProvider(null);
+  }
   setManagedRelaySession(appAtomRegistry, {
     accountId,
     readClerkToken: tokenProvider,
   });
 }
 
-function CloudAuthBridge(props: { readonly children: ReactNode }) {
+function CloudAuthBridge(props: {
+  readonly children: ReactNode;
+  readonly managedRelayEnabled: boolean;
+}) {
   const { getToken, isLoaded, isSignedIn, userId } = useAuth({ treatPendingAsSignedOut: false });
   const removeRelayEnvironments = useAtomCommand(environmentCatalog.removeRelayEnvironments, {
     reportFailure: false,
@@ -92,7 +105,7 @@ function CloudAuthBridge(props: { readonly children: ReactNode }) {
         const cleanup = [
           resetManagedRelayTokenCache(),
           removeRelayEnvironments(),
-          ...(previous
+          ...(previous && props.managedRelayEnabled
             ? [
                 settleAsyncResult(() =>
                   runtime.runPromiseExit(
@@ -113,7 +126,7 @@ function CloudAuthBridge(props: { readonly children: ReactNode }) {
     if (!isSignedIn || !userId) {
       const previous = previousTokenProviderRef.current;
       previousTokenProviderRef.current = null;
-      deactivateCloudRelayAccount();
+      deactivateCloudAccount();
       if (previousObservedAccount !== null) {
         void queueAccountCleanup(previous);
       }
@@ -121,14 +134,14 @@ function CloudAuthBridge(props: { readonly children: ReactNode }) {
     }
 
     const previous = previousTokenProviderRef.current;
-    const tokenProvider = () => getToken(resolveRelayClerkTokenOptions());
+    const tokenProvider = () => getToken(resolveCloudClerkTokenOptions());
     const activateSession = () => {
       if (cancelled) {
         return;
       }
       previousTokenProviderRef.current = { userId, provider: tokenProvider };
-      activateCloudRelayAccount(userId, tokenProvider);
-      if (isAccountTransition) {
+      activateCloudAccount(userId, tokenProvider, props.managedRelayEnabled);
+      if (isAccountTransition && props.managedRelayEnabled) {
         requestConnectOnboarding(userId);
       }
     };
@@ -147,7 +160,7 @@ function CloudAuthBridge(props: { readonly children: ReactNode }) {
       previousObservedAccount !== userId
     ) {
       previousTokenProviderRef.current = null;
-      deactivateCloudRelayAccount();
+      deactivateCloudAccount();
       activateAfterTransition(queueAccountCleanup(previous));
     } else {
       activateAfterTransition(accountTransitionRef.current ?? Promise.resolve());
@@ -156,7 +169,7 @@ function CloudAuthBridge(props: { readonly children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [getToken, isLoaded, isSignedIn, removeRelayEnvironments, userId]);
+  }, [getToken, isLoaded, isSignedIn, props.managedRelayEnabled, removeRelayEnvironments, userId]);
 
   useEffect(
     () => () => {
@@ -176,21 +189,22 @@ function CloudAuthBridge(props: { readonly children: ReactNode }) {
 export function CloudAuthProvider(props: { readonly children: ReactNode }) {
   const config = resolveCloudPublicConfig();
   const publishableKey = config.clerk.publishableKey;
-  const relayUrl = config.relay.url;
+  const cloudIdentityEnabled = hasCloudIdentityConfig(config);
+  const managedRelayEnabled = hasManagedRelayConfig(config);
 
   useEffect(() => {
-    if (!publishableKey || !relayUrl) {
-      deactivateCloudRelayAccount();
+    if (!cloudIdentityEnabled) {
+      deactivateCloudAccount();
     }
-  }, [publishableKey, relayUrl]);
+  }, [cloudIdentityEnabled]);
 
-  if (!publishableKey || !relayUrl) {
+  if (!publishableKey || !cloudIdentityEnabled) {
     return props.children;
   }
 
   return (
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-      <CloudAuthBridge>{props.children}</CloudAuthBridge>
+      <CloudAuthBridge managedRelayEnabled={managedRelayEnabled}>{props.children}</CloudAuthBridge>
     </ClerkProvider>
   );
 }

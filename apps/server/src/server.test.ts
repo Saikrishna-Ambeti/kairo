@@ -300,14 +300,8 @@ const defaultSupermemoryStatus: SupermemoryStatus = {
 
 const defaultComposioStatus = {
   enabled: false,
-  primaryAction: "install_and_login" as const,
-  cli: {
-    status: "missing" as const,
-    platform: "darwin" as const,
-    installCommandLabel: "curl -fsSL https://composio.dev/install | bash",
-  },
-  auth: { status: "unknown" as const },
-  toolkits: [],
+  endpoint: "https://connect.composio.dev/mcp",
+  auth: { status: "not_configured" as const, hasApiKey: false },
   agentSupport: [],
 };
 
@@ -697,11 +691,8 @@ const buildAppUnderTest = (options?: {
       Layer.provide(
         Layer.mock(ComposioService)({
           getStatus: Effect.succeed(defaultComposioStatus),
-          listToolkits: () => Effect.succeed({ items: [], source: "fallback" as const }),
-          installAndLogin: () => Stream.empty,
-          login: () => Stream.empty,
-          linkToolkit: () => Stream.empty,
-          installAgentSupport: () => Effect.succeed(defaultComposioStatus),
+          configure: () => Effect.succeed(defaultComposioStatus),
+          testConnection: () => Effect.succeed(defaultComposioStatus),
           disable: Effect.succeed(defaultComposioStatus),
           ...options?.layers?.composio,
         }),
