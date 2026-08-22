@@ -58,8 +58,16 @@ function errorResponse(error: CloudApiRequestFailure): Response {
   return responseJson(body, error.status);
 }
 
-function normalizePathname(pathname: string): string {
-  return pathname === "/api" ? "/" : pathname.startsWith("/api/") ? pathname.slice(4) : pathname;
+function normalizePathname(url: URL): string {
+  const rewrittenPath = url.pathname === "/api/v1" ? url.searchParams.get("__kairo_path") : null;
+  if (rewrittenPath) {
+    return `/v1/${rewrittenPath.replace(/^\/+/, "")}`;
+  }
+  return url.pathname === "/api"
+    ? "/"
+    : url.pathname.startsWith("/api/")
+      ? url.pathname.slice(4)
+      : url.pathname;
 }
 
 function requestIdFrom(request: Request): string {
@@ -176,7 +184,7 @@ export const handleCloudApiRequest = Effect.fn("cloudApi.http.handleRequest")(fu
   request: Request,
 ) {
   const requestId = requestIdFrom(request);
-  const pathname = normalizePathname(new URL(request.url).pathname);
+  const pathname = normalizePathname(new URL(request.url));
   if (request.method === "GET" && pathname === "/health") {
     return responseJson({ ok: true, service: "kairo-cloud-api", version: "1" });
   }
