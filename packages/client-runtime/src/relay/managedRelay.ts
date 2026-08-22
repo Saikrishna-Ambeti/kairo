@@ -244,7 +244,7 @@ export interface ManagedRelayAuthorization {
 }
 
 export interface ManagedRelayClientLayerOptions {
-  readonly relayUrl: string;
+  readonly relayUrl: string | null;
   readonly clientId: RelayPublicClientId;
   readonly accessTokenStore?: ManagedRelayAccessTokenStore;
 }
@@ -252,7 +252,7 @@ export interface ManagedRelayClientLayerOptions {
 export class ManagedRelayClient extends Context.Service<
   ManagedRelayClient,
   {
-    readonly relayUrl: string;
+    readonly relayUrl: string | null;
     readonly listEnvironments: (input: {
       readonly clerkToken: string;
     }) => Effect.Effect<ReadonlyArray<RelayClientEnvironmentRecord>, ManagedRelayClientError>;
@@ -398,10 +398,10 @@ function dpopHeaders(authorization: ManagedRelayAuthorization) {
   };
 }
 
-function disabledManagedRelayClient(relayUrl: string): ManagedRelayClient["Service"] {
+function disabledManagedRelayClient(relayUrl: string | null): ManagedRelayClient["Service"] {
   const unavailable = (spanName: string) =>
     Effect.fn(spanName)(function* () {
-      return yield* new ManagedRelayUrlInvalidError({ relayUrl });
+      return yield* new ManagedRelayUrlInvalidError({ relayUrl: relayUrl ?? "" });
     });
   return ManagedRelayClient.of({
     relayUrl,
@@ -427,7 +427,7 @@ function disabledManagedRelayClient(relayUrl: string): ManagedRelayClient["Servi
 export const make = Effect.fn("ManagedRelayClient.make")(function* (
   options: ManagedRelayClientLayerOptions,
 ) {
-  const relayUrl = normalizeSecureRelayUrl(options.relayUrl);
+  const relayUrl = options.relayUrl === null ? null : normalizeSecureRelayUrl(options.relayUrl);
   if (relayUrl === null) {
     return disabledManagedRelayClient(options.relayUrl);
   }

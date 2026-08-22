@@ -208,7 +208,7 @@ export function makeCloudCliOAuthConfig({
 
 export const cloudCliOAuthConfig = makeCloudCliOAuthConfig();
 
-export const hasCloudPublicConfig = Boolean(
+export const hasManagedRelayPublicConfig = Boolean(
   (normalizeSecureRelayUrl(process.env.KAIRO_RELAY_URL ?? "") ?? buildTimeRelayUrl) &&
   (process.env.KAIRO_CLERK_PUBLISHABLE_KEY?.trim() || buildTimeClerkPublishableKey) &&
   (process.env.KAIRO_CLERK_CLI_OAUTH_CLIENT_ID?.trim() || buildTimeClerkCliOAuthClientId),

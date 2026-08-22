@@ -27,6 +27,11 @@ The public surface is intentionally narrow:
 There is no generic proxy route. Relay deployment, Cloudflare DNS, tunnels, and Tailscale are not
 required. A Vercel `*.vercel.app` hostname is sufficient.
 
+Clients treat public configuration as two capabilities. Cloud identity requires the Clerk
+publishable key and JWT template. Managed relay requires Cloud identity plus a valid HTTPS relay
+URL. Clients mount Clerk and exchange installation grants when only Cloud identity is configured;
+they do not start relay discovery or relay requests.
+
 The exchange issues a 30-day Ed25519 grant. Its subject identifies the Kairo environment, its
 memory namespace is stable for the Clerk user across environments, and its scopes permit only
 memory reads and writes. The Supermemory routes accept the installation grant, never the Clerk JWT.

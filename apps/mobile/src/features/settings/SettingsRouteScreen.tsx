@@ -29,7 +29,11 @@ import {
   subscribeAgentAwarenessRegistrationStatus,
 } from "../agent-awareness/remoteRegistration";
 import { refreshManagedRelayEnvironments } from "../cloud/managedRelayState";
-import { hasCloudPublicConfig, resolveRelayClerkTokenOptions } from "../cloud/publicConfig";
+import {
+  hasCloudIdentityConfig,
+  hasManagedRelayConfig,
+  resolveCloudClerkTokenOptions,
+} from "../cloud/publicConfig";
 import { withNativeGlassHeaderItem } from "../layout/native-glass-header-items";
 import { WorkspaceSidebarToolbar } from "../layout/workspace-sidebar-toolbar";
 import { runtime } from "../../lib/runtime";
@@ -66,6 +70,7 @@ function useDeviceRegistered(): boolean {
 
 export function SettingsRouteScreen() {
   const navigation = useNavigation();
+  const cloudIdentityEnabled = hasCloudIdentityConfig();
 
   return (
     <>
@@ -95,7 +100,11 @@ export function SettingsRouteScreen() {
           }}
         />
       )}
-      {hasCloudPublicConfig() ? <ConfiguredSettingsRouteScreen /> : <LocalSettingsRouteScreen />}
+      {cloudIdentityEnabled ? (
+        <ConfiguredSettingsRouteScreen managedRelayEnabled={hasManagedRelayConfig()} />
+      ) : (
+        <LocalSettingsRouteScreen />
+      )}
     </>
   );
 }
@@ -141,7 +150,11 @@ function LocalSettingsRouteScreen() {
   );
 }
 
-function ConfiguredSettingsRouteScreen() {
+function ConfiguredSettingsRouteScreen({
+  managedRelayEnabled,
+}: {
+  readonly managedRelayEnabled: boolean;
+}) {
   const preferencesResult = useAtomValue(mobilePreferencesAtom);
   const savePreferences = useAtomSet(updateMobilePreferencesAtom);
   const agentAwarenessPushAvailable = supportsAgentAwarenessPush();
@@ -288,7 +301,7 @@ function ConfiguredSettingsRouteScreen() {
     }
 
     setLiveActivityStatus("linking");
-    const tokenResult = await settlePromise(() => getToken(resolveRelayClerkTokenOptions()));
+    const tokenResult = await settlePromise(() => getToken(resolveCloudClerkTokenOptions()));
     if (tokenResult._tag === "Failure") {
       setLiveActivityStatus("disabled");
       const error = squashAtomCommandFailure(tokenResult);
@@ -382,7 +395,7 @@ function ConfiguredSettingsRouteScreen() {
           let token: string | null = null;
           if (isSignedIn) {
             const tokenResult = await settlePromise(() =>
-              getToken(resolveRelayClerkTokenOptions()),
+              getToken(resolveCloudClerkTokenOptions()),
             );
             if (tokenResult._tag === "Failure") {
               reportAtomCommandResult(tokenResult, {
@@ -471,44 +484,50 @@ function ConfiguredSettingsRouteScreen() {
             value={`${environmentCount}`}
             target="SettingsEnvironments"
           />
-          <SettingsSwitchRow
-            icon="bell.badge"
-            label="Device Notifications"
-            disabled={
-              !agentAwarenessPlatform.supported ||
-              !agentAwarenessPushAvailable ||
-              notificationStatus === "checking" ||
-              notificationStatus === "unsupported"
-            }
-            subtitle={agentAwarenessPlatform.subtitle}
-            // Only reads as on when this device is actually registered with the
-            // relay; otherwise notifications cannot be delivered regardless of
-            // the local iOS permission.
-            value={
-              agentAwarenessPushAvailable && notificationStatus === "enabled" && deviceRegistered
-            }
-            onValueChange={handleDeviceNotificationsChange}
-          />
-          <SettingsSwitchRow
-            disabled={
-              !agentAwarenessPlatform.supported ||
-              !agentAwarenessPushAvailable ||
-              !isLoaded ||
-              liveActivityStatus === "checking" ||
-              liveActivityStatus === "linking"
-            }
-            icon="bolt.circle"
-            label="Live Activity Updates"
-            subtitle={agentAwarenessPlatform.subtitle}
-            // Same gate: a saved preference is meaningless until the device
-            // registration the relay needs to push updates has succeeded.
-            value={
-              agentAwarenessPushAvailable &&
-              (liveActivityStatus === "enabled" || liveActivityStatus === "linking") &&
-              deviceRegistered
-            }
-            onValueChange={handleLiveActivitiesChange}
-          />
+          {managedRelayEnabled ? (
+            <>
+              <SettingsSwitchRow
+                icon="bell.badge"
+                label="Device Notifications"
+                disabled={
+                  !agentAwarenessPlatform.supported ||
+                  !agentAwarenessPushAvailable ||
+                  notificationStatus === "checking" ||
+                  notificationStatus === "unsupported"
+                }
+                subtitle={agentAwarenessPlatform.subtitle}
+                // Only reads as on when this device is actually registered with the
+                // relay; otherwise notifications cannot be delivered regardless of
+                // the local iOS permission.
+                value={
+                  agentAwarenessPushAvailable &&
+                  notificationStatus === "enabled" &&
+                  deviceRegistered
+                }
+                onValueChange={handleDeviceNotificationsChange}
+              />
+              <SettingsSwitchRow
+                disabled={
+                  !agentAwarenessPlatform.supported ||
+                  !agentAwarenessPushAvailable ||
+                  !isLoaded ||
+                  liveActivityStatus === "checking" ||
+                  liveActivityStatus === "linking"
+                }
+                icon="bolt.circle"
+                label="Live Activity Updates"
+                subtitle={agentAwarenessPlatform.subtitle}
+                // Same gate: a saved preference is meaningless until the device
+                // registration the relay needs to push updates has succeeded.
+                value={
+                  agentAwarenessPushAvailable &&
+                  (liveActivityStatus === "enabled" || liveActivityStatus === "linking") &&
+                  deviceRegistered
+                }
+                onValueChange={handleLiveActivitiesChange}
+              />
+            </>
+          ) : null}
         </SettingsSection>
 
         <GeneralSettingsSection />

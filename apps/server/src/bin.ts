@@ -10,7 +10,7 @@ import packageJson from "../package.json" with { type: "json" };
 import { authCommand } from "./cli/auth.ts";
 import { connectCommand } from "./cli/connect.ts";
 import { pairCommand } from "./cli/pair.ts";
-import { hasCloudPublicConfig } from "./cloud/publicConfig.ts";
+import { hasManagedRelayPublicConfig } from "./cloud/publicConfig.ts";
 import { sharedServerCommandFlags } from "./cli/config.ts";
 import { projectCommand } from "./cli/project.ts";
 import { runServerCommand, serveCommand, startCommand } from "./cli/server.ts";
@@ -44,7 +44,7 @@ const connectUnavailableCommand = Command.make("connect", {
   ),
 );
 
-export const makeCli = ({ cloudEnabled = hasCloudPublicConfig } = {}) =>
+export const makeCli = ({ managedRelayEnabled = hasManagedRelayPublicConfig } = {}) =>
   Command.make("kairo", { ...sharedServerCommandFlags }).pipe(
     Command.withDescription("Run the Kairo server."),
     Command.withHandler((flags) => runServerCommand(flags)),
@@ -57,7 +57,7 @@ export const makeCli = ({ cloudEnabled = hasCloudPublicConfig } = {}) =>
       serviceCommand,
       servicePreflightCommand,
       triageCommand,
-      cloudEnabled ? connectCommand : connectUnavailableCommand,
+      managedRelayEnabled ? connectCommand : connectUnavailableCommand,
     ]),
   );
 
