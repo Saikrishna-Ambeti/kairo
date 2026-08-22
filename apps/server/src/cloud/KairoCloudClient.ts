@@ -1,7 +1,10 @@
 import {
+  ComposioError,
   DEFAULT_KAIRO_CLOUD_API_URL,
   KairoCloudCapabilitiesResponse,
   type KairoCloudCapabilitiesResponse as KairoCloudCapabilitiesResponseShape,
+  KairoCloudComposioAccessResponse,
+  type KairoCloudComposioAccessResponse as KairoCloudComposioAccessResponseShape,
   type KairoCloudInstallationExchangeRequest,
   KairoCloudInstallationExchangeResponse,
   type KairoCloudInstallationExchangeResponse as KairoCloudInstallationExchangeResponseShape,
@@ -32,6 +35,9 @@ export interface KairoCloudClientShape {
   readonly getCapabilities: (
     accessToken: Redacted.Redacted<string>,
   ) => Effect.Effect<KairoCloudCapabilitiesResponseShape, SupermemoryError>;
+  readonly issueComposioAccess: (
+    accessToken: Redacted.Redacted<string>,
+  ) => Effect.Effect<KairoCloudComposioAccessResponseShape, ComposioError>;
   readonly saveMemory: (
     accessToken: Redacted.Redacted<string>,
     input: KairoCloudMemorySaveRequest,
@@ -122,6 +128,18 @@ export const makeKairoCloudClient = Effect.gen(function* () {
         path: "/v1/capabilities",
         responseSchema: KairoCloudCapabilitiesResponse,
       }),
+    issueComposioAccess: (accessToken) =>
+      execute({
+        accessToken,
+        method: "POST",
+        operation: "Composio access provisioning",
+        path: "/v1/composio/access",
+        responseSchema: KairoCloudComposioAccessResponse,
+      }).pipe(
+        Effect.mapError(
+          (error) => new ComposioError({ message: error.message, cause: error.cause }),
+        ),
+      ),
     saveMemory: (accessToken, body) =>
       execute({
         accessToken,

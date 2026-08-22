@@ -1,4 +1,5 @@
 import {
+  DEFAULT_KAIRO_CLOUD_API_URL,
   type ProviderDriverKind,
   type ProviderInstanceConfig,
   type ProviderInstanceConfigMap,
@@ -7,12 +8,13 @@ import {
   type ServerSettings,
 } from "@kairo/contracts";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
-import { getComposioApiKey } from "./ComposioSecrets.ts";
+import { getComposioAccessToken } from "./ComposioSecrets.ts";
 
-export const COMPOSIO_MCP_URL = "https://connect.composio.dev/mcp";
-export const COMPOSIO_API_KEY_ENV = "KAIRO_COMPOSIO_API_KEY";
+export const COMPOSIO_MCP_URL_ENV = "KAIRO_COMPOSIO_MCP_URL";
+export const COMPOSIO_AUTHORIZATION_ENV = "KAIRO_COMPOSIO_AUTHORIZATION";
 
 const SUPPORTED_DRIVERS = new Set<string>(["codex", "claudeAgent", "cursor", "grok"]);
 
@@ -32,12 +34,19 @@ function mergeGeneratedEnvironment(
 }
 
 export function buildComposioProviderEnvironment(input: {
-  readonly apiKey: string;
+  readonly accessToken: Redacted.Redacted<string>;
+  readonly cloudApiUrl: string;
 }): ReadonlyArray<ProviderInstanceEnvironmentVariable> {
+  const mcpUrl = new URL("/v1/composio/mcp", input.cloudApiUrl).toString();
   return [
     {
-      name: COMPOSIO_API_KEY_ENV,
-      value: input.apiKey,
+      name: COMPOSIO_MCP_URL_ENV,
+      value: mcpUrl,
+      sensitive: false,
+    },
+    {
+      name: COMPOSIO_AUTHORIZATION_ENV,
+      value: `Bearer ${Redacted.value(input.accessToken)}`,
       sensitive: true,
     },
   ];
@@ -53,10 +62,13 @@ export const applyComposioProviderBindings = (
       return configMap;
     }
 
-    const apiKey = yield* getComposioApiKey().pipe(Effect.orElseSucceed(() => null));
-    if (!apiKey) return configMap;
+    const accessToken = yield* getComposioAccessToken().pipe(Effect.orElseSucceed(() => null));
+    if (!accessToken) return configMap;
 
-    const generated = buildComposioProviderEnvironment({ apiKey });
+    const generated = buildComposioProviderEnvironment({
+      accessToken,
+      cloudApiUrl: process.env.KAIRO_CLOUD_API_URL ?? DEFAULT_KAIRO_CLOUD_API_URL,
+    });
     const selectedIds = new Set<ProviderInstanceId>(composio.providerInstanceIds);
     const merged: Record<string, ProviderInstanceConfig> = { ...configMap };
     for (const [rawInstanceId, instance] of Object.entries(configMap)) {

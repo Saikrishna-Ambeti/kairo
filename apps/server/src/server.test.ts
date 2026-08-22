@@ -299,8 +299,7 @@ const defaultSupermemoryStatus: SupermemoryStatus = {
 
 const defaultComposioStatus = {
   enabled: false,
-  endpoint: "https://connect.composio.dev/mcp",
-  auth: { status: "not_configured" as const, hasApiKey: false },
+  service: { status: "unavailable" as const, available: false },
   agentSupport: [],
 };
 
@@ -678,6 +677,7 @@ const buildAppUnderTest = (options?: {
       ),
       Layer.provide(
         Layer.mock(SupermemoryService)({
+          provisionAccess: () => Effect.void,
           getStatus: Effect.succeed(defaultSupermemoryStatus),
           configure: () => Effect.succeed(defaultSupermemoryStatus),
           disable: Effect.succeed(defaultSupermemoryStatus),

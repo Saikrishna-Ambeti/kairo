@@ -14,6 +14,7 @@ import * as Redacted from "effect/Redacted";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import { KairoCloudClient } from "../cloud/KairoCloudClient.ts";
 import * as KairoCloudClientLive from "../cloud/KairoCloudClient.ts";
+import { setComposioAccessToken } from "../composio/ComposioSecrets.ts";
 import { ServerEnvironment } from "../environment/ServerEnvironment.ts";
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
@@ -103,6 +104,14 @@ export const makeSupermemoryService = Effect.gen(function* () {
             }),
         ),
       );
+    yield* cloud.issueComposioAccess(Redacted.make(grant.accessToken)).pipe(
+      Effect.flatMap((composioGrant) =>
+        setComposioAccessToken(composioGrant.accessToken).pipe(
+          Effect.provideService(ServerSecretStore.ServerSecretStore, secretStore),
+        ),
+      ),
+      Effect.catch(() => Effect.logWarning("Kairo Cloud app integrations are unavailable.")),
+    );
   });
 
   const request = <A>(input: {

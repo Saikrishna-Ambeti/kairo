@@ -73,8 +73,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
-import { buildComposioMcpHeaders } from "../../composio/ComposioMcp.ts";
-import { COMPOSIO_MCP_URL } from "../../composio/ComposioProviderBindings.ts";
+import { buildComposioMcpHeaders, getComposioMcpUrl } from "../../composio/ComposioMcp.ts";
 import { ServerConfig } from "../../config.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import { resolveClaudeSdkExecutablePath } from "../Drivers/ClaudeExecutable.ts";
@@ -4150,6 +4149,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       };
       const mcpSession = McpProviderSession.readMcpProviderSession(input.threadId);
       const composioMcpHeaders = buildComposioMcpHeaders(claudeEnvironment);
+      const composioMcpUrl = getComposioMcpUrl(claudeEnvironment);
       const mcpServers = {
         ...(mcpSession
           ? {
@@ -4160,11 +4160,11 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
               },
             }
           : {}),
-        ...(composioMcpHeaders
+        ...(composioMcpHeaders && composioMcpUrl
           ? {
               composio: {
                 type: "http" as const,
-                url: COMPOSIO_MCP_URL,
+                url: composioMcpUrl,
                 headers: composioMcpHeaders,
               },
             }
