@@ -210,4 +210,27 @@ describe("Kairo Cloud API", () => {
       expect(upstreamCalls).toBe(0);
     }),
   );
+
+  it.effect("routes rewritten Vercel API paths to the Cloud API handler", () =>
+    Effect.gen(function* () {
+      const app = yield* Effect.acquireRelease(
+        Effect.sync(() => makeCloudApiHandler(configuration, globalThis.fetch)),
+        (value) => Effect.promise(() => value.dispose()),
+      );
+      const token = yield* issueTestGrant;
+      const response = yield* Effect.promise(() =>
+        app.handler(
+          new Request("https://cloud.test/api/v1?__kairo_path=capabilities", {
+            headers: { authorization: `Bearer ${token}` },
+          }),
+        ),
+      );
+
+      expect(response.status).toBe(200);
+      expect(yield* Effect.promise(() => response.json())).toEqual({
+        memory: true,
+        principal: "installation",
+      });
+    }),
+  );
 });
