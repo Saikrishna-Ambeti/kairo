@@ -36,7 +36,7 @@ export type ComposerCommandItem =
   | {
       id: string;
       type: "slash-command";
-      command: ComposerSlashCommand | "document";
+      command: ComposerSlashCommand;
       label: string;
       description: string;
     }

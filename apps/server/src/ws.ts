@@ -50,6 +50,7 @@ import {
   FilesystemBrowseError,
   AssetWorkspaceContextNotFoundError,
   AssetWorkspaceContextResolutionError,
+  ArtifactLibraryReadError,
   RpcClientId,
   EnvironmentAuthorizationError,
   ThreadId,
@@ -114,6 +115,7 @@ import * as ProcessResourceMonitor from "./diagnostics/ProcessResourceMonitor.ts
 import * as ResourceTelemetry from "./resourceTelemetry/ResourceTelemetry.ts";
 import * as AnalyticsService from "./telemetry/AnalyticsService.ts";
 import * as UsageService from "./usage/UsageService.ts";
+import { ArtifactMetadataRepository } from "./persistence/Services/ArtifactMetadata.ts";
 import * as TraceDiagnostics from "./diagnostics/TraceDiagnostics.ts";
 import * as PullRequestService from "./pullRequest/PullRequestService.ts";
 import * as SourceControlDiscovery from "./sourceControl/SourceControlDiscovery.ts";
@@ -514,6 +516,7 @@ const makeWsRpcLayer = (
       const processResourceMonitor = yield* ProcessResourceMonitor.ProcessResourceMonitor;
       const resourceTelemetry = yield* ResourceTelemetry.ResourceTelemetry;
       const usage = yield* UsageService.UsageService;
+      const artifactMetadata = yield* ArtifactMetadataRepository;
       const supermemory = yield* SupermemoryService;
       const composio = yield* ComposioService;
       const relayClient = yield* RelayClient.RelayClient;
@@ -1793,6 +1796,39 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.serverGetUsageSummary, usage.readSummary(input), {
             "rpc.aggregate": "server",
           }),
+        [WS_METHODS.serverListArtifacts]: (input) => {
+          const kinds = input.kinds ?? ["document", "pdf"];
+          const normalizedQuery = input.query?.trim().toLowerCase() ?? "";
+          return observeRpcEffect(
+            WS_METHODS.serverListArtifacts,
+            artifactMetadata
+              .list({
+                threadId: input.threadId ?? null,
+                queryLike: normalizedQuery.length === 0 ? null : `%${normalizedQuery}%`,
+                includeDocuments: kinds.includes("document") ? 1 : 0,
+                includePdfs: kinds.includes("pdf") ? 1 : 0,
+                limit: input.limit ?? 200,
+              })
+              .pipe(
+                Effect.flatMap((artifacts) =>
+                  DateTime.now.pipe(
+                    Effect.map((indexedAt) => ({
+                      artifacts,
+                      indexedAt: DateTime.formatIso(indexedAt),
+                    })),
+                  ),
+                ),
+                Effect.mapError(
+                  (cause) =>
+                    new ArtifactLibraryReadError({
+                      detail: "Artifact metadata could not be read.",
+                      cause,
+                    }),
+                ),
+              ),
+            { "rpc.aggregate": "server" },
+          );
+        },
         [WS_METHODS.serverRetryResourceTelemetry]: (_input) =>
           observeRpcEffect(WS_METHODS.serverRetryResourceTelemetry, resourceTelemetry.retry, {
             "rpc.aggregate": "server",

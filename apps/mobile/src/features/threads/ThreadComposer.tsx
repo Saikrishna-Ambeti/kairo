@@ -13,7 +13,6 @@ import {
   serializeComposerFileLink,
   type ComposerTrigger,
 } from "@kairo/shared/composerTrigger";
-import { buildStudentArtifactStarterPrompt } from "@kairo/shared/studentArtifacts";
 import { StackActions, useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { ReactNode } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
@@ -404,13 +403,6 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
           description: "Switch model",
         },
         {
-          id: "cmd:document",
-          type: "slash-command" as const,
-          command: "document",
-          label: "/document",
-          description: "Create a Word document or PDF artifact",
-        },
-        {
           id: "cmd:plan",
           type: "slash-command" as const,
           command: "plan",
@@ -597,18 +589,6 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
         setComposerSelection({ start: result.cursor, end: result.cursor });
         onChangeDraftMessage(result.text);
         onUpdateInteractionMode(item.command);
-        return;
-      }
-
-      if (item.type === "slash-command" && item.command === "document") {
-        const result = replaceTextRange(
-          draftMessage,
-          composerTrigger.rangeStart,
-          composerTrigger.rangeEnd,
-          buildStudentArtifactStarterPrompt(),
-        );
-        setComposerSelection({ start: result.cursor, end: result.cursor });
-        onChangeDraftMessage(result.text);
         return;
       }
 

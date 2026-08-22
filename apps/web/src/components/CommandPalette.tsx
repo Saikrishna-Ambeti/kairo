@@ -37,7 +37,6 @@ import * as Option from "effect/Option";
 import {
   ArrowLeftIcon,
   CornerLeftUpIcon,
-  FileTextIcon,
   FileSearchIcon,
   FolderIcon,
   FolderPlusIcon,
@@ -169,8 +168,6 @@ import {
   buildSidebarProjectSnapshots,
 } from "../sidebarProjectGrouping";
 import type { Project } from "../types";
-import { useProfessionalRole } from "./onboarding/useProfessionalRole";
-import { openStudentArtifactGenerator } from "../studentArtifactBus";
 
 const EMPTY_BROWSE_ENTRIES: FilesystemBrowseResult["entries"] = [];
 
@@ -567,7 +564,6 @@ function OpenCommandPaletteDialog(props: {
   readonly clearOpenIntent: () => void;
 }) {
   const surface = useProductSurfaceConfig();
-  const professionalRole = useProfessionalRole();
   const showSourceControlProviders = areSourceControlProvidersVisible(surface);
   const navigate = useNavigate();
   const { clearOpenIntent, openIntent, openOverlayMode, setOpen } = props;
@@ -1533,20 +1529,6 @@ function OpenCommandPaletteDialog(props: {
       icon: <SquarePenIcon className={ITEM_ICON_CLASS} />,
       addonIcon: <SquarePenIcon className={ADDON_ICON_CLASS} />,
       groups: [{ value: "projects", label: "Projects", items: projectThreadItems }],
-    });
-  }
-
-  if (professionalRole === "student" && (activeThread || activeDraftThread)) {
-    actionItems.push({
-      kind: "action",
-      value: "action:create-document-artifact",
-      searchTerms: ["student", "document", "pdf", "word", "artifact", "assignment"],
-      title: "Create document artifact",
-      description: "Generate a Word document, PDF, or both",
-      icon: <FileTextIcon className={ITEM_ICON_CLASS} />,
-      run: async () => {
-        openStudentArtifactGenerator();
-      },
     });
   }
 

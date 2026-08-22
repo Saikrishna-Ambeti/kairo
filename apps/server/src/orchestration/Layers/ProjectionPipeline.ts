@@ -3,7 +3,9 @@ import {
   type ChatAttachment,
   type OrchestrationEvent,
   type OrchestrationSessionStatus,
+  type ProjectId,
   ThreadId,
+  type TurnId,
 } from "@kairo/contracts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -34,6 +36,7 @@ import {
   ProjectionTurnRepository,
 } from "../../persistence/Services/ProjectionTurns.ts";
 import { ProjectionThreadRepository } from "../../persistence/Services/ProjectionThreads.ts";
+import { ArtifactMetadataRepository } from "../../persistence/Services/ArtifactMetadata.ts";
 import { ProjectionPendingApprovalRepositoryLive } from "../../persistence/Layers/ProjectionPendingApprovals.ts";
 import { ProjectionProjectRepositoryLive } from "../../persistence/Layers/ProjectionProjects.ts";
 import { ProjectionStateRepositoryLive } from "../../persistence/Layers/ProjectionState.ts";
@@ -43,6 +46,7 @@ import { ProjectionThreadProposedPlanRepositoryLive } from "../../persistence/La
 import { ProjectionThreadSessionRepositoryLive } from "../../persistence/Layers/ProjectionThreadSessions.ts";
 import { ProjectionTurnRepositoryLive } from "../../persistence/Layers/ProjectionTurns.ts";
 import { ProjectionThreadRepositoryLive } from "../../persistence/Layers/ProjectionThreads.ts";
+import { ArtifactMetadataRepositoryLive } from "../../persistence/Layers/ArtifactMetadata.ts";
 import { ServerConfig } from "../../config.ts";
 import {
   OrchestrationProjectionPipeline,
@@ -65,6 +69,7 @@ export const ORCHESTRATION_PROJECTOR_NAMES = {
   threadTurns: "projection.thread-turns",
   checkpoints: "projection.checkpoints",
   pendingApprovals: "projection.pending-approvals",
+  artifacts: "projection.artifacts",
 } as const;
 
 type ProjectorName =
@@ -117,6 +122,20 @@ function extractActivityRequestId(payload: unknown): ApprovalRequestId | null {
   }
   const requestId = (payload as Record<string, unknown>).requestId;
   return typeof requestId === "string" ? ApprovalRequestId.make(requestId) : null;
+}
+
+function artifactKindForPath(relativePath: string): "document" | "pdf" | null {
+  const lowerPath = relativePath.toLowerCase();
+  if (lowerPath.endsWith(".docx")) return "document";
+  if (lowerPath.endsWith(".pdf")) return "pdf";
+  return null;
+}
+
+function artifactTitleFromFileName(fileName: string): string {
+  const baseName = fileName.replace(/\.(?:docx|pdf)$/i, "");
+  const words = baseName.replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+  if (words.length === 0) return "Untitled document";
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 }
 
 function isStalePendingApprovalFailureDetail(detail: string | null): boolean {
@@ -480,6 +499,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
     const projectionThreadSessionRepository = yield* ProjectionThreadSessionRepository;
     const projectionTurnRepository = yield* ProjectionTurnRepository;
     const projectionPendingApprovalRepository = yield* ProjectionPendingApprovalRepository;
+    const artifactMetadataRepository = yield* ArtifactMetadataRepository;
 
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -1606,6 +1626,160 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       }
     });
 
+    const indexArtifactFiles = Effect.fn("indexArtifactFiles")(function* (input: {
+      readonly thread: {
+        readonly threadId: ThreadId;
+        readonly projectId: ProjectId;
+        readonly title: string;
+        readonly worktreePath: string | null;
+      };
+      readonly project: { readonly title: string; readonly workspaceRoot: string };
+      readonly turnId: TurnId;
+      readonly checkpointTurnCount: number;
+      readonly files: ReadonlyArray<{ readonly path: string }>;
+      readonly completedAt: string;
+    }) {
+      const cwd = input.thread.worktreePath ?? input.project.workspaceRoot;
+
+      yield* Effect.forEach(
+        input.files,
+        (file) => {
+          const kind = artifactKindForPath(file.path);
+          if (kind === null) return Effect.void;
+
+          const relativePath = file.path.replaceAll("\\", "/");
+          const absolutePath = path.resolve(cwd, relativePath);
+          const pathFromRoot = path.relative(cwd, absolutePath);
+          if (pathFromRoot.startsWith("..") || path.isAbsolute(pathFromRoot)) {
+            return Effect.void;
+          }
+
+          return fileSystem.stat(absolutePath).pipe(
+            Effect.orElseSucceed(() => null),
+            Effect.flatMap((info) => {
+              if (info === null || info.type !== "File") {
+                return artifactMetadataRepository.deletePath({
+                  threadId: input.thread.threadId,
+                  relativePath,
+                });
+              }
+
+              const fileName = path.basename(relativePath);
+              const title = artifactTitleFromFileName(fileName);
+              return artifactMetadataRepository.upsert({
+                threadId: input.thread.threadId,
+                projectId: input.thread.projectId,
+                turnId: input.turnId,
+                checkpointTurnCount: input.checkpointTurnCount,
+                kind,
+                title,
+                fileName,
+                relativePath,
+                sizeBytes: Number(info.size),
+                searchText: [
+                  title,
+                  fileName,
+                  relativePath,
+                  input.project.title,
+                  input.thread.title,
+                  kind,
+                ]
+                  .join(" ")
+                  .toLowerCase(),
+                createdAt: input.completedAt,
+                updatedAt: input.completedAt,
+              });
+            }),
+          );
+        },
+        { concurrency: 4 },
+      ).pipe(Effect.asVoid);
+    });
+
+    const applyArtifactsProjection: ProjectorDefinition["apply"] = Effect.fn(
+      "applyArtifactsProjection",
+    )(function* (event, _attachmentSideEffects) {
+      if (event.type === "project.deleted") {
+        yield* artifactMetadataRepository.deleteByProjectId(event.payload.projectId);
+        return;
+      }
+      if (event.type === "thread.deleted") {
+        yield* artifactMetadataRepository.deleteByThreadId(event.payload.threadId);
+        return;
+      }
+      if (event.type !== "thread.turn-diff-completed" && event.type !== "thread.reverted") {
+        return;
+      }
+
+      const threadOption = yield* projectionThreadRepository.getById({
+        threadId: event.payload.threadId,
+      });
+      if (Option.isNone(threadOption)) return;
+      const thread = threadOption.value;
+      const projectOption = yield* projectionProjectRepository.getById({
+        projectId: thread.projectId,
+      });
+      if (Option.isNone(projectOption)) return;
+      const project = projectOption.value;
+
+      if (event.type === "thread.turn-diff-completed") {
+        yield* indexArtifactFiles({
+          thread,
+          project,
+          turnId: event.payload.turnId,
+          checkpointTurnCount: event.payload.checkpointTurnCount,
+          files: event.payload.files,
+          completedAt: event.payload.completedAt,
+        });
+        return;
+      }
+
+      yield* artifactMetadataRepository.deleteByThreadId(event.payload.threadId);
+      const retainedTurns = yield* projectionTurnRepository.listByThreadId({
+        threadId: event.payload.threadId,
+      });
+      const latestByPath = new Map<
+        string,
+        {
+          readonly turnId: TurnId;
+          readonly checkpointTurnCount: number;
+          readonly path: string;
+          readonly completedAt: string;
+        }
+      >();
+      for (const turn of retainedTurns) {
+        if (
+          turn.turnId === null ||
+          turn.checkpointTurnCount === null ||
+          turn.completedAt === null
+        ) {
+          continue;
+        }
+        for (const file of turn.checkpointFiles) {
+          if (artifactKindForPath(file.path) === null) continue;
+          latestByPath.set(file.path, {
+            turnId: turn.turnId,
+            checkpointTurnCount: turn.checkpointTurnCount,
+            path: file.path,
+            completedAt: turn.completedAt,
+          });
+        }
+      }
+      yield* Effect.forEach(
+        latestByPath.values(),
+        (artifact) =>
+          indexArtifactFiles({
+            thread,
+            project,
+            turnId: artifact.turnId,
+            checkpointTurnCount: artifact.checkpointTurnCount,
+            files: [{ path: artifact.path }],
+            completedAt: artifact.completedAt,
+          }),
+        { concurrency: 4 },
+      ).pipe(Effect.asVoid);
+    });
+
     const projectors: ReadonlyArray<ProjectorDefinition> = [
       {
         name: ORCHESTRATION_PROJECTOR_NAMES.projects,
@@ -1642,6 +1816,10 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       {
         name: ORCHESTRATION_PROJECTOR_NAMES.threads,
         apply: applyThreadsProjection,
+      },
+      {
+        name: ORCHESTRATION_PROJECTOR_NAMES.artifacts,
+        apply: applyArtifactsProjection,
       },
     ];
 
@@ -1746,4 +1924,5 @@ export const OrchestrationProjectionPipelineLive = Layer.effect(
   Layer.provideMerge(ProjectionTurnRepositoryLive),
   Layer.provideMerge(ProjectionPendingApprovalRepositoryLive),
   Layer.provideMerge(ProjectionStateRepositoryLive),
+  Layer.provideMerge(ArtifactMetadataRepositoryLive),
 );

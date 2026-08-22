@@ -22,7 +22,6 @@ import {
 import type { EnvironmentConnectionPresentation } from "@kairo/client-runtime/connection";
 import { serializeComposerFileLink } from "@kairo/shared/composerTrigger";
 import { createModelSelection, normalizeModelSlug } from "@kairo/shared/model";
-import { appendStudentArtifactPrompt } from "@kairo/shared/studentArtifacts";
 import {
   memo,
   type ReactNode,
@@ -124,9 +123,6 @@ import {
   submitComposerDraft,
 } from "./composerSubmission";
 import { ComposerPromptLengthValidation } from "./ComposerPromptLengthValidation";
-import { useProfessionalRole } from "../onboarding/useProfessionalRole";
-import { StudentArtifactGeneratorDialog } from "../student/StudentArtifactGeneratorDialog";
-import { onOpenStudentArtifactGenerator } from "../../studentArtifactBus";
 
 type ComposerCommandMenuPosition = {
   bottom: number;
@@ -231,7 +227,6 @@ import { toastManager } from "../ui/toast";
 import {
   BotIcon,
   CircleAlertIcon,
-  FileTextIcon,
   PencilRulerIcon,
   type LucideIcon,
   LockIcon,
@@ -713,8 +708,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     onExpandImage,
   } = props;
   const isSendDisabled = sendDisabledReason !== null;
-  const professionalRole = useProfessionalRole();
-  const isStudent = professionalRole === "student";
 
   // ------------------------------------------------------------------
   // Store subscriptions (prompt / images / terminal contexts)
@@ -998,7 +991,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const [composerMenuAnchor, setComposerMenuAnchor] = useState<HTMLDivElement | null>(null);
   const [isStashMenuOpen, setIsStashMenuOpen] = useState(false);
   const [isTasksDrawerOpen, setIsTasksDrawerOpen] = useState(false);
-  const [isStudentArtifactDialogOpen, setIsStudentArtifactDialogOpen] = useState(false);
   const [dismissedTasksTurnId, setDismissedTasksTurnId] = useState<TurnId | null>(null);
   const [stashPulse, setStashPulse] = useState<{ key: number; active: boolean }>({
     key: 0,
@@ -1096,17 +1088,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           label: "/model",
           description: "Switch response model for this thread",
         },
-        ...(isStudent
-          ? ([
-              {
-                id: "slash:document",
-                type: "slash-command",
-                command: "document",
-                label: "/document",
-                description: "Create a Word document or PDF artifact",
-              },
-            ] as const)
-          : []),
         ...(planModeUiEnabled
           ? ([
               {
@@ -1175,7 +1156,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     return [];
   }, [
     composerTrigger,
-    isStudent,
     planModeUiEnabled,
     selectedProvider,
     selectedProviderStatus,
@@ -1272,18 +1252,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     },
     [composerDraftTarget, promptRef, scheduleComposerFocus, setComposerDraftPrompt],
   );
-
-  const addStudentArtifactPrompt = useCallback(
-    (artifactPrompt: string) => {
-      setPromptFromTraits(appendStudentArtifactPrompt(promptRef.current, artifactPrompt));
-    },
-    [promptRef, setPromptFromTraits],
-  );
-
-  useEffect(() => {
-    if (!isStudent) return;
-    return onOpenStudentArtifactGenerator(() => setIsStudentArtifactDialogOpen(true));
-  }, [isStudent]);
 
   const providerTraitsMenuContent = renderProviderTraitsMenuContent({
     provider: selectedProvider,
@@ -1790,17 +1758,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         return;
       }
       if (item.type === "slash-command") {
-        if (item.command === "document") {
-          const applied = applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, "", {
-            expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
-            focusEditorAfterReplace: false,
-          });
-          if (applied) {
-            setComposerHighlightedItemId(null);
-            setIsStudentArtifactDialogOpen(true);
-          }
-          return;
-        }
         if (item.command === "model") {
           const applied = applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, "", {
             expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
@@ -3383,32 +3340,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     />
                   )}
 
-                  {isStudent ? (
-                    <>
-                      <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
-                      <Tooltip>
-                        <TooltipTrigger
-                          render={
-                            <ComposerControl
-                              type="button"
-                              className="shrink-0 text-secondary-label hover:text-foreground"
-                              aria-label="Create document artifact"
-                              onClick={() => setIsStudentArtifactDialogOpen(true)}
-                            />
-                          }
-                        >
-                          <ComposerControlIcon icon={FileTextIcon} />
-                          <span
-                            className={isComposerFooterCompact ? "sr-only" : "hidden lg:inline"}
-                          >
-                            Document
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipPopup side="top">Create Word document or PDF</TooltipPopup>
-                      </Tooltip>
-                    </>
-                  ) : null}
-
                   {isComposerFooterCompact ? (
                     <CompactComposerControlsMenu
                       interactionMode={interactionMode}
@@ -3484,11 +3415,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           </div>
         </div>
       </div>
-      <StudentArtifactGeneratorDialog
-        open={isStudentArtifactDialogOpen}
-        onOpenChange={setIsStudentArtifactDialogOpen}
-        onAddPrompt={addStudentArtifactPrompt}
-      />
     </form>
   );
 });
