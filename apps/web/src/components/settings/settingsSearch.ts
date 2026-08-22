@@ -104,6 +104,11 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/appearance",
   },
   {
+    id: "professional-role",
+    title: "Professional role",
+    to: "/settings/general",
+  },
+  {
     id: "project-grouping",
     title: "Project grouping",
     to: "/settings/general",
@@ -173,11 +178,6 @@ export const SETTINGS_SEARCH_ITEMS = [
   {
     id: "diagnostics",
     title: "Diagnostics",
-    to: "/settings/general",
-  },
-  {
-    id: "legacy-plan-mode",
-    title: "Plan mode (legacy)",
     to: "/settings/general",
   },
   {

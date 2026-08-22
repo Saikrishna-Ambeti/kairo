@@ -75,6 +75,7 @@ import {
   extractTodosAsPlan,
 } from "../acp/CursorAcpExtension.ts";
 import { type CursorAdapterShape } from "../Services/CursorAdapter.ts";
+import { applyStudyModeInstructions } from "../StudyModeInstructions.ts";
 import { resolveCursorAcpBaseModelId } from "./CursorProvider.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 const encodeUnknownJsonStringExit = Schema.encodeUnknownExit(Schema.fromJsonString(Schema.Unknown));
@@ -967,8 +968,12 @@ export function makeCursorAdapter(
           }
 
           const promptParts: Array<EffectAcpSchema.ContentBlock> = [];
-          if (input.input?.trim()) {
-            promptParts.push({ type: "text", text: input.input.trim() });
+          const promptText = applyStudyModeInstructions(
+            input.input?.trim() ?? "",
+            input.interactionMode,
+          );
+          if (promptText) {
+            promptParts.push({ type: "text", text: promptText });
           }
           if (input.attachments && input.attachments.length > 0) {
             for (const attachment of input.attachments) {

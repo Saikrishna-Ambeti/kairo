@@ -38,6 +38,7 @@ import {
   ProviderAdapterValidationError,
 } from "../Errors.ts";
 import { type OpenCodeAdapterShape } from "../Services/OpenCodeAdapter.ts";
+import { applyStudyModeInstructions } from "../StudyModeInstructions.ts";
 import {
   buildOpenCodePermissionRules,
   OpenCodeRuntime,
@@ -1455,7 +1456,7 @@ export function makeOpenCodeAdapter(
         });
       }
 
-      const text = input.input?.trim();
+      const text = applyStudyModeInstructions(input.input?.trim() ?? "", input.interactionMode);
       const fileParts = toOpenCodeFileParts({
         attachments: input.attachments,
         resolveAttachmentPath: (attachment) =>

@@ -25,6 +25,13 @@ import {
   type UnifiedSettings,
 } from "@kairo/contracts/settings";
 import { safeErrorLogAttributes } from "@kairo/client-runtime/errors";
+import {
+  PROFESSIONAL_ROLE_OTHER_STORAGE_KEY,
+  PROFESSIONAL_ROLE_STORAGE_KEY,
+  ProfessionalRoleOtherSchema,
+  ProfessionalRoleSchema,
+} from "~/components/onboarding/professionalRole";
+import { getLocalStorageItem } from "./useLocalStorage";
 import { ensureLocalApi } from "~/localApi";
 import {
   getThemeDefinition,
@@ -114,9 +121,27 @@ async function hydrateClientSettings(): Promise<void> {
       if (hydrationGeneration !== clientSettingsHydrationGeneration) {
         return;
       }
-      if (persistedSettings) {
-        replaceClientSettingsSnapshot({ ...DEFAULT_CLIENT_SETTINGS, ...persistedSettings });
+      let hydratedSettings = persistedSettings
+        ? { ...DEFAULT_CLIENT_SETTINGS, ...persistedSettings }
+        : DEFAULT_CLIENT_SETTINGS;
+      if (hydratedSettings.professionalRole === null) {
+        const legacyRole = getLocalStorageItem(
+          PROFESSIONAL_ROLE_STORAGE_KEY,
+          ProfessionalRoleSchema,
+        );
+        const legacyOtherRole =
+          getLocalStorageItem(PROFESSIONAL_ROLE_OTHER_STORAGE_KEY, ProfessionalRoleOtherSchema) ??
+          "";
+        if (legacyRole !== null) {
+          hydratedSettings = {
+            ...hydratedSettings,
+            professionalRole: legacyRole,
+            professionalRoleOther: legacyOtherRole,
+          };
+          await ensureLocalApi().persistence.setClientSettings(hydratedSettings);
+        }
       }
+      replaceClientSettingsSnapshot(hydratedSettings);
     } catch (error) {
       console.error(`${CLIENT_SETTINGS_PERSISTENCE_ERROR_SCOPE} hydrate failed`, {
         operation: "hydrate",

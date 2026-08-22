@@ -19,6 +19,7 @@ import {
 } from "./keybindings.ts";
 import { EditorId, RemoteOpenTarget } from "./editor.ts";
 import { ModelCapabilities } from "./model.ts";
+import { ProviderInteractionMode } from "./orchestration.ts";
 import { ProviderDriverKind, ProviderInstanceId } from "./providerInstance.ts";
 import { ProductSurfaceConfigWithDefault } from "./productSurface.ts";
 import { ServerSettings } from "./settings.ts";
@@ -171,6 +172,7 @@ export const ServerProvider = Schema.Struct({
   badgeLabel: Schema.optional(TrimmedNonEmptyString),
   continuation: Schema.optional(ServerProviderContinuation),
   showInteractionModeToggle: Schema.optional(Schema.Boolean),
+  supportedInteractionModes: Schema.optional(Schema.Array(ProviderInteractionMode)),
   requiresNewThreadForModelChange: Schema.optional(Schema.Boolean),
   enabled: Schema.Boolean,
   installed: Schema.Boolean,

@@ -32,6 +32,7 @@ import {
   MIN_PROMPT_FONT_SIZE,
   MIN_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
   MIN_TERMINAL_FONT_SIZE,
+  type ProfessionalRole,
 } from "@kairo/contracts/settings";
 import { resolveServerBackgroundActivitySettings } from "@kairo/shared/backgroundActivitySettings";
 import { createModelSelection } from "@kairo/shared/model";
@@ -68,8 +69,8 @@ import { useDesktopUpdateState } from "../../state/desktopUpdate";
 import {
   getCustomModelOptionsByInstance,
   resolveAppModelSelectionState,
-  withoutPlanAgentSelection,
 } from "../../modelSelection";
+import { PROFESSIONAL_ROLES } from "../onboarding/professionalRole";
 import {
   applyProviderInstanceSettings,
   deriveProviderInstanceEntries,
@@ -1645,7 +1646,6 @@ function AutoSettleDaysInput({
 // The legacy rows sit behind the fold, so a settings-search jump has to
 // expand the section before its target can mount and scroll.
 const LEGACY_FEATURE_TARGET_IDS: ReadonlySet<string> = new Set([
-  "legacy-plan-mode",
   "legacy-token-streaming",
   "legacy-sidebar",
 ]);
@@ -1687,41 +1687,6 @@ function LegacyFeaturesSection() {
         </CollapsibleTrigger>
         <CollapsiblePanel>
           <div className="relative space-y-1 overflow-visible pt-3 text-foreground">
-            <SettingsRow
-              {...searchableSetting("legacy-plan-mode")}
-              description="Brings back the Build/Plan toggle in the composer along with the /plan and /default commands and the Shift+Tab shortcut. While off, every thread runs in build mode."
-              control={
-                <Switch
-                  checked={settings.planModeEnabled}
-                  onCheckedChange={(checked) => {
-                    const planModeEnabled = Boolean(checked);
-                    const textGenerationModelSelection = withoutPlanAgentSelection(
-                      settings.textGenerationModelSelection,
-                    );
-                    const sourceControlWriterModelSelection = withoutPlanAgentSelection(
-                      settings.sourceControlWriterModelSelection,
-                    );
-                    updateSettings({
-                      planModeEnabled,
-                      ...(planModeEnabled
-                        ? {}
-                        : {
-                            ...(textGenerationModelSelection &&
-                            textGenerationModelSelection !== settings.textGenerationModelSelection
-                              ? { textGenerationModelSelection }
-                              : {}),
-                            ...(sourceControlWriterModelSelection &&
-                            sourceControlWriterModelSelection !==
-                              settings.sourceControlWriterModelSelection
-                              ? { sourceControlWriterModelSelection }
-                              : {}),
-                          }),
-                    });
-                  }}
-                  aria-label="Plan mode (legacy)"
-                />
-              }
-            />
             <SettingsRow
               {...searchableSetting("legacy-token-streaming")}
               description="Paints assistant output token by token instead of in complete chunks. Not recommended: it is significantly slower, and long responses become harder to follow. Kept only for compatibility with the old behavior."
@@ -1824,6 +1789,44 @@ export function GeneralSettingsPanel() {
   return (
     <SettingsPageContainer>
       <SettingsSection title="General">
+        <SettingsRow
+          {...searchableSetting("professional-role")}
+          description="Tailors features to how you use Kairo. Study Mode appears for student profiles."
+          control={
+            <div className="flex w-full flex-col gap-2 sm:w-56">
+              <Select
+                value={settings.professionalRole}
+                onValueChange={(value) =>
+                  updateSettings({ professionalRole: value as ProfessionalRole })
+                }
+              >
+                <SelectTrigger className="w-full" aria-label="Professional role">
+                  <SelectValue>
+                    {PROFESSIONAL_ROLES.find((role) => role.value === settings.professionalRole)
+                      ?.label ?? "Choose role"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectPopup align="end" alignItemWithTrigger={false}>
+                  {PROFESSIONAL_ROLES.map((role) => (
+                    <SelectItem key={role.value} value={role.value}>
+                      {role.label}
+                    </SelectItem>
+                  ))}
+                </SelectPopup>
+              </Select>
+              {settings.professionalRole === "other" ? (
+                <Input
+                  aria-label="Your profession"
+                  placeholder="e.g. Product designer"
+                  value={settings.professionalRoleOther}
+                  onChange={(event) =>
+                    updateSettings({ professionalRoleOther: event.currentTarget.value })
+                  }
+                />
+              ) : null}
+            </div>
+          }
+        />
         <SettingsRow
           {...searchableSetting("project-grouping")}
           description="Combine matching repositories across environments."
@@ -2337,7 +2340,7 @@ export function GeneralSettingsPanel() {
                 onPromptChange={() => {}}
                 modelOptions={textGenModelOptions}
                 allowPromptInjectedEffort={false}
-                planModeEnabled={settings.planModeEnabled}
+                planModeEnabled
                 triggerVariant="outline"
                 triggerClassName="min-w-0 max-w-none shrink-0 text-foreground/90 hover:text-foreground"
                 onModelOptionsChange={(nextOptions) => {

@@ -23,6 +23,8 @@ const clientSettings: ClientSettings = {
   dismissedProviderUpdateNotificationKeys: [],
   diffIgnoreWhitespace: true,
   onboardingCompleted: true,
+  professionalRole: null,
+  professionalRoleOther: "",
   environmentIdentificationMode: "artwork",
   favorites: [],
   fontFamilyCode: "",

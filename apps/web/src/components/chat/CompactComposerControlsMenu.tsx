@@ -13,10 +13,10 @@ import {
 
 export const CompactComposerControlsMenu = memo(function CompactComposerControlsMenu(props: {
   interactionMode: ProviderInteractionMode;
+  interactionModes: ReadonlyArray<ProviderInteractionMode>;
   runtimeMode: RuntimeMode;
-  showInteractionModeToggle: boolean;
   traitsMenuContent?: ReactNode;
-  onToggleInteractionMode: () => void;
+  onInteractionModeChange: (mode: ProviderInteractionMode) => void;
   onRuntimeModeChange: (mode: RuntimeMode) => void;
 }) {
   return (
@@ -40,18 +40,25 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
             <MenuDivider />
           </>
         ) : null}
-        {props.showInteractionModeToggle ? (
+        {props.interactionModes.length > 1 ? (
           <>
             <div className="px-2 py-1.5 font-medium text-muted-foreground text-xs">Mode</div>
             <MenuRadioGroup
               value={props.interactionMode}
               onValueChange={(value) => {
                 if (!value || value === props.interactionMode) return;
-                props.onToggleInteractionMode();
+                props.onInteractionModeChange(value as ProviderInteractionMode);
               }}
             >
-              <MenuRadioItem value="default">Chat</MenuRadioItem>
-              <MenuRadioItem value="plan">Plan</MenuRadioItem>
+              {props.interactionModes.includes("default") ? (
+                <MenuRadioItem value="default">Build</MenuRadioItem>
+              ) : null}
+              {props.interactionModes.includes("plan") ? (
+                <MenuRadioItem value="plan">Plan</MenuRadioItem>
+              ) : null}
+              {props.interactionModes.includes("study") ? (
+                <MenuRadioItem value="study">Study</MenuRadioItem>
+              ) : null}
             </MenuRadioGroup>
             <MenuDivider />
           </>

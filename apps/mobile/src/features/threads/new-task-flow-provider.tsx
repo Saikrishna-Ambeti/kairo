@@ -70,14 +70,16 @@ import {
 } from "../../state/use-remote-environment-registry";
 import { EnvironmentProject } from "@kairo/client-runtime/state/shell";
 import { type VcsRef } from "@kairo/client-runtime/state/vcs";
+import { resolveVisibleInteractionModes } from "@kairo/client-runtime/interactionModes";
+import { useAtomValue } from "@effect/atom-react";
+import { AsyncResult } from "effect/unstable/reactivity";
 import {
   buildHomeProjectScopes,
   sortHomeProjectScopes,
   type HomeProjectScope,
 } from "../home/homeThreadList";
 import { useMobileProjectGroupingSettings } from "../../state/project-grouping";
-import { resolvePendingTaskInteractionMode } from "./legacy-plan-mode";
-import { useLegacyPlanModeState } from "./use-legacy-plan-mode-enabled";
+import { mobilePreferencesAtom } from "../../state/preferences";
 import {
   resolveNewTaskBranchWorktreePath,
   resolveNewTaskLocalWorkspaceSelection,
@@ -143,7 +145,7 @@ type NewTaskFlowContextValue = {
   readonly currentCheckoutBranchName: string | null;
   readonly runtimeMode: RuntimeMode;
   readonly interactionMode: ProviderInteractionMode;
-  readonly planModeEnabled: boolean;
+  readonly interactionModes: ReadonlyArray<ProviderInteractionMode>;
   readonly expandedProvider: string | null;
   readonly environments: ReadonlyArray<{
     readonly environmentId: EnvironmentId;
@@ -194,7 +196,9 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
   const threads = useThreadShells();
   const { savedConnectionsById } = useSavedRemoteConnections();
   const groupingSettings = useMobileProjectGroupingSettings();
-  const { enabled: planModeEnabled, loaded: planModePreferenceLoaded } = useLegacyPlanModeState();
+  const preferences = useAtomValue(mobilePreferencesAtom);
+  const studentProfile =
+    AsyncResult.isSuccess(preferences) && preferences.value.professionalRole === "student";
   const projectScopes = useMemo(
     () =>
       sortHomeProjectScopes({
@@ -401,10 +405,6 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
     selectedEnvironmentServerConfig?.settings.newWorktreesStartFromOrigin ??
     true;
   const runtimeMode = selectedProjectDraft.runtimeMode ?? DEFAULT_RUNTIME_MODE;
-  const interactionMode = planModeEnabled
-    ? (selectedProjectDraft.interactionMode ?? DEFAULT_PROVIDER_INTERACTION_MODE)
-    : DEFAULT_PROVIDER_INTERACTION_MODE;
-
   // Stored selections only count while their provider is usable on the
   // server; otherwise the server's default model wins instead of silently
   // targeting a disabled provider. The draft selection is an explicit pick
@@ -444,13 +444,23 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
         option.selection.instanceId === selectedModel.instanceId &&
         option.selection.model === selectedModel.model,
     ) ?? null;
-  const selectedProviderSkills = useMemo(
+  const selectedProviderStatus = useMemo(
     () =>
       selectedEnvironmentServerConfig?.providers.find(
         (provider) => provider.instanceId === selectedModel?.instanceId,
-      )?.skills ?? [],
+      ) ?? null,
     [selectedEnvironmentServerConfig, selectedModel?.instanceId],
   );
+  const selectedProviderSkills = selectedProviderStatus?.skills ?? [];
+  const interactionModes = useMemo(
+    () => resolveVisibleInteractionModes({ provider: selectedProviderStatus, studentProfile }),
+    [selectedProviderStatus, studentProfile],
+  );
+  const requestedInteractionMode =
+    selectedProjectDraft.interactionMode ?? DEFAULT_PROVIDER_INTERACTION_MODE;
+  const interactionMode = interactionModes.includes(requestedInteractionMode)
+    ? requestedInteractionMode
+    : DEFAULT_PROVIDER_INTERACTION_MODE;
   const setSelectedModelKey = useCallback(
     // Options ride along in the same write: a follow-up setSelectedModelOptions
     // call would rebuild the selection from the stale pre-switch model.
@@ -866,12 +876,15 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
         attachments: draft.attachments,
         modelSelection: draftModelSelection,
         runtimeMode: draft.runtimeMode ?? DEFAULT_RUNTIME_MODE,
-        interactionMode: resolvePendingTaskInteractionMode({
-          preferenceLoaded: planModePreferenceLoaded,
-          planModeEnabled,
-          draftInteractionMode: draft.interactionMode,
-          queuedInteractionMode: editingPendingTask?.interactionMode,
-        }),
+        interactionMode: interactionModes.includes(
+          draft.interactionMode ??
+            editingPendingTask?.interactionMode ??
+            DEFAULT_PROVIDER_INTERACTION_MODE,
+        )
+          ? (draft.interactionMode ??
+            editingPendingTask?.interactionMode ??
+            DEFAULT_PROVIDER_INTERACTION_MODE)
+          : DEFAULT_PROVIDER_INTERACTION_MODE,
         creation: {
           projectId: selectedProject.id,
           ...(projectTitle !== undefined ? { projectTitle } : {}),
@@ -900,8 +913,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       selectedModel,
       selectedProject,
       selectedProjectDraftKey,
-      planModeEnabled,
-      planModePreferenceLoaded,
+      interactionModes,
       startFromOrigin,
       workspaceMode,
     ],
@@ -1021,7 +1033,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       currentCheckoutBranchName,
       runtimeMode,
       interactionMode,
-      planModeEnabled,
+      interactionModes,
       expandedProvider,
       environments,
       selectedProject,
@@ -1073,7 +1085,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       filteredBranches,
       finishEditingPendingTask,
       interactionMode,
-      planModeEnabled,
+      interactionModes,
       loadBranches,
       loadMoreBranches,
       projectScopes,

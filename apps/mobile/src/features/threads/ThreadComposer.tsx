@@ -7,6 +7,9 @@ import type {
   RuntimeMode,
   ServerConfig as KairoServerConfig,
 } from "@kairo/contracts";
+import { resolveVisibleInteractionModes } from "@kairo/client-runtime/interactionModes";
+import { useAtomValue } from "@effect/atom-react";
+import { AsyncResult } from "effect/unstable/reactivity";
 import {
   detectComposerTrigger,
   replaceTextRange,
@@ -37,6 +40,7 @@ import { useThemeColor } from "../../lib/useThemeColor";
 import { themeColorWithAlpha } from "../../lib/mobileTheme";
 import { armAgentAwarenessLiveActivityForLocalWork } from "../agent-awareness/remoteRegistration";
 import { scopedThreadKey } from "../../lib/scopedEntities";
+import { mobilePreferencesAtom } from "../../state/preferences";
 
 import { AppText as Text } from "../../components/AppText";
 import { ComposerAttachmentStrip } from "../../components/ComposerAttachmentStrip";
@@ -355,6 +359,21 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
       ) ?? null
     );
   }, [props.serverConfig, props.selectedThread.modelSelection.instanceId]);
+  const preferences = useAtomValue(mobilePreferencesAtom);
+  const studentProfile =
+    AsyncResult.isSuccess(preferences) && preferences.value.professionalRole === "student";
+  const interactionModes = useMemo(
+    () => resolveVisibleInteractionModes({ provider: selectedProviderStatus, studentProfile }),
+    [selectedProviderStatus, studentProfile],
+  );
+  const interactionMode = interactionModes.includes(props.selectedThread.interactionMode)
+    ? props.selectedThread.interactionMode
+    : "default";
+  const interactionModeLabel =
+    interactionMode === "plan" ? "Plan" : interactionMode === "study" ? "Study" : "Build";
+  const nextInteractionMode =
+    interactionModes[(interactionModes.indexOf(interactionMode) + 1) % interactionModes.length] ??
+    "default";
 
   // ── Trigger detection ────────────────────────────────────
   const [composerSelection, setComposerSelection] = useState(() => ({
@@ -402,20 +421,39 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
           label: "/model",
           description: "Switch model",
         },
-        {
-          id: "cmd:plan",
-          type: "slash-command" as const,
-          command: "plan",
-          label: "/plan",
-          description: "Switch to plan mode",
-        },
-        {
-          id: "cmd:default",
-          type: "slash-command" as const,
-          command: "default",
-          label: "/default",
-          description: "Switch to default mode",
-        },
+        ...(interactionModes.includes("plan")
+          ? [
+              {
+                id: "cmd:plan",
+                type: "slash-command" as const,
+                command: "plan",
+                label: "/plan",
+                description: "Switch to plan mode",
+              },
+            ]
+          : []),
+        ...(interactionModes.includes("study")
+          ? [
+              {
+                id: "cmd:study",
+                type: "slash-command" as const,
+                command: "study",
+                label: "/study",
+                description: "Switch to Study Mode",
+              },
+            ]
+          : []),
+        ...(interactionModes.length > 1
+          ? [
+              {
+                id: "cmd:default",
+                type: "slash-command" as const,
+                command: "default",
+                label: "/default",
+                description: "Switch to default mode",
+              },
+            ]
+          : []),
       ];
       const builtIn = allBuiltIn.filter((item) => item.command.includes(q));
 
@@ -542,7 +580,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     }
 
     return [];
-  }, [composerTrigger, pathSearch.entries, selectedProviderStatus]);
+  }, [composerTrigger, interactionModes, pathSearch.entries, selectedProviderStatus]);
 
   // ── Handle command selection ──────────────────────────────
   const { onChangeDraftMessage, onUpdateInteractionMode, draftMessage, onSendMessage } = props;
@@ -578,7 +616,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
 
       if (
         item.type === "slash-command" &&
-        (item.command === "plan" || item.command === "default")
+        (item.command === "plan" || item.command === "study" || item.command === "default")
       ) {
         const result = replaceTextRange(
           draftMessage,
@@ -883,6 +921,23 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
                   maxWidth={152}
                   onPress={openSettings}
                 />
+                {interactionModes.length > 1 ? (
+                  <ComposerInlineControl
+                    accessibilityHint={`Switches to ${nextInteractionMode === "plan" ? "Plan" : nextInteractionMode === "study" ? "Study" : "Build"} mode`}
+                    accessibilityLabel={`Interaction mode: ${interactionModeLabel}`}
+                    emphasized
+                    icon={
+                      interactionMode === "plan"
+                        ? { ios: "list.bullet.clipboard", android: "auto_awesome" }
+                        : interactionMode === "study"
+                          ? { ios: "graduationcap", android: "school" }
+                          : { ios: "hammer", android: "construction" }
+                    }
+                    label={interactionModeLabel}
+                    onPress={() => props.onUpdateInteractionMode(nextInteractionMode)}
+                    showChevron={false}
+                  />
+                ) : null}
                 {showStopAction ? (
                   <ComposerToolbarButton
                     accessibilityLabel="Stop"

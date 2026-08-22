@@ -39,6 +39,10 @@
       "types": "./src/providerSkills.ts",
       "default": "./src/providerSkills.ts"
     },
+    "./interactionModes": {
+      "types": "./src/interactionModes.ts",
+      "default": "./src/interactionModes.ts"
+    },
     "./relay": {
       "types": "./src/relay/index.ts",
       "default": "./src/relay/index.ts"
