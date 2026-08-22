@@ -6,7 +6,7 @@ import type {
 import { Platform, View } from "react-native";
 
 import { AppText as Text } from "./AppText";
-import { KairoWordmark } from "./KairoWordmark";
+import { KairoMark } from "./KairoMark";
 import { IPAD_HOME_TITLE_OFFSET } from "../lib/layoutMetrics";
 import { resolveMobileStageLabel } from "../lib/mobileBranding";
 import { useThemeColor } from "../lib/useThemeColor";
@@ -36,7 +36,6 @@ export function CompactBrandTitle(
     readonly nativeLeadingItem?: boolean;
   } = {},
 ) {
-  const iconColor = useThemeColor("--color-icon");
   const mutedColor = useThemeColor("--color-foreground-muted");
   const subtleColor = useThemeColor("--color-subtle");
   const stageLabel = resolveMobileStageLabel(Constants.expoConfig?.extra?.appVariant);
@@ -55,17 +54,20 @@ export function CompactBrandTitle(
         marginLeft: titleOffset,
       }}
     >
-      <KairoWordmark color={iconColor} height={15} />
-      <Text
-        style={{
-          color: mutedColor,
-          fontFamily: "DMSans-Medium",
-          fontSize: 21,
-          letterSpacing: -0.5,
-        }}
-      >
-        Code
-      </Text>
+      <View style={{ alignItems: "center", flexDirection: "row" }}>
+        <KairoMark size={22} />
+        <Text
+          style={{
+            color: mutedColor,
+            fontFamily: "DMSans-Medium",
+            fontSize: 21,
+            letterSpacing: -0.5,
+            marginLeft: -1,
+          }}
+        >
+          airo
+        </Text>
+      </View>
       <View
         style={{
           backgroundColor: subtleColor,
