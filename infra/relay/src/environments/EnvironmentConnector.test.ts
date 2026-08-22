@@ -161,8 +161,8 @@ function connectorTestLayer(
     request: HttpClientRequest.HttpClientRequest,
   ) => Effect.Effect<HttpClientResponse.HttpClientResponse>,
   options?: {
-    readonly links?: EnvironmentLinks.EnvironmentLinksShape;
-    readonly allocations?: ManagedEndpointAllocations.ManagedEndpointAllocationsShape;
+    readonly links?: EnvironmentLinks.EnvironmentLinks["Service"];
+    readonly allocations?: ManagedEndpointAllocations.ManagedEndpointAllocations["Service"];
   },
 ) {
   return EnvironmentConnector.layer.pipe(
@@ -174,7 +174,7 @@ function connectorTestLayer(
         options?.allocations ?? makeAllocations(),
       ),
     ),
-    Layer.provide(Layer.succeed(RelayConfiguration.RelayConfiguration, settings)),
+    Layer.provide(RelayConfiguration.layer(settings)),
     Layer.provide(Layer.succeed(HttpClient.HttpClient, HttpClient.make(execute))),
   );
 }
@@ -188,21 +188,25 @@ function makeAllocations(
     tunnelName: "tunnel-name",
     dnsRecordId: "dns-record-id",
     readyAt: "2026-05-25T00:00:00.000Z",
+    updatedAt: "2026-05-25T00:00:00.000Z",
   },
-): ManagedEndpointAllocations.ManagedEndpointAllocationsShape {
+): ManagedEndpointAllocations.ManagedEndpointAllocations["Service"] {
   return {
     get: () => Effect.succeed(allocation),
     reserve: () => Effect.die("unused"),
     recordTunnel: () => Effect.die("unused"),
     recordDns: () => Effect.die("unused"),
     markReady: () => Effect.die("unused"),
+    claimRelease: () => Effect.die("unused"),
+    claimDeprovision: () => Effect.die("unused"),
     remove: () => Effect.die("unused"),
+    removeClaimed: () => Effect.die("unused"),
   };
 }
 
 function makeLinks(
   overrides: Partial<EnvironmentLinks.RelayLinkedEnvironmentRecord> = {},
-): EnvironmentLinks.EnvironmentLinksShape {
+): EnvironmentLinks.EnvironmentLinks["Service"] {
   return {
     upsert: () => Effect.void,
     listUsersForEnvironment: () => Effect.succeed([]),
@@ -467,6 +471,7 @@ describe("EnvironmentConnector", () => {
             tunnelName: "tunnel-name",
             dnsRecordId: "dns-record-id",
             readyAt: null,
+            updatedAt: "2026-05-25T00:00:00.000Z",
           }),
         }),
       ),
@@ -535,6 +540,7 @@ describe("EnvironmentConnector", () => {
         environmentId: "env-connector-test",
         status: "offline",
         error: "Managed endpoint health request failed: Environment is unavailable.",
+        traceId: expect.any(String),
       });
     }).pipe(Effect.provide(connectorTestLayer(execute)));
   });

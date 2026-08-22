@@ -14,4 +14,4 @@ export {
   normalizeProjectPathForComparison,
   normalizeProjectPathForDispatch,
   resolveProjectPathForDispatch,
-} from "@kairo/client-runtime";
+} from "@kairo/client-runtime/state/projects";

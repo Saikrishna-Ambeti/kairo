@@ -53,17 +53,19 @@ describe("DesktopEnvironment", () => {
       assert.equal(environment.isDevelopment, true);
       assert.equal(environment.appDataDirectory, "/Users/alice/Library/Application Support");
       assert.equal(environment.baseDir, "/tmp/kairo");
-      assert.equal(environment.stateDir, "/tmp/kairo/dev");
-      assert.equal(environment.desktopSettingsPath, "/tmp/kairo/dev/desktop-settings.json");
-      assert.equal(environment.clientSettingsPath, "/tmp/kairo/dev/client-settings.json");
+      assert.equal(environment.stateDir, "/tmp/kairo/userdata");
+      assert.equal(environment.desktopSettingsPath, "/tmp/kairo/userdata/desktop-settings.json");
+      assert.equal(environment.clientSettingsPath, "/tmp/kairo/userdata/client-settings.json");
       assert.equal(
         environment.savedEnvironmentRegistryPath,
-        "/tmp/kairo/dev/saved-environments.json",
+        "/tmp/kairo/userdata/saved-environments.json",
       );
-      assert.equal(environment.serverSettingsPath, "/tmp/kairo/dev/settings.json");
-      assert.equal(environment.logDir, "/tmp/kairo/dev/logs");
+      assert.equal(environment.serverSettingsPath, "/tmp/kairo/userdata/settings.json");
+      assert.equal(environment.logDir, "/tmp/kairo/userdata/logs");
+      assert.equal(environment.browserArtifactsDir, "/tmp/kairo/userdata/browser-artifacts");
       assert.equal(environment.rootDir, "/repo");
       assert.equal(environment.appRoot, "/repo");
+      assert.equal(environment.serverRoot, "/repo");
       assert.equal(environment.backendEntryPath, "/repo/apps/server/dist/bin.mjs");
       assert.equal(environment.backendCwd, "/repo");
       assert.equal(environment.appUserModelId, "com.kairo.app.dev");
@@ -83,7 +85,7 @@ describe("DesktopEnvironment", () => {
     }),
   );
 
-  it.effect("derives production state paths under userdata", () =>
+  it.effect("stores production state under userdata in an explicit home", () =>
     Effect.gen(function* () {
       const environment = yield* makeEnvironment(
         {},
@@ -95,7 +97,39 @@ describe("DesktopEnvironment", () => {
       assert.equal(environment.isDevelopment, false);
       assert.equal(environment.stateDir, "/tmp/kairo/userdata");
       assert.equal(environment.logDir, "/tmp/kairo/userdata/logs");
+      assert.equal(environment.browserArtifactsDir, "/tmp/kairo/userdata/browser-artifacts");
       assert.equal(environment.serverSettingsPath, "/tmp/kairo/userdata/settings.json");
+    }),
+  );
+
+  it.effect("uses the packaged Windows server sidecar as the backend root", () =>
+    Effect.gen(function* () {
+      const environment = yield* makeEnvironment({
+        platform: "win32",
+        isPackaged: true,
+        appPath: "/install/resources/app.asar",
+        resourcesPath: "/install/resources",
+      });
+
+      assert.equal(environment.appRoot, "/install/resources/app.asar");
+      assert.equal(environment.serverRoot, "/install/resources/server.asar");
+      assert.equal(
+        environment.backendEntryPath,
+        "/install/resources/server.asar/apps/server/dist/bin.mjs",
+      );
+    }),
+  );
+
+  it.effect("keeps implicit development state separate from production state", () =>
+    Effect.gen(function* () {
+      const development = yield* makeEnvironment(
+        {},
+        { VITE_DEV_SERVER_URL: "http://localhost:5173" },
+      );
+      const production = yield* makeEnvironment();
+
+      assert.equal(development.stateDir, "/Users/alice/.kairo/dev");
+      assert.equal(production.stateDir, "/Users/alice/.kairo/userdata");
     }),
   );
 

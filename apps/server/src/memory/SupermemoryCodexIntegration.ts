@@ -23,8 +23,9 @@ const REQUIRED_SCRIPT_NAMES = [
   "search-memory.js",
 ] as const;
 
-const decodeJsonString = Schema.decodeEffect(Schema.UnknownFromJsonString);
-const encodeJsonString = Schema.encodeEffect(Schema.UnknownFromJsonString);
+const UnknownFromJsonString = Schema.fromJsonString(Schema.Unknown);
+const decodeJsonString = Schema.decodeEffect(UnknownFromJsonString);
+const encodeJsonString = Schema.encodeEffect(UnknownFromJsonString);
 
 export interface CodexSupermemoryIntegrationState {
   readonly homePath: string;

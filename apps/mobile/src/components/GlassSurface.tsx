@@ -1,12 +1,23 @@
 import { GlassView, isGlassEffectAPIAvailable } from "expo-glass-effect";
 import type { ReactNode } from "react";
-import { Platform, useColorScheme, View, type ViewProps, type ViewStyle } from "react-native";
+import {
+  Platform,
+  View,
+  type ColorValue,
+  type StyleProp,
+  type ViewProps,
+  type ViewStyle,
+} from "react-native";
+import { useThemeColor } from "../lib/useThemeColor";
+import { useAppearancePreferences } from "../features/settings/appearance/AppearancePreferencesProvider";
 
-export interface GlassSurfaceProps extends ViewProps {
+interface GlassSurfaceProps extends Omit<ViewProps, "className"> {
   readonly children: ReactNode;
   readonly glassEffectStyle?: "clear" | "regular" | "none";
-  readonly tintColor?: string;
+  readonly tintColor?: ColorValue;
   readonly chrome?: "default" | "none";
+  /** Styling used only when native Liquid Glass is unavailable. */
+  readonly fallbackStyle?: StyleProp<ViewStyle>;
 }
 
 export function GlassSurface({
@@ -14,28 +25,23 @@ export function GlassSurface({
   glassEffectStyle = "regular",
   chrome = "default",
   tintColor,
+  fallbackStyle,
   style,
   ...props
 }: GlassSurfaceProps) {
-  const isDarkMode = useColorScheme() === "dark";
+  const { themeAppearance } = useAppearancePreferences();
+  const isDarkMode = themeAppearance === "dark";
+  const borderColor = useThemeColor("--color-border");
+  const glassSurface = useThemeColor("--color-glass-surface");
+  const glassTint = useThemeColor("--color-glass-tint");
   const supportsGlass = Platform.OS === "ios" && isGlassEffectAPIAvailable();
   const surfaceStyle: ViewStyle = {
     borderRadius: 32,
     overflow: "hidden",
     borderWidth: chrome === "none" ? 0 : 1,
-    borderColor:
-      chrome === "none"
-        ? "transparent"
-        : isDarkMode
-          ? "rgba(255,255,255,0.08)"
-          : "rgba(226,232,240,0.9)",
-    backgroundColor:
-      chrome === "none"
-        ? "transparent"
-        : isDarkMode
-          ? "rgba(15,23,42,0.78)"
-          : "rgba(255,255,255,0.72)",
-    shadowColor: chrome === "none" ? "transparent" : "#020617",
+    borderColor: chrome === "none" ? "transparent" : borderColor,
+    backgroundColor: chrome === "none" ? "transparent" : glassSurface,
+    shadowColor: chrome === "none" ? "transparent" : "#000000",
     shadowOpacity: chrome === "none" ? 0 : isDarkMode ? 0.22 : 0.08,
     shadowRadius: chrome === "none" ? 0 : 28,
     shadowOffset:
@@ -56,7 +62,7 @@ export function GlassSurface({
       <GlassView
         {...props}
         glassEffectStyle={glassEffectStyle}
-        tintColor={tintColor ?? (isDarkMode ? "rgba(15,23,42,0.18)" : "rgba(255,255,255,0.18)")}
+        tintColor={String(tintColor ?? glassTint)}
         colorScheme={isDarkMode ? "dark" : "light"}
         style={[surfaceStyle, style]}
       >
@@ -66,7 +72,7 @@ export function GlassSurface({
   }
 
   return (
-    <View {...props} style={[surfaceStyle, style]}>
+    <View {...props} style={[surfaceStyle, fallbackStyle, style]}>
       {children}
     </View>
   );

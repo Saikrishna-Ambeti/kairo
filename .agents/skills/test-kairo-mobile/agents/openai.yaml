@@ -1,0 +1,4 @@
+interface:
+  display_name: "Test Kairo Mobile"
+  short_description: "Test Kairo on iOS or Android"
+  default_prompt: "Use $test-kairo-mobile to launch Kairo against an isolated backend and verify the affected flow on an available simulator or emulator."

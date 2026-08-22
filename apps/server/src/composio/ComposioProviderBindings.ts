@@ -5,6 +5,8 @@ import type {
   ProviderInstanceId,
   ServerSettings,
 } from "@kairo/contracts";
+import { HostProcessEnvironment, HostProcessPlatform } from "@kairo/shared/hostProcess";
+import * as Effect from "effect/Effect";
 
 function mergeGeneratedEnvironment(
   existing: ProviderInstanceConfig["environment"],
@@ -17,13 +19,19 @@ function mergeGeneratedEnvironment(
   ];
 }
 
-function prependPath(installDir: string): string {
-  const delimiter = process.platform === "win32" ? ";" : ":";
-  return [installDir, process.env.PATH].filter(Boolean).join(delimiter);
+function prependPath(
+  installDir: string,
+  platform: NodeJS.Platform,
+  environment: NodeJS.ProcessEnv,
+): string {
+  const delimiter = platform === "win32" ? ";" : ":";
+  return [installDir, environment.PATH].filter(Boolean).join(delimiter);
 }
 
 export function buildComposioProviderEnvironment(input: {
   readonly installDir?: string | undefined;
+  readonly platform: NodeJS.Platform;
+  readonly environment: NodeJS.ProcessEnv;
 }): ReadonlyArray<ProviderInstanceEnvironmentVariable> {
   if (!input.installDir) return [];
   return [
@@ -34,23 +42,25 @@ export function buildComposioProviderEnvironment(input: {
     },
     {
       name: "PATH",
-      value: prependPath(input.installDir),
+      value: prependPath(input.installDir, input.platform, input.environment),
       sensitive: false,
     },
   ];
 }
 
-export function applyComposioProviderBindings(
+export const applyComposioProviderBindings = Effect.fn(function* (
   settings: ServerSettings,
   configMap: ProviderInstanceConfigMap,
-): ProviderInstanceConfigMap {
+) {
   const composio = settings.integrations.composio;
   if (!composio.enabled || composio.providerInstanceIds.length === 0) {
     return configMap;
   }
 
-  const installDir = process.env.COMPOSIO_INSTALL_DIR || `${process.env.HOME ?? ""}/.composio`;
-  const generated = buildComposioProviderEnvironment({ installDir });
+  const platform = yield* HostProcessPlatform;
+  const environment = yield* HostProcessEnvironment;
+  const installDir = environment.COMPOSIO_INSTALL_DIR || `${environment.HOME ?? ""}/.composio`;
+  const generated = buildComposioProviderEnvironment({ installDir, platform, environment });
   if (generated.length === 0) return configMap;
 
   const selectedIds = new Set(composio.providerInstanceIds);
@@ -63,4 +73,4 @@ export function applyComposioProviderBindings(
     };
   }
   return merged as ProviderInstanceConfigMap;
-}
+});

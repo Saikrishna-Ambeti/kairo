@@ -1,0 +1,37 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="paper" x1="18" y1="2" x2="112" y2="126" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#65C5FF"/>
+      <stop offset=".48" stop-color="#347CEF"/>
+      <stop offset="1" stop-color="#102A91"/>
+    </linearGradient>
+    <linearGradient id="draftBeam" x1="9" y1="112" x2="117" y2="16" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D9FAFF" stop-opacity="0"/>
+      <stop offset=".52" stop-color="#B9F3FF" stop-opacity=".24"/>
+      <stop offset="1" stop-color="#D9FAFF" stop-opacity="0"/>
+    </linearGradient>
+    <pattern id="minorGrid" width="4" height="4" patternUnits="userSpaceOnUse">
+      <path d="M4 0H0V4" stroke="#D9F7FF" stroke-width=".18" opacity=".34"/>
+    </pattern>
+    <pattern id="majorGrid" width="16" height="16" patternUnits="userSpaceOnUse">
+      <rect width="16" height="16" fill="url(#minorGrid)"/>
+      <path d="M16 0H0V16" stroke="#F0FCFF" stroke-width=".34" opacity=".5"/>
+    </pattern>
+    <clipPath id="frame"><rect width="128" height="128" rx="10"/></clipPath>
+  </defs>
+  <g clip-path="url(#frame)">
+    <rect width="128" height="128" fill="url(#paper)"/>
+    <rect x="4" y="4" width="120" height="120" fill="url(#majorGrid)"/>
+    <path d="M-8 101L54 17H73L10 101H-8Z" fill="url(#draftBeam)"/>
+    <path d="M68 128L128 49V77L89 128H68Z" fill="#17378E" fill-opacity=".24"/>
+    <path d="M4 64H124M64 4V124" stroke="#F0FCFF" stroke-width=".3" opacity=".44"/>
+    <path d="M8 28H54M8 25V31M54 25V31M76 102H116M76 99V105M116 99V105" stroke="#DBF8FF" stroke-width=".48" opacity=".78"/>
+    <path d="M88 39L112 63L88 87L64 63L88 39Z" fill="#8BE6FF" fill-opacity=".07" stroke="#D5F9FF" stroke-width=".48" opacity=".7"/>
+    <path d="M88 35V91M60 63H116" stroke="#D5F9FF" stroke-width=".28" stroke-dasharray="1.4 1.8" opacity=".5"/>
+    <g stroke="#DDF7FF" stroke-linecap="round">
+      <path d="M17 17V21M15 19H19M105 17V21M103 19H107M114 108V112M112 110H116" stroke-width=".44" opacity=".8"/>
+      <path d="M14 107L24 99M18 112L29 103M103 27L114 18M107 31L119 21" stroke-width=".4" opacity=".24"/>
+    </g>
+    <rect x="5.75" y="5.75" width="116.5" height="116.5" rx="5.5" stroke="#F1FCFF" stroke-width=".5" opacity=".62"/>
+  </g>
+</svg>

@@ -1,7 +1,7 @@
 # Kairo Connect Relay
 
-> [!WARNING]
-> Kairo Connect is currently in private beta. Join the waitlist in the app under Settings > Kairo Connect.
+> [!NOTE]
+> Sign in to Kairo Connect from the app under Settings > Connections.
 
 The relay is the hosted control plane for Kairo Connect. It helps clients discover and connect to
 remote environments, manages the cloud-side records needed for those connections, and delivers
@@ -9,7 +9,7 @@ optional mobile notifications and Live Activities.
 
 The relay is intentionally not in the hot path for normal Kairo traffic. After a client connects,
 regular API and WebSocket traffic goes directly between that client and the selected environment.
-See the [Kairo Connect architecture overview](../../docs/cloud/kairo-connect-auth-flow.html) for the larger system
+See the [Kairo Connect architecture overview](../../docs/internals/kairo-code-connect-auth-flow.html) for the larger system
 design.
 
 ## Responsibilities
@@ -25,7 +25,7 @@ The relay currently owns:
 - Persisting relay state and exposing relay-specific traces for diagnostics.
 
 The environment server and relay have separate credentials and trust boundaries. Read
-[Environment Authentication Profile](../../docs/environment-auth.md) before changing token,
+[Environment Authentication Profile](../../docs/internals/environment-auth.md) before changing token,
 credential, or authorization behavior.
 
 ## Code Map
@@ -45,7 +45,7 @@ credential, or authorization behavior.
 Shared request and response schemas live in
 [`packages/contracts/src/relay.ts`](../../packages/contracts/src/relay.ts). Shared client-side relay
 calls live in
-[`packages/client-runtime/src/managedRelay.ts`](../../packages/client-runtime/src/managedRelay.ts).
+[`packages/client-runtime/src/relay/managedRelay.ts`](../../packages/client-runtime/src/relay/managedRelay.ts).
 
 ## Working Locally
 
@@ -89,10 +89,9 @@ file from the relay directory. Runtime secrets include Clerk and APNs credential
 the configured API and tunnel DNS zones as retained Cloudflare resources. Personal stages reference
 the production-owned zones.
 
-The `prod` Alchemy stage owns the retained PlanetScale database and is the shared hosted relay for
-stable and nightly clients. Every other stage references that database and provisions an isolated
-PlanetScale branch and runtime role for local development, so deploy `prod` before creating
-developer stages:
+The `prod` Alchemy stage owns the retained Neon project and default database. It is the shared hosted
+relay for stable and nightly clients. Every other stage references that project and provisions an
+isolated Neon branch for local development, so deploy `prod` before creating developer stages:
 
 ```sh
 vp run --filter kairo-relay deploy -- --stage prod
@@ -123,14 +122,12 @@ deploy personal non-production stages locally with any stage name other than `pr
 The repository must define these Actions variables shared by relay deployments:
 
 - `CLOUDFLARE_ACCOUNT_ID`
-- `PLANETSCALE_ORGANIZATION`
 - `AXIOM_ORG_ID`
 
 The repository must define these Actions secrets shared by relay deployments:
 
 - `CLOUDFLARE_API_TOKEN`
-- `PLANETSCALE_API_TOKEN_ID`
-- `PLANETSCALE_API_TOKEN`
+- `NEON_API_KEY`
 - `AXIOM_TOKEN`
 
 The `production` GitHub environment must define these Actions variables:
@@ -159,8 +156,8 @@ and hosted web builds.
 
 See:
 
-- [Kairo Connect Clerk Setup](../../docs/cloud/kairo-connect-clerk.md) for Clerk keys, JWT templates, and waitlist
+- [Kairo Connect Clerk Setup](../../docs/internals/kairo-connect.md) for Clerk keys, JWT templates, and sign-up restrictions
   setup.
-- [Relay Observability](../../docs/relay-observability.md) for deployment tracing and diagnostics.
-- [Kairo Connect Architecture Overview](../../docs/cloud/kairo-connect-auth-flow.html) for the full link,
+- [Relay Observability](../../docs/operations/relay-observability.md) for deployment tracing and diagnostics.
+- [Kairo Connect Architecture Overview](../../docs/internals/kairo-code-connect-auth-flow.html) for the full link,
   connect, endpoint, and notification flows.

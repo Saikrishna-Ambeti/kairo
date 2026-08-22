@@ -5,20 +5,12 @@ public class KairoReviewDiffModule: Module {
     Name("KairoReviewDiffSurface")
 
     View(KairoReviewDiffView.self) {
-      Prop("rowsJson") { (view: KairoReviewDiffView, rowsJson: String) in
-        view.setRowsJson(rowsJson)
-      }
-
-      Prop("tokensJson") { (view: KairoReviewDiffView, tokensJson: String) in
-        view.setTokensJson(tokensJson)
-      }
-
-      Prop("tokensPatchJson") { (view: KairoReviewDiffView, tokensPatchJson: String) in
-        view.setTokensPatchJson(tokensPatchJson)
-      }
-
       Prop("tokensResetKey") { (view: KairoReviewDiffView, tokensResetKey: String) in
         view.setTokensResetKey(tokensResetKey)
+      }
+
+      Prop("contentResetKey") { (view: KairoReviewDiffView, contentResetKey: String) in
+        view.setContentResetKey(contentResetKey)
       }
 
       Prop("collapsedFileIdsJson") { (view: KairoReviewDiffView, collapsedFileIdsJson: String) in
@@ -57,7 +49,46 @@ public class KairoReviewDiffModule: Module {
         view.setContentWidth(CGFloat(contentWidth))
       }
 
-      Events("onDebug", "onToggleFile", "onToggleViewedFile", "onPressLine", "onToggleComment")
+      Prop("initialRowIndex") { (view: KairoReviewDiffView, initialRowIndex: Double) in
+        view.setInitialRowIndex(initialRowIndex)
+      }
+
+      Prop("refreshing") { (view: KairoReviewDiffView, refreshing: Bool) in
+        view.setRefreshing(refreshing)
+      }
+
+      Events(
+        "onDebug",
+        "onVisibleFileChange",
+        "onToggleFile",
+        "onToggleViewedFile",
+        "onPressLine",
+        "onToggleComment",
+        "onPullToRefresh"
+      )
+
+      AsyncFunction("scrollToFile") { (view: KairoReviewDiffView, fileId: String, animated: Bool) in
+        view.scrollToFile(fileId, animated: animated)
+      }
+
+      AsyncFunction("scrollToTop") { (view: KairoReviewDiffView, animated: Bool) in
+        view.scrollToTop(animated: animated)
+      }
+
+      // Large, frequently changing JSON values cannot be regular Fabric props. Expo's
+      // prop adapter compares strings on the main thread before invoking a setter, which
+      // makes a syntax-token patch capable of blocking a frame by itself.
+      AsyncFunction("setRowsJson") { (view: KairoReviewDiffView, rowsJson: String) in
+        view.setRowsJson(rowsJson)
+      }
+
+      AsyncFunction("setTokensJson") { (view: KairoReviewDiffView, tokensJson: String) in
+        view.setTokensJson(tokensJson)
+      }
+
+      AsyncFunction("setTokensPatchJson") { (view: KairoReviewDiffView, tokensPatchJson: String) in
+        view.setTokensPatchJson(tokensPatchJson)
+      }
     }
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@kairo/desktop",
-  "version": "0.0.27",
+  "version": "0.0.33",
   "private": true,
   "type": "module",
   "main": "dist-electron/main.cjs",
@@ -12,21 +12,27 @@
     "smoke-test": "node scripts/smoke-test.mjs"
   },
   "dependencies": {
-    "@effect/platform-node": "4.0.0-beta.78",
+    "@clerk/electron": "catalog:",
+    "@clerk/electron-passkeys": "catalog:",
+    "@effect/platform-node": "catalog:",
     "@kairo/client-runtime": "workspace:*",
     "@kairo/contracts": "workspace:*",
     "@kairo/shared": "workspace:*",
     "@kairo/ssh": "workspace:*",
     "@kairo/tailscale": "workspace:*",
-    "effect": "4.0.0-beta.78",
+    "effect": "catalog:",
     "electron": "41.5.0",
-    "electron-updater": "^6.8.9"
+    "electron-store": "^8.2.0",
+    "electron-updater": "^6.6.2",
+    "playwright-core": "1.60.0",
+    "react-grab": "^0.1.32"
   },
   "devDependencies": {
-    "@effect/vitest": "4.0.0-beta.78",
+    "@effect/vitest": "catalog:",
     "@types/node": "24.12.4",
     "cross-env": "^10.1.0",
-    "electron-builder": "26.8.1",
+    "electron-builder": "26.15.6",
+    "tailwindcss": "^4.0.0",
     "vite-plus": "catalog:"
   },
   "productName": "Kairo (Alpha)"

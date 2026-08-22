@@ -12,6 +12,9 @@ export interface KairoPublicConfig {
   readonly mobileOtlpTracesUrl: string | undefined;
   readonly mobileOtlpTracesDataset: string | undefined;
   readonly mobileOtlpTracesToken: string | undefined;
+  readonly relayClientOtlpTracesUrl: string | undefined;
+  readonly relayClientOtlpTracesDataset: string | undefined;
+  readonly relayClientOtlpTracesToken: string | undefined;
 }
 
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -52,6 +55,7 @@ export function loadRepoEnv({
     ...(config.clerkCliOAuthClientId
       ? {
           KAIRO_CLERK_CLI_OAUTH_CLIENT_ID: config.clerkCliOAuthClientId,
+          VITE_CLERK_CLI_OAUTH_CLIENT_ID: config.clerkCliOAuthClientId,
         }
       : {}),
     ...(config.relayUrl
@@ -78,6 +82,24 @@ export function loadRepoEnv({
           EXPO_PUBLIC_OTLP_TRACES_TOKEN: config.mobileOtlpTracesToken,
         }
       : {}),
+    ...(config.relayClientOtlpTracesUrl
+      ? {
+          KAIRO_RELAY_CLIENT_OTLP_TRACES_URL: config.relayClientOtlpTracesUrl,
+          VITE_RELAY_OTLP_TRACES_URL: config.relayClientOtlpTracesUrl,
+        }
+      : {}),
+    ...(config.relayClientOtlpTracesDataset
+      ? {
+          KAIRO_RELAY_CLIENT_OTLP_TRACES_DATASET: config.relayClientOtlpTracesDataset,
+          VITE_RELAY_OTLP_TRACES_DATASET: config.relayClientOtlpTracesDataset,
+        }
+      : {}),
+    ...(config.relayClientOtlpTracesToken
+      ? {
+          KAIRO_RELAY_CLIENT_OTLP_TRACES_TOKEN: config.relayClientOtlpTracesToken,
+          VITE_RELAY_OTLP_TRACES_TOKEN: config.relayClientOtlpTracesToken,
+        }
+      : {}),
   };
 }
 
@@ -95,7 +117,11 @@ export function resolvePublicConfig(...sources: readonly Environment[]): KairoPu
       "VITE_CLERK_JWT_TEMPLATE",
       "EXPO_PUBLIC_CLERK_JWT_TEMPLATE",
     ),
-    clerkCliOAuthClientId: firstNonEmpty(sources, "KAIRO_CLERK_CLI_OAUTH_CLIENT_ID"),
+    clerkCliOAuthClientId: firstNonEmpty(
+      sources,
+      "KAIRO_CLERK_CLI_OAUTH_CLIENT_ID",
+      "VITE_CLERK_CLI_OAUTH_CLIENT_ID",
+    ),
     relayUrl: firstNonEmpty(sources, "KAIRO_RELAY_URL", "VITE_KAIRO_RELAY_URL"),
     mobileOtlpTracesUrl: firstNonEmpty(
       sources,
@@ -111,6 +137,21 @@ export function resolvePublicConfig(...sources: readonly Environment[]): KairoPu
       sources,
       "KAIRO_MOBILE_OTLP_TRACES_TOKEN",
       "EXPO_PUBLIC_OTLP_TRACES_TOKEN",
+    ),
+    relayClientOtlpTracesUrl: firstNonEmpty(
+      sources,
+      "KAIRO_RELAY_CLIENT_OTLP_TRACES_URL",
+      "VITE_RELAY_OTLP_TRACES_URL",
+    ),
+    relayClientOtlpTracesDataset: firstNonEmpty(
+      sources,
+      "KAIRO_RELAY_CLIENT_OTLP_TRACES_DATASET",
+      "VITE_RELAY_OTLP_TRACES_DATASET",
+    ),
+    relayClientOtlpTracesToken: firstNonEmpty(
+      sources,
+      "KAIRO_RELAY_CLIENT_OTLP_TRACES_TOKEN",
+      "VITE_RELAY_OTLP_TRACES_TOKEN",
     ),
   };
 }

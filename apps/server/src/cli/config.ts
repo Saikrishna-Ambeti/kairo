@@ -18,18 +18,10 @@ import * as SchemaTransformation from "effect/SchemaTransformation";
 import { Argument, Flag } from "effect/unstable/cli";
 
 import { readBootstrapEnvelope } from "../bootstrap.ts";
-import {
-  DEFAULT_PORT,
-  deriveServerPaths,
-  ensureServerDirectories,
-  resolveStaticDir,
-  RuntimeMode,
-  type ServerConfigShape,
-  type StartupPresentation,
-} from "../config.ts";
+import * as ServerConfig from "../config.ts";
 import { expandHomePath, resolveBaseDir } from "../os-jank.ts";
 
-export const modeFlag = Flag.choice("mode", RuntimeMode.literals).pipe(
+export const modeFlag = Flag.choice("mode", ServerConfig.RuntimeMode.literals).pipe(
   Flag.withDescription("Runtime mode. `desktop` keeps loopback defaults unless overridden."),
   Flag.optional,
 );
@@ -43,7 +35,9 @@ export const hostFlag = Flag.string("host").pipe(
   Flag.optional,
 );
 export const baseDirFlag = Flag.string("base-dir").pipe(
-  Flag.withDescription("Base directory path (equivalent to KAIRO_HOME)."),
+  Flag.withDescription(
+    "Explicit Kairo data directory; runtime state is stored under userdata (equivalent to KAIRO_HOME).",
+  ),
   Flag.optional,
 );
 export const devUrlFlag = Flag.string("dev-url").pipe(
@@ -95,7 +89,7 @@ const EnvServerConfig = Config.all({
   ),
   traceMaxBytes: Config.int("KAIRO_TRACE_MAX_BYTES").pipe(Config.withDefault(10 * 1024 * 1024)),
   traceMaxFiles: Config.int("KAIRO_TRACE_MAX_FILES").pipe(Config.withDefault(10)),
-  traceBatchWindowMs: Config.int("KAIRO_TRACE_BATCH_WINDOW_MS").pipe(Config.withDefault(200)),
+  traceBatchWindowMs: Config.int("KAIRO_TRACE_BATCH_WINDOW_MS").pipe(Config.withDefault(1_000)),
   otlpTracesUrl: Config.string("KAIRO_OTLP_TRACES_URL").pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
@@ -110,7 +104,7 @@ const EnvServerConfig = Config.all({
   otlpServiceName: Config.string("KAIRO_OTLP_SERVICE_NAME").pipe(
     Config.withDefault("kairo-server"),
   ),
-  mode: Config.schema(RuntimeMode, "KAIRO_MODE").pipe(
+  mode: Config.schema(ServerConfig.RuntimeMode, "KAIRO_MODE").pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
@@ -118,6 +112,15 @@ const EnvServerConfig = Config.all({
   host: Config.string("KAIRO_HOST").pipe(Config.option, Config.map(Option.getOrUndefined)),
   kairoHome: Config.string("KAIRO_HOME").pipe(Config.option, Config.map(Option.getOrUndefined)),
   devUrl: Config.url("VITE_DEV_SERVER_URL").pipe(Config.option, Config.map(Option.getOrUndefined)),
+  devAllowedOrigins: Config.string("KAIRO_DEV_ALLOWED_ORIGINS").pipe(
+    Config.withDefault(""),
+    Config.map((value) =>
+      value
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0),
+    ),
+  ),
   noBrowser: Config.boolean("KAIRO_NO_BROWSER").pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
@@ -145,7 +148,7 @@ const EnvServerConfig = Config.all({
 });
 
 export interface CliServerFlags {
-  readonly mode: Option.Option<RuntimeMode>;
+  readonly mode: Option.Option<ServerConfig.RuntimeMode>;
   readonly port: Option.Option<number>;
   readonly host: Option.Option<string>;
   readonly baseDir: Option.Option<string>;
@@ -214,7 +217,7 @@ export const resolveServerConfig = (
   flags: CliServerFlags,
   cliLogLevel: Option.Option<LogLevel.LogLevel>,
   options?: {
-    readonly startupPresentation?: StartupPresentation;
+    readonly startupPresentation?: ServerConfig.StartupPresentation;
     readonly forceAutoBootstrapProjectFromCwd?: boolean;
   },
 ) =>
@@ -244,7 +247,7 @@ export const resolveServerConfig = (
         : Option.none();
     const bootstrap = Option.getOrUndefined(bootstrapEnvelope);
 
-    const mode: RuntimeMode = Option.getOrElse(
+    const mode: ServerConfig.RuntimeMode = Option.getOrElse(
       resolveOptionPrecedence(
         normalizedFlags.mode,
         Option.fromUndefinedOr(env.mode),
@@ -263,9 +266,9 @@ export const resolveServerConfig = (
         onSome: (value) => Effect.succeed(value),
         onNone: () => {
           if (mode === "desktop") {
-            return Effect.succeed(DEFAULT_PORT);
+            return Effect.succeed(ServerConfig.DEFAULT_PORT);
           }
-          return findAvailablePort(DEFAULT_PORT);
+          return findAvailablePort(ServerConfig.DEFAULT_PORT);
         },
       },
     );
@@ -273,20 +276,22 @@ export const resolveServerConfig = (
       resolveOptionPrecedence(normalizedFlags.devUrl, Option.fromUndefinedOr(env.devUrl)),
       () => undefined,
     );
+    const explicitBaseDir = resolveOptionPrecedence(
+      normalizedFlags.baseDir,
+      Option.fromUndefinedOr(env.kairoHome),
+    ).pipe(Option.filter((value) => value.trim().length > 0));
     const baseDir = yield* resolveBaseDir(
       Option.getOrUndefined(
-        resolveOptionPrecedence(
-          normalizedFlags.baseDir,
-          Option.fromUndefinedOr(env.kairoHome),
-          Option.fromUndefinedOr(bootstrap?.kairoHome),
-        ),
+        resolveOptionPrecedence(explicitBaseDir, Option.fromUndefinedOr(bootstrap?.kairoHome)),
       ),
     );
     const rawCwd = Option.getOrElse(normalizedFlags.cwd, () => process.cwd());
     const cwd = path.resolve(yield* expandHomePath(rawCwd.trim()));
     yield* fs.makeDirectory(cwd, { recursive: true });
-    const derivedPaths = yield* deriveServerPaths(baseDir, devUrl);
-    yield* ensureServerDirectories(derivedPaths);
+    const derivedPaths = yield* ServerConfig.deriveServerPaths(baseDir, devUrl, {
+      baseDirIsExplicit: Option.isSome(explicitBaseDir),
+    });
+    yield* ServerConfig.ensureServerDirectories(derivedPaths);
     const persistedObservabilitySettings = yield* loadPersistedObservabilitySettings(
       derivedPaths.settingsPath,
     );
@@ -304,6 +309,9 @@ export const resolveServerConfig = (
       () => mode === "desktop",
     );
     const desktopBootstrapToken = bootstrap?.desktopBootstrapToken;
+    const desktopTelemetryFd = bootstrap?.desktopTelemetryFd;
+    const desktopTelemetryControlFd = bootstrap?.desktopTelemetryControlFd;
+    const resourceMonitorPath = bootstrap?.resourceMonitorPath;
     const autoBootstrapProjectFromCwd = Option.getOrElse(
       resolveOptionPrecedence(
         Option.fromUndefinedOr(options?.forceAutoBootstrapProjectFromCwd),
@@ -336,7 +344,7 @@ export const resolveServerConfig = (
       ),
       () => 443,
     );
-    const staticDir = devUrl ? undefined : yield* resolveStaticDir();
+    const staticDir = devUrl ? undefined : yield* ServerConfig.resolveStaticDir();
     const host = Option.getOrElse(
       resolveOptionPrecedence(
         normalizedFlags.host,
@@ -347,7 +355,7 @@ export const resolveServerConfig = (
     );
     const logLevel = Option.getOrElse(cliLogLevel, () => env.logLevel);
 
-    const config: ServerConfigShape = {
+    const config: ServerConfig.ServerConfig["Service"] = {
       logLevel,
       traceMinLevel: env.traceMinLevel,
       traceTimingEnabled: env.traceTimingEnabled,
@@ -373,9 +381,13 @@ export const resolveServerConfig = (
       host,
       staticDir,
       devUrl,
+      devAllowedOrigins: env.devAllowedOrigins,
       noBrowser,
       startupPresentation,
       desktopBootstrapToken,
+      desktopTelemetryFd,
+      desktopTelemetryControlFd,
+      resourceMonitorPath,
       autoBootstrapProjectFromCwd,
       logWebSocketEvents,
       tailscaleServeEnabled,
@@ -461,7 +473,7 @@ export const DurationFromString = Schema.String.pipe(
           return Effect.succeed(duration);
         }
         return Effect.fail(
-          new SchemaIssue.InvalidValue(Option.some(value), {
+          new SchemaIssue.InvalidValue({
             message: "Invalid duration. Use values like 5m, 1h, 30d, or 15 minutes.",
           }),
         );

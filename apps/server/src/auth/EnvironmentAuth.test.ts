@@ -4,29 +4,35 @@ import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import type { ServerConfigShape } from "../config.ts";
-import { ServerConfig } from "../config.ts";
+import * as ServerConfig from "../config.ts";
 import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
 import * as PairingGrantStore from "./PairingGrantStore.ts";
 import * as EnvironmentAuth from "./EnvironmentAuth.ts";
 
 import * as ServerSecretStore from "./ServerSecretStore.ts";
+import * as SessionStore from "./SessionStore.ts";
 
-const makeServerConfigLayer = (overrides?: Partial<ServerConfigShape>) =>
+/** Pinned so dev-mode cookie tests can assert the port-scoped name. */
+const TEST_SERVER_PORT = 13_773;
+
+const makeServerConfigLayer = (overrides?: Partial<ServerConfig.ServerConfig["Service"]>) =>
   Layer.effect(
-    ServerConfig,
+    ServerConfig.ServerConfig,
     Effect.gen(function* () {
-      const config = yield* ServerConfig;
+      const config = yield* ServerConfig.ServerConfig;
       return {
         ...config,
         ...overrides,
-      } satisfies ServerConfigShape;
+        // Keep the test server deterministic even when the default test layer
+        // changes its development port.
+        port: TEST_SERVER_PORT,
+      } satisfies ServerConfig.ServerConfig["Service"];
     }),
   ).pipe(
     Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "kairo-auth-server-test-" })),
   );
 
-const makeEnvironmentAuthLayer = (overrides?: Partial<ServerConfigShape>) =>
+const makeEnvironmentAuthLayer = (overrides?: Partial<ServerConfig.ServerConfig["Service"]>) =>
   EnvironmentAuth.layer.pipe(
     Layer.provide(SqlitePersistenceMemory),
     Layer.provide(ServerSecretStore.layer),
@@ -34,14 +40,17 @@ const makeEnvironmentAuthLayer = (overrides?: Partial<ServerConfigShape>) =>
   );
 
 const makeCookieRequest = (
+  cookieName: string,
   sessionToken: string,
-): Parameters<EnvironmentAuth.EnvironmentAuthShape["authenticateHttpRequest"]>[0] =>
+): Parameters<EnvironmentAuth.EnvironmentAuth["Service"]["authenticateHttpRequest"]>[0] =>
   ({
     cookies: {
-      kairo_session: sessionToken,
+      [cookieName]: sessionToken,
     },
     headers: {},
-  }) as unknown as Parameters<EnvironmentAuth.EnvironmentAuthShape["authenticateHttpRequest"]>[0];
+  }) as unknown as Parameters<
+    EnvironmentAuth.EnvironmentAuth["Service"]["authenticateHttpRequest"]
+  >[0];
 
 const requestMetadata = {
   deviceType: "desktop" as const,
@@ -54,35 +63,32 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
   it.effect("classifies invalid bootstrap credential failures for the HTTP boundary", () =>
     Effect.sync(() => {
       const error = EnvironmentAuth.toBootstrapExchangeError(
-        new PairingGrantStore.BootstrapCredentialInvalidError({
-          message: "Unknown bootstrap credential.",
-        }),
+        new PairingGrantStore.UnknownBootstrapCredentialError({}),
       );
 
       expect(error._tag).toBe("ServerAuthInvalidCredentialError");
-      if (error._tag === "ServerAuthInvalidCredentialError") {
-        expect(error.reason).toBe("invalid_credential");
-      }
     }),
   );
 
   it.effect("maps unexpected bootstrap failures to 500", () =>
     Effect.sync(() => {
-      const error = EnvironmentAuth.toBootstrapExchangeError(
-        new PairingGrantStore.BootstrapCredentialInternalError({
-          message: "Failed to consume bootstrap credential.",
-          cause: new Error("sqlite is unavailable"),
-        }),
-      );
+      const cause = new PairingGrantStore.BootstrapCredentialConsumeError({
+        cause: new Error("sqlite is unavailable"),
+      });
+      const error = EnvironmentAuth.toBootstrapExchangeError(cause);
 
-      expect(error._tag).toBe("ServerAuthInternalError");
+      expect(error._tag).toBe("ServerAuthBootstrapCredentialValidationError");
       expect(error.message).toBe("Failed to validate bootstrap credential.");
+      if (error._tag === "ServerAuthBootstrapCredentialValidationError") {
+        expect(error.cause).toBe(cause);
+      }
     }),
   );
 
   it.effect("issues standard pairing credentials by default", () =>
     Effect.gen(function* () {
       const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
+      const sessions = yield* SessionStore.SessionStore;
 
       const pairingCredential = yield* serverAuth.issuePairingCredential();
       const exchanged = yield* serverAuth.createBrowserSession(
@@ -90,7 +96,7 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
         requestMetadata,
       );
       const verified = yield* serverAuth.authenticateHttpRequest(
-        makeCookieRequest(exchanged.sessionToken),
+        makeCookieRequest(sessions.cookieName, exchanged.sessionToken),
       );
 
       expect(verified.sessionId.length).toBeGreaterThan(0);
@@ -112,10 +118,7 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
         )
         .pipe(Effect.flip);
 
-      expect(error._tag).toBe("ServerAuthInvalidRequestError");
-      if (error._tag === "ServerAuthInvalidRequestError") {
-        expect(error.reason).toBe("scope_not_granted");
-      }
+      expect(error._tag).toBe("ServerAuthScopeNotGrantedError");
     }).pipe(Effect.provide(makeEnvironmentAuthLayer())),
   );
 
@@ -153,6 +156,7 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
   it.effect("issues startup pairing URLs that bootstrap administrative sessions", () =>
     Effect.gen(function* () {
       const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
+      const sessions = yield* SessionStore.SessionStore;
 
       const pairingUrl = yield* serverAuth.issueStartupPairingUrl("http://127.0.0.1:3773");
       const token = new URLSearchParams(new URL(pairingUrl).hash.slice(1)).get("token");
@@ -166,7 +170,7 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
 
       const exchanged = yield* serverAuth.createBrowserSession(token ?? "", requestMetadata);
       const verified = yield* serverAuth.authenticateHttpRequest(
-        makeCookieRequest(exchanged.sessionToken),
+        makeCookieRequest(sessions.cookieName, exchanged.sessionToken),
       );
 
       expect(verified.scopes).toEqual([...AuthAdministrativeScopes]);
@@ -179,13 +183,14 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
     () =>
       Effect.gen(function* () {
         const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
+        const sessions = yield* SessionStore.SessionStore;
 
         const administrativeExchange = yield* serverAuth.createBrowserSession(
           "desktop-bootstrap-token",
           requestMetadata,
         );
         const administrativeSession = yield* serverAuth.authenticateHttpRequest(
-          makeCookieRequest(administrativeExchange.sessionToken),
+          makeCookieRequest(sessions.cookieName, administrativeExchange.sessionToken),
         );
         const pairingCredential = yield* serverAuth.issuePairingCredential({
           label: "Julius iPhone",
@@ -202,7 +207,7 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
           },
         );
         const clientSession = yield* serverAuth.authenticateHttpRequest(
-          makeCookieRequest(clientExchange.sessionToken),
+          makeCookieRequest(sessions.cookieName, clientExchange.sessionToken),
         );
         const clientsBeforeRevoke = yield* serverAuth.listClientSessions(
           administrativeSession.sessionId,

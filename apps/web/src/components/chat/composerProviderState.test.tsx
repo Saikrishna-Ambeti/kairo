@@ -6,6 +6,7 @@ import {
   type ServerProviderModel,
 } from "@kairo/contracts";
 import {
+  getComposerPromptInjectionState,
   getComposerProviderState,
   renderProviderTraitsMenuContent,
   renderProviderTraitsPicker,
@@ -61,6 +62,13 @@ const ULTRATHINK_FRAME_CLASSES = {
 } as const;
 
 describe("getComposerProviderState", () => {
+  it("derives a stable prompt injection state for ordinary prompt edits", () => {
+    expect(getComposerPromptInjectionState("Investigate this failure")).toBe("none");
+    expect(getComposerPromptInjectionState("Ultrathink:\nInvestigate this failure")).toBe(
+      "ultrathink",
+    );
+  });
+
   it("returns descriptor defaults when no selections are provided", () => {
     const state = getComposerProviderState({
       provider: PROVIDER,
@@ -71,8 +79,8 @@ describe("getComposerProviderState", () => {
           { id: "high", label: "High", isDefault: true },
         ]),
       ]),
-      prompt: "",
       modelOptions: undefined,
+      planModeEnabled: true,
     });
 
     expect(state).toEqual({
@@ -93,8 +101,8 @@ describe("getComposerProviderState", () => {
         ]),
         booleanDescriptor("fastMode"),
       ]),
-      prompt: "",
       modelOptions: selections(["effort", "low"], ["fastMode", true]),
+      planModeEnabled: true,
     });
 
     expect(state).toEqual({
@@ -112,8 +120,8 @@ describe("getComposerProviderState", () => {
         selectDescriptor("effort", [{ id: "high", label: "High", isDefault: true }]),
         booleanDescriptor("fastMode"),
       ]),
-      prompt: "",
       modelOptions: selections(["effort", "high"], ["fastMode", false]),
+      planModeEnabled: true,
     });
 
     expect(state.modelOptionsForDispatch).toEqual(
@@ -126,8 +134,8 @@ describe("getComposerProviderState", () => {
       provider: PROVIDER,
       model: MODEL,
       models: modelWith([booleanDescriptor("thinking")]),
-      prompt: "",
       modelOptions: selections(["effort", "max"], ["thinking", false]),
+      planModeEnabled: true,
     });
 
     expect(state).toEqual({
@@ -152,8 +160,8 @@ describe("getComposerProviderState", () => {
           { id: "plan", label: "Plan" },
         ]),
       ]),
-      prompt: "",
       modelOptions: selections(["agent", "plan"]),
+      planModeEnabled: true,
     });
 
     expect(state.promptEffort).toBe("high");
@@ -162,13 +170,65 @@ describe("getComposerProviderState", () => {
     );
   });
 
+  it("drops the plan agent from dispatch when legacy plan mode is disabled", () => {
+    const state = getComposerProviderState({
+      provider: PROVIDER,
+      model: MODEL,
+      models: modelWith([
+        selectDescriptor("agent", [
+          { id: "build", label: "Build", isDefault: true },
+          { id: "plan", label: "Plan" },
+        ]),
+      ]),
+      modelOptions: selections(["agent", "plan"]),
+      planModeEnabled: false,
+    });
+
+    expect(state.modelOptionsForDispatch).toEqual(selections(["agent", "build"]));
+  });
+
+  it("drops the agent descriptor entirely when plan is the only option and plan mode is disabled", () => {
+    const state = getComposerProviderState({
+      provider: PROVIDER,
+      model: MODEL,
+      models: modelWith([
+        selectDescriptor("agent", [{ id: "plan", label: "Plan", isDefault: true }]),
+      ]),
+      modelOptions: selections(["agent", "plan"]),
+      planModeEnabled: false,
+    });
+
+    expect(state).toEqual({
+      provider: PROVIDER,
+      promptEffort: null,
+      modelOptionsForDispatch: undefined,
+    });
+  });
+
+  it("falls back to a surviving agent when plan was the descriptor default and plan mode is disabled", () => {
+    const state = getComposerProviderState({
+      provider: PROVIDER,
+      model: MODEL,
+      models: modelWith([
+        selectDescriptor("agent", [
+          { id: "plan", label: "Plan", isDefault: true },
+          { id: "research", label: "Research" },
+        ]),
+      ]),
+      modelOptions: undefined,
+      planModeEnabled: false,
+    });
+
+    expect(state.modelOptionsForDispatch).toEqual(selections(["agent", "research"]));
+  });
+
   it("returns undefined dispatch options when the model declares no descriptors", () => {
     const state = getComposerProviderState({
       provider: PROVIDER,
       model: MODEL,
       models: modelWith([]),
-      prompt: "",
       modelOptions: selections(["anything", "value"]),
+      planModeEnabled: true,
     });
 
     expect(state).toEqual({
@@ -193,8 +253,11 @@ describe("getComposerProviderState", () => {
           ["ultrathink"],
         ),
       ]),
-      prompt: "Ultrathink:\nInvestigate this failure",
+      promptInjectionState: getComposerPromptInjectionState(
+        "Ultrathink:\nInvestigate this failure",
+      ),
       modelOptions: selections(["effort", "medium"]),
+      planModeEnabled: true,
     });
 
     expect(state).toEqual({
@@ -212,8 +275,11 @@ describe("getComposerProviderState", () => {
       models: modelWith([
         selectDescriptor("effort", [{ id: "high", label: "High", isDefault: true }]),
       ]),
-      prompt: "Ultrathink:\nInvestigate this failure",
+      promptInjectionState: getComposerPromptInjectionState(
+        "Ultrathink:\nInvestigate this failure",
+      ),
       modelOptions: undefined,
+      planModeEnabled: true,
     });
 
     expect(state).not.toHaveProperty("composerFrameClassName");
@@ -234,6 +300,7 @@ describe("provider traits render guards", () => {
       modelOptions: undefined,
       prompt: "",
       onPromptChange: () => {},
+      planModeEnabled: true,
     };
 
     expect(renderProviderTraitsPicker(args)).toBeNull();

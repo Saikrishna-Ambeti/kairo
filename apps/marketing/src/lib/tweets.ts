@@ -15,8 +15,8 @@ export const tweets = [
   {
     handle: "teja2495",
     content:
-      "I’ve completely switched to Kairo for all my workflows. I just switch between different subscriptions and harnesses depending on what I need.",
-    excerpt: "I’ve completely switched to Kairo for all my workflows.",
+      "I've completely switched to Kairo for all my workflows. I just switch between different subscriptions and providers depending on what I need.",
+    excerpt: "I've completely switched to Kairo for all my workflows.",
     link: "https://x.com/teja2495/status/2052420254991581623",
   },
   {
@@ -33,16 +33,15 @@ export const tweets = [
   {
     handle: "aronprins",
     content:
-      "I already loved Kairo by @theo and @jullerino, but their Connections implementation is next level epic and for this they should both earn maximum repect 🔥🫡",
-    excerpt: "I already loved Kairo, but their Connections implementation is next level epic.",
+      "I already loved Kairo, but their Connections implementation is awesome and for this they should both earn maximum respect.",
+    excerpt: "I already loved Kairo, but their Connections implementation is awesome.",
     link: "https://x.com/aronprins/status/2045102518196183109",
   },
   {
     handle: "BennettBuhner",
     content:
-      "Kairo is literally Codex but better; all your favorite models and harnesses, accessible anywhere! The app is great but the website is even greater, so instead of needing to SSH into a machine, Kairo IS my SSH!",
-    excerpt:
-      "Kairo is literally Codex but better; all your favorite models and harnesses, accessible anywhere.",
+      "Kairo is literally Codex but better; all your favorite models, accessible anywhere! The app is great but the website is even greater, so instead of needing to SSH into a machine, Kairo IS my SSH!",
+    excerpt: "Kairo is literally Codex but better; all your favorite models, accessible anywhere.",
     link: "https://x.com/BennettBuhner/status/2054667115697754387",
   },
   {
@@ -53,7 +52,7 @@ export const tweets = [
   {
     handle: "Josikinz",
     content:
-      "Kairo is better because it’s like if the codex Mac app didn’t make my computer run like shit 😋",
+      "Kairo is better because it's like if the codex Mac app didn't make my computer run like shit.",
     link: "https://x.com/Josikinz/status/2030367951694745870",
   },
   {
@@ -74,20 +73,19 @@ export const tweets = [
   {
     handle: "kostyniuk00",
     content:
-      "I was not expecting a year ago, that my anti-AI colleagues would thank me a year later, for persuading them to try Kairo Beta, that really helped them with organizing their workflows. \n\nFantastic product by @jullerino and @theo. Go try it out if you haven’t yet!",
+      "I was not expecting a year ago, that my anti-AI colleagues would thank me a year later, for persuading them to try Kairo Beta, that really helped them with organizing their workflows.\n\nFantastic product. Go try it out if you haven't yet!",
     excerpt:
       "My anti-AI colleagues thanked me for persuading them to try Kairo Beta. Fantastic product.",
     link: "https://x.com/kostyniuk00/status/2052041388179468521",
   },
   {
     handle: "gnukeith",
-    content:
-      "I tried Kairo it actually fixed issues that Opus couldn’t solve in Claude Code + Theo has replied with “UwU” under my post. Dario has not.",
+    content: "I tried Kairo it actually fixed issues that Opus couldn't solve in Claude Code.",
     link: "https://x.com/gnukeith/status/2054670073579630730",
   },
   {
     handle: "peculiarnewbie",
-    content: "Kairo is iOS and other harnesses are androids",
+    content: "Kairo is iOS and other runners are androids",
     link: "https://x.com/peculiarnewbie/status/2054671685027233827",
   },
   {
@@ -99,7 +97,7 @@ export const tweets = [
   {
     handle: "pocarles",
     content:
-      "Only using Codex and Kairo now.\n\nI thought all AI coding harnesses had roughly the same impact. Using Kairo taught me how wrong I was. The interface between you and the model changes everything.",
+      "Only using Codex and Kairo now.\n\nI thought all AI coding runners had roughly the same impact. Using Kairo taught me how wrong I was. The interface between you and the model changes everything.",
     excerpt:
       "Using Kairo taught me how wrong I was. The interface between you and the model changes everything.",
     link: "https://x.com/pocarles/status/2054673964274758046",

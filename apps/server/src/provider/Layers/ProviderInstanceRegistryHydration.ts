@@ -112,7 +112,7 @@ const deriveEffectiveProviderInstanceConfigMap = (
   Effect.gen(function* () {
     const baseConfigMap = deriveProviderInstanceConfigMap(settings);
     let effectiveConfigMap = settings.integrations.composio.enabled
-      ? applyComposioProviderBindings(settings, baseConfigMap)
+      ? yield* applyComposioProviderBindings(settings, baseConfigMap)
       : baseConfigMap;
 
     if (!settings.memory.supermemory.enabled) {

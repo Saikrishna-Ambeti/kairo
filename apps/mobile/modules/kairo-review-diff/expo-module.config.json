@@ -1,7 +1,10 @@
 {
-  "platforms": ["apple"],
+  "platforms": ["apple", "android"],
   "apple": {
     "modules": ["KairoReviewDiffModule"],
     "podspecPath": "KairoReviewDiffNative.podspec"
+  },
+  "android": {
+    "modules": ["expo.modules.kairoreviewdiff.KairoReviewDiffModule"]
   }
 }

@@ -1,46 +1,45 @@
 // @effect-diagnostics nodeBuiltinImport:off
-import fs from "node:fs";
-import path from "node:path";
-import { spawnSync } from "node:child_process";
+import * as NodeFS from "node:fs";
+import * as NodePath from "node:path";
+import * as NodeChildProcess from "node:child_process";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
 import * as PlatformError from "effect/PlatformError";
+import * as References from "effect/References";
 import * as Scope from "effect/Scope";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { expect } from "vite-plus/test";
 import type {
   GitActionProgressEvent,
   GitPreparePullRequestThreadInput,
-  ModelSelection,
   ThreadId,
 } from "@kairo/contracts";
 
-import { GitCommandError, TextGenerationError } from "@kairo/contracts";
-import { type GitManagerShape } from "./GitManager.ts";
 import {
-  GitHubCliError,
-  type GitHubCliShape,
-  type GitHubPullRequestSummary,
-  GitHubCli,
-} from "../sourceControl/GitHubCli.ts";
-import { type TextGenerationShape, TextGeneration } from "../textGeneration/TextGeneration.ts";
+  DEFAULT_SERVER_SETTINGS,
+  GitCommandError,
+  ProviderDriverKind,
+  ProviderInstanceId,
+  TextGenerationError,
+} from "@kairo/contracts";
+import * as GitHubCli from "../sourceControl/GitHubCli.ts";
+import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
 import * as GitHubSourceControlProvider from "../sourceControl/GitHubSourceControlProvider.ts";
 import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
-import { makeGitManager } from "./GitManager.ts";
-import { ServerConfig } from "../config.ts";
-import { ServerSettingsService } from "../serverSettings.ts";
-import {
-  ProjectSetupScriptRunner,
-  ProjectSetupScriptRunnerError,
-  type ProjectSetupScriptRunnerInput,
-  type ProjectSetupScriptRunnerShape,
-} from "../project/Services/ProjectSetupScriptRunner.ts";
+import * as ServerConfig from "../config.ts";
+import * as ProjectSetupScriptRunner from "../project/ProjectSetupScriptRunner.ts";
+import * as ProviderRegistry from "../provider/Services/ProviderRegistry.ts";
+import * as ServerSettings from "../serverSettings.ts";
+import * as GitManager from "./GitManager.ts";
 
 interface FakeGhScenario {
   prListSequence?: string[];
@@ -60,7 +59,9 @@ interface FakeGhScenario {
     headRepositoryOwnerLogin?: string | null;
   };
   repositoryCloneUrls?: Record<string, { url: string; sshUrl: string }>;
-  failWith?: GitHubCliError;
+  failWith?: GitHubCli.GitHubCliError;
+  /** Let this many gh calls succeed before failWith kicks in (default 0 = fail immediately). */
+  failAfterCalls?: number;
 }
 
 function fakeGhOutput(stdout: string): VcsProcess.VcsProcessOutput {
@@ -73,42 +74,11 @@ function fakeGhOutput(stdout: string): VcsProcess.VcsProcessOutput {
   };
 }
 
-interface FakeGitTextGeneration {
-  generateCommitMessage: (input: {
-    cwd: string;
-    branch: string | null;
-    stagedSummary: string;
-    stagedPatch: string;
-    includeBranch?: boolean;
-    modelSelection: ModelSelection;
-  }) => Effect.Effect<
-    { subject: string; body: string; branch?: string | undefined },
-    TextGenerationError
-  >;
-  generatePrContent: (input: {
-    cwd: string;
-    baseBranch: string;
-    headBranch: string;
-    commitSummary: string;
-    diffSummary: string;
-    diffPatch: string;
-    modelSelection: ModelSelection;
-  }) => Effect.Effect<{ title: string; body: string }, TextGenerationError>;
-  generateBranchName: (input: {
-    cwd: string;
-    message: string;
-    modelSelection: ModelSelection;
-  }) => Effect.Effect<{ branch: string }, TextGenerationError>;
-  generateThreadTitle: (input: {
-    cwd: string;
-    message: string;
-    modelSelection: ModelSelection;
-  }) => Effect.Effect<{ title: string }, TextGenerationError>;
-}
+type FakeGitTextGeneration = TextGeneration.TextGeneration["Service"];
 
 type FakePullRequest = NonNullable<FakeGhScenario["pullRequest"]>;
 
-function normalizeFakePullRequestSummary(raw: unknown): GitHubPullRequestSummary | null {
+function normalizeFakePullRequestSummary(raw: unknown): GitHubCli.GitHubPullRequestSummary | null {
   if (!raw || typeof raw !== "object") {
     return null;
   }
@@ -175,25 +145,15 @@ function normalizeFakePullRequestSummary(raw: unknown): GitHubPullRequestSummary
 }
 
 function runGitSyncForFakeGh(cwd: string, args: readonly string[]): void {
-  const result = spawnSync("git", args, {
+  const result = NodeChildProcess.spawnSync("git", args, {
     cwd,
     encoding: "utf8",
   });
   if (result.status === 0) {
     return;
   }
-  throw new GitHubCliError({
-    operation: "execute",
-    detail: `Failed to simulate gh checkout with git ${args.join(" ")}: ${result.stderr?.trim() || "unknown error"}`,
-  });
-}
-
-function isGitHubCliError(error: unknown): error is GitHubCliError {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "_tag" in error &&
-    (error as { _tag?: unknown })._tag === "GitHubCliError"
+  throw new Error(
+    `Failed to simulate gh checkout with git ${args.join(" ")}: ${result.stderr?.trim() || "unknown error"}`,
   );
 }
 
@@ -265,7 +225,7 @@ function initRepo(
     yield* runGit(cwd, ["init", "--initial-branch=main"]);
     yield* runGit(cwd, ["config", "user.email", "test@example.com"]);
     yield* runGit(cwd, ["config", "user.name", "Test User"]);
-    yield* fs.writeFileString(path.join(cwd, "README.md"), "hello\n");
+    yield* fs.writeFileString(NodePath.join(cwd, "README.md"), "hello\n");
     yield* runGit(cwd, ["add", "README.md"]);
     yield* runGit(cwd, ["commit", "-m", "Initial commit"]);
   });
@@ -312,7 +272,9 @@ function configureVisibleRemoteUrlWithLocalRewrite(
   });
 }
 
-function createTextGeneration(overrides: Partial<FakeGitTextGeneration> = {}): TextGenerationShape {
+function createTextGeneration(
+  overrides: Partial<FakeGitTextGeneration> = {},
+): TextGeneration.TextGeneration["Service"] {
   const implementation: FakeGitTextGeneration = {
     generateCommitMessage: (input) =>
       Effect.succeed({
@@ -385,7 +347,7 @@ function createTextGeneration(overrides: Partial<FakeGitTextGeneration> = {}): T
 }
 
 function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
-  service: GitHubCliShape;
+  service: GitHubCli.GitHubCli["Service"];
   ghCalls: string[];
 } {
   const prListQueue = [...(scenario.prListSequence ?? [])];
@@ -397,11 +359,11 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
   );
   const ghCalls: string[] = [];
 
-  const execute: GitHubCliShape["execute"] = (input) => {
+  const execute: GitHubCli.GitHubCli["Service"]["execute"] = (input) => {
     const args = [...input.args];
     ghCalls.push(args.join(" "));
 
-    if (scenario.failWith) {
+    if (scenario.failWith && ghCalls.length > (scenario.failAfterCalls ?? 0)) {
       return Effect.fail(scenario.failWith);
     }
 
@@ -468,7 +430,7 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
         try: () => {
           const headBranch = scenario.pullRequest?.headRefName;
           if (headBranch) {
-            const existingBranch = spawnSync(
+            const existingBranch = NodeChildProcess.spawnSync(
               "git",
               ["show-ref", "--verify", "--quiet", `refs/heads/${headBranch}`],
               {
@@ -485,14 +447,12 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
           return fakeGhOutput("");
         },
         catch: (error) =>
-          isGitHubCliError(error)
+          GitHubCli.isGitHubCliError(error)
             ? error
-            : new GitHubCliError({
-                operation: "execute",
-                detail:
-                  error instanceof Error
-                    ? `Failed to simulate gh checkout: ${error.message}`
-                    : "Failed to simulate gh checkout.",
+            : new GitHubCli.GitHubCliCommandError({
+                command: "gh",
+                cwd: input.cwd,
+                cause: error,
               }),
       });
     }
@@ -503,9 +463,10 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
         const cloneUrls = scenario.repositoryCloneUrls?.[repository];
         if (!cloneUrls) {
           return Effect.fail(
-            new GitHubCliError({
-              operation: "execute",
-              detail: `Unexpected repository lookup: ${repository}`,
+            new GitHubCli.GitHubCliCommandError({
+              command: "gh",
+              cwd: input.cwd,
+              cause: new Error(`Unexpected repository lookup: ${repository}`),
             }),
           );
         }
@@ -523,9 +484,10 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
     }
 
     return Effect.fail(
-      new GitHubCliError({
-        operation: "execute",
-        detail: `Unexpected gh command: ${args.join(" ")}`,
+      new GitHubCli.GitHubCliCommandError({
+        command: "gh",
+        cwd: input.cwd,
+        cause: new Error(`Unexpected gh command: ${args.join(" ")}`),
       }),
     );
   };
@@ -553,7 +515,7 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
           Effect.map((raw) =>
             raw
               .map((entry) => normalizeFakePullRequestSummary(entry))
-              .filter((entry): entry is GitHubPullRequestSummary => entry !== null),
+              .filter((entry): entry is GitHubCli.GitHubPullRequestSummary => entry !== null),
           ),
         ),
       createPullRequest: (input) =>
@@ -592,7 +554,9 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
             "--json",
             "number,title,url,baseRefName,headRefName,state,mergedAt,isCrossRepository,headRepository,headRepositoryOwner",
           ],
-        }).pipe(Effect.map((result) => JSON.parse(result.stdout) as GitHubPullRequestSummary)),
+        }).pipe(
+          Effect.map((result) => JSON.parse(result.stdout) as GitHubCli.GitHubPullRequestSummary),
+        ),
       getRepositoryCloneUrls: (input) =>
         execute({
           cwd: input.cwd,
@@ -600,9 +564,10 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
         }).pipe(Effect.map((result) => JSON.parse(result.stdout))),
       createRepository: (input) =>
         Effect.fail(
-          new GitHubCliError({
-            operation: "createRepository",
-            detail: `Unexpected repository create: ${input.repository}`,
+          new GitHubCli.GitHubCliCommandError({
+            command: "gh",
+            cwd: input.cwd,
+            cause: new Error(`Unexpected repository create: ${input.repository}`),
           }),
         ),
       checkoutPullRequest: (input) =>
@@ -616,7 +581,7 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
 }
 
 function runStackedAction(
-  manager: GitManagerShape,
+  manager: GitManager.GitManager["Service"],
   input: {
     cwd: string;
     action: "commit" | "push" | "create_pr" | "commit_push" | "commit_push_pr";
@@ -625,7 +590,7 @@ function runStackedAction(
     featureBranch?: boolean;
     filePaths?: readonly string[];
   },
-  options?: Parameters<GitManagerShape["runStackedAction"]>[1],
+  options?: Parameters<GitManager.GitManager["Service"]["runStackedAction"]>[1],
 ) {
   return manager.runStackedAction(
     {
@@ -636,12 +601,15 @@ function runStackedAction(
   );
 }
 
-function resolvePullRequest(manager: GitManagerShape, input: { cwd: string; reference: string }) {
+function resolvePullRequest(
+  manager: GitManager.GitManager["Service"],
+  input: { cwd: string; reference: string },
+) {
   return manager.resolvePullRequest(input);
 }
 
 function preparePullRequestThread(
-  manager: GitManagerShape,
+  manager: GitManager.GitManager["Service"],
   input: GitPreparePullRequestThreadInput,
 ) {
   return manager.preparePullRequestThread(input);
@@ -650,24 +618,25 @@ function preparePullRequestThread(
 function makeManager(input?: {
   ghScenario?: FakeGhScenario;
   textGeneration?: Partial<FakeGitTextGeneration>;
-  setupScriptRunner?: ProjectSetupScriptRunnerShape;
+  serverSettings?: Parameters<typeof ServerSettings.layerTest>[0];
+  setupScriptRunner?: ProjectSetupScriptRunner.ProjectSetupScriptRunner["Service"];
 }) {
   const { service: gitHubCli, ghCalls } = createGitHubCliWithFakeGh(input?.ghScenario);
   const textGeneration = createTextGeneration(input?.textGeneration);
-  const ServerConfigLayer = ServerConfig.layerTest(process.cwd(), {
+  const serverConfigLayer = ServerConfig.layerTest(process.cwd(), {
     prefix: "kairo-git-manager-test-",
   });
 
-  const serverSettingsLayer = ServerSettingsService.layerTest();
+  const serverSettingsLayer = ServerSettings.ServerSettingsService.layerTest(input?.serverSettings);
 
   const vcsDriverLayer = GitVcsDriver.layer.pipe(
     Layer.provideMerge(VcsProcess.layer),
     Layer.provideMerge(NodeServices.layer),
-    Layer.provideMerge(ServerConfigLayer),
+    Layer.provideMerge(serverConfigLayer),
   );
   const sourceControlRegistryLayer = Layer.effect(
     SourceControlProviderRegistry.SourceControlProviderRegistry,
-    GitHubSourceControlProvider.make().pipe(
+    GitHubSourceControlProvider.make.pipe(
       Effect.map((provider) =>
         SourceControlProviderRegistry.SourceControlProviderRegistry.of({
           get: () => Effect.succeed(provider),
@@ -676,14 +645,17 @@ function makeManager(input?: {
           discover: Effect.succeed([]),
         }),
       ),
-      Effect.provide(Layer.succeed(GitHubCli, gitHubCli)),
+      Effect.provide(Layer.succeed(GitHubCli.GitHubCli, gitHubCli)),
     ),
   );
 
   const managerLayer = Layer.mergeAll(
-    Layer.succeed(TextGeneration, textGeneration),
+    Layer.succeed(TextGeneration.TextGeneration, textGeneration),
+    Layer.mock(ProviderRegistry.ProviderRegistry)({
+      getProviders: Effect.succeed([]),
+    }),
     Layer.succeed(
-      ProjectSetupScriptRunner,
+      ProjectSetupScriptRunner.ProjectSetupScriptRunner,
       input?.setupScriptRunner ?? {
         runForThread: () => Effect.succeed({ status: "no-script" as const }),
       },
@@ -692,7 +664,7 @@ function makeManager(input?: {
     serverSettingsLayer,
   ).pipe(Layer.provideMerge(sourceControlRegistryLayer), Layer.provideMerge(NodeServices.layer));
 
-  return makeGitManager().pipe(
+  return GitManager.make.pipe(
     Effect.provide(managerLayer),
     Effect.map((manager) => ({ manager, ghCalls })),
   );
@@ -745,6 +717,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         baseRef: "main",
         headRef: "feature/status-open-pr",
         state: "open",
+        updatedAt: null,
       });
     }),
   );
@@ -784,6 +757,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         baseRef: "main",
         headRef: "feature/status-trimmed-pr",
         state: "open",
+        updatedAt: null,
       });
     }),
   );
@@ -836,6 +810,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         baseRef: "main",
         headRef: "feature/status-valid-pr-entry",
         state: "open",
+        updatedAt: null,
       });
     }),
   );
@@ -886,6 +861,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         baseRef: "main",
         headRef: "feature/status-lowercase-state",
         state: "merged",
+        updatedAt: "2026-01-02T00:00:00.000Z",
       });
     }),
   );
@@ -920,7 +896,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
   it.effect("status returns an explicit non-repo result for deleted directories", () =>
     Effect.gen(function* () {
       const rootDir = yield* makeTempDir("kairo-git-manager-missing-dir-");
-      const cwd = path.join(rootDir, "deleted-repo");
+      const cwd = NodePath.join(rootDir, "deleted-repo");
       yield* makeDirectory(cwd);
       yield* removePath(cwd);
       const { manager } = yield* makeManager();
@@ -979,6 +955,73 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
+  it.effect("status skips the provider lookup for a branch that was never pushed", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("kairo-git-manager-");
+      yield* initRepo(repoDir);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/never-pushed"]);
+
+      const { manager, ghCalls } = yield* makeManager();
+
+      const status = yield* manager.status({ cwd: repoDir });
+
+      expect(status.refName).toBe("feature/never-pushed");
+      expect(status.pr).toBeNull();
+      expect(ghCalls.filter((call) => call.startsWith("pr list "))).toHaveLength(0);
+    }),
+  );
+
+  it.effect("status still looks up PRs for a branch pushed without --set-upstream", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("kairo-git-manager-");
+      yield* initRepo(repoDir);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/pushed-no-upstream"]);
+      // No `-u`, so the remote-tracking ref exists but branch.<name>.merge does
+      // not. Most terminal and agent pushes land this way, and they can still
+      // have a PR, so the skip must not trigger here.
+      yield* runGit(repoDir, ["push", "origin", "feature/pushed-no-upstream"]);
+
+      const { manager, ghCalls } = yield* makeManager({
+        ghScenario: {
+          prListSequence: [
+            // @effect-diagnostics-next-line preferSchemaOverJson:off
+            JSON.stringify([
+              {
+                number: 214,
+                title: "Pushed without upstream",
+                url: "https://github.com/pingdotgg/kairo/pull/214",
+                baseRefName: "main",
+                headRefName: "feature/pushed-no-upstream",
+                state: "OPEN",
+                updatedAt: "2026-04-01T15:00:00Z",
+              },
+            ]),
+          ],
+        },
+      });
+
+      const status = yield* manager.status({ cwd: repoDir });
+
+      expect(status.pr?.number).toBe(214);
+      expect(ghCalls.filter((call) => call.startsWith("pr list ")).length).toBeGreaterThan(0);
+    }),
+  );
+
+  it("backs off repeated PR lookup failures past the healthy refresh cadence", () => {
+    expect(Duration.toMillis(GitManager.prLookupFailureTtl(1))).toBe(20_000);
+    expect(Duration.toMillis(GitManager.prLookupFailureTtl(2))).toBe(40_000);
+    // The point of the backoff: by the third retry a failing branch must not be
+    // asking more often than a healthy one, which refreshes every 2 minutes.
+    expect(Duration.toMillis(GitManager.prLookupFailureTtl(4))).toBeGreaterThan(120_000);
+    expect(Duration.toMillis(GitManager.prLookupFailureTtl(20))).toBe(900_000);
+  });
+
   it.effect(
     "status ignores unrelated fork PRs when the current branch tracks the same repository",
     () =>
@@ -1030,7 +1073,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         const forkDir = yield* createBareRemote();
         yield* runGit(repoDir, ["remote", "add", "fork-seed", forkDir]);
         yield* runGit(repoDir, ["checkout", "-b", "statemachine"]);
-        fs.writeFileSync(path.join(repoDir, "fork-pr.txt"), "fork pr\n");
+        NodeFS.writeFileSync(NodePath.join(repoDir, "fork-pr.txt"), "fork pr\n");
         yield* runGit(repoDir, ["add", "fork-pr.txt"]);
         yield* runGit(repoDir, ["commit", "-m", "Fork PR branch"]);
         yield* runGit(repoDir, ["push", "-u", "fork-seed", "statemachine"]);
@@ -1082,9 +1125,76 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           baseRef: "main",
           headRef: "statemachine",
           state: "open",
+          updatedAt: "2026-03-10T07:00:00.000Z",
         });
         expect(ghCalls).toContain(
           "pr list --head jasonLaster:statemachine --state all --limit 20 --json number,title,url,baseRefName,headRefName,state,mergedAt,updatedAt,isCrossRepository,headRepository,headRepositoryOwner",
+        );
+      }),
+    20_000,
+  );
+
+  it.effect(
+    "status preserves a fork PR whose head is named after the default branch",
+    () =>
+      Effect.gen(function* () {
+        const repoDir = yield* makeTempDir("kairo-git-manager-");
+        yield* initRepo(repoDir);
+        const originDir = yield* createBareRemote();
+        const forkDir = yield* createBareRemote();
+        yield* runGit(repoDir, ["remote", "add", "origin", originDir]);
+        yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+        yield* runGit(repoDir, ["remote", "set-head", "origin", "main"]);
+        yield* runGit(repoDir, ["remote", "add", "fork-seed", forkDir]);
+        yield* runGit(repoDir, ["push", "fork-seed", "main"]);
+        yield* runGit(repoDir, ["checkout", "-b", "kairo/pr-777/main"]);
+        yield* runGit(repoDir, ["branch", "--set-upstream-to", "fork-seed/main"]);
+        yield* configureVisibleRemoteUrlWithLocalRewrite(
+          repoDir,
+          "fork-seed",
+          "git@github.com:contributor/codething-mvp.git",
+          forkDir,
+        );
+
+        const { manager, ghCalls } = yield* makeManager({
+          ghScenario: {
+            prListByHeadSelector: {
+              // @effect-diagnostics-next-line preferSchemaOverJson:off
+              "contributor:main": JSON.stringify([
+                {
+                  number: 777,
+                  title: "Fork PR from main",
+                  url: "https://github.com/pingdotgg/codething-mvp/pull/777",
+                  baseRefName: "main",
+                  headRefName: "main",
+                  state: "OPEN",
+                  updatedAt: "2026-03-10T07:00:00Z",
+                  isCrossRepository: true,
+                  headRepository: {
+                    nameWithOwner: "contributor/codething-mvp",
+                  },
+                  headRepositoryOwner: {
+                    login: "contributor",
+                  },
+                },
+              ]),
+            },
+          },
+        });
+
+        const status = yield* manager.status({ cwd: repoDir });
+        expect(status.refName).toBe("kairo/pr-777/main");
+        expect(status.pr).toEqual({
+          number: 777,
+          title: "Fork PR from main",
+          url: "https://github.com/pingdotgg/codething-mvp/pull/777",
+          baseRef: "main",
+          headRef: "main",
+          state: "open",
+          updatedAt: "2026-03-10T07:00:00.000Z",
+        });
+        expect(ghCalls).toContain(
+          "pr list --head contributor:main --state all --limit 20 --json number,title,url,baseRefName,headRefName,state,mergedAt,updatedAt,isCrossRepository,headRepository,headRepositoryOwner",
         );
       }),
     20_000,
@@ -1190,6 +1300,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           baseRef: "main",
           headRef: "effect-atom",
           state: "open",
+          updatedAt: "2026-03-01T10:00:00.000Z",
         });
         expect(ghCalls.some((call) => call.includes("pr list --head upstream/effect-atom "))).toBe(
           false,
@@ -1241,6 +1352,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         baseRef: "main",
         headRef: "feature/status-merged-pr",
         state: "merged",
+        updatedAt: "2026-01-30T10:00:00.000Z",
       });
     }),
   );
@@ -1273,6 +1385,43 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       const status = yield* manager.status({ cwd: repoDir });
       expect(status.refName).toBe("main");
       expect(status.pr).toBeNull();
+    }),
+  );
+
+  it.effect("status does not inherit a merged PR from a feature branch's default upstream", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("kairo-git-manager-");
+      yield* initRepo(repoDir);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+      yield* runGit(repoDir, ["remote", "set-head", "origin", "main"]);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/from-main", "origin/main"]);
+
+      const { manager, ghCalls } = yield* makeManager({
+        ghScenario: {
+          prListSequence: [
+            // @effect-diagnostics-next-line preferSchemaOverJson:off
+            JSON.stringify([
+              {
+                number: 54,
+                title: "Reverse merge from main",
+                url: "https://github.com/pingdotgg/codething-mvp/pull/54",
+                baseRefName: "je-filter-list",
+                headRefName: "main",
+                state: "MERGED",
+                mergedAt: "2023-09-28T03:21:10Z",
+                updatedAt: "2023-09-28T03:21:10Z",
+              },
+            ]),
+          ],
+        },
+      });
+
+      const status = yield* manager.status({ cwd: repoDir });
+      expect(status.refName).toBe("feature/from-main");
+      expect(status.pr).toBeNull();
+      expect(ghCalls.some((call) => call.includes("pr list"))).toBe(false);
     }),
   );
 
@@ -1320,6 +1469,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         baseRef: "main",
         headRef: "feature/status-open-over-merged",
         state: "open",
+        updatedAt: "2026-01-30T10:00:00.000Z",
       });
     }),
   );
@@ -1335,9 +1485,10 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
       const { manager } = yield* makeManager({
         ghScenario: {
-          failWith: new GitHubCliError({
-            operation: "execute",
-            detail: "GitHub CLI (`gh`) is required but not available on PATH.",
+          failWith: new GitHubCli.GitHubCliUnavailableError({
+            command: "gh",
+            cwd: repoDir,
+            cause: new Error("gh is not available on PATH"),
           }),
         },
       });
@@ -1348,13 +1499,303 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
+  it.effect("status logs actionable provider detail without exposing the upstream cause", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("kairo-git-manager-");
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/status-rate-limited"]);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "feature/status-rate-limited"]);
+
+      const upstreamCause = "GraphQL rate limit for user ID 51714798 and token secret-value";
+      const { manager } = yield* makeManager({
+        ghScenario: {
+          failWith: new GitHubCli.GitHubCliRateLimitError({
+            command: "gh",
+            cwd: repoDir,
+            cause: new Error(upstreamCause),
+          }),
+        },
+      });
+      const logs: Array<{ message: string; annotations: Record<string, unknown> }> = [];
+      const logger = Logger.make<unknown, void>(({ fiber, message }) => {
+        logs.push({
+          message: String(message),
+          annotations: { ...fiber.getRef(References.CurrentLogAnnotations) },
+        });
+      });
+
+      const status = yield* manager
+        .status({ cwd: repoDir })
+        .pipe(Effect.provide(Logger.layer([logger], { mergeWithExisting: false })));
+
+      expect(status.pr).toBeNull();
+      const warning = logs.find((entry) => entry.message.includes("PR lookup failed"));
+      expect(warning?.annotations).toMatchObject({
+        operation: "lookupStatusPr",
+        branch: "feature/status-rate-limited",
+        errorTag: "SourceControlProviderError",
+        provider: "github",
+        providerOperation: "listChangeRequests",
+        providerCommand: "gh",
+        errorDetail:
+          "GitHub API rate limit exceeded. Run `gh api rate_limit` to inspect the quota and reset time.",
+      });
+      const loggedText = [
+        warning?.message ?? "",
+        ...Object.values(warning?.annotations ?? {}).map(String),
+      ].join("\n");
+      expect(loggedText).not.toContain(upstreamCause);
+      expect(loggedText).not.toContain("secret-value");
+    }),
+  );
+
+  it.effect("status keeps the last known PR when a later lookup fails", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("kairo-git-manager-");
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/pr-sticky"]);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "feature/pr-sticky"]);
+
+      const existingPr = {
+        number: 214,
+        title: "Sticky PR",
+        url: "https://github.com/pingdotgg/codething-mvp/pull/214",
+        baseRefName: "main",
+        headRefName: "feature/pr-sticky",
+      };
+      const { manager } = yield* makeManager({
+        ghScenario: {
+          // @effect-diagnostics-next-line preferSchemaOverJson:off
+          prListSequence: [JSON.stringify([existingPr])],
+          failWith: new GitHubCli.GitHubCliUnavailableError({
+            command: "gh",
+            cwd: repoDir,
+            cause: new Error("rate limited"),
+          }),
+          failAfterCalls: 1,
+        },
+      });
+
+      const first = yield* manager.status({ cwd: repoDir });
+      expect(first.pr?.number).toBe(214);
+
+      // An explicit invalidation (user refresh, git action) bypasses the PR
+      // cache and forces a live lookup — which now fails. The badge must keep
+      // the last known PR instead of blanking out.
+      yield* manager.invalidateStatus(repoDir);
+      const second = yield* manager.status({ cwd: repoDir });
+      expect(second.pr?.number).toBe(214);
+    }),
+  );
+
+  it.effect(
+    "status does not reuse a stale PR after the branch is retargeted to a different upstream",
+    () =>
+      Effect.gen(function* () {
+        const repoDir = yield* makeTempDir("kairo-git-manager-");
+        yield* initRepo(repoDir);
+        yield* runGit(repoDir, ["checkout", "-b", "feature/pr-retarget"]);
+
+        const originRemote = yield* createBareRemote();
+        yield* runGit(repoDir, ["remote", "add", "origin", originRemote]);
+        yield* runGit(repoDir, ["push", "-u", "origin", "feature/pr-retarget"]);
+
+        const existingPr = {
+          number: 214,
+          title: "Sticky PR",
+          url: "https://github.com/pingdotgg/codething-mvp/pull/214",
+          baseRefName: "main",
+          headRefName: "feature/pr-retarget",
+        };
+        const { manager } = yield* makeManager({
+          ghScenario: {
+            // @effect-diagnostics-next-line preferSchemaOverJson:off
+            prListSequence: [JSON.stringify([existingPr])],
+            failWith: new GitHubCli.GitHubCliUnavailableError({
+              command: "gh",
+              cwd: repoDir,
+              cause: new Error("rate limited"),
+            }),
+            failAfterCalls: 1,
+          },
+        });
+
+        const first = yield* manager.status({ cwd: repoDir });
+        expect(first.pr?.number).toBe(214);
+
+        // Retarget the branch to a different remote/upstream (e.g. the PR was
+        // reopened against a fork). The previously cached PR belonged to the
+        // old upstream and must not be shown against the new one.
+        const forkRemote = yield* createBareRemote();
+        yield* runGit(repoDir, ["remote", "add", "fork", forkRemote]);
+        yield* runGit(repoDir, ["push", "fork", "feature/pr-retarget"]);
+        yield* runGit(repoDir, [
+          "branch",
+          "--set-upstream-to=fork/feature/pr-retarget",
+          "feature/pr-retarget",
+        ]);
+
+        yield* manager.invalidateStatus(repoDir);
+        const second = yield* manager.status({ cwd: repoDir });
+        expect(second.pr).toBeNull();
+      }),
+  );
+
+  it.effect("status keeps the last known PR when the branch gains its first upstream", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("kairo-git-manager-");
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/pr-sticky-first-push"]);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+
+      const existingPr = {
+        number: 215,
+        title: "Sticky first-push PR",
+        url: "https://github.com/pingdotgg/codething-mvp/pull/215",
+        baseRefName: "main",
+        headRefName: "feature/pr-sticky-first-push",
+      };
+      const { manager } = yield* makeManager({
+        ghScenario: {
+          // @effect-diagnostics-next-line preferSchemaOverJson:off
+          prListSequence: [JSON.stringify([existingPr])],
+          failWith: new GitHubCli.GitHubCliUnavailableError({
+            command: "gh",
+            cwd: repoDir,
+            cause: new Error("rate limited"),
+          }),
+          failAfterCalls: 1,
+        },
+      });
+
+      const first = yield* manager.status({ cwd: repoDir });
+      expect(first.pr?.number).toBe(215);
+
+      yield* runGit(repoDir, ["push", "-u", "origin", "feature/pr-sticky-first-push"]);
+      yield* manager.invalidateStatus(repoDir);
+
+      const second = yield* manager.status({ cwd: repoDir });
+      expect(second.pr?.number).toBe(215);
+    }),
+  );
+
+  it.effect("status drops the last known PR when the tracked remote is repointed", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("kairo-git-manager-");
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/pr-repointed"]);
+      const originalRemoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", originalRemoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "feature/pr-repointed"]);
+
+      const existingPr = {
+        number: 216,
+        title: "Old remote PR",
+        url: "https://github.com/pingdotgg/codething-mvp/pull/216",
+        baseRefName: "main",
+        headRefName: "feature/pr-repointed",
+      };
+      const { manager } = yield* makeManager({
+        ghScenario: {
+          // @effect-diagnostics-next-line preferSchemaOverJson:off
+          prListSequence: [JSON.stringify([existingPr])],
+          failWith: new GitHubCli.GitHubCliUnavailableError({
+            command: "gh",
+            cwd: repoDir,
+            cause: new Error("rate limited"),
+          }),
+          failAfterCalls: 1,
+        },
+      });
+
+      const first = yield* manager.status({ cwd: repoDir });
+      expect(first.pr?.number).toBe(216);
+
+      const replacementRemoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "replacement", replacementRemoteDir]);
+      yield* runGit(repoDir, ["push", "replacement", "feature/pr-repointed"]);
+      yield* runGit(repoDir, ["remote", "set-url", "origin", replacementRemoteDir]);
+      yield* manager.invalidateStatus(repoDir);
+
+      const second = yield* manager.status({ cwd: repoDir });
+      expect(second.pr).toBeNull();
+    }),
+  );
+
+  it.effect("status keeps the last known PR when the current remote URL can't be resolved", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("kairo-git-manager-");
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/pr-config-hiccup"]);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "feature/pr-config-hiccup"]);
+
+      const existingPr = {
+        number: 217,
+        title: "Config hiccup PR",
+        url: "https://github.com/pingdotgg/codething-mvp/pull/217",
+        baseRefName: "main",
+        headRefName: "feature/pr-config-hiccup",
+      };
+      const { manager } = yield* makeManager({
+        ghScenario: {
+          // @effect-diagnostics-next-line preferSchemaOverJson:off
+          prListSequence: [JSON.stringify([existingPr])],
+          failWith: new GitHubCli.GitHubCliUnavailableError({
+            command: "gh",
+            cwd: repoDir,
+            cause: new Error("rate limited"),
+          }),
+          failAfterCalls: 1,
+        },
+      });
+
+      const first = yield* manager.status({ cwd: repoDir });
+      expect(first.pr?.number).toBe(217);
+
+      // `remote.origin.url` reads go through readConfigValueNullable, which
+      // maps ANY failed read (a real "no remote configured" state or a
+      // transient git-config hiccup) to null the same way. Unsetting the
+      // key here reproduces that ambiguity without touching branch
+      // tracking (refs/remotes/origin/* and branch.<b>.remote are
+      // untouched) — the remote identity has not actually changed, so the
+      // sticky PR must survive even though the current lookup can no
+      // longer resolve a remote URL to compare against.
+      yield* runGit(repoDir, ["config", "--unset", "remote.origin.url"]);
+      yield* manager.invalidateStatus(repoDir);
+
+      const second = yield* manager.status({ cwd: repoDir });
+      expect(second.pr?.number).toBe(217);
+    }),
+  );
+
   it.effect("creates a commit when working tree is dirty", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("kairo-git-manager-");
       yield* initRepo(repoDir);
-      fs.writeFileSync(path.join(repoDir, "README.md"), "hello\nworld\n");
+      NodeFS.writeFileSync(NodePath.join(repoDir, "README.md"), "hello\nworld\n");
+      let generatedPolicy: TextGeneration.CommitMessageGenerationInput["policy"] = undefined;
 
-      const { manager } = yield* makeManager();
+      const { manager } = yield* makeManager({
+        serverSettings: {
+          sourceControlWritingStyle: {
+            mode: "custom" as const,
+            customInstructions: "Use a direct tone.",
+          },
+        },
+        textGeneration: {
+          generateCommitMessage: (input) => {
+            generatedPolicy = input.policy;
+            return Effect.succeed({ subject: "Implement stacked git actions", body: "" });
+          },
+        },
+      });
       const result = yield* runStackedAction(manager, {
         cwd: repoDir,
         action: "commit",
@@ -1364,6 +1805,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       expect(result.commit.status).toBe("created");
       expect(result.push.status).toBe("skipped_not_requested");
       expect(result.pr.status).toBe("skipped_not_requested");
+      expect(generatedPolicy).toMatchObject({ commitInstructions: "Use a direct tone." });
       expect(result.toast).toMatchObject({
         description: "Implement stacked git actions",
         cta: {
@@ -1383,11 +1825,123 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
+  it.effect("preserves custom style when instructions are empty", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("kairo-git-manager-");
+      yield* initRepo(repoDir);
+      NodeFS.writeFileSync(NodePath.join(repoDir, "README.md"), "hello\nworld\n");
+      let generatedPolicy: TextGeneration.CommitMessageGenerationInput["policy"] = undefined;
+
+      const { manager } = yield* makeManager({
+        serverSettings: {
+          sourceControlWritingStyle: {
+            mode: "custom" as const,
+            customInstructions: "",
+          },
+        },
+        textGeneration: {
+          generateCommitMessage: (input) => {
+            generatedPolicy = input.policy;
+            return Effect.succeed({ subject: "Preserve custom style", body: "" });
+          },
+        },
+      });
+      yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "commit",
+      });
+
+      expect(generatedPolicy).toEqual({
+        kind: "custom",
+        inferRepositoryConventions: false,
+      });
+    }),
+  );
+
+  it.effect("falls back when the dedicated source control writer is unavailable", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("kairo-git-manager-");
+      yield* initRepo(repoDir);
+      NodeFS.writeFileSync(NodePath.join(repoDir, "README.md"), "hello\nworld\n");
+      const missingInstanceId = ProviderInstanceId.make("missing_writer");
+      let generatedModelSelection:
+        | TextGeneration.CommitMessageGenerationInput["modelSelection"]
+        | undefined;
+
+      const { manager } = yield* makeManager({
+        serverSettings: {
+          providerInstances: {
+            [missingInstanceId]: {
+              driver: ProviderDriverKind.make("missing-driver"),
+              config: {},
+            },
+          },
+          sourceControlWriterModelSelection: {
+            instanceId: missingInstanceId,
+            model: "missing-model",
+          },
+        },
+        textGeneration: {
+          generateCommitMessage: (input) => {
+            generatedModelSelection = input.modelSelection;
+            return Effect.succeed({ subject: "Use the available writer", body: "" });
+          },
+        },
+      });
+
+      yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "commit",
+      });
+
+      expect(generatedModelSelection).toEqual(DEFAULT_SERVER_SETTINGS.textGenerationModelSelection);
+    }),
+  );
+
+  it.effect("preserves repository conventions style when recent history is empty", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("kairo-git-manager-");
+      yield* runGit(repoDir, ["init", "--initial-branch=main"]);
+      yield* runGit(repoDir, ["config", "user.email", "test@example.com"]);
+      yield* runGit(repoDir, ["config", "user.name", "Test User"]);
+      NodeFS.writeFileSync(NodePath.join(repoDir, "README.md"), "hello\n");
+      yield* runGit(repoDir, ["add", "README.md"]);
+      let generatedPolicy: TextGeneration.CommitMessageGenerationInput["policy"] = undefined;
+
+      const { manager } = yield* makeManager({
+        serverSettings: {
+          sourceControlWritingStyle: {
+            mode: "repo_conventions" as const,
+          },
+        },
+        textGeneration: {
+          generateCommitMessage: (input) => {
+            generatedPolicy = input.policy;
+            return Effect.succeed({ subject: "Create initial commit", body: "" });
+          },
+        },
+      });
+      yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "commit",
+      });
+
+      expect(generatedPolicy).toEqual({
+        kind: "repo_conventions",
+        commitInstructions:
+          "Follow the repository's established commit message style when examples are available.",
+        changeRequestInstructions:
+          "Follow the repository's established change request title and body style when examples are available.",
+        inferRepositoryConventions: true,
+      });
+    }),
+  );
+
   it.effect("uses custom commit message when provided", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("kairo-git-manager-");
       yield* initRepo(repoDir);
-      fs.writeFileSync(path.join(repoDir, "README.md"), "hello\ncustom\n");
+      NodeFS.writeFileSync(NodePath.join(repoDir, "README.md"), "hello\ncustom\n");
       let generatedCount = 0;
 
       const { manager } = yield* makeManager({
@@ -1430,8 +1984,8 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("kairo-git-manager-");
       yield* initRepo(repoDir);
-      fs.writeFileSync(path.join(repoDir, "a.txt"), "file a\n");
-      fs.writeFileSync(path.join(repoDir, "b.txt"), "file b\n");
+      NodeFS.writeFileSync(NodePath.join(repoDir, "a.txt"), "file a\n");
+      NodeFS.writeFileSync(NodePath.join(repoDir, "b.txt"), "file b\n");
 
       const { manager } = yield* makeManager();
       const result = yield* runStackedAction(manager, {
@@ -1458,7 +2012,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       const remoteDir = yield* createBareRemote();
       yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
       yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
-      fs.writeFileSync(path.join(repoDir, "README.md"), "hello\nfeature-branch\n");
+      NodeFS.writeFileSync(NodePath.join(repoDir, "README.md"), "hello\nfeature-branch\n");
       let generatedCount = 0;
 
       const { manager } = yield* makeManager({
@@ -1518,7 +2072,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("kairo-git-manager-");
       yield* initRepo(repoDir);
-      fs.writeFileSync(path.join(repoDir, "README.md"), "hello\ncustom-feature\n");
+      NodeFS.writeFileSync(NodePath.join(repoDir, "README.md"), "hello\ncustom-feature\n");
       let generatedCount = 0;
 
       const { manager } = yield* makeManager({
@@ -1581,16 +2135,18 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       yield* initRepo(repoDir);
 
       const { manager } = yield* makeManager();
-      const errorMessage = yield* runStackedAction(manager, {
+      const error = yield* runStackedAction(manager, {
         cwd: repoDir,
         action: "commit",
         featureBranch: true,
-      }).pipe(
-        Effect.flip,
-        Effect.map((error) => error.message),
-      );
+      }).pipe(Effect.flip);
 
-      expect(errorMessage).toContain("no changes to commit");
+      expect(error).toMatchObject({
+        _tag: "GitManagerError",
+        operation: "runFeatureBranchStep",
+        cwd: repoDir,
+      });
+      expect(error.message).toContain("no changes to commit");
     }),
   );
 
@@ -1601,7 +2157,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       yield* runGit(repoDir, ["checkout", "-b", "feature/stacked-flow"]);
       const remoteDir = yield* createBareRemote();
       yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
-      fs.writeFileSync(path.join(repoDir, "feature.txt"), "feature\n");
+      NodeFS.writeFileSync(NodePath.join(repoDir, "feature.txt"), "feature\n");
 
       const { manager } = yield* makeManager();
       const result = yield* runStackedAction(manager, {
@@ -1630,7 +2186,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         yield* runGit(repoDir, ["checkout", "-b", "feature/no-upstream-pr"]);
         const remoteDir = yield* createBareRemote();
         yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
-        fs.writeFileSync(path.join(repoDir, "feature.txt"), "feature\n");
+        NodeFS.writeFileSync(NodePath.join(repoDir, "feature.txt"), "feature\n");
 
         const { manager, ghCalls } = yield* makeManager({
           ghScenario: {
@@ -1701,7 +2257,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       yield* runGit(repoDir, ["checkout", "-b", "feature/push-only"]);
       const remoteDir = yield* createBareRemote();
       yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
-      fs.writeFileSync(path.join(repoDir, "push-only.txt"), "push only\n");
+      NodeFS.writeFileSync(NodePath.join(repoDir, "push-only.txt"), "push only\n");
       yield* runGit(repoDir, ["add", "push-only.txt"]);
       yield* runGit(repoDir, ["commit", "-m", "Push only branch"]);
 
@@ -1729,11 +2285,11 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       yield* runGit(repoDir, ["checkout", "-b", "feature/push-dirty"]);
       const remoteDir = yield* createBareRemote();
       yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
-      fs.writeFileSync(path.join(repoDir, "push-dirty.txt"), "push dirty\n");
+      NodeFS.writeFileSync(NodePath.join(repoDir, "push-dirty.txt"), "push dirty\n");
       yield* runGit(repoDir, ["add", "push-dirty.txt"]);
       yield* runGit(repoDir, ["commit", "-m", "Push dirty branch"]);
-      fs.mkdirSync(path.join(repoDir, ".vercel"));
-      fs.writeFileSync(path.join(repoDir, ".vercel", "project.json"), "{}\n");
+      NodeFS.mkdirSync(NodePath.join(repoDir, ".vercel"));
+      NodeFS.writeFileSync(NodePath.join(repoDir, ".vercel", "project.json"), "{}\n");
 
       const { manager } = yield* makeManager();
       const result = yield* runStackedAction(manager, {
@@ -1764,7 +2320,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       yield* runGit(repoDir, ["checkout", "-b", "feature/create-pr-only"]);
       const remoteDir = yield* createBareRemote();
       yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
-      fs.writeFileSync(path.join(repoDir, "create-pr-only.txt"), "create pr\n");
+      NodeFS.writeFileSync(NodePath.join(repoDir, "create-pr-only.txt"), "create pr\n");
       yield* runGit(repoDir, ["add", "create-pr-only.txt"]);
       yield* runGit(repoDir, ["commit", "-m", "Create PR only branch"]);
 
@@ -1809,7 +2365,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       const repoDir = yield* makeTempDir("kairo-git-manager-");
       yield* initRepo(repoDir);
       yield* runGit(repoDir, ["checkout", "-b", "feature/provider-fallback"]);
-      fs.writeFileSync(path.join(repoDir, "provider-fallback.txt"), "fallback\n");
+      NodeFS.writeFileSync(NodePath.join(repoDir, "provider-fallback.txt"), "fallback\n");
       yield* runGit(repoDir, ["add", "provider-fallback.txt"]);
       yield* runGit(repoDir, ["commit", "-m", "Provider fallback"]);
       const remoteDir = yield* createBareRemote();
@@ -1952,7 +2508,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         ).toBe(true);
         expect(ghCalls.some((call) => call.startsWith("pr create "))).toBe(false);
       }),
-    12_000,
+    30_000,
   );
 
   it.effect(
@@ -1986,7 +2542,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         yield* runGit(repoDir, ["checkout", "main"]);
         yield* runGit(repoDir, ["branch", "-D", "effect-atom"]);
         yield* runGit(repoDir, ["checkout", "--track", "my-org/upstream/effect-atom"]);
-        fs.writeFileSync(path.join(repoDir, "changes.txt"), "change\n");
+        NodeFS.writeFileSync(NodePath.join(repoDir, "changes.txt"), "change\n");
         yield* runGit(repoDir, ["add", "changes.txt"]);
         yield* runGit(repoDir, ["commit", "-m", "Feature commit"]);
 
@@ -2052,7 +2608,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           false,
         );
       }),
-    20_000,
+    30_000,
   );
 
   it.effect(
@@ -2127,7 +2683,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         expect(ownerSelectorCallIndex).toBeGreaterThanOrEqual(0);
         expect(ghCalls.some((call) => call.startsWith("pr create "))).toBe(false);
       }),
-    12_000,
+    30_000,
   );
 
   it.effect(
@@ -2194,23 +2750,165 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           "pr list --head octocat:statemachine --state open --limit 1",
         );
       }),
-    12_000,
+    30_000,
+  );
+
+  it.effect(
+    "does not reuse a cross-repo PR when GitHub omits head identity metadata",
+    () =>
+      Effect.gen(function* () {
+        const repoDir = yield* makeTempDir("kairo-git-manager-");
+        yield* initRepo(repoDir);
+        yield* runGit(repoDir, ["checkout", "-b", "statemachine"]);
+        const forkDir = yield* createBareRemote();
+        yield* runGit(repoDir, ["remote", "add", "fork-seed", forkDir]);
+        yield* runGit(repoDir, ["push", "-u", "fork-seed", "statemachine"]);
+        yield* runGit(repoDir, [
+          "config",
+          "remote.fork-seed.url",
+          "git@github.com:octocat/codething-mvp.git",
+        ]);
+
+        const { manager, ghCalls } = yield* makeManager({
+          ghScenario: {
+            prListSequenceByHeadSelector: {
+              "octocat:statemachine": [
+                `[{"number":41,"title":"Ambiguous fork PR","url":"https://github.com/pingdotgg/codething-mvp/pull/41","baseRefName":"main","headRefName":"statemachine","state":"OPEN"}]`,
+                `[{"number":142,"title":"Add stacked git actions","url":"https://github.com/pingdotgg/codething-mvp/pull/142","baseRefName":"main","headRefName":"statemachine","state":"OPEN","isCrossRepository":true,"headRepository":{"nameWithOwner":"octocat/codething-mvp"},"headRepositoryOwner":{"login":"octocat"}}]`,
+              ],
+              "fork-seed:statemachine": ["[]"],
+              statemachine: ["[]"],
+            },
+          },
+        });
+
+        const result = yield* runStackedAction(manager, {
+          cwd: repoDir,
+          action: "commit_push_pr",
+        });
+
+        expect(result.pr.status).toBe("created");
+        expect(result.pr.number).toBe(142);
+        expect(ghCalls.some((call) => call.startsWith("pr create "))).toBe(true);
+      }),
+    20_000,
+  );
+
+  it.effect("rejects same-repo PR metadata when matching a cross-repo head context", () =>
+    Effect.sync(() => {
+      const headContext = {
+        headBranch: "statemachine",
+        headRepositoryNameWithOwner: "pingdotgg/codething-mvp",
+        headRepositoryOwnerLogin: "pingdotgg",
+        isCrossRepository: true,
+      };
+
+      expect(
+        GitManager.matchesBranchHeadContext(
+          {
+            number: 41,
+            title: "Same-repo PR",
+            url: "https://github.com/pingdotgg/codething-mvp/pull/41",
+            baseRefName: "main",
+            headRefName: "statemachine",
+            state: "open",
+            updatedAt: Option.none(),
+            isCrossRepository: false,
+            headRepositoryNameWithOwner: "pingdotgg/codething-mvp",
+            headRepositoryOwnerLogin: "pingdotgg",
+          },
+          headContext,
+        ),
+      ).toBe(false);
+
+      expect(
+        GitManager.matchesBranchHeadContext(
+          {
+            number: 142,
+            title: "Fork PR",
+            url: "https://github.com/pingdotgg/codething-mvp/pull/142",
+            baseRefName: "main",
+            headRefName: "statemachine",
+            state: "open",
+            updatedAt: Option.none(),
+            isCrossRepository: true,
+            headRepositoryNameWithOwner: "pingdotgg/codething-mvp",
+            headRepositoryOwnerLogin: "pingdotgg",
+          },
+          headContext,
+        ),
+      ).toBe(true);
+    }),
+  );
+
+  it.effect("accepts fork PR metadata when origin is the fork checkout remote", () =>
+    Effect.sync(() => {
+      const headContext = {
+        headBranch: "kairo/git-audit-stability",
+        headRepositoryNameWithOwner: "justsomelegs/kairo",
+        headRepositoryOwnerLogin: "justsomelegs",
+        isCrossRepository: false,
+      };
+
+      expect(
+        GitManager.matchesBranchHeadContext(
+          {
+            number: 2284,
+            title: "Improve branch mismatch warnings",
+            url: "https://github.com/pingdotgg/kairo/pull/2284",
+            baseRefName: "main",
+            headRefName: "kairo/git-audit-stability",
+            state: "open",
+            updatedAt: Option.none(),
+            isCrossRepository: true,
+            headRepositoryNameWithOwner: "justsomelegs/kairo",
+            headRepositoryOwnerLogin: "justsomelegs",
+          },
+          headContext,
+        ),
+      ).toBe(true);
+    }),
   );
 
   it.effect("creates PR when one does not already exist", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("kairo-git-manager-");
       yield* initRepo(repoDir);
+      NodeFS.mkdirSync(NodePath.join(repoDir, ".github"));
+      NodeFS.writeFileSync(
+        NodePath.join(repoDir, ".github", "pull_request_template.md"),
+        "## What changed?\n\n## Verification",
+      );
+      yield* runGit(repoDir, ["add", ".github/pull_request_template.md"]);
+      yield* runGit(repoDir, ["commit", "-m", "Add pull request template"]);
       yield* runGit(repoDir, ["checkout", "-b", "feature-create-pr"]);
       const remoteDir = yield* createBareRemote();
       yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
-      fs.writeFileSync(path.join(repoDir, "changes.txt"), "change\n");
+      NodeFS.writeFileSync(NodePath.join(repoDir, "changes.txt"), "change\n");
       yield* runGit(repoDir, ["add", "changes.txt"]);
       yield* runGit(repoDir, ["commit", "-m", "Feature commit"]);
       yield* runGit(repoDir, ["push", "-u", "origin", "feature-create-pr"]);
       yield* runGit(repoDir, ["config", "branch.feature-create-pr.gh-merge-base", "main"]);
+      let generatedPolicy: TextGeneration.PrContentGenerationInput["policy"] = undefined;
+      let generatedChangeRequestTemplate: string | undefined;
 
       const { manager, ghCalls } = yield* makeManager({
+        serverSettings: {
+          sourceControlWritingStyle: {
+            mode: "custom" as const,
+            customInstructions: "Lead with user impact.",
+          },
+        },
+        textGeneration: {
+          generatePrContent: (input) => {
+            generatedPolicy = input.policy;
+            generatedChangeRequestTemplate = input.changeRequestTemplate;
+            return Effect.succeed({
+              title: "Add stacked git actions",
+              body: "## What changed?\nAdded stacked git actions.",
+            });
+          },
+        },
         ghScenario: {
           prListSequence: [
             "[]",
@@ -2235,11 +2933,71 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       expect(result.branch.status).toBe("skipped_not_requested");
       expect(result.pr.status).toBe("created");
       expect(result.pr.number).toBe(88);
+      expect(generatedPolicy).toMatchObject({
+        changeRequestInstructions: "Lead with user impact.",
+      });
+      expect(generatedChangeRequestTemplate).toBe("## What changed?\n\n## Verification");
       expect(ghCalls.filter((call) => call.startsWith("pr list "))).toHaveLength(2);
       expect(
         ghCalls.some((call) => call.includes("pr create --base main --head feature-create-pr")),
       ).toBe(true);
       expect(ghCalls.some((call) => call.startsWith("pr view "))).toBe(false);
+    }),
+  );
+
+  it.effect("generates PR content against the remote base when the local base is stale", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("kairo-git-manager-");
+      yield* initRepo(repoDir);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+      yield* runGit(remoteDir, ["symbolic-ref", "HEAD", "refs/heads/main"]);
+
+      const peerDir = yield* makeTempDir("kairo-git-peer-");
+      yield* runGit(peerDir, ["clone", remoteDir, "."]);
+      yield* runGit(peerDir, ["config", "user.email", "peer@example.com"]);
+      yield* runGit(peerDir, ["config", "user.name", "Peer User"]);
+      NodeFS.writeFileSync(NodePath.join(peerDir, "remote.txt"), "remote\n");
+      yield* runGit(peerDir, ["add", "remote.txt"]);
+      yield* runGit(peerDir, ["commit", "-m", "Remote base commit"]);
+      yield* runGit(peerDir, ["push", "origin", "main"]);
+
+      yield* runGit(repoDir, ["fetch", "origin"]);
+      yield* runGit(repoDir, [
+        "checkout",
+        "--no-track",
+        "-b",
+        "feature/remote-base",
+        "origin/main",
+      ]);
+      NodeFS.writeFileSync(NodePath.join(repoDir, "feature.txt"), "feature\n");
+      yield* runGit(repoDir, ["add", "feature.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "Feature commit"]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "feature/remote-base"]);
+      yield* runGit(repoDir, ["config", "branch.feature/remote-base.gh-merge-base", "main"]);
+
+      let generatedCommitSummary = "";
+      const { manager } = yield* makeManager({
+        ghScenario: {
+          prListSequence: ["[]", "[]"],
+        },
+        textGeneration: {
+          generatePrContent: (input) => {
+            generatedCommitSummary = input.commitSummary;
+            return Effect.succeed({ title: "Feature PR", body: "Feature body" });
+          },
+        },
+      });
+
+      const result = yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "create_pr",
+      });
+
+      expect(result.pr.status).toBe("created");
+      expect(generatedCommitSummary).toContain("Feature commit");
+      expect(generatedCommitSummary).not.toContain("Remote base commit");
     }),
   );
 
@@ -2252,7 +3010,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         yield* runGit(repoDir, ["checkout", "-b", "feature/no-fork-match"]);
         const remoteDir = yield* createBareRemote();
         yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
-        fs.writeFileSync(path.join(repoDir, "changes.txt"), "change\n");
+        NodeFS.writeFileSync(NodePath.join(repoDir, "changes.txt"), "change\n");
         yield* runGit(repoDir, ["add", "changes.txt"]);
         yield* runGit(repoDir, ["commit", "-m", "Feature commit"]);
         yield* runGit(repoDir, ["push", "-u", "origin", "feature/no-fork-match"]);
@@ -2324,7 +3082,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       const forkDir = yield* createBareRemote();
       yield* runGit(repoDir, ["remote", "add", "fork-seed", forkDir]);
       yield* runGit(repoDir, ["checkout", "-b", "statemachine"]);
-      fs.writeFileSync(path.join(repoDir, "changes.txt"), "change\n");
+      NodeFS.writeFileSync(NodePath.join(repoDir, "changes.txt"), "change\n");
       yield* runGit(repoDir, ["add", "changes.txt"]);
       yield* runGit(repoDir, ["commit", "-m", "Feature commit"]);
       yield* runGit(repoDir, ["push", "-u", "fork-seed", "statemachine"]);
@@ -2417,9 +3175,10 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
       const { manager } = yield* makeManager({
         ghScenario: {
-          failWith: new GitHubCliError({
-            operation: "execute",
-            detail: "GitHub CLI (`gh`) is required but not available on PATH.",
+          failWith: new GitHubCli.GitHubCliUnavailableError({
+            command: "gh",
+            cwd: repoDir,
+            cause: new Error("gh is not available on PATH"),
           }),
         },
       });
@@ -2446,9 +3205,10 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
       const { manager } = yield* makeManager({
         ghScenario: {
-          failWith: new GitHubCliError({
-            operation: "execute",
-            detail: "GitHub CLI is not authenticated. Run `gh auth login` and retry.",
+          failWith: new GitHubCli.GitHubCliAuthenticationError({
+            command: "gh",
+            cwd: repoDir,
+            cause: new Error("gh is not authenticated"),
           }),
         },
       });
@@ -2504,7 +3264,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       const repoDir = yield* makeTempDir("kairo-git-manager-");
       yield* initRepo(repoDir);
       yield* runGit(repoDir, ["checkout", "-b", "feature/pr-local"]);
-      fs.writeFileSync(path.join(repoDir, "local.txt"), "local\n");
+      NodeFS.writeFileSync(NodePath.join(repoDir, "local.txt"), "local\n");
       yield* runGit(repoDir, ["add", "local.txt"]);
       yield* runGit(repoDir, ["commit", "-m", "Local PR branch"]);
 
@@ -2545,7 +3305,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
         yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
         yield* runGit(repoDir, ["checkout", "-b", "feature/pr-local-upstream"]);
-        fs.writeFileSync(path.join(repoDir, "upstream.txt"), "upstream\n");
+        NodeFS.writeFileSync(NodePath.join(repoDir, "upstream.txt"), "upstream\n");
         yield* runGit(repoDir, ["add", "upstream.txt"]);
         yield* runGit(repoDir, ["commit", "-m", "Local upstream PR branch"]);
         yield* runGit(repoDir, ["push", "-u", "origin", "feature/pr-local-upstream"]);
@@ -2603,7 +3363,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
         yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
         yield* runGit(repoDir, ["checkout", "-b", "feature/pr-local-no-head-repo"]);
-        fs.writeFileSync(path.join(repoDir, "no-head-repo.txt"), "upstream\n");
+        NodeFS.writeFileSync(NodePath.join(repoDir, "no-head-repo.txt"), "upstream\n");
         yield* runGit(repoDir, ["add", "no-head-repo.txt"]);
         yield* runGit(repoDir, ["commit", "-m", "Local PR branch without repo metadata"]);
         yield* runGit(repoDir, ["push", "-u", "origin", "feature/pr-local-no-head-repo"]);
@@ -2650,7 +3410,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
       yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
       yield* runGit(repoDir, ["checkout", "-b", "feature/pr-worktree"]);
-      fs.writeFileSync(path.join(repoDir, "worktree.txt"), "worktree\n");
+      NodeFS.writeFileSync(NodePath.join(repoDir, "worktree.txt"), "worktree\n");
       yield* runGit(repoDir, ["add", "worktree.txt"]);
       yield* runGit(repoDir, ["commit", "-m", "PR worktree branch"]);
       yield* runGit(repoDir, ["push", "-u", "origin", "feature/pr-worktree"]);
@@ -2678,7 +3438,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
       expect(result.branch).toBe("feature/pr-worktree");
       expect(result.worktreePath).not.toBeNull();
-      expect(fs.existsSync(result.worktreePath as string)).toBe(true);
+      expect(NodeFS.existsSync(result.worktreePath as string)).toBe(true);
       const worktreeBranch = (yield* runGit(result.worktreePath as string, [
         "branch",
         "--show-current",
@@ -2687,7 +3447,66 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
-  it.effect("launches setup only when creating a new PR worktree", () =>
+  it.effect("preserves both branch materialization failures when the fallback also fails", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("kairo-git-manager-");
+      yield* initRepo(repoDir);
+      const originDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", originDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+
+      const missingForkDir = NodePath.join(repoDir, "missing-fork.git");
+      const { manager } = yield* makeManager({
+        ghScenario: {
+          pullRequest: {
+            number: 93,
+            title: "Missing fork branch",
+            url: "https://github.com/pingdotgg/codething-mvp/pull/93",
+            baseRefName: "main",
+            headRefName: "feature/missing-fork-branch",
+            state: "open",
+            isCrossRepository: true,
+            headRepositoryNameWithOwner: "octocat/codething-mvp",
+            headRepositoryOwnerLogin: "octocat",
+          },
+          repositoryCloneUrls: {
+            "octocat/codething-mvp": {
+              url: missingForkDir,
+              sshUrl: missingForkDir,
+            },
+          },
+        },
+      });
+
+      const error = yield* preparePullRequestThread(manager, {
+        cwd: repoDir,
+        reference: "93",
+        mode: "worktree",
+      }).pipe(Effect.flip);
+
+      if (error._tag !== "GitPullRequestMaterializationError") {
+        return yield* Effect.die(error);
+      }
+      expect(error).toMatchObject({
+        cwd: repoDir,
+        pullRequestNumber: 93,
+        headRepository: "octocat/codething-mvp",
+        headBranch: "feature/missing-fork-branch",
+        localBranch: "kairo/pr-93/feature/missing-fork-branch",
+      });
+      if (!(error.cause instanceof AggregateError)) {
+        return yield* Effect.die(error.cause);
+      }
+      expect(error.cause.errors).toHaveLength(2);
+      expect(error.cause.errors).toEqual([
+        expect.objectContaining({ _tag: "GitCommandError" }),
+        expect.objectContaining({ _tag: "GitCommandError" }),
+      ]);
+      expect(error.cause.cause).toBe(error.cause.errors[0]);
+    }),
+  );
+
+  it.effect("launches setup when creating a new PR worktree", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("kairo-git-manager-");
       yield* initRepo(repoDir);
@@ -2695,14 +3514,14 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
       yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
       yield* runGit(repoDir, ["checkout", "-b", "feature/pr-worktree-setup"]);
-      fs.writeFileSync(path.join(repoDir, "setup.txt"), "setup\n");
+      NodeFS.writeFileSync(NodePath.join(repoDir, "setup.txt"), "setup\n");
       yield* runGit(repoDir, ["add", "setup.txt"]);
       yield* runGit(repoDir, ["commit", "-m", "PR worktree setup branch"]);
       yield* runGit(repoDir, ["push", "-u", "origin", "feature/pr-worktree-setup"]);
       yield* runGit(repoDir, ["push", "origin", "HEAD:refs/pull/177/head"]);
       yield* runGit(repoDir, ["checkout", "main"]);
 
-      const setupCalls: ProjectSetupScriptRunnerInput[] = [];
+      const setupCalls: ProjectSetupScriptRunner.ProjectSetupScriptRunnerInput[] = [];
       const { manager } = yield* makeManager({
         ghScenario: {
           pullRequest: {
@@ -2750,7 +3569,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
       yield* runGit(repoDir, ["remote", "add", "fork-seed", forkDir]);
       yield* runGit(repoDir, ["checkout", "-b", "feature/pr-fork"]);
-      fs.writeFileSync(path.join(repoDir, "fork.txt"), "fork\n");
+      NodeFS.writeFileSync(NodePath.join(repoDir, "fork.txt"), "fork\n");
       yield* runGit(repoDir, ["add", "fork.txt"]);
       yield* runGit(repoDir, ["commit", "-m", "Fork PR branch"]);
       yield* runGit(repoDir, ["push", "-u", "fork-seed", "feature/pr-fork"]);
@@ -2812,7 +3631,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
       yield* runGit(repoDir, ["remote", "add", "fork-seed", forkDir]);
       yield* runGit(repoDir, ["checkout", "-b", "feature/pr-local-fork"]);
-      fs.writeFileSync(path.join(repoDir, "local-fork.txt"), "local fork\n");
+      NodeFS.writeFileSync(NodePath.join(repoDir, "local-fork.txt"), "local fork\n");
       yield* runGit(repoDir, ["add", "local-fork.txt"]);
       yield* runGit(repoDir, ["commit", "-m", "Local fork PR branch"]);
       yield* runGit(repoDir, ["push", "-u", "fork-seed", "feature/pr-local-fork"]);
@@ -2865,7 +3684,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
       yield* runGit(repoDir, ["remote", "add", "binbandit-seed", forkDir]);
       yield* runGit(repoDir, ["checkout", "-b", "fix/git-action-default-without-origin"]);
-      fs.writeFileSync(path.join(repoDir, "derived-fork.txt"), "derived fork\n");
+      NodeFS.writeFileSync(NodePath.join(repoDir, "derived-fork.txt"), "derived fork\n");
       yield* runGit(repoDir, ["add", "derived-fork.txt"]);
       yield* runGit(repoDir, ["commit", "-m", "Derived fork PR branch"]);
       yield* runGit(repoDir, [
@@ -2917,14 +3736,18 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       const repoDir = yield* makeTempDir("kairo-git-manager-");
       yield* initRepo(repoDir);
       yield* runGit(repoDir, ["checkout", "-b", "feature/pr-existing-worktree"]);
-      fs.writeFileSync(path.join(repoDir, "existing.txt"), "existing\n");
+      NodeFS.writeFileSync(NodePath.join(repoDir, "existing.txt"), "existing\n");
       yield* runGit(repoDir, ["add", "existing.txt"]);
       yield* runGit(repoDir, ["commit", "-m", "Existing worktree branch"]);
       yield* runGit(repoDir, ["checkout", "main"]);
-      const worktreePath = path.join(repoDir, "..", `pr-existing-${path.basename(repoDir)}`);
+      const worktreePath = NodePath.join(
+        repoDir,
+        "..",
+        `pr-existing-${NodePath.basename(repoDir)}`,
+      );
       yield* runGit(repoDir, ["worktree", "add", worktreePath, "feature/pr-existing-worktree"]);
 
-      const setupCalls: ProjectSetupScriptRunnerInput[] = [];
+      const setupCalls: ProjectSetupScriptRunner.ProjectSetupScriptRunnerInput[] = [];
       const { manager } = yield* makeManager({
         ghScenario: {
           pullRequest: {
@@ -2952,10 +3775,551 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         threadId: asThreadId("thread-pr-existing-worktree"),
       });
 
-      expect(result.worktreePath && fs.realpathSync.native(result.worktreePath)).toBe(
-        fs.realpathSync.native(worktreePath),
+      expect(result.worktreePath && NodeFS.realpathSync.native(result.worktreePath)).toBe(
+        NodeFS.realpathSync.native(worktreePath),
       );
       expect(result.branch).toBe("feature/pr-existing-worktree");
+      // Nothing to fetch from, so the checkout keeps the commit it had and setup stays out of a
+      // worktree another thread may be sitting in.
+      expect(setupCalls).toHaveLength(0);
+      expect(result.isOnPullRequestHead).toBe(false);
+    }),
+  );
+
+  it.effect("refreshes a reused PR worktree onto the updated pull request head", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("kairo-git-manager-");
+      yield* initRepo(repoDir);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/pr-reused-stale"]);
+      NodeFS.writeFileSync(NodePath.join(repoDir, "stale.txt"), "stale\n");
+      yield* runGit(repoDir, ["add", "stale.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "Reused stale PR branch"]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "feature/pr-reused-stale"]);
+      yield* runGit(repoDir, ["checkout", "main"]);
+      const worktreePath = NodePath.join(
+        repoDir,
+        "..",
+        `pr-reused-stale-${NodePath.basename(repoDir)}`,
+      );
+      yield* runGit(repoDir, ["worktree", "add", worktreePath, "feature/pr-reused-stale"]);
+
+      yield* runGit(repoDir, ["checkout", "-b", "author-push", "origin/feature/pr-reused-stale"]);
+      NodeFS.writeFileSync(NodePath.join(repoDir, "authored.txt"), "authored\n");
+      yield* runGit(repoDir, ["add", "authored.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "New PR head commit"]);
+      yield* runGit(repoDir, ["push", "origin", "author-push:feature/pr-reused-stale"]);
+      const updatedHead = (yield* runGit(repoDir, ["rev-parse", "author-push"])).stdout.trim();
+      yield* runGit(repoDir, ["checkout", "main"]);
+
+      const { manager } = yield* makeManager({
+        ghScenario: {
+          pullRequest: {
+            number: 84,
+            title: "Reused stale PR",
+            url: "https://github.com/pingdotgg/codething-mvp/pull/84",
+            baseRefName: "main",
+            headRefName: "feature/pr-reused-stale",
+            state: "open",
+          },
+        },
+      });
+
+      const result = yield* preparePullRequestThread(manager, {
+        cwd: repoDir,
+        reference: "84",
+        mode: "worktree",
+      });
+
+      expect(result.worktreePath && NodeFS.realpathSync.native(result.worktreePath)).toBe(
+        NodeFS.realpathSync.native(worktreePath),
+      );
+      expect(result.branch).toBe("feature/pr-reused-stale");
+      expect((yield* runGit(worktreePath, ["rev-parse", "HEAD"])).stdout.trim()).toBe(updatedHead);
+    }),
+  );
+
+  it.effect("runs the setup script when a reused PR worktree moves onto the new head", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("kairo-git-manager-");
+      yield* initRepo(repoDir);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/pr-reused-setup"]);
+      NodeFS.writeFileSync(NodePath.join(repoDir, "reused-setup.txt"), "reused setup\n");
+      yield* runGit(repoDir, ["add", "reused-setup.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "Reused setup PR branch"]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "feature/pr-reused-setup"]);
+      yield* runGit(repoDir, ["checkout", "main"]);
+      const worktreePath = NodePath.join(
+        repoDir,
+        "..",
+        `pr-reused-setup-${NodePath.basename(repoDir)}`,
+      );
+      yield* runGit(repoDir, ["worktree", "add", worktreePath, "feature/pr-reused-setup"]);
+
+      yield* runGit(repoDir, ["checkout", "-b", "setup-author-push", "feature/pr-reused-setup"]);
+      NodeFS.writeFileSync(NodePath.join(repoDir, "reused-setup.txt"), "reused setup again\n");
+      yield* runGit(repoDir, ["add", "reused-setup.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "New reused setup head"]);
+      yield* runGit(repoDir, ["push", "origin", "setup-author-push:feature/pr-reused-setup"]);
+      yield* runGit(repoDir, ["checkout", "main"]);
+
+      const setupCalls: ProjectSetupScriptRunner.ProjectSetupScriptRunnerInput[] = [];
+      const { manager } = yield* makeManager({
+        ghScenario: {
+          pullRequest: {
+            number: 85,
+            title: "Reused setup PR",
+            url: "https://github.com/pingdotgg/codething-mvp/pull/85",
+            baseRefName: "main",
+            headRefName: "feature/pr-reused-setup",
+            state: "open",
+          },
+        },
+        setupScriptRunner: {
+          runForThread: (setupInput) =>
+            Effect.sync(() => {
+              setupCalls.push(setupInput);
+              return { status: "no-script" as const };
+            }),
+        },
+      });
+
+      const result = yield* preparePullRequestThread(manager, {
+        cwd: repoDir,
+        reference: "85",
+        mode: "worktree",
+        threadId: asThreadId("thread-pr-reused-setup"),
+      });
+
+      expect(setupCalls).toHaveLength(1);
+      expect(setupCalls[0]).toEqual({
+        threadId: "thread-pr-reused-setup",
+        projectCwd: repoDir,
+        worktreePath: result.worktreePath as string,
+      });
+      expect(result.isOnPullRequestHead).toBe(true);
+    }),
+  );
+
+  it.effect("leaves the setup script alone when a reused PR worktree is already on the head", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("kairo-git-manager-");
+      yield* initRepo(repoDir);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/pr-reused-current"]);
+      NodeFS.writeFileSync(NodePath.join(repoDir, "reused-current.txt"), "reused current\n");
+      yield* runGit(repoDir, ["add", "reused-current.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "Reused current PR branch"]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "feature/pr-reused-current"]);
+      yield* runGit(repoDir, ["checkout", "main"]);
+      const worktreePath = NodePath.join(
+        repoDir,
+        "..",
+        `pr-reused-current-${NodePath.basename(repoDir)}`,
+      );
+      yield* runGit(repoDir, ["worktree", "add", worktreePath, "feature/pr-reused-current"]);
+      const currentHead = (yield* runGit(worktreePath, ["rev-parse", "HEAD"])).stdout.trim();
+
+      const setupCalls: ProjectSetupScriptRunner.ProjectSetupScriptRunnerInput[] = [];
+      const { manager } = yield* makeManager({
+        ghScenario: {
+          pullRequest: {
+            number: 95,
+            title: "Reused current PR",
+            url: "https://github.com/pingdotgg/codething-mvp/pull/95",
+            baseRefName: "main",
+            headRefName: "feature/pr-reused-current",
+            state: "open",
+          },
+        },
+        setupScriptRunner: {
+          runForThread: (setupInput) =>
+            Effect.sync(() => {
+              setupCalls.push(setupInput);
+              return { status: "no-script" as const };
+            }),
+        },
+      });
+
+      const result = yield* preparePullRequestThread(manager, {
+        cwd: repoDir,
+        reference: "95",
+        mode: "worktree",
+        threadId: asThreadId("thread-pr-reused-current"),
+      });
+
+      expect(result.isOnPullRequestHead).toBe(true);
+      expect((yield* runGit(worktreePath, ["rev-parse", "HEAD"])).stdout.trim()).toBe(currentHead);
+      expect(setupCalls).toHaveLength(0);
+    }),
+  );
+
+  it.effect("resets a clean reused PR worktree onto a force-pushed pull request head", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("kairo-git-manager-");
+      yield* initRepo(repoDir);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/pr-force-pushed"]);
+      NodeFS.writeFileSync(NodePath.join(repoDir, "force-pushed.txt"), "first\n");
+      yield* runGit(repoDir, ["add", "force-pushed.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "Force-pushed PR branch"]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "feature/pr-force-pushed"]);
+      yield* runGit(repoDir, ["checkout", "main"]);
+      const worktreePath = NodePath.join(
+        repoDir,
+        "..",
+        `pr-force-pushed-${NodePath.basename(repoDir)}`,
+      );
+      yield* runGit(repoDir, ["worktree", "add", worktreePath, "feature/pr-force-pushed"]);
+      const staleHead = (yield* runGit(worktreePath, ["rev-parse", "HEAD"])).stdout.trim();
+
+      yield* runGit(repoDir, ["checkout", "-b", "author-rewrite", "feature/pr-force-pushed"]);
+      NodeFS.writeFileSync(NodePath.join(repoDir, "force-pushed.txt"), "rewritten\n");
+      yield* runGit(repoDir, ["add", "force-pushed.txt"]);
+      yield* runGit(repoDir, ["commit", "--amend", "-m", "Rewritten PR head"]);
+      yield* runGit(repoDir, [
+        "push",
+        "--force",
+        "origin",
+        "author-rewrite:feature/pr-force-pushed",
+      ]);
+      const rewrittenHead = (yield* runGit(repoDir, ["rev-parse", "author-rewrite"])).stdout.trim();
+      // Pushing from this clone also advanced its remote-tracking ref. A head rewritten by the
+      // author leaves that ref behind, which is the state a reused worktree is really opened in.
+      yield* runGit(repoDir, [
+        "update-ref",
+        "refs/remotes/origin/feature/pr-force-pushed",
+        staleHead,
+      ]);
+      yield* runGit(repoDir, ["checkout", "main"]);
+
+      const { manager } = yield* makeManager({
+        ghScenario: {
+          pullRequest: {
+            number: 86,
+            title: "Force-pushed PR",
+            url: "https://github.com/pingdotgg/codething-mvp/pull/86",
+            baseRefName: "main",
+            headRefName: "feature/pr-force-pushed",
+            state: "open",
+          },
+        },
+      });
+
+      const result = yield* preparePullRequestThread(manager, {
+        cwd: repoDir,
+        reference: "86",
+        mode: "worktree",
+      });
+
+      expect(result.worktreePath && NodeFS.realpathSync.native(result.worktreePath)).toBe(
+        NodeFS.realpathSync.native(worktreePath),
+      );
+      expect(result.isOnPullRequestHead).toBe(true);
+      expect((yield* runGit(worktreePath, ["rev-parse", "HEAD"])).stdout.trim()).toBe(
+        rewrittenHead,
+      );
+      expect(NodeFS.readFileSync(NodePath.join(worktreePath, "force-pushed.txt"), "utf8")).toBe(
+        "rewritten\n",
+      );
+    }),
+  );
+
+  it.effect("keeps a reused PR worktree that carries its own commit off the rewritten head", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("kairo-git-manager-");
+      yield* initRepo(repoDir);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/pr-local-commit"]);
+      NodeFS.writeFileSync(NodePath.join(repoDir, "local-commit.txt"), "first\n");
+      yield* runGit(repoDir, ["add", "local-commit.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "Local commit PR branch"]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "feature/pr-local-commit"]);
+      yield* runGit(repoDir, ["checkout", "main"]);
+      const worktreePath = NodePath.join(
+        repoDir,
+        "..",
+        `pr-local-commit-${NodePath.basename(repoDir)}`,
+      );
+      yield* runGit(repoDir, ["worktree", "add", worktreePath, "feature/pr-local-commit"]);
+      const upstreamHead = (yield* runGit(worktreePath, ["rev-parse", "HEAD"])).stdout.trim();
+
+      yield* runGit(repoDir, ["checkout", "-b", "local-commit-rewrite", "feature/pr-local-commit"]);
+      NodeFS.writeFileSync(NodePath.join(repoDir, "local-commit.txt"), "rewritten\n");
+      yield* runGit(repoDir, ["add", "local-commit.txt"]);
+      yield* runGit(repoDir, ["commit", "--amend", "-m", "Rewritten local commit head"]);
+      yield* runGit(repoDir, [
+        "push",
+        "--force",
+        "origin",
+        "local-commit-rewrite:feature/pr-local-commit",
+      ]);
+      yield* runGit(repoDir, [
+        "update-ref",
+        "refs/remotes/origin/feature/pr-local-commit",
+        upstreamHead,
+      ]);
+      yield* runGit(repoDir, ["checkout", "main"]);
+
+      // The work that must survive: a commit made in the worktree, on top of the stale head.
+      NodeFS.writeFileSync(NodePath.join(worktreePath, "thread-work.txt"), "thread work\n");
+      yield* runGit(worktreePath, ["add", "thread-work.txt"]);
+      yield* runGit(worktreePath, ["commit", "-m", "Work done in the reused worktree"]);
+      const worktreeHead = (yield* runGit(worktreePath, ["rev-parse", "HEAD"])).stdout.trim();
+
+      const setupCalls: ProjectSetupScriptRunner.ProjectSetupScriptRunnerInput[] = [];
+      const { manager } = yield* makeManager({
+        ghScenario: {
+          pullRequest: {
+            number: 87,
+            title: "Local commit PR",
+            url: "https://github.com/pingdotgg/codething-mvp/pull/87",
+            baseRefName: "main",
+            headRefName: "feature/pr-local-commit",
+            state: "open",
+          },
+        },
+        setupScriptRunner: {
+          runForThread: (setupInput) =>
+            Effect.sync(() => {
+              setupCalls.push(setupInput);
+              return { status: "no-script" as const };
+            }),
+        },
+      });
+
+      const result = yield* preparePullRequestThread(manager, {
+        cwd: repoDir,
+        reference: "87",
+        mode: "worktree",
+        threadId: asThreadId("thread-pr-local-commit"),
+      });
+
+      expect(result.isOnPullRequestHead).toBe(false);
+      expect((yield* runGit(worktreePath, ["rev-parse", "HEAD"])).stdout.trim()).toBe(worktreeHead);
+      expect(NodeFS.existsSync(NodePath.join(worktreePath, "thread-work.txt"))).toBe(true);
+      expect(setupCalls).toHaveLength(0);
+    }),
+  );
+
+  it.effect("keeps a dirty reused PR worktree off the rewritten pull request head", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("kairo-git-manager-");
+      yield* initRepo(repoDir);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/pr-dirty-worktree"]);
+      NodeFS.writeFileSync(NodePath.join(repoDir, "dirty.txt"), "first\n");
+      yield* runGit(repoDir, ["add", "dirty.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "Dirty worktree PR branch"]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "feature/pr-dirty-worktree"]);
+      yield* runGit(repoDir, ["checkout", "main"]);
+      const worktreePath = NodePath.join(
+        repoDir,
+        "..",
+        `pr-dirty-worktree-${NodePath.basename(repoDir)}`,
+      );
+      yield* runGit(repoDir, ["worktree", "add", worktreePath, "feature/pr-dirty-worktree"]);
+      const staleHead = (yield* runGit(worktreePath, ["rev-parse", "HEAD"])).stdout.trim();
+
+      yield* runGit(repoDir, ["checkout", "-b", "dirty-rewrite", "feature/pr-dirty-worktree"]);
+      NodeFS.writeFileSync(NodePath.join(repoDir, "dirty.txt"), "rewritten\n");
+      yield* runGit(repoDir, ["add", "dirty.txt"]);
+      yield* runGit(repoDir, ["commit", "--amend", "-m", "Rewritten dirty head"]);
+      yield* runGit(repoDir, [
+        "push",
+        "--force",
+        "origin",
+        "dirty-rewrite:feature/pr-dirty-worktree",
+      ]);
+      yield* runGit(repoDir, [
+        "update-ref",
+        "refs/remotes/origin/feature/pr-dirty-worktree",
+        staleHead,
+      ]);
+      yield* runGit(repoDir, ["checkout", "main"]);
+
+      NodeFS.writeFileSync(NodePath.join(worktreePath, "dirty.txt"), "uncommitted edit\n");
+
+      const setupCalls: ProjectSetupScriptRunner.ProjectSetupScriptRunnerInput[] = [];
+      const { manager } = yield* makeManager({
+        ghScenario: {
+          pullRequest: {
+            number: 89,
+            title: "Dirty worktree PR",
+            url: "https://github.com/pingdotgg/codething-mvp/pull/89",
+            baseRefName: "main",
+            headRefName: "feature/pr-dirty-worktree",
+            state: "open",
+          },
+        },
+        setupScriptRunner: {
+          runForThread: (setupInput) =>
+            Effect.sync(() => {
+              setupCalls.push(setupInput);
+              return { status: "no-script" as const };
+            }),
+        },
+      });
+
+      const result = yield* preparePullRequestThread(manager, {
+        cwd: repoDir,
+        reference: "89",
+        mode: "worktree",
+        threadId: asThreadId("thread-pr-dirty-worktree"),
+      });
+
+      expect(result.isOnPullRequestHead).toBe(false);
+      expect((yield* runGit(worktreePath, ["rev-parse", "HEAD"])).stdout.trim()).toBe(staleHead);
+      expect(NodeFS.readFileSync(NodePath.join(worktreePath, "dirty.txt"), "utf8")).toBe(
+        "uncommitted edit\n",
+      );
+      expect(setupCalls).toHaveLength(0);
+    }),
+  );
+
+  it.effect("refreshes a reused PR worktree that has no upstream from the pull request ref", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("kairo-git-manager-");
+      yield* initRepo(repoDir);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/pr-ref-only"]);
+      NodeFS.writeFileSync(NodePath.join(repoDir, "ref-only.txt"), "ref only\n");
+      yield* runGit(repoDir, ["add", "ref-only.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "Pull ref only PR branch"]);
+      // The head lives at refs/pull/90/head and nowhere else, so nothing can be tracked.
+      yield* runGit(repoDir, ["push", "origin", "HEAD:refs/pull/90/head"]);
+      yield* runGit(repoDir, ["checkout", "main"]);
+      yield* runGit(repoDir, ["branch", "-D", "feature/pr-ref-only"]);
+
+      const { manager } = yield* makeManager({
+        ghScenario: {
+          pullRequest: {
+            number: 90,
+            title: "Pull ref only PR",
+            url: "https://github.com/pingdotgg/codething-mvp/pull/90",
+            baseRefName: "main",
+            headRefName: "feature/pr-ref-only",
+            state: "open",
+          },
+        },
+      });
+
+      const created = yield* preparePullRequestThread(manager, {
+        cwd: repoDir,
+        reference: "90",
+        mode: "worktree",
+      });
+      const worktreePath = created.worktreePath as string;
+      expect(
+        (yield* runGit(worktreePath, ["rev-parse", "--abbrev-ref", "@{upstream}"], true)).exitCode,
+      ).not.toBe(0);
+
+      yield* runGit(repoDir, ["fetch", "origin", "refs/pull/90/head"]);
+      yield* runGit(repoDir, ["checkout", "-b", "ref-only-author", "FETCH_HEAD"]);
+      NodeFS.writeFileSync(NodePath.join(repoDir, "ref-only.txt"), "ref only again\n");
+      yield* runGit(repoDir, ["add", "ref-only.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "New pull ref head"]);
+      yield* runGit(repoDir, ["push", "origin", "ref-only-author:refs/pull/90/head"]);
+      const updatedHead = (yield* runGit(repoDir, ["rev-parse", "ref-only-author"])).stdout.trim();
+      yield* runGit(repoDir, ["checkout", "main"]);
+
+      const result = yield* preparePullRequestThread(manager, {
+        cwd: repoDir,
+        reference: "90",
+        mode: "worktree",
+      });
+
+      expect(result.worktreePath && NodeFS.realpathSync.native(result.worktreePath)).toBe(
+        NodeFS.realpathSync.native(worktreePath),
+      );
+      expect(result.isOnPullRequestHead).toBe(true);
+      expect((yield* runGit(worktreePath, ["rev-parse", "HEAD"])).stdout.trim()).toBe(updatedHead);
+    }),
+  );
+
+  it.effect("never moves an unrelated local branch that shares the fork head branch name", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("kairo-git-manager-");
+      yield* initRepo(repoDir);
+      const originDir = yield* createBareRemote();
+      const forkDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", originDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+      yield* runGit(repoDir, ["remote", "add", "fork-seed", forkDir]);
+      yield* runGit(repoDir, ["checkout", "-b", "fork-main-collision"]);
+      NodeFS.writeFileSync(NodePath.join(repoDir, "contributor.txt"), "contributor\n");
+      yield* runGit(repoDir, ["add", "contributor.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "Contributor commit on the fork main"]);
+      yield* runGit(repoDir, ["push", "-u", "fork-seed", "fork-main-collision:main"]);
+      // The user's own main, checked out in its own worktree and behind the fork's main: a
+      // fast-forward would land the contributor's commits in it.
+      yield* runGit(repoDir, ["checkout", "-b", "feature/root-work", "main"]);
+      const mainWorktreePath = NodePath.join(
+        repoDir,
+        "..",
+        `local-main-${NodePath.basename(repoDir)}`,
+      );
+      yield* runGit(repoDir, ["worktree", "add", mainWorktreePath, "main"]);
+      const localMainBefore = (yield* runGit(repoDir, ["rev-parse", "main"])).stdout.trim();
+
+      const setupCalls: ProjectSetupScriptRunner.ProjectSetupScriptRunnerInput[] = [];
+      const { manager } = yield* makeManager({
+        ghScenario: {
+          pullRequest: {
+            number: 94,
+            title: "Fork main collision PR",
+            url: "https://github.com/pingdotgg/codething-mvp/pull/94",
+            baseRefName: "main",
+            headRefName: "main",
+            state: "open",
+            isCrossRepository: true,
+            headRepositoryNameWithOwner: "octocat/codething-mvp",
+            headRepositoryOwnerLogin: "octocat",
+          },
+          repositoryCloneUrls: {
+            "octocat/codething-mvp": {
+              url: forkDir,
+              sshUrl: forkDir,
+            },
+          },
+        },
+        setupScriptRunner: {
+          runForThread: (setupInput) =>
+            Effect.sync(() => {
+              setupCalls.push(setupInput);
+              return { status: "no-script" as const };
+            }),
+        },
+      });
+
+      const result = yield* preparePullRequestThread(manager, {
+        cwd: repoDir,
+        reference: "94",
+        mode: "worktree",
+        threadId: asThreadId("thread-pr-fork-main-collision"),
+      });
+
+      expect((yield* runGit(repoDir, ["rev-parse", "main"])).stdout.trim()).toBe(localMainBefore);
+      expect((yield* runGit(mainWorktreePath, ["rev-parse", "HEAD"])).stdout.trim()).toBe(
+        localMainBefore,
+      );
+      expect(NodeFS.existsSync(NodePath.join(mainWorktreePath, "contributor.txt"))).toBe(false);
+      expect(result.isOnPullRequestHead).toBe(false);
       expect(setupCalls).toHaveLength(0);
     }),
   );
@@ -2972,7 +4336,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
         yield* runGit(repoDir, ["remote", "add", "fork-seed", forkDir]);
         yield* runGit(repoDir, ["checkout", "-b", "fork-main-source"]);
-        fs.writeFileSync(path.join(repoDir, "fork-main.txt"), "fork main\n");
+        NodeFS.writeFileSync(NodePath.join(repoDir, "fork-main.txt"), "fork main\n");
         yield* runGit(repoDir, ["add", "fork-main.txt"]);
         yield* runGit(repoDir, ["commit", "-m", "Fork main branch"]);
         yield* runGit(repoDir, ["push", "-u", "fork-seed", "fork-main-source:main"]);
@@ -3032,7 +4396,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
         yield* runGit(repoDir, ["remote", "add", "fork-seed", forkDir]);
         yield* runGit(repoDir, ["checkout", "-b", "fork-main-source"]);
-        fs.writeFileSync(path.join(repoDir, "fork-main-second.txt"), "fork main second\n");
+        NodeFS.writeFileSync(NodePath.join(repoDir, "fork-main-second.txt"), "fork main second\n");
         yield* runGit(repoDir, ["add", "fork-main-second.txt"]);
         yield* runGit(repoDir, ["commit", "-m", "Fork main second branch"]);
         yield* runGit(repoDir, ["push", "-u", "fork-seed", "fork-main-source:main"]);
@@ -3090,12 +4454,16 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
       yield* runGit(repoDir, ["remote", "add", "fork-seed", forkDir]);
       yield* runGit(repoDir, ["checkout", "-b", "feature/pr-reused-fork"]);
-      fs.writeFileSync(path.join(repoDir, "reused-fork.txt"), "reused fork\n");
+      NodeFS.writeFileSync(NodePath.join(repoDir, "reused-fork.txt"), "reused fork\n");
       yield* runGit(repoDir, ["add", "reused-fork.txt"]);
       yield* runGit(repoDir, ["commit", "-m", "Reused fork PR branch"]);
       yield* runGit(repoDir, ["push", "-u", "fork-seed", "feature/pr-reused-fork"]);
       yield* runGit(repoDir, ["checkout", "main"]);
-      const worktreePath = path.join(repoDir, "..", `pr-reused-fork-${path.basename(repoDir)}`);
+      const worktreePath = NodePath.join(
+        repoDir,
+        "..",
+        `pr-reused-fork-${NodePath.basename(repoDir)}`,
+      );
       yield* runGit(repoDir, ["worktree", "add", worktreePath, "feature/pr-reused-fork"]);
       yield* runGit(worktreePath, ["branch", "--unset-upstream"], true);
 
@@ -3127,8 +4495,8 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         mode: "worktree",
       });
 
-      expect(result.worktreePath && fs.realpathSync.native(result.worktreePath)).toBe(
-        fs.realpathSync.native(worktreePath),
+      expect(result.worktreePath && NodeFS.realpathSync.native(result.worktreePath)).toBe(
+        NodeFS.realpathSync.native(worktreePath),
       );
       expect(
         (yield* runGit(worktreePath, ["rev-parse", "--abbrev-ref", "@{upstream}"])).stdout.trim(),
@@ -3144,7 +4512,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
       yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
       yield* runGit(repoDir, ["checkout", "-b", "feature/pr-setup-failure"]);
-      fs.writeFileSync(path.join(repoDir, "setup-failure.txt"), "setup failure\n");
+      NodeFS.writeFileSync(NodePath.join(repoDir, "setup-failure.txt"), "setup failure\n");
       yield* runGit(repoDir, ["add", "setup-failure.txt"]);
       yield* runGit(repoDir, ["commit", "-m", "PR setup failure branch"]);
       yield* runGit(repoDir, ["push", "-u", "origin", "feature/pr-setup-failure"]);
@@ -3163,8 +4531,15 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           },
         },
         setupScriptRunner: {
-          runForThread: () =>
-            Effect.fail(new ProjectSetupScriptRunnerError({ message: "terminal start failed" })),
+          runForThread: (input) =>
+            Effect.fail(
+              new ProjectSetupScriptRunner.ProjectSetupScriptOperationError({
+                threadId: input.threadId,
+                worktreePath: input.worktreePath,
+                operation: "openTerminal",
+                cause: new Error("terminal start failed"),
+              }),
+            ),
         },
       });
 
@@ -3177,7 +4552,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
       expect(result.branch).toBe("feature/pr-setup-failure");
       expect(result.worktreePath).not.toBeNull();
-      expect(fs.existsSync(result.worktreePath as string)).toBe(true);
+      expect(NodeFS.existsSync(result.worktreePath as string)).toBe(true);
     }),
   );
 
@@ -3217,9 +4592,9 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("kairo-git-manager-");
       yield* initRepo(repoDir);
-      fs.writeFileSync(path.join(repoDir, "hooked.txt"), "hooked\n");
-      fs.writeFileSync(
-        path.join(repoDir, ".git", "hooks", "pre-commit"),
+      NodeFS.writeFileSync(NodePath.join(repoDir, "hooked.txt"), "hooked\n");
+      NodeFS.writeFileSync(
+        NodePath.join(repoDir, ".git", "hooks", "pre-commit"),
         '#!/bin/sh\necho "hook: start" >&2\nsleep 0.05\necho "hook: end" >&2\n',
         { mode: 0o755 },
       );
@@ -3280,9 +4655,9 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("kairo-git-manager-");
       yield* initRepo(repoDir);
-      fs.writeFileSync(path.join(repoDir, "hook-failure.txt"), "broken\n");
-      fs.writeFileSync(
-        path.join(repoDir, ".git", "hooks", "pre-commit"),
+      NodeFS.writeFileSync(NodePath.join(repoDir, "hook-failure.txt"), "broken\n");
+      NodeFS.writeFileSync(
+        NodePath.join(repoDir, ".git", "hooks", "pre-commit"),
         '#!/bin/sh\necho "hook: fail" >&2\nexit 1\n',
         { mode: 0o755 },
       );
@@ -3310,12 +4685,17 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         Effect.map((error) => error.message),
       );
 
-      expect(errorMessage).toContain("hook: fail");
+      expect(errorMessage).toContain("Git command failed in GitVcsDriver.commit.commit");
+      expect(errorMessage).not.toContain("hook: fail");
       expect(events).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             kind: "hook_started",
             hookName: "pre-commit",
+          }),
+          expect.objectContaining({
+            kind: "hook_output",
+            text: "hook: fail",
           }),
           expect.objectContaining({
             kind: "action_failed",
@@ -3333,7 +4713,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       yield* runGit(repoDir, ["checkout", "-b", "feature/pr-only-follow-up"]);
       const remoteDir = yield* createBareRemote();
       yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
-      fs.writeFileSync(path.join(repoDir, "pr-only.txt"), "pr only\n");
+      NodeFS.writeFileSync(NodePath.join(repoDir, "pr-only.txt"), "pr only\n");
       yield* runGit(repoDir, ["add", "pr-only.txt"]);
       yield* runGit(repoDir, ["commit", "-m", "PR only branch"]);
       yield* runGit(repoDir, ["push", "-u", "origin", "feature/pr-only-follow-up"]);

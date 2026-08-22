@@ -5,8 +5,9 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { ChildProcessSpawner } from "effect/unstable/process";
+import { VcsRepositoryDetectionError } from "@kairo/contracts";
 
-import { ServerConfig } from "../config.ts";
+import * as ServerConfig from "../config.ts";
 import type * as VcsDriver from "../vcs/VcsDriver.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
@@ -37,7 +38,8 @@ function makeRegistry(input: {
     readonly name: string;
     readonly url: string;
   }>;
-  readonly process?: Partial<VcsProcess.VcsProcessShape>;
+  readonly process?: Partial<VcsProcess.VcsProcess["Service"]>;
+  readonly resolve?: VcsDriverRegistry.VcsDriverRegistry["Service"]["resolve"];
 }) {
   const driver = {
     listRemotes: () =>
@@ -53,25 +55,27 @@ function makeRegistry(input: {
           expiresAt: Option.none(),
         },
       }),
-  } satisfies Partial<VcsDriver.VcsDriverShape>;
+  } satisfies Partial<VcsDriver.VcsDriver["Service"]>;
 
   const registryLayer = Layer.mock(VcsDriverRegistry.VcsDriverRegistry)({
-    get: () => Effect.succeed(driver as unknown as VcsDriver.VcsDriverShape),
-    resolve: () =>
-      Effect.succeed({
-        kind: "git",
-        repository: {
+    get: () => Effect.succeed(driver as unknown as VcsDriver.VcsDriver["Service"]),
+    resolve:
+      input.resolve ??
+      (() =>
+        Effect.succeed({
           kind: "git",
-          rootPath: "/repo",
-          metadataPath: null,
-          freshness: {
-            source: "live-local" as const,
-            observedAt: TEST_EPOCH,
-            expiresAt: Option.none(),
+          repository: {
+            kind: "git",
+            rootPath: "/repo",
+            metadataPath: null,
+            freshness: {
+              source: "live-local" as const,
+              observedAt: TEST_EPOCH,
+              expiresAt: Option.none(),
+            },
           },
-        },
-        driver: driver as unknown as VcsDriver.VcsDriverShape,
-      }),
+          driver: driver as unknown as VcsDriver.VcsDriver["Service"],
+        })),
   });
 
   const processLayer = Layer.mock(VcsProcess.VcsProcess)({
@@ -79,7 +83,7 @@ function makeRegistry(input: {
     ...input.process,
   });
 
-  return SourceControlProviderRegistry.make().pipe(
+  return SourceControlProviderRegistry.make.pipe(
     Effect.provide(
       Layer.mergeAll(
         registryLayer,
@@ -120,6 +124,46 @@ it.effect("routes directly by provider kind for remote-first workflows", () =>
   }),
 );
 
+it.effect("includes the request cwd when an unregistered provider is used", () =>
+  Effect.gen(function* () {
+    const registry = yield* makeRegistry({ remotes: [] });
+    const provider = yield* registry.get("unknown");
+
+    const error = yield* provider
+      .getChangeRequest({ cwd: "/repo", reference: "#42" })
+      .pipe(Effect.flip);
+
+    assert.strictEqual(error.provider, "unknown");
+    assert.strictEqual(error.operation, "getChangeRequest");
+    assert.strictEqual(error.cwd, "/repo");
+    assert.strictEqual(error.reference, "#42");
+  }),
+);
+
+it.effect("retains VCS detection failures with structured cwd context", () =>
+  Effect.gen(function* () {
+    const cause = new VcsRepositoryDetectionError({
+      operation: "resolve",
+      cwd: "/repo",
+      detail: "raw VCS detection failure",
+      cause: new Error("raw nested failure"),
+    });
+    const registry = yield* makeRegistry({
+      remotes: [],
+      resolve: () => Effect.fail(cause),
+    });
+
+    const error = yield* registry.resolve({ cwd: "/repo" }).pipe(Effect.flip);
+
+    assert.strictEqual(error.provider, "unknown");
+    assert.strictEqual(error.operation, "detectProvider");
+    assert.strictEqual(error.cwd, "/repo");
+    assert.strictEqual(error.detail, "Failed to detect source control provider.");
+    assert.strictEqual(error.cause, cause);
+    assert.equal(error.message.includes(cause.message), false);
+  }),
+);
+
 it.effect("routes GitLab remotes to the GitLab provider", () =>
   Effect.gen(function* () {
     const registry = yield* makeRegistry({
@@ -156,6 +200,38 @@ self-hosted.example.test
     const provider = yield* registry.resolve({ cwd: "/repo" });
 
     assert.strictEqual(provider.kind, "gitlab");
+  }),
+);
+
+it.effect("refines the caller-selected remote instead of choosing another configured remote", () =>
+  Effect.gen(function* () {
+    const registry = yield* makeRegistry({
+      remotes: [{ name: "origin", url: "git@github.com:fork/project.git" }],
+      process: {
+        run: () =>
+          Effect.succeed(
+            processOutput(`self-hosted.example.test
+  ✓ Logged in to self-hosted.example.test as gitlab-user
+`),
+          ),
+      },
+    });
+
+    const handle = yield* registry.resolveHandle({
+      cwd: "/repo",
+      context: {
+        provider: {
+          kind: "unknown",
+          name: "self-hosted.example.test",
+          baseUrl: "https://self-hosted.example.test",
+        },
+        remoteName: "upstream",
+        remoteUrl: "https://self-hosted.example.test/group/project.git",
+      },
+    });
+
+    assert.strictEqual(handle.context?.provider.kind, "gitlab");
+    assert.strictEqual(handle.context?.remoteName, "upstream");
   }),
 );
 

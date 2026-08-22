@@ -3,7 +3,9 @@ import { assert, describe, it } from "@effect/vitest";
 
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import { HostProcessPlatform } from "@kairo/shared/hostProcess";
 
 import {
   buildSshAskpassHelperDescriptor,
@@ -37,7 +39,6 @@ describe("ssh auth", () => {
         authSecret: "super-secret",
         interactiveAuth: true,
         askpassDirectory: directory,
-        platform: "linux",
         baseEnv: {},
       });
 
@@ -51,15 +52,21 @@ describe("ssh auth", () => {
         yield* fs.readFileString(askpassPath),
         'printf "%s\\n" "$KAIRO_SSH_AUTH_SECRET"',
       );
-    }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
+    }).pipe(
+      Effect.provide(Layer.merge(NodeServices.layer, Layer.succeed(HostProcessPlatform, "linux"))),
+      Effect.scoped,
+    ),
   );
 
   it.effect("builds a windows askpass launcher pair", () =>
     Effect.gen(function* () {
       const descriptor = yield* buildSshAskpassHelperDescriptor({
         directory: "C:\\temp\\kairo-ssh-askpass",
-        platform: "win32",
-      }).pipe(Effect.provide(NodeServices.layer));
+      }).pipe(
+        Effect.provide(
+          Layer.merge(NodeServices.layer, Layer.succeed(HostProcessPlatform, "win32")),
+        ),
+      );
 
       assert.equal(descriptor.launcherPath, "C:\\temp\\kairo-ssh-askpass\\ssh-askpass.cmd");
       assert.deepEqual(

@@ -5,7 +5,7 @@ import {
   EnvironmentHttpInternalServerError,
   EnvironmentHttpUnauthorizedError,
 } from "@kairo/contracts";
-import { makeEnvironmentHttpApiClient } from "@kairo/client-runtime";
+import { makeEnvironmentHttpApiClient } from "@kairo/client-runtime/rpc";
 import {
   RelayCloudEnvironmentHealthProofPayload,
   RelayEnvironmentHealthResponse,
@@ -13,6 +13,7 @@ import {
   RelayEnvironmentMintResponse,
   RelayEnvironmentMintResponseProofPayload,
   RelayCloudMintCredentialProofPayload,
+  RelayEnvironmentConnectNotAuthorizedReason,
   type RelayEnvironmentConnectResponse,
   type RelayEnvironmentStatusResponse,
 } from "@kairo/contracts/relay";
@@ -35,28 +36,17 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import { FetchHttpClient, HttpClient } from "effect/unstable/http";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientError from "effect/unstable/http/HttpClientError";
 
 import * as EnvironmentLinks from "./EnvironmentLinks.ts";
 import * as ManagedEndpointAllocations from "./ManagedEndpointAllocations.ts";
 import * as RelayConfiguration from "../Config.ts";
 import { isManagedEndpointHostname } from "../deploymentConfig.ts";
 
-export const EnvironmentConnectNotAuthorizedReason = Schema.Literals([
-  "client_proof_key_thumbprint_missing",
-  "environment_link_not_found",
-  "endpoint_provider_not_managed",
-  "managed_endpoint_allocation_not_found",
-  "managed_endpoint_base_domain_not_configured",
-  "managed_endpoint_allocation_not_ready",
-  "managed_endpoint_hostname_invalid",
-  "managed_endpoint_mismatch",
-]);
-export type EnvironmentConnectNotAuthorizedReason =
-  typeof EnvironmentConnectNotAuthorizedReason.Type;
-
 function environmentConnectNotAuthorizedReasonMessage(
-  reason: EnvironmentConnectNotAuthorizedReason,
+  reason: RelayEnvironmentConnectNotAuthorizedReason,
 ): string {
   switch (reason) {
     case "client_proof_key_thumbprint_missing":
@@ -83,7 +73,7 @@ export class EnvironmentConnectNotAuthorized extends Schema.TaggedErrorClass<Env
   {
     environmentId: Schema.String,
     operation: Schema.Literals(["connect", "status"]),
-    reason: EnvironmentConnectNotAuthorizedReason,
+    reason: RelayEnvironmentConnectNotAuthorizedReason,
   },
 ) {
   override get message(): string {
@@ -139,22 +129,20 @@ export type EnvironmentConnectorError =
 export const ENVIRONMENT_MINT_REQUEST_TIMEOUT_MS = 10_000;
 const ENVIRONMENT_HEALTH_CLOCK_SKEW_MILLIS = 60 * 1_000;
 
-export interface EnvironmentConnectorShape {
-  readonly connect: (input: {
-    readonly userId: string;
-    readonly environmentId: string;
-    readonly clientProofKeyThumbprint: string;
-    readonly deviceId?: string;
-  }) => Effect.Effect<RelayEnvironmentConnectResponse, EnvironmentConnectorError>;
-  readonly status: (input: {
-    readonly userId: string;
-    readonly environmentId: string;
-  }) => Effect.Effect<RelayEnvironmentStatusResponse, EnvironmentConnectorError>;
-}
-
 export class EnvironmentConnector extends Context.Service<
   EnvironmentConnector,
-  EnvironmentConnectorShape
+  {
+    readonly connect: (input: {
+      readonly userId: string;
+      readonly environmentId: string;
+      readonly clientProofKeyThumbprint: string;
+      readonly deviceId?: string;
+    }) => Effect.Effect<RelayEnvironmentConnectResponse, EnvironmentConnectorError>;
+    readonly status: (input: {
+      readonly userId: string;
+      readonly environmentId: string;
+    }) => Effect.Effect<RelayEnvironmentStatusResponse, EnvironmentConnectorError>;
+  }
 >()("kairo-relay/environments/EnvironmentConnector") {}
 
 const decodeMintResponseProof = Schema.decodeUnknownEffect(
@@ -178,6 +166,24 @@ function environmentHealthRequestFailureMessage(cause: unknown): string {
     ? `Managed endpoint health request failed: ${cause.message}`
     : "Managed endpoint health request failed.";
 }
+
+function environmentHealthRequestFailureReason(cause: unknown): string {
+  if (isEnvironmentHealthError(cause)) {
+    return cause._tag;
+  }
+  if (HttpClientError.isHttpClientError(cause)) {
+    return cause.reason._tag;
+  }
+  if (Schema.isSchemaError(cause)) {
+    return "SchemaError";
+  }
+  return cause instanceof Error && cause.name ? cause.name : "Unknown";
+}
+
+const currentTraceId = Effect.currentSpan.pipe(
+  Effect.map((span) => span.traceId),
+  Effect.orElseSucceed(() => "unavailable"),
+);
 
 const withoutRedirects = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }));
@@ -457,6 +463,7 @@ const make = Effect.gen(function* () {
         ),
       );
       const checkedAt = DateTime.formatIso(now);
+      const traceId = yield* currentTraceId;
       const environmentClient = yield* makeEnvironmentClient(endpoint.httpBaseUrl);
       const responseOption = yield* environmentClient.connect.health({ payload: { proof } }).pipe(
         withoutRedirects,
@@ -467,21 +474,44 @@ const make = Effect.gen(function* () {
         Effect.timeoutOption(Duration.millis(ENVIRONMENT_MINT_REQUEST_TIMEOUT_MS)),
       );
       if (Option.isNone(responseOption)) {
+        yield* Effect.annotateCurrentSpan({
+          "relay.environment_health.outcome": "timeout",
+          "relay.environment_health.trace_id": traceId,
+        });
+        yield* Effect.logWarning("Managed endpoint health request timed out", {
+          environmentId: link.environmentId,
+          endpoint: endpoint.httpBaseUrl,
+          traceId,
+        });
         return {
           environmentId: link.environmentId,
           endpoint,
           status: "offline" as const,
           checkedAt,
           error: "Managed endpoint health request timed out.",
+          traceId,
         };
       }
       if (responseOption.value._tag === "Failure") {
+        const failureReason = environmentHealthRequestFailureReason(responseOption.value.cause);
+        yield* Effect.annotateCurrentSpan({
+          "relay.environment_health.outcome": "failure",
+          "relay.environment_health.failure_reason": failureReason,
+          "relay.environment_health.trace_id": traceId,
+        });
+        yield* Effect.logWarning("Managed endpoint health request failed", {
+          environmentId: link.environmentId,
+          endpoint: endpoint.httpBaseUrl,
+          failureReason,
+          traceId,
+        });
         return {
           environmentId: link.environmentId,
           endpoint,
           status: "offline" as const,
           checkedAt,
           error: environmentHealthRequestFailureMessage(responseOption.value.cause),
+          traceId,
         };
       }
       const decoded = responseOption.value.response;

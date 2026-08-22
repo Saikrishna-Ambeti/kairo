@@ -7,14 +7,18 @@
     "test": "vp test run"
   },
   "dependencies": {
-    "@effect/platform-node": "4.0.0-beta.78",
+    "@effect/platform-node": "catalog:",
+    "@electron/asar": "^3.4.1",
     "@kairo/contracts": "workspace:*",
     "@kairo/shared": "workspace:*",
-    "effect": "4.0.0-beta.78",
-    "yaml": "^2.9.0"
+    "@kairo/tailscale": "workspace:*",
+    "effect": "catalog:",
+    "pngjs": "7.0.0",
+    "yaml": "catalog:"
   },
   "devDependencies": {
-    "@effect/vitest": "4.0.0-beta.78",
+    "@effect/vitest": "catalog:",
+    "@types/pngjs": "6.0.5",
     "vite-plus": "catalog:"
   }
 }

@@ -5,7 +5,15 @@ import type {
 } from "../diffs/nativeReviewDiffTypes";
 import * as Arr from "effect/Array";
 import { pipe } from "effect/Function";
-import { getPierreTerminalTheme, type TerminalAppearanceScheme } from "../terminal/terminalTheme";
+import type { ResolvedMobileCodeSurface } from "../../lib/appearancePreferences";
+import { resolveMobileCodeSurface } from "../../lib/appearancePreferences";
+import { MOBILE_CODE_SURFACE } from "../../lib/typography";
+import {
+  DEFAULT_MOBILE_THEME_ID,
+  getMobileThemeVariables,
+  type MobileThemeId,
+} from "../../lib/mobileTheme";
+import { getMobileTerminalTheme, type TerminalAppearanceScheme } from "../terminal/terminalTheme";
 import { computeWordAltDiffRanges } from "./reviewWordDiffs";
 import {
   getReviewFilePreviewState,
@@ -17,42 +25,68 @@ import type { ReviewInlineComment } from "./reviewCommentSelection";
 
 const NATIVE_REVIEW_MAX_WORD_DIFF_RANGE_COUNT = 4;
 const NATIVE_REVIEW_MAX_WORD_DIFF_COVERAGE = 0.45;
+const NATIVE_HEX_COLOR = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i;
+const NATIVE_RGBA_COLOR =
+  /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)$/;
 
-export const NATIVE_REVIEW_DIFF_ROW_HEIGHT = 20;
+export const NATIVE_REVIEW_DIFF_ROW_HEIGHT = MOBILE_CODE_SURFACE.rowHeight;
 export const NATIVE_REVIEW_DIFF_CONTENT_WIDTH = 2_800;
 
-export const NATIVE_REVIEW_DIFF_STYLE = {
-  rowHeight: NATIVE_REVIEW_DIFF_ROW_HEIGHT,
-  contentWidth: NATIVE_REVIEW_DIFF_CONTENT_WIDTH,
-  changeBarWidth: 4,
-  gutterWidth: 46,
-  codePadding: 7,
-  textVerticalInset: 2,
-  fileHeaderHeight: 56,
-  fileHeaderHorizontalMargin: 8,
-  fileHeaderVerticalMargin: 6,
-  fileHeaderCornerRadius: 10,
-  fileHeaderHorizontalPadding: 10,
-  fileHeaderPathRightPadding: 118,
-  fileHeaderCountColumnWidth: 38,
-  fileHeaderCountGap: 5,
-  codeFontSize: 11,
-  codeFontWeight: "regular",
-  lineNumberFontSize: 10,
-  lineNumberFontWeight: "regular",
-  hunkFontSize: 11,
-  hunkFontWeight: "medium",
-  fileHeaderFontSize: 11,
-  fileHeaderFontWeight: "semibold",
-  fileHeaderMetaFontSize: 10,
-  fileHeaderMetaFontWeight: "semibold",
-  fileHeaderSubtextFontSize: 11,
-  fileHeaderSubtextFontWeight: "medium",
-  fileHeaderStatusFontSize: 9,
-  fileHeaderStatusFontWeight: "bold",
-  emptyStateFontSize: 12,
-  emptyStateFontWeight: "medium",
-} as const;
+export const NATIVE_REVIEW_DIFF_STYLE = createNativeReviewDiffStyle(
+  resolveMobileCodeSurface(MOBILE_CODE_SURFACE.fontSize),
+);
+
+function opaqueNativeHexColor(color: string, background: string): string {
+  const hex = NATIVE_HEX_COLOR.exec(color);
+  if (hex) return color;
+
+  const rgba = NATIVE_RGBA_COLOR.exec(color);
+  const backgroundHex = NATIVE_HEX_COLOR.exec(background);
+  if (!rgba || !backgroundHex) return background;
+
+  const alpha = rgba[4] === undefined ? 1 : Math.min(1, Math.max(0, Number(rgba[4])));
+  const channels = [1, 2, 3].map((index) => {
+    const foreground = Number(rgba[index]);
+    const behind = Number.parseInt(backgroundHex[index], 16);
+    return Math.round(foreground * alpha + behind * (1 - alpha));
+  });
+  return `#${channels.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+}
+
+export function createNativeReviewDiffStyle(codeSurface: ResolvedMobileCodeSurface) {
+  return {
+    rowHeight: codeSurface.rowHeight,
+    contentWidth: NATIVE_REVIEW_DIFF_CONTENT_WIDTH,
+    changeBarWidth: 4,
+    gutterWidth: codeSurface.gutterWidth,
+    codePadding: codeSurface.codePadding,
+    textVerticalInset: codeSurface.textVerticalInset,
+    fileHeaderHeight: 56,
+    fileHeaderHorizontalMargin: 8,
+    fileHeaderVerticalMargin: 6,
+    fileHeaderCornerRadius: 10,
+    fileHeaderHorizontalPadding: 10,
+    fileHeaderPathRightPadding: 118,
+    fileHeaderCountColumnWidth: 38,
+    fileHeaderCountGap: 5,
+    codeFontSize: codeSurface.fontSize,
+    codeFontWeight: "regular",
+    lineNumberFontSize: codeSurface.lineNumberFontSize,
+    lineNumberFontWeight: "regular",
+    hunkFontSize: 11,
+    hunkFontWeight: "medium",
+    fileHeaderFontSize: 11,
+    fileHeaderFontWeight: "semibold",
+    fileHeaderMetaFontSize: 10,
+    fileHeaderMetaFontWeight: "semibold",
+    fileHeaderSubtextFontSize: 11,
+    fileHeaderSubtextFontWeight: "medium",
+    fileHeaderStatusFontSize: 9,
+    fileHeaderStatusFontWeight: "bold",
+    emptyStateFontSize: 12,
+    emptyStateFontWeight: "medium",
+  } as const;
+}
 
 export interface NativeReviewDiffData {
   readonly rows: ReadonlyArray<NativeReviewDiffRow>;
@@ -74,21 +108,57 @@ export interface BuildNativeReviewDiffDataInput {
   readonly comments?: ReadonlyArray<ReviewInlineComment>;
 }
 
+interface CachedNativeReviewDiffData {
+  readonly commentsKey: string;
+  readonly data: NativeReviewDiffData;
+}
+
+const nativeReviewDiffDataCache = new WeakMap<ReviewParsedDiff, CachedNativeReviewDiffData>();
+
+function buildReviewCommentsCacheKey(comments: ReadonlyArray<ReviewInlineComment>): string {
+  if (comments.length === 0) {
+    return "none";
+  }
+
+  return comments
+    .map((comment) =>
+      [
+        comment.id,
+        comment.sectionId,
+        comment.filePath,
+        comment.startIndex,
+        comment.endIndex,
+        comment.rangeLabel,
+        comment.text,
+      ].join("\u001f"),
+    )
+    .join("\u001e");
+}
+
 export function createNativeReviewDiffTheme(
   scheme: TerminalAppearanceScheme,
+  themeId: MobileThemeId = DEFAULT_MOBILE_THEME_ID,
 ): NativeReviewDiffTheme {
-  const terminalTheme = getPierreTerminalTheme(scheme);
-  const [, terminalRed, , , terminalBlue] = terminalTheme.palette;
+  const terminalTheme = getMobileTerminalTheme(themeId, scheme);
+  const appTheme = getMobileThemeVariables(themeId, scheme);
+  const [, terminalRed] = terminalTheme.palette;
+  // Swift expects #RRGGBB/#RRGGBBAA while Android expects #RRGGBB/#AARRGGBB.
+  // Flatten translucent app tokens onto the code surface so both native
+  // implementations receive the one unambiguous shared format.
+  const background = opaqueNativeHexColor(appTheme["--color-sheet"], appTheme["--color-screen"]);
+  const nativeColor = (color: string) => opaqueNativeHexColor(color, background);
 
   if (scheme === "dark") {
     return {
-      background: terminalTheme.background,
-      text: terminalTheme.foreground,
-      mutedText: terminalTheme.mutedForeground,
-      headerBackground: terminalTheme.background,
-      border: terminalTheme.border,
-      hunkBackground: "#071f28",
-      hunkText: terminalBlue ?? "#009fff",
+      // Match the app surface (--color-sheet) so code views blend with the rest of
+      // the app instead of using a distinct code-editor background.
+      background,
+      text: nativeColor(appTheme["--color-md-code-text"]),
+      mutedText: nativeColor(appTheme["--color-foreground-muted"]),
+      headerBackground: background,
+      border: nativeColor(appTheme["--color-border"]),
+      hunkBackground: nativeColor(appTheme["--color-subtle-strong"]),
+      hunkText: nativeColor(appTheme["--color-primary"]),
       addBackground: "#0d2f28",
       deleteBackground: "#391415",
       addBar: "#00cab1",
@@ -99,13 +169,15 @@ export function createNativeReviewDiffTheme(
   }
 
   return {
-    background: "#ffffff",
-    text: "#070707",
-    mutedText: terminalTheme.mutedForeground,
-    headerBackground: "#ffffff",
-    border: terminalTheme.border,
-    hunkBackground: "#e0f2ff",
-    hunkText: terminalBlue ?? "#009fff",
+    // Match the app surface (--color-sheet) so code views blend with the rest of the
+    // app instead of using a distinct code-editor background.
+    background,
+    text: nativeColor(appTheme["--color-md-code-text"]),
+    mutedText: nativeColor(appTheme["--color-foreground-muted"]),
+    headerBackground: background,
+    border: nativeColor(appTheme["--color-border"]),
+    hunkBackground: nativeColor(appTheme["--color-subtle-strong"]),
+    hunkText: nativeColor(appTheme["--color-primary"]),
     addBackground: "#e5f8f5",
     deleteBackground: "#ffe6e7",
     addBar: "#00cab1",
@@ -428,4 +500,27 @@ export function buildNativeReviewDiffData(
     additions: parsedDiff.additions,
     deletions: parsedDiff.deletions,
   };
+}
+
+/**
+ * Reuses the expensive flattened native row model across React development
+ * render probes and unrelated draft updates. Only the latest comment version
+ * is retained for each parsed diff so editing a comment cannot grow the cache.
+ */
+export function getCachedNativeReviewDiffData(
+  input: BuildNativeReviewDiffDataInput,
+): NativeReviewDiffData {
+  const comments = input.comments ?? [];
+  const commentsKey = buildReviewCommentsCacheKey(comments);
+  const cached = nativeReviewDiffDataCache.get(input.parsedDiff);
+  if (cached?.commentsKey === commentsKey) {
+    return cached.data;
+  }
+
+  const data = buildNativeReviewDiffData({
+    parsedDiff: input.parsedDiff,
+    comments,
+  });
+  nativeReviewDiffDataCache.set(input.parsedDiff, { commentsKey, data });
+  return data;
 }

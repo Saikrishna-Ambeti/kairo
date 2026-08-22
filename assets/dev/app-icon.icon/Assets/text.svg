@@ -1,0 +1,37 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="k-leg" x1="41.78" x2="103.6" y1="90.09" y2="88.58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0A245E"/>
+      <stop offset=".44" stop-color="#2548AA"/>
+      <stop offset="1" stop-color="#7469E8"/>
+    </linearGradient>
+    <linearGradient id="k-stem" x1="12.63" x2="38.67" y1="19.37" y2="51.18" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6579F2"/>
+      <stop offset=".5" stop-color="#3D55C2"/>
+      <stop offset="1" stop-color="#213887"/>
+    </linearGradient>
+    <linearGradient id="k-stem-edge" x1="26.34" x2="26.34" y1="12.42" y2="59.76" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E0FAFF"/>
+      <stop offset=".48" stop-color="#93DCFF"/>
+      <stop offset="1" stop-color="#668DFF"/>
+    </linearGradient>
+    <linearGradient id="k-arm" x1="12.64" x2="97.81" y1="99.76" y2="16.43" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#092A6C"/>
+      <stop offset=".3" stop-color="#2851BA"/>
+      <stop offset=".66" stop-color="#6E63E4"/>
+      <stop offset="1" stop-color="#AA8AFF"/>
+    </linearGradient>
+    <linearGradient id="k-fold" x1="25.33" x2="86.86" y1="65.15" y2="65.15" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#47BCFF"/>
+      <stop offset=".52" stop-color="#6EA8FF"/>
+      <stop offset="1" stop-color="#B19AFF"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(68 64) scale(.75) translate(-64 -64)">
+    <polygon points="103.6 110.6 69.1 110.6 38.8 78.1 57.6 59.3" fill="url(#k-leg)"/>
+    <polygon points="38.7 12 12.7 12 12.7 73.2 38.7 45.4" fill="url(#k-stem)"/>
+    <polygon points="25.5 12.3 25.4 12.3 25.4 58.5 26.7 57.1 26.7 12.3" fill="url(#k-stem-edge)"/>
+    <path d="m69.3 12-56.6 60.2v38.5h27V83.8l2.9-3.1 61-68.7H69.3Z" fill="url(#k-arm)"/>
+    <polygon points="86.9 12.9 25.4 76.9 25.3 77 25.3 110.6 26.7 110.6 26.7 77.7 41 62.2 85.8 109.7 86.9 110.5 89 110.5 41.9 61.1" fill="url(#k-fold)"/>
+  </g>
+</svg>

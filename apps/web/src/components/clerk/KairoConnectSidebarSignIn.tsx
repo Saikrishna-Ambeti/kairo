@@ -1,8 +1,10 @@
 import { UserButton, useAuth } from "@clerk/react";
-import { LogInIcon } from "lucide-react";
+import { LogInIcon, ServerIcon, SmartphoneIcon } from "lucide-react";
 
 import { hasCloudPublicConfig } from "../../cloud/publicConfig";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
+import { MobileClientsUserProfilePage } from "./MobileClientsUserProfilePage";
+import { KairoConnectUserProfilePage } from "./KairoConnectUserProfilePage";
 import { useKairoConnectAuthPrompt } from "./useKairoConnectAuthPrompt";
 
 export function KairoConnectSidebarSignIn() {
@@ -27,10 +29,25 @@ function ConfiguredKairoConnectSidebarAvatar() {
       appearance={{
         elements: {
           avatarBox: "size-7",
-          userButtonTrigger: "rounded-lg p-1 hover:bg-sidebar-accent",
+          userButtonTrigger: "rounded-lg p-1 hover:bg-sidebar-row-hover",
         },
       }}
-    />
+    >
+      <UserButton.UserProfilePage
+        label="Mobile clients"
+        labelIcon={<SmartphoneIcon className="size-4" />}
+        url="mobile-clients"
+      >
+        <MobileClientsUserProfilePage />
+      </UserButton.UserProfilePage>
+      <UserButton.UserProfilePage
+        label="Kairo Connect"
+        labelIcon={<ServerIcon className="size-4" />}
+        url="kairo-connect"
+      >
+        <KairoConnectUserProfilePage />
+      </UserButton.UserProfilePage>
+    </UserButton>
   );
 }
 
@@ -44,12 +61,8 @@ function ConfiguredKairoConnectSidebarSignIn() {
     <>
       <SidebarMenu>
         <SidebarMenuItem>
-          <SidebarMenuButton
-            size="sm"
-            className="gap-2 px-2 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-            onClick={openAuthPrompt}
-          >
-            <LogInIcon className="size-4" />
+          <SidebarMenuButton onClick={openAuthPrompt}>
+            <LogInIcon />
             <span>Sign in to Kairo Connect</span>
           </SidebarMenuButton>
         </SidebarMenuItem>

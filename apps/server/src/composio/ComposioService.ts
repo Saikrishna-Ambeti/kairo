@@ -1,7 +1,8 @@
 import * as NodeOS from "node:os";
-import { randomUUID } from "node:crypto";
+import * as NodeCrypto from "node:crypto";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { HostProcessPlatform } from "@kairo/shared/hostProcess";
 import {
   ComposioError,
   type ComposioAgentSupportStatus,
@@ -156,9 +157,7 @@ const CONNECTED_ACCOUNT_DISCOVERY_TOOLKITS = [
 const COMPOSIO_INSTALL_COMMAND = "curl -fsSL https://composio.dev/install | sh";
 const WINDOWS_UNSUPPORTED_MESSAGE =
   "Composio does not support native Windows. Run Kairo in WSL, then set up Composio there.";
-const isComposioError = Schema.is(ComposioError);
-
-const decodeUnknownJsonString = Schema.decodeEffect(Schema.UnknownFromJsonString);
+const decodeUnknownJsonString = Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown));
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -467,26 +466,22 @@ function connectedToolkitsFromTable(output: string): ComposioToolkitStatus[] {
   return connected;
 }
 
-function platform(): ComposioPlatform {
-  if (
-    process.platform === "darwin" ||
-    process.platform === "linux" ||
-    process.platform === "win32"
-  ) {
-    return process.platform;
+function platform(hostPlatform: NodeJS.Platform): ComposioPlatform {
+  if (hostPlatform === "darwin" || hostPlatform === "linux" || hostPlatform === "win32") {
+    return hostPlatform;
   }
   return "other";
 }
 
-function installCommandLabel(): string {
-  if (process.platform === "win32") {
+function installCommandLabel(hostPlatform: NodeJS.Platform): string {
+  if (hostPlatform === "win32") {
     return `WSL: ${COMPOSIO_INSTALL_COMMAND}`;
   }
   return COMPOSIO_INSTALL_COMMAND;
 }
 
-function installedPathCandidate(path: Path.Path): string {
-  const exe = process.platform === "win32" ? "composio.exe" : "composio";
+function installedPathCandidate(path: Path.Path, hostPlatform: NodeJS.Platform): string {
+  const exe = hostPlatform === "win32" ? "composio.exe" : "composio";
   return path.join(
     process.env.COMPOSIO_INSTALL_DIR || path.join(NodeOS.homedir(), ".composio"),
     exe,
@@ -504,7 +499,7 @@ function redact(output: string): string {
 }
 
 function errorDetail(error: ComposioServiceError): string | undefined {
-  if (!isComposioError(error) || typeof error.cause !== "string") return undefined;
+  if (error._tag !== "ComposioError" || typeof error.cause !== "string") return undefined;
   const detail = redact(error.cause).trim();
   return detail || undefined;
 }
@@ -543,6 +538,7 @@ export const makeComposioService = Effect.gen(function* () {
   const processRunner = yield* ProcessRunner;
   const fileSystem = yield* FileSystem.FileSystem;
   const pathService = yield* Path.Path;
+  const hostPlatform = yield* HostProcessPlatform;
   const events = yield* Effect.acquireRelease(
     PubSub.unbounded<ComposioOperationProgressEvent>(),
     PubSub.shutdown,
@@ -578,7 +574,7 @@ export const makeComposioService = Effect.gen(function* () {
       );
 
   const resolveExecutable: Effect.Effect<string | null, never> = Effect.gen(function* () {
-    const candidate = installedPathCandidate(pathService);
+    const candidate = installedPathCandidate(pathService, hostPlatform);
     const exists = yield* fileSystem.exists(candidate).pipe(Effect.orElseSucceed(() => false));
     if (exists) {
       return candidate;
@@ -593,12 +589,12 @@ export const makeComposioService = Effect.gen(function* () {
     const executable = yield* resolveExecutable;
     if (!executable) {
       return {
-        status: process.platform === "win32" ? "unsupported" : "missing",
-        platform: platform(),
-        installCommandLabel: installCommandLabel(),
+        status: hostPlatform === "win32" ? "unsupported" : "missing",
+        platform: platform(hostPlatform),
+        installCommandLabel: installCommandLabel(hostPlatform),
         lastCheckedAt: checkedAt,
         message:
-          process.platform === "win32"
+          hostPlatform === "win32"
             ? WINDOWS_UNSUPPORTED_MESSAGE
             : "Composio CLI is not installed on this backend.",
       } satisfies ComposioCliState;
@@ -611,8 +607,8 @@ export const makeComposioService = Effect.gen(function* () {
     );
     return {
       status: "needs_login",
-      platform: platform(),
-      installCommandLabel: installCommandLabel(),
+      platform: platform(hostPlatform),
+      installCommandLabel: installCommandLabel(hostPlatform),
       executablePath: executable,
       ...(version ? { version } : {}),
       lastCheckedAt: checkedAt,
@@ -894,12 +890,15 @@ export const makeComposioService = Effect.gen(function* () {
         yield* publish(operation, "Checking CLI", "Composio CLI is already installed.");
         return executable;
       }
-      if (process.platform === "win32") {
+      if (hostPlatform === "win32") {
         return yield* new ComposioError({ message: WINDOWS_UNSUPPORTED_MESSAGE });
       }
-      let result: ProcessRunOutput;
       operation = yield* publish(operation, "Installing CLI", "Installing Composio CLI.");
-      result = yield* run("bash", ["-lc", COMPOSIO_INSTALL_COMMAND], Duration.minutes(10));
+      const result: ProcessRunOutput = yield* run(
+        "bash",
+        ["-lc", COMPOSIO_INSTALL_COMMAND],
+        Duration.minutes(10),
+      );
       if (result.code !== 0 || result.timedOut) {
         return yield* new ComposioError({
           message: result.timedOut
@@ -962,7 +961,7 @@ export const makeComposioService = Effect.gen(function* () {
       if (existing?.status === "running") return existing;
       const startedAt = yield* nowIso;
       const operation: ComposioOperation = {
-        id: randomUUID(),
+        id: NodeCrypto.randomUUID(),
         kind,
         status: "running",
         startedAt,

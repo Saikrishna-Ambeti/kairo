@@ -8,34 +8,54 @@ import * as Path from "effect/Path";
 import {
   VcsRepositoryDetectionError,
   VcsUnsupportedOperationError,
+  type ReviewDiffFileContentsInput,
+  type ReviewDiffFileContentsResult,
   type ReviewDiffPreviewError,
   type ReviewDiffPreviewInput,
   type ReviewDiffPreviewResult,
 } from "@kairo/contracts";
 
-import { ServerConfig } from "../config.ts";
+import * as ServerConfig from "../config.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 
-export interface ReviewServiceShape {
-  readonly getDiffPreview: (
-    input: ReviewDiffPreviewInput,
-  ) => Effect.Effect<ReviewDiffPreviewResult, ReviewDiffPreviewError>;
-}
+export class ReviewService extends Context.Service<
+  ReviewService,
+  {
+    readonly getDiffPreview: (
+      input: ReviewDiffPreviewInput,
+    ) => Effect.Effect<ReviewDiffPreviewResult, ReviewDiffPreviewError>;
+    readonly getDiffFileContents: (
+      input: ReviewDiffFileContentsInput,
+    ) => Effect.Effect<ReviewDiffFileContentsResult, ReviewDiffPreviewError>;
+  }
+>()("kairo/review/ReviewService") {}
 
-export class ReviewService extends Context.Service<ReviewService, ReviewServiceShape>()(
-  "kairo/review/ReviewService",
-) {}
-
-export const make = Effect.fn("makeReviewService")(function* () {
-  const config = yield* ServerConfig;
+export const make = Effect.gen(function* () {
+  const config = yield* ServerConfig.ServerConfig;
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const vcsRegistry = yield* VcsDriverRegistry.VcsDriverRegistry;
   const git = yield* GitVcsDriver.GitVcsDriver;
 
-  const canonicalizePath = (value: string) =>
-    fileSystem.realPath(path.resolve(value)).pipe(Effect.orElseSucceed(() => path.resolve(value)));
+  const canonicalizePath = (value: string) => {
+    const resolvedPath = path.resolve(value);
+    return fileSystem.realPath(resolvedPath).pipe(
+      Effect.catchTags({
+        PlatformError: (cause) =>
+          cause.reason._tag === "NotFound"
+            ? Effect.succeed(resolvedPath)
+            : Effect.fail(
+                new VcsRepositoryDetectionError({
+                  operation: "ReviewService.assertWorkspaceBoundCwd.canonicalizePath",
+                  cwd: resolvedPath,
+                  detail: "Failed to resolve a path while validating the review workspace.",
+                  cause,
+                }),
+              ),
+      }),
+    );
+  };
 
   const isWithinRoot = (candidate: string, root: string) => {
     const relative = path.relative(root, candidate);
@@ -43,6 +63,7 @@ export const make = Effect.fn("makeReviewService")(function* () {
   };
 
   const assertWorkspaceBoundCwd = Effect.fn("ReviewService.assertWorkspaceBoundCwd")(function* (
+    operation: "ReviewService.getDiffPreview" | "ReviewService.getDiffFileContents",
     cwd: string,
   ) {
     const [candidate, workspaceRoot, worktreesRoot] = yield* Effect.all([
@@ -56,16 +77,19 @@ export const make = Effect.fn("makeReviewService")(function* () {
     }
 
     return yield* new VcsRepositoryDetectionError({
-      operation: "ReviewService.getDiffPreview",
+      operation,
       cwd,
-      detail: "Review diff preview cwd must stay within the configured workspace root.",
+      detail:
+        operation === "ReviewService.getDiffPreview"
+          ? "Review diff preview cwd must stay within the configured workspace root."
+          : "Review diff file contents cwd must stay within the configured workspace root.",
     });
   });
 
-  const getDiffPreview: ReviewServiceShape["getDiffPreview"] = Effect.fn(
+  const getDiffPreview: ReviewService["Service"]["getDiffPreview"] = Effect.fn(
     "ReviewService.getDiffPreview",
   )(function* (input) {
-    yield* assertWorkspaceBoundCwd(input.cwd);
+    yield* assertWorkspaceBoundCwd("ReviewService.getDiffPreview", input.cwd);
 
     const handle = yield* vcsRegistry.detect({ cwd: input.cwd, requestedKind: "auto" });
     if (!handle) {
@@ -91,9 +115,27 @@ export const make = Effect.fn("makeReviewService")(function* () {
     return yield* getDriverDiffPreview(input);
   });
 
+  const getDiffFileContents: ReviewService["Service"]["getDiffFileContents"] = Effect.fn(
+    "ReviewService.getDiffFileContents",
+  )(function* (input) {
+    yield* assertWorkspaceBoundCwd("ReviewService.getDiffFileContents", input.cwd);
+
+    const handle = yield* vcsRegistry.detect({ cwd: input.cwd, requestedKind: "auto" });
+    if (handle?.kind !== "git") {
+      return yield* new VcsUnsupportedOperationError({
+        operation: "ReviewService.getDiffFileContents",
+        kind: handle?.kind ?? "unknown",
+        detail: "Unchanged diff expansion currently requires a Git repository.",
+      });
+    }
+
+    return yield* git.getReviewDiffFileContents(input);
+  });
+
   return ReviewService.of({
     getDiffPreview,
+    getDiffFileContents,
   });
 });
 
-export const layer = Layer.effect(ReviewService, make());
+export const layer = Layer.effect(ReviewService, make);

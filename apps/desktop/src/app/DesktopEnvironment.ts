@@ -11,11 +11,9 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 
-import {
-  type DesktopSettings,
-  resolveDefaultDesktopSettings,
-} from "../settings/DesktopAppSettings.ts";
+import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopConfig from "./DesktopConfig.ts";
+import { resolveDesktopBaseDir, resolveDesktopStateDir } from "./DesktopStatePaths.ts";
 import { isNightlyDesktopVersion } from "../updates/updateChannels.ts";
 
 export interface MakeDesktopEnvironmentInput {
@@ -30,54 +28,61 @@ export interface MakeDesktopEnvironmentInput {
   readonly runningUnderArm64Translation: boolean;
 }
 
-export interface DesktopEnvironmentShape {
-  readonly path: Path.Path;
-  readonly dirname: string;
-  readonly platform: NodeJS.Platform;
-  readonly processArch: string;
-  readonly isPackaged: boolean;
-  readonly isDevelopment: boolean;
-  readonly appVersion: string;
-  readonly appPath: string;
-  readonly resourcesPath: string;
-  readonly homeDirectory: string;
-  readonly appDataDirectory: string;
-  readonly baseDir: string;
-  readonly stateDir: string;
-  readonly desktopSettingsPath: string;
-  readonly clientSettingsPath: string;
-  readonly savedEnvironmentRegistryPath: string;
-  readonly serverSettingsPath: string;
-  readonly logDir: string;
-  readonly rootDir: string;
-  readonly appRoot: string;
-  readonly backendEntryPath: string;
-  readonly backendCwd: string;
-  readonly preloadPath: string;
-  readonly appUpdateYmlPath: string;
-  readonly devServerUrl: Option.Option<URL>;
-  readonly devRemoteKairoServerEntryPath: Option.Option<string>;
-  readonly configuredBackendPort: Option.Option<number>;
-  readonly commitHashOverride: Option.Option<string>;
-  readonly otlpTracesUrl: Option.Option<string>;
-  readonly otlpExportIntervalMs: number;
-  readonly branding: DesktopAppBranding;
-  readonly displayName: string;
-  readonly appUserModelId: string;
-  readonly linuxDesktopEntryName: string;
-  readonly linuxWmClass: string;
-  readonly userDataDirName: string;
-  readonly legacyUserDataDirName: string;
-  readonly defaultDesktopSettings: DesktopSettings;
-  readonly runtimeInfo: DesktopRuntimeInfo;
-  readonly resolvePickFolderDefaultPath: (rawOptions: unknown) => Option.Option<string>;
-  readonly resolveResourcePathCandidates: (fileName: string) => readonly string[];
-  readonly developmentDockIconPath: string;
-}
-
 export class DesktopEnvironment extends Context.Service<
   DesktopEnvironment,
-  DesktopEnvironmentShape
+  {
+    readonly path: Path.Path;
+    readonly dirname: string;
+    readonly platform: NodeJS.Platform;
+    readonly processArch: string;
+    readonly isPackaged: boolean;
+    readonly isDevelopment: boolean;
+    readonly appVersion: string;
+    readonly appPath: string;
+    readonly resourcesPath: string;
+    readonly homeDirectory: string;
+    readonly appDataDirectory: string;
+    readonly baseDir: string;
+    readonly stateDir: string;
+    readonly desktopSettingsPath: string;
+    readonly clientSettingsPath: string;
+    readonly savedEnvironmentRegistryPath: string;
+    readonly serverSettingsPath: string;
+    readonly logDir: string;
+    readonly browserArtifactsDir: string;
+    readonly rootDir: string;
+    readonly appRoot: string;
+    // Root of the tree containing apps/server/dist and node_modules for the
+    // backend. Equals appRoot everywhere except packaged Windows, where the
+    // server tree ships as the resources/server.asar sidecar (see
+    // scripts/build-desktop-artifact.ts) that the asar-aware
+    // ELECTRON_RUN_AS_NODE primary reads in place and the WSL backend
+    // extracts on demand (see DesktopWslServerTree).
+    readonly serverRoot: string;
+    readonly backendEntryPath: string;
+    readonly backendCwd: string;
+    readonly preloadPath: string;
+    readonly appUpdateYmlPath: string;
+    readonly devServerUrl: Option.Option<URL>;
+    readonly devRemoteKairoServerEntryPath: Option.Option<string>;
+    readonly configuredBackendPort: Option.Option<number>;
+    readonly commitHashOverride: Option.Option<string>;
+    readonly otlpTracesUrl: Option.Option<string>;
+    readonly otlpExportIntervalMs: number;
+    readonly branding: DesktopAppBranding;
+    readonly displayName: string;
+    readonly appUserModelId: string;
+    readonly linuxDesktopEntryName: string;
+    readonly linuxWmClass: string;
+    readonly linuxApplicationsDir: string;
+    readonly appImagePath: Option.Option<string>;
+    readonly userDataDirName: string;
+    readonly legacyUserDataDirName: string;
+    readonly defaultDesktopSettings: DesktopAppSettings.DesktopSettings;
+    readonly runtimeInfo: DesktopRuntimeInfo;
+    readonly resolvePickFolderDefaultPath: (rawOptions: unknown) => Option.Option<string>;
+    readonly resolveResourcePathCandidates: (fileName: string) => readonly string[];
+  }
 >()("@kairo/desktop/app/DesktopEnvironment") {}
 
 const APP_BASE_NAME = "Kairo";
@@ -135,9 +140,9 @@ function resolveDesktopRuntimeInfo(input: {
   };
 }
 
-const makeDesktopEnvironment = Effect.fn("desktop.environment.make")(function* (
+const make = Effect.fn("desktop.environment.make")(function* (
   input: MakeDesktopEnvironmentInput,
-): Effect.fn.Return<DesktopEnvironmentShape, Config.ConfigError, Path.Path> {
+): Effect.fn.Return<DesktopEnvironment["Service"], Config.ConfigError, Path.Path> {
   const path = yield* Path.Path;
   const config = yield* DesktopConfig.DesktopConfig;
   const homeDirectory = input.homeDirectory;
@@ -151,17 +156,34 @@ const makeDesktopEnvironment = Effect.fn("desktop.environment.make")(function* (
       : input.platform === "darwin"
         ? path.join(homeDirectory, "Library", "Application Support")
         : Option.getOrElse(config.xdgConfigHome, () => path.join(homeDirectory, ".config"));
-  const baseDir = Option.getOrElse(config.kairoHome, () => path.join(homeDirectory, ".kairo"));
+  const baseDir = resolveDesktopBaseDir({
+    homeDirectory,
+    joinPath: path.join,
+    kairoHome: config.kairoHome,
+  });
   const rootDir = path.resolve(input.dirname, "../../..");
   const appRoot = input.isPackaged ? input.appPath : rootDir;
+  const serverRoot =
+    input.isPackaged && input.platform === "win32"
+      ? path.join(input.resourcesPath, "server.asar")
+      : appRoot;
   const branding = resolveDesktopAppBranding({
     isDevelopment,
     appVersion: input.appVersion,
   });
   const displayName = branding.displayName;
-  const stateDir = path.join(baseDir, isDevelopment ? "dev" : "userdata");
+  const stateDir = resolveDesktopStateDir({
+    baseDir,
+    isDevelopment,
+    joinPath: path.join,
+    kairoHome: config.kairoHome,
+  });
   const userDataDirName = isDevelopment ? "kairo-dev" : "kairo";
   const legacyUserDataDirName = isDevelopment ? "Kairo (Dev)" : "Kairo (Alpha)";
+  const linuxApplicationsDir = path.join(
+    Option.getOrElse(config.xdgDataHome, () => path.join(homeDirectory, ".local", "share")),
+    "applications",
+  );
   const resourcesPath = input.resourcesPath;
 
   return DesktopEnvironment.of({
@@ -183,9 +205,11 @@ const makeDesktopEnvironment = Effect.fn("desktop.environment.make")(function* (
     savedEnvironmentRegistryPath: path.join(stateDir, "saved-environments.json"),
     serverSettingsPath: path.join(stateDir, "settings.json"),
     logDir: path.join(stateDir, "logs"),
+    browserArtifactsDir: path.join(stateDir, "browser-artifacts"),
     rootDir,
     appRoot,
-    backendEntryPath: path.join(appRoot, "apps/server/dist/bin.mjs"),
+    serverRoot,
+    backendEntryPath: path.join(serverRoot, "apps/server/dist/bin.mjs"),
     backendCwd: input.isPackaged ? homeDirectory : appRoot,
     preloadPath: path.join(input.dirname, "preload.cjs"),
     appUpdateYmlPath: input.isPackaged
@@ -204,9 +228,11 @@ const makeDesktopEnvironment = Effect.fn("desktop.environment.make")(function* (
     ),
     linuxDesktopEntryName: isDevelopment ? "kairo-dev.desktop" : "kairo.desktop",
     linuxWmClass: isDevelopment ? "kairo-dev" : "kairo",
+    linuxApplicationsDir,
+    appImagePath: config.appImagePath,
     userDataDirName,
     legacyUserDataDirName,
-    defaultDesktopSettings: resolveDefaultDesktopSettings(input.appVersion),
+    defaultDesktopSettings: DesktopAppSettings.resolveDefaultDesktopSettings(input.appVersion),
     runtimeInfo: resolveDesktopRuntimeInfo({
       platform: input.platform,
       processArch: input.processArch,
@@ -243,9 +269,8 @@ const makeDesktopEnvironment = Effect.fn("desktop.environment.make")(function* (
       path.join(resourcesPath, "resources", fileName),
       path.join(resourcesPath, fileName),
     ],
-    developmentDockIconPath: path.join(rootDir, "assets", "dev", "blueprint-macos-1024.png"),
   });
 });
 
 export const layer = (input: MakeDesktopEnvironmentInput) =>
-  Layer.effect(DesktopEnvironment, makeDesktopEnvironment(input));
+  Layer.effect(DesktopEnvironment, make(input));

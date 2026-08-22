@@ -1,4 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import {
+  resolveServerBackedAppDisplayName,
+  resolveServerBackedAppStageLabel,
+} from "./branding.logic";
 
 const originalWindow = globalThis.window;
 
@@ -46,6 +50,17 @@ describe("branding", () => {
     expect(branding.APP_DISPLAY_NAME).toBe("Kairo (Nightly)");
   });
 
+  it("does not label the latest hosted app channel", async () => {
+    vi.stubEnv("VITE_HOSTED_APP_CHANNEL", "latest");
+
+    const branding = await import("./branding");
+
+    expect(branding.HOSTED_APP_CHANNEL).toBe("latest");
+    expect(branding.HOSTED_APP_CHANNEL_LABEL).toBe("Latest");
+    expect(branding.APP_STAGE_LABEL).toBe("Latest");
+    expect(branding.APP_DISPLAY_NAME).toBe("Kairo");
+  });
+
   it("ignores unknown hosted app channels", async () => {
     vi.stubEnv("VITE_HOSTED_APP_CHANNEL", "preview");
 
@@ -53,5 +68,49 @@ describe("branding", () => {
 
     expect(branding.HOSTED_APP_CHANNEL).toBeNull();
     expect(branding.HOSTED_APP_CHANNEL_LABEL).toBeNull();
+  });
+});
+
+describe("branding logic", () => {
+  it("returns Nightly for nightly primary server versions", () => {
+    expect(
+      resolveServerBackedAppStageLabel({
+        primaryServerVersion: "0.0.28-nightly.20260616.12",
+        fallbackStageLabel: "Alpha",
+      }),
+    ).toBe("Nightly");
+  });
+
+  it("updates the display name for nightly primary server versions", () => {
+    expect(
+      resolveServerBackedAppDisplayName({
+        baseName: "Kairo",
+        fallbackDisplayName: "Kairo (Alpha)",
+        fallbackStageLabel: "Alpha",
+        primaryServerVersion: "0.0.28-nightly.20260616.12",
+      }),
+    ).toBe("Kairo (Nightly)");
+  });
+
+  it("keeps the fallback display name for stable primary server versions", () => {
+    expect(
+      resolveServerBackedAppDisplayName({
+        baseName: "Kairo",
+        fallbackDisplayName: "Kairo (Alpha)",
+        fallbackStageLabel: "Alpha",
+        primaryServerVersion: "0.0.27",
+      }),
+    ).toBe("Kairo (Alpha)");
+  });
+
+  it("keeps the fallback display name for malformed nightly primary server versions", () => {
+    expect(
+      resolveServerBackedAppDisplayName({
+        baseName: "Kairo",
+        fallbackDisplayName: "Kairo (Alpha)",
+        fallbackStageLabel: "Alpha",
+        primaryServerVersion: "0.0.28-nightly.20260616",
+      }),
+    ).toBe("Kairo (Alpha)");
   });
 });

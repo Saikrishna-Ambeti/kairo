@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { ChildProcessSpawner } from "effect/unstable/process";
+import { HostProcessPlatform } from "@kairo/shared/hostProcess";
 
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
 import { makeManualOnlyProviderMaintenanceCapabilities } from "../provider/providerMaintenance.ts";
@@ -20,6 +21,8 @@ function ok(stdout = "", stderr = ""): ProcessRunOutput {
     timedOut: false,
     stdoutTruncated: false,
     stderrTruncated: false,
+    stdoutInvalidUtf8: false,
+    stderrInvalidUtf8: false,
   };
 }
 
@@ -34,6 +37,7 @@ function failed(stderr: string): ProcessRunOutput {
 function makeTestDeps(
   run: (input: ProcessRunInput) => Effect.Effect<ProcessRunOutput, never, never>,
   composioSettings: Partial<typeof DEFAULT_SERVER_SETTINGS.integrations.composio> = {},
+  hostPlatform: NodeJS.Platform = "linux",
 ) {
   return Layer.mergeAll(
     NodeServices.layer,
@@ -46,6 +50,7 @@ function makeTestDeps(
       },
     }),
     Layer.succeed(ProcessRunner, ProcessRunner.of({ run })),
+    Layer.succeed(HostProcessPlatform, hostPlatform),
     Layer.mock(ProviderRegistry)({
       getProviders: Effect.succeed([]),
       refresh: () => Effect.succeed([]),
@@ -255,9 +260,7 @@ describe("ComposioService", () => {
   it.effect("reports native Windows as unsupported instead of running npm install", () =>
     Effect.gen(function* () {
       const previousInstallDir = process.env.COMPOSIO_INSTALL_DIR;
-      const platformDescriptor = Object.getOwnPropertyDescriptor(process, "platform");
       process.env.COMPOSIO_INSTALL_DIR = "/tmp/kairo-composio-test-windows";
-      Object.defineProperty(process, "platform", { configurable: true, value: "win32" });
       const runs: ProcessRunInput[] = [];
       const runMock = vi.fn((input: ProcessRunInput) =>
         Effect.sync(() => {
@@ -266,7 +269,7 @@ describe("ComposioService", () => {
         }),
       );
       const ComposioTest = Layer.effect(ComposioService, makeComposioService).pipe(
-        Layer.provide(makeTestDeps(runMock)),
+        Layer.provide(makeTestDeps(runMock, {}, "win32")),
       );
 
       try {
@@ -288,7 +291,6 @@ describe("ComposioService", () => {
           false,
         );
       } finally {
-        if (platformDescriptor) Object.defineProperty(process, "platform", platformDescriptor);
         if (previousInstallDir === undefined) {
           delete process.env.COMPOSIO_INSTALL_DIR;
         } else {

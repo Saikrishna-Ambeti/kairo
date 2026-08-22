@@ -7,7 +7,12 @@ import {
   InfoIcon,
   RefreshCwIcon,
 } from "lucide-react";
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useAtomValue } from "@effect/atom-react";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@kairo/client-runtime/state/runtime";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import type {
   ServerProcessDiagnosticsEntry,
   ServerProcessResourceHistorySummary,
@@ -16,21 +21,26 @@ import type {
 import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
 
-import { ensureLocalApi } from "../../localApi";
 import { cn } from "../../lib/utils";
+import { ensureLocalApi } from "../../localApi";
 import { resolveAndPersistPreferredEditor } from "../../editorPreferences";
-import { formatRelativeTime } from "../../timestampFormat";
-import { useServerAvailableEditors, useServerObservability } from "../../rpc/serverState";
+import { formatRelativeTimeLabel, getRelativeTimeState } from "../../timestampFormat";
+import { useEnvironmentQuery } from "../../state/query";
 import {
-  useProcessDiagnostics,
-  useProcessResourceHistory,
-} from "../../lib/processDiagnosticsState";
-import { useTraceDiagnostics } from "../../lib/traceDiagnosticsState";
+  primaryServerAvailableEditorsAtom,
+  primaryServerObservabilityAtom,
+  serverEnvironment,
+} from "../../state/server";
+import { shellEnvironment } from "../../state/shell";
+import { usePrimaryEnvironment } from "../../state/environments";
+import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
+import { ResourceTelemetryDiagnostics } from "./ResourceTelemetryDiagnostics";
 import { SettingsPageContainer, SettingsSection, useRelativeTimeTick } from "./settingsLayout";
+import { useAtomCommand } from "../../state/use-atom-command";
 
 const NUMBER_FORMAT = new Intl.NumberFormat();
 
@@ -57,8 +67,7 @@ function formatBytes(value: number): string {
 
 function formatRelative(value: DateTime.Utc | null): string {
   if (!value) return "No trace records";
-  const relative = formatRelativeTime(DateTime.formatIso(value));
-  return relative.suffix ? `${relative.value} ${relative.suffix}` : relative.value;
+  return formatRelativeTimeLabel(DateTime.formatIso(value));
 }
 
 function formatRelativeNoWrap(value: DateTime.Utc | null): string {
@@ -95,7 +104,7 @@ function StatBlock({
               render={
                 <button
                   type="button"
-                  className="inline-flex size-3.5 shrink-0 items-center justify-center rounded-sm text-muted-foreground/60 hover:text-foreground"
+                  className="cursor-pointer inline-flex size-3.5 shrink-0 items-center justify-center rounded-sm text-muted-foreground/60 hover:text-foreground"
                   aria-label={`${label} details`}
                 >
                   <InfoIcon className="size-3" />
@@ -179,7 +188,7 @@ function ExpandableText({
       {canExpand ? (
         <button
           type="button"
-          className="mt-1 text-[11px] font-medium text-foreground/70 underline-offset-2 hover:text-foreground hover:underline"
+          className="cursor-pointer mt-1 text-[11px] font-medium text-foreground/70 underline-offset-2 hover:text-foreground hover:underline"
           onClick={() => setExpanded((value) => !value)}
         >
           {expanded ? "Show less" : expandLabel}
@@ -239,16 +248,10 @@ function DiagnosticsTable({
 }
 
 function TraceIdCell({ traceId }: { traceId: string }) {
-  const [copied, setCopied] = useState(false);
-  const copyTraceId = useCallback(() => {
-    void navigator.clipboard
-      ?.writeText(traceId)
-      .then(() => {
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 1_200);
-      })
-      .catch(() => undefined);
-  }, [traceId]);
+  const { copyToClipboard, isCopied: copied } = useCopyToClipboard({
+    target: "trace ID",
+    timeout: 1_200,
+  });
 
   return (
     <div className="flex w-full min-w-0 max-w-full items-center gap-2">
@@ -270,14 +273,14 @@ function TraceIdCell({ traceId }: { traceId: string }) {
       <Tooltip>
         <TooltipTrigger
           render={
-            <button
-              type="button"
-              className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+            <Button
+              size="icon-micro"
+              variant="ghost-muted"
               aria-label={copied ? "Copied trace ID" : "Copy trace ID"}
-              onClick={copyTraceId}
+              onClick={() => copyToClipboard(traceId)}
             >
               <CopyIcon className="size-3" />
-            </button>
+            </Button>
           }
         />
         <TooltipPopup side="top">{copied ? "Copied" : "Copy full trace ID"}</TooltipPopup>
@@ -319,14 +322,14 @@ function ProcessNameCell({
       style={{ paddingLeft: `${Math.min(process.depth, 6) * 10}px` }}
     >
       {hasChildren ? (
-        <button
-          type="button"
-          className="inline-flex size-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+        <Button
+          size="icon-micro"
+          variant="ghost-muted"
           aria-label={isExpanded ? `Collapse ${name}` : `Expand ${name}`}
           onClick={() => onToggle(process.pid)}
         >
           <ChevronIcon className="size-3.5" />
-        </button>
+        </Button>
       ) : (
         <span className="size-5 shrink-0" aria-hidden="true" />
       )}
@@ -363,7 +366,7 @@ function ProcessSignalActions({
             <button
               type="button"
               disabled={isSignaling}
-              className="text-[11px] font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:pointer-events-none disabled:opacity-50"
+              className="cursor-pointer text-[11px] font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:pointer-events-none disabled:opacity-50"
               onClick={() => onSignal(process.pid, "SIGINT")}
             >
               INT
@@ -378,7 +381,7 @@ function ProcessSignalActions({
             <button
               type="button"
               disabled={isSignaling}
-              className="text-[11px] font-medium text-destructive underline-offset-2 hover:underline disabled:pointer-events-none disabled:opacity-50"
+              className="cursor-pointer text-[11px] font-medium text-destructive underline-offset-2 hover:underline disabled:pointer-events-none disabled:opacity-50"
               onClick={() => onSignal(process.pid, "SIGKILL")}
             >
               KILL
@@ -638,7 +641,7 @@ function ResourceHistoryWindowSelector({
           key={option.windowMs}
           type="button"
           className={cn(
-            "h-6 rounded-sm px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground",
+            "cursor-pointer h-6 rounded-sm px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground",
             selectedWindowMs === option.windowMs && "bg-muted text-foreground",
           )}
           onClick={() => onSelect(option.windowMs)}
@@ -753,10 +756,14 @@ function ProcessResourceHistoryTable({
 
 function DiagnosticsLastChecked({ checkedAt }: { checkedAt: DateTime.Utc | null }) {
   useRelativeTimeTick();
-  const relative = checkedAt ? formatRelativeTime(DateTime.formatIso(checkedAt)) : null;
+  const relative = getRelativeTimeState(checkedAt ? DateTime.formatIso(checkedAt) : null);
 
-  if (!relative) {
+  if (relative.status === "missing") {
     return <span className="text-[11px] text-muted-foreground/50">Checking</span>;
+  }
+
+  if (relative.status === "invalid") {
+    return <span className="text-[11px] text-muted-foreground/50">Checked unavailable</span>;
   }
 
   return (
@@ -786,9 +793,8 @@ function DiagnosticsRefreshButton({
       <TooltipTrigger
         render={
           <Button
-            size="icon-xs"
-            variant="ghost"
-            className="size-5 rounded-sm p-0 text-muted-foreground hover:text-foreground"
+            size="icon-micro"
+            variant="ghost-muted"
             disabled={isPending}
             onClick={onClick}
             aria-label={label}
@@ -803,31 +809,59 @@ function DiagnosticsRefreshButton({
 }
 
 export function DiagnosticsSettingsPanel() {
-  const observability = useServerObservability();
-  const availableEditors = useServerAvailableEditors();
+  const observability = useAtomValue(primaryServerObservabilityAtom);
+  const availableEditors = useAtomValue(primaryServerAvailableEditorsAtom);
+  const primaryEnvironment = usePrimaryEnvironment();
+  const environmentId = primaryEnvironment?.environmentId ?? null;
+  const signalServerProcess = useAtomCommand(serverEnvironment.signalProcess, {
+    reportFailure: false,
+  });
+  const openInEditor = useAtomCommand(shellEnvironment.openInEditor, {
+    reportFailure: false,
+  });
   const [resourceWindowMs, setResourceWindowMs] = useState(15 * 60_000);
   const selectedResourceWindow =
     RESOURCE_HISTORY_WINDOWS.find((option) => option.windowMs === resourceWindowMs) ??
     RESOURCE_HISTORY_WINDOWS[1];
-  const { data, error, isPending, refresh } = useTraceDiagnostics();
+  const { data, error, isPending, refresh } = useEnvironmentQuery(
+    environmentId === null
+      ? null
+      : serverEnvironment.traceDiagnostics({ environmentId, input: {} }),
+  );
   const {
     data: processData,
     error: processError,
     isPending: isProcessPending,
     refresh: refreshProcesses,
-  } = useProcessDiagnostics();
+  } = useEnvironmentQuery(
+    environmentId === null
+      ? null
+      : serverEnvironment.processDiagnostics({ environmentId, input: {} }),
+  );
   const {
     data: resourceData,
     error: resourceError,
     isPending: isResourcePending,
     refresh: refreshResources,
-  } = useProcessResourceHistory({
-    windowMs: selectedResourceWindow.windowMs,
-    bucketMs: selectedResourceWindow.bucketMs,
-  });
+  } = useEnvironmentQuery(
+    environmentId === null
+      ? null
+      : serverEnvironment.processResourceHistory({
+          environmentId,
+          input: {
+            windowMs: selectedResourceWindow.windowMs,
+            bucketMs: selectedResourceWindow.bucketMs,
+          },
+        }),
+  );
   const [isOpeningLogsDirectory, setIsOpeningLogsDirectory] = useState(false);
   const [openLogsDirectoryError, setOpenLogsDirectoryError] = useState<string | null>(null);
   const [signalingPid, setSignalingPid] = useState<number | null>(null);
+  const signalingPidRef = useRef<number | null>(null);
+  const environmentIdRef = useRef(environmentId);
+  const processDataRef = useRef(processData);
+  environmentIdRef.current = environmentId;
+  processDataRef.current = processData;
 
   const openLogsDirectory = useCallback(() => {
     const logsDirectoryPath = observability?.logsDirectoryPath ?? null;
@@ -838,70 +872,116 @@ export function DiagnosticsSettingsPanel() {
       setOpenLogsDirectoryError("No available editors found.");
       return;
     }
+    if (environmentId === null) {
+      setOpenLogsDirectoryError("No environment is selected.");
+      return;
+    }
 
     setIsOpeningLogsDirectory(true);
     setOpenLogsDirectoryError(null);
-    void ensureLocalApi()
-      .shell.openInEditor(logsDirectoryPath, editor)
-      .catch((error: unknown) => {
+    void (async () => {
+      const result = await openInEditor({
+        environmentId,
+        input: {
+          cwd: logsDirectoryPath,
+          editor,
+        },
+      });
+      setIsOpeningLogsDirectory(false);
+      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
         setOpenLogsDirectoryError(
           error instanceof Error ? error.message : "Unable to open logs folder.",
         );
-      })
-      .finally(() => {
-        setIsOpeningLogsDirectory(false);
-      });
-  }, [availableEditors, observability?.logsDirectoryPath]);
+      }
+    })();
+  }, [availableEditors, environmentId, observability?.logsDirectoryPath, openInEditor]);
 
   const isInitialLoading = isPending && data === null;
   const isProcessInitialLoading = isProcessPending && processData === null;
   const signalProcess = useCallback(
-    (pid: number, signal: ServerProcessSignal) => {
-      if (
-        signal === "SIGKILL" &&
-        !window.confirm(`Send SIGKILL to process ${pid}? This cannot be handled by the process.`)
-      ) {
+    async (pid: number, signal: ServerProcessSignal) => {
+      if (signalingPidRef.current !== null) return;
+      signalingPidRef.current = pid;
+      setSignalingPid(pid);
+      const clearSignaling = () => {
+        signalingPidRef.current = null;
+        setSignalingPid(null);
+      };
+      if (signal === "SIGKILL") {
+        let confirmed = false;
+        try {
+          confirmed = await ensureLocalApi().dialogs.confirm(
+            `Send SIGKILL to process ${pid}? This cannot be handled by the process.`,
+            { variant: "destructive" },
+          );
+        } catch (error) {
+          clearSignaling();
+          toastManager.add({
+            type: "error",
+            title: "Could not confirm signal",
+            description: error instanceof Error ? error.message : `Failed to send ${signal}.`,
+          });
+          return;
+        }
+        if (!confirmed) {
+          clearSignaling();
+          return;
+        }
+      }
+      const currentEnvironmentId = environmentIdRef.current;
+      if (currentEnvironmentId === null) {
+        clearSignaling();
+        return;
+      }
+      const process = processDataRef.current?.processes.find((entry) => entry.pid === pid);
+      if (process === undefined) {
+        clearSignaling();
         return;
       }
 
-      setSignalingPid(pid);
-      void ensureLocalApi()
-        .server.signalProcess({ pid, signal })
-        .then((result) => {
-          if (!result.signaled) {
-            const message = Option.getOrUndefined(result.message);
-            refreshProcesses();
-            if (isStaleProcessSignalMessage(message)) {
-              toastManager.add({
-                type: "info",
-                title: "Process already exited",
-                description:
-                  "The process is not a child of the Kairo Server. It might already have exited.",
-              });
-              return;
-            }
-
+      try {
+        const result = await signalServerProcess({
+          environmentId: currentEnvironmentId,
+          input: { pid, startTimeMs: process.startTimeMs, signal },
+        });
+        if (result._tag === "Failure") {
+          if (!isAtomCommandInterrupted(result)) {
+            const error = squashAtomCommandFailure(result);
             toastManager.add({
               type: "error",
               title: `Could not send ${signal}`,
-              description: message ?? `Failed to send ${signal}.`,
+              description: error instanceof Error ? error.message : `Failed to send ${signal}.`,
+            });
+          }
+          return;
+        }
+        if (!result.value.signaled) {
+          const message = Option.getOrUndefined(result.value.message);
+          refreshProcesses();
+          if (isStaleProcessSignalMessage(message)) {
+            toastManager.add({
+              type: "info",
+              title: "Process already exited",
+              description:
+                "The process is not a child of the Kairo Server. It might already have exited.",
             });
             return;
           }
-          refreshProcesses();
-        })
-        .catch((error: unknown) => {
+
           toastManager.add({
             type: "error",
             title: `Could not send ${signal}`,
-            description: error instanceof Error ? error.message : `Failed to send ${signal}.`,
+            description: message ?? `Failed to send ${signal}.`,
           });
-        })
-        .finally(() => {
-          setSignalingPid(null);
-        });
+          return;
+        }
+        refreshProcesses();
+      } finally {
+        clearSignaling();
+      }
     },
-    [refreshProcesses],
+    [refreshProcesses, signalServerProcess],
   );
 
   const processDiagnosticsError = processData ? Option.getOrNull(processData.error) : null;
@@ -912,7 +992,9 @@ export function DiagnosticsSettingsPanel() {
     : false;
 
   return (
-    <SettingsPageContainer>
+    <SettingsPageContainer width="expanded" className="gap-10">
+      <ResourceTelemetryDiagnostics />
+
       <SettingsSection
         title="Live Processes"
         headerAction={
@@ -1047,9 +1129,8 @@ export function DiagnosticsSettingsPanel() {
               <TooltipTrigger
                 render={
                   <Button
-                    size="icon-xs"
-                    variant="ghost"
-                    className="size-5 rounded-sm p-0 text-muted-foreground hover:text-foreground"
+                    size="icon-micro"
+                    variant="ghost-muted"
                     disabled={!observability?.logsDirectoryPath || isOpeningLogsDirectory}
                     onClick={openLogsDirectory}
                     aria-label="Open logs folder"
