@@ -1,15 +1,46 @@
-# Documentation
+# Kairo docs
 
-Kairo is an AI assistant app for everyday work. It is designed for people who are not deeply familiar with AI, and for anyone who wants a practical assistant that can remember useful context and work with data from connected platforms.
+## Using Kairo
 
-These docs currently mix user setup, product direction, and developer references because the project is still early.
+- [Install and first run](./user/install.md)
+- [Permission modes](./user/permission-modes.md)
+- [Keyboard shortcuts](./user/keybindings.md)
+- [Organizing threads](./user/thread-sidebar.md)
+- [Review usage](./user/usage.md)
+- [Customize a project icon](./user/project-settings.md)
+- [Mobile appearance](./user/mobile-appearance.md)
+- [Remote access](./user/remote-access.md)
+- [Keeping app and server in sync](./user/updating.md)
+- [Source control integrations](./user/source-control.md)
+- [Background service (Linux)](./user/background-service.md)
+- Providers: [Codex](./user/providers-codex.md) · [Claude](./user/providers-claude.md)
 
-- [Getting started](./getting-started/quick-start.md)
-- [Architecture](./architecture/overview.md)
-- [Kairo Connect](./cloud/kairo-connect-clerk.md)
-- [Developer integrations](./integrations/source-control-providers.md)
-- [Operations](./operations/ci.md)
-- [Project plans](./project/non-technical-ai-cleanup-plan.md)
-- [Providers](./providers/codex.md)
-- [Reference](./reference/encyclopedia.md)
-- [User guides](./user/keybindings.md)
+Mobile app: [apps/mobile/README.md](../apps/mobile/README.md)
+
+---
+
+## Working on Kairo
+
+Everything below is for maintainers. Setup lives in the [root README](../README.md);
+policy in [CONTRIBUTING.md](../CONTRIBUTING.md); agent rules in [AGENTS.md](../AGENTS.md).
+
+- [Architecture overview](./internals/overview.md)
+- [Workspace layout](./internals/workspace-layout.md)
+- [Glossary](./internals/glossary.md)
+- [Scripts](./internals/scripts.md)
+- [Connection runtime](./internals/connection-runtime.md)
+- [Providers](./internals/providers.md)
+- [Remote environments](./internals/remote.md)
+- [Server updates](./internals/server-updates.md)
+- [Resource telemetry](./internals/resource-telemetry.md)
+- [Environment auth](./internals/environment-auth.md)
+- [Kairo Connect](./internals/kairo-connect.md)
+- [CI gates](./internals/ci.md)
+- [Engineering work artifacts](./internals/work-artifacts.md)
+
+### Runbooks
+
+- [Release](./operations/release.md)
+- [Observability](./operations/observability.md)
+- [Relay observability](./operations/relay-observability.md)
+- [Mobile app store screenshots](./operations/mobile-app-store-screenshots.md)

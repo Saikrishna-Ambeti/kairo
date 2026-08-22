@@ -356,9 +356,9 @@ typedef struct {
   ghostty_input_action_e action;
   ghostty_input_mods_e mods;
   ghostty_input_mods_e consumed_mods;
-  uinkairo2_t keycode;
+  uint32_t keycode;
   const char* text;
-  uinkairo2_t unshifted_codepoint;
+  uint32_t unshifted_codepoint;
   bool composing;
 } ghostty_input_key_s;
 
@@ -371,7 +371,7 @@ typedef enum {
 typedef union {
   ghostty_input_key_e translated;
   ghostty_input_key_e physical;
-  uinkairo2_t unicode;
+  uint32_t unicode;
   // catch_all has no payload
 } ghostty_input_trigger_key_u;
 
@@ -414,8 +414,8 @@ typedef struct {
 typedef struct {
   double tl_px_x;
   double tl_px_y;
-  uinkairo2_t offset_start;
-  uinkairo2_t offset_len;
+  uint32_t offset_start;
+  uint32_t offset_len;
   const char* text;
   uintptr_t text_len;
 } ghostty_text_s;
@@ -436,8 +436,8 @@ typedef enum {
 typedef struct {
   ghostty_point_tag_e tag;
   ghostty_point_coord_e coord;
-  uinkairo2_t x;
-  uinkairo2_t y;
+  uint32_t x;
+  uint32_t y;
 } ghostty_point_s;
 
 typedef struct {
@@ -489,10 +489,10 @@ typedef struct {
 typedef struct {
   uint16_t columns;
   uint16_t rows;
-  uinkairo2_t width_px;
-  uinkairo2_t height_px;
-  uinkairo2_t cell_width_px;
-  uinkairo2_t cell_height_px;
+  uint32_t width_px;
+  uint32_t height_px;
+  uint32_t cell_width_px;
+  uint32_t cell_height_px;
 } ghostty_surface_size_s;
 
 // Config types
@@ -536,7 +536,7 @@ typedef enum {
 
 typedef union {
   float percentage;
-  uinkairo2_t pixels;
+  uint32_t pixels;
 } ghostty_quick_terminal_size_value_u;
 
 typedef struct {
@@ -738,22 +738,22 @@ typedef struct {
 
 // apprt.action.SizeLimit
 typedef struct {
-  uinkairo2_t min_width;
-  uinkairo2_t min_height;
-  uinkairo2_t max_width;
-  uinkairo2_t max_height;
+  uint32_t min_width;
+  uint32_t min_height;
+  uint32_t max_width;
+  uint32_t max_height;
 } ghostty_action_size_limit_s;
 
 // apprt.action.InitialSize
 typedef struct {
-  uinkairo2_t width;
-  uinkairo2_t height;
+  uint32_t width;
+  uint32_t height;
 } ghostty_action_initial_size_s;
 
 // apprt.action.CellSize
 typedef struct {
-  uinkairo2_t width;
-  uinkairo2_t height;
+  uint32_t width;
+  uint32_t height;
 } ghostty_action_cell_size_s;
 
 // renderer.Health
@@ -837,7 +837,7 @@ typedef enum {
 
 // apprt.surface.Message.ChildExited
 typedef struct {
-  uinkairo2_t exit_code;
+  uint32_t exit_code;
   uint64_t timetime_ms;
 } ghostty_surface_message_childexited_s;
 
@@ -1084,8 +1084,8 @@ GHOSTTY_API bool ghostty_config_get(ghostty_config_t, void*, const char*, uintpt
 GHOSTTY_API ghostty_input_trigger_s ghostty_config_trigger(ghostty_config_t,
                                                               const char*,
                                                               uintptr_t);
-GHOSTTY_API uinkairo2_t ghostty_config_diagnostics_count(ghostty_config_t);
-GHOSTTY_API ghostty_diagnostic_s ghostty_config_get_diagnostic(ghostty_config_t, uinkairo2_t);
+GHOSTTY_API uint32_t ghostty_config_diagnostics_count(ghostty_config_t);
+GHOSTTY_API ghostty_diagnostic_s ghostty_config_get_diagnostic(ghostty_config_t, uint32_t);
 GHOSTTY_API ghostty_string_s ghostty_config_open_path(void);
 
 GHOSTTY_API ghostty_app_t ghostty_app_new(const ghostty_runtime_config_s*,
@@ -1123,7 +1123,7 @@ GHOSTTY_API void ghostty_surface_set_write_callback(ghostty_surface_t,
 GHOSTTY_API void ghostty_surface_set_content_scale(ghostty_surface_t, double, double);
 GHOSTTY_API void ghostty_surface_set_focus(ghostty_surface_t, bool);
 GHOSTTY_API void ghostty_surface_set_occlusion(ghostty_surface_t, bool);
-GHOSTTY_API void ghostty_surface_set_size(ghostty_surface_t, uinkairo2_t, uinkairo2_t);
+GHOSTTY_API void ghostty_surface_set_size(ghostty_surface_t, uint32_t, uint32_t);
 GHOSTTY_API ghostty_surface_size_s ghostty_surface_size(ghostty_surface_t);
 GHOSTTY_API uint64_t ghostty_surface_foreground_pid(ghostty_surface_t);
 GHOSTTY_API ghostty_string_s ghostty_surface_tty_name(ghostty_surface_t);
@@ -1150,7 +1150,7 @@ GHOSTTY_API void ghostty_surface_mouse_scroll(ghostty_surface_t,
                                                  double,
                                                  double,
                                                  ghostty_input_scroll_mods_t);
-GHOSTTY_API void ghostty_surface_mouse_pressure(ghostty_surface_t, uinkairo2_t, double);
+GHOSTTY_API void ghostty_surface_mouse_pressure(ghostty_surface_t, uint32_t, double);
 GHOSTTY_API void ghostty_surface_ime_point(ghostty_surface_t, double*, double*, double*, double*);
 GHOSTTY_API void ghostty_surface_request_close(ghostty_surface_t);
 GHOSTTY_API void ghostty_surface_split(ghostty_surface_t, ghostty_action_split_direction_e);
@@ -1173,7 +1173,7 @@ GHOSTTY_API bool ghostty_surface_read_text(ghostty_surface_t,
 GHOSTTY_API void ghostty_surface_free_text(ghostty_surface_t, ghostty_text_s*);
 
 #ifdef __APPLE__
-GHOSTTY_API void ghostty_surface_set_display_id(ghostty_surface_t, uinkairo2_t);
+GHOSTTY_API void ghostty_surface_set_display_id(ghostty_surface_t, uint32_t);
 GHOSTTY_API void* ghostty_surface_quicklook_font(ghostty_surface_t);
 GHOSTTY_API bool ghostty_surface_quicklook_word(ghostty_surface_t, ghostty_text_s*);
 #endif
@@ -1182,7 +1182,7 @@ GHOSTTY_API ghostty_inspector_t ghostty_surface_inspector(ghostty_surface_t);
 GHOSTTY_API void ghostty_inspector_free(ghostty_surface_t);
 GHOSTTY_API void ghostty_inspector_set_focus(ghostty_inspector_t, bool);
 GHOSTTY_API void ghostty_inspector_set_content_scale(ghostty_inspector_t, double, double);
-GHOSTTY_API void ghostty_inspector_set_size(ghostty_inspector_t, uinkairo2_t, uinkairo2_t);
+GHOSTTY_API void ghostty_inspector_set_size(ghostty_inspector_t, uint32_t, uint32_t);
 GHOSTTY_API void ghostty_inspector_mouse_button(ghostty_inspector_t,
                                                    ghostty_input_mouse_state_e,
                                                    ghostty_input_mouse_button_e,

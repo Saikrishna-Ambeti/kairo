@@ -15,12 +15,13 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ensureLocalApi } from "../../localApi";
+import { usePrimaryServerApi } from "../../state/primaryServerApi";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { stackedThreadToast, toastManager } from "../ui/toast";
-import { ComposioSetupDialog } from "./IntegrationsSettings";
+import { ComposioSetupDialog } from "./ComposioSetupDialog";
 import { getAvailableComposioCatalogItems } from "./IntegrationsSettings.logic";
 import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
 
@@ -106,6 +107,7 @@ function AppRow({
 }
 
 export function ComposioAppsSettings() {
+  const serverApi = usePrimaryServerApi();
   const [query, setQuery] = useState("");
   const [catalog, setCatalog] = useState<ComposioToolkitCatalog | null>(null);
   const [status, setStatus] = useState<ComposioStatus | null>(null);
@@ -119,12 +121,11 @@ export function ComposioAppsSettings() {
   const loadCatalog = useCallback(async () => {
     setLoading(true);
     try {
-      const localApi = ensureLocalApi();
       const [nextCatalog, nextStatus] = await Promise.all([
-        localApi.server.listComposioToolkits({
+        serverApi.listComposioToolkits({
           limit: 1000,
         }),
-        localApi.server.getComposioStatus(),
+        serverApi.getComposioStatus(),
       ]);
       setCatalog(nextCatalog);
       setStatus(nextStatus);
@@ -144,8 +145,8 @@ export function ComposioAppsSettings() {
     backgroundStatusRefreshStartedRef.current = true;
     const timeoutIds = [1_500, 4_000, 8_000].map((delay) =>
       window.setTimeout(() => {
-        void ensureLocalApi()
-          .server.getComposioStatus()
+        void serverApi
+          .getComposioStatus()
           .then(setStatus)
           .catch(() => undefined);
       }, delay),
@@ -171,8 +172,8 @@ export function ComposioAppsSettings() {
     setAuthUrl(null);
     setDialogOpen(true);
     try {
-      await ensureLocalApi().server.linkComposioToolkit({ toolkit }, appendProgress);
-      setStatus(await ensureLocalApi().server.getComposioStatus());
+      await serverApi.linkComposioToolkit({ toolkit }, appendProgress);
+      setStatus(await serverApi.getComposioStatus());
       toastManager.add(stackedThreadToast({ type: "success", title: `${toolkit} connected` }));
     } catch (error) {
       showComposioError(`Could not connect ${toolkit}`, error);

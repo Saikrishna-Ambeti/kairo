@@ -6,7 +6,9 @@ import {
   SidebarMenuButton,
   SidebarMenuSubButton,
   SidebarProvider,
+  SidebarTrigger,
 } from "./sidebar";
+import { resolveSidebarState } from "./sidebarState";
 
 function renderSidebarButton(className?: string) {
   return renderToStaticMarkup(
@@ -17,11 +19,67 @@ function renderSidebarButton(className?: string) {
 }
 
 describe("sidebar interactive cursors", () => {
-  it("uses a pointer cursor for menu buttons by default", () => {
+  it("uses mobile sheet visibility for the shared responsive state", () => {
+    expect(resolveSidebarState({ isMobile: true, open: true, openMobile: false })).toBe(
+      "collapsed",
+    );
+    expect(resolveSidebarState({ isMobile: true, open: false, openMobile: true })).toBe("expanded");
+    expect(resolveSidebarState({ isMobile: false, open: true, openMobile: false })).toBe(
+      "expanded",
+    );
+  });
+
+  it("exposes collapsed state for shared titlebar inset styling", () => {
+    const html = renderToStaticMarkup(
+      <SidebarProvider defaultOpen={false}>
+        <div />
+      </SidebarProvider>,
+    );
+
+    expect(html).toContain('data-sidebar-state="collapsed"');
+  });
+
+  it("keeps the sidebar trigger interactive inside Electron drag regions", () => {
+    const html = renderToStaticMarkup(
+      <SidebarProvider>
+        <SidebarTrigger />
+      </SidebarProvider>,
+    );
+
+    expect(html).toContain("[-webkit-app-region:no-drag]");
+    expect(html).toContain("size-[var(--workspace-titlebar-control-size)]!");
+  });
+
+  it("uses shared geometry and icon constraints for menu buttons by default", () => {
     const html = renderSidebarButton();
 
     expect(html).toContain('data-slot="sidebar-menu-button"');
+    expect(html).toContain("h-8");
+    expect(html).toContain("rounded-[var(--control-radius)]");
+    expect(html).toContain("px-[var(--sidebar-row-content-inset)]");
+    expect(html).toContain("py-1.5");
+    expect(html).toContain("]:size-4");
+    expect(html).toContain("]:shrink-0");
     expect(html).toContain("cursor-pointer");
+    expect(html).toContain("gap-[var(--sidebar-control-gap)]");
+    expect(html).toContain("text-[var(--sidebar-icon-color)]");
+    expect(html).not.toContain("[&amp;&gt;svg]:opacity-60");
+  });
+
+  it("applies the shared default treatment to icon-only menu buttons", () => {
+    const html = renderToStaticMarkup(
+      <SidebarProvider>
+        <SidebarMenuButton size="icon">
+          <span>+</span>
+        </SidebarMenuButton>
+      </SidebarProvider>,
+    );
+
+    expect(html).toContain("size-8");
+    expect(html).toContain("justify-center");
+    expect(html).toContain("p-0");
+    expect(html).toContain("font-medium");
+    expect(html).toContain("text-sidebar-muted-foreground/80");
   });
 
   it("lets project drag handles override the default pointer cursor", () => {

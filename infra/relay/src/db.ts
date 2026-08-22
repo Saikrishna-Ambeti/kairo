@@ -7,14 +7,33 @@ import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import type { EffectPgDatabase } from "drizzle-orm/effect-postgres";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 
 import { relayDatabaseMode } from "./dbConfig.ts";
 
-export interface RelayDatabase extends EffectPgDatabase {
-  readonly $client: PgClient;
-}
+export class RelayDb extends Context.Service<
+  RelayDb,
+  EffectPgDatabase & {
+    readonly $client: PgClient;
+  }
+>()("kairo-relay/db/RelayDb") {}
 
-export class RelayDb extends Context.Service<RelayDb, RelayDatabase>()("kairo-relay/db/RelayDb") {}
+export class RelayTransactions extends Context.Service<
+  RelayTransactions,
+  {
+    readonly withTransaction: RelayDb["Service"]["$client"]["withTransaction"];
+  }
+>()("kairo-relay/db/RelayTransactions") {
+  static readonly layer = Layer.effect(
+    RelayTransactions,
+    Effect.gen(function* () {
+      const db = yield* RelayDb;
+      return RelayTransactions.of({
+        withTransaction: db.$client.withTransaction,
+      });
+    }),
+  );
+}
 
 export const PlanetscaleDatabase = Effect.gen(function* () {
   const { stage } = yield* Alchemy.Stack;
@@ -30,10 +49,10 @@ export const PlanetscaleDatabase = Effect.gen(function* () {
       ? yield* Planetscale.PostgresDatabase("RelayPostgresDatabase", {
           name: "kairorelay",
           region: { slug: "us-west" },
-          clusterSize: "PS_5",
+          clusterSize: "PS_20",
           migrationsDir: schema.out,
           migrationsTable: "relay_migrations",
-          replicas: 0, // BUMP BEFORE GOING TO PROD
+          replicas: 2,
         }).pipe(RemovalPolicy.retain())
       : yield* Planetscale.PostgresDatabase.ref("RelayPostgresDatabase", {
           stage: "prod",
@@ -58,7 +77,7 @@ export const PlanetscaleDatabase = Effect.gen(function* () {
 
 export const RelayHyperdrive = Effect.gen(function* () {
   const { runtimeRole } = yield* PlanetscaleDatabase;
-  return yield* Cloudflare.Hyperdrive("RelayHyperdrive", {
+  return yield* Cloudflare.Hyperdrive.Connection("RelayHyperdrive", {
     origin: runtimeRole.origin,
     caching: {
       disabled: true,

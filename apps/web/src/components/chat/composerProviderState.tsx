@@ -21,9 +21,12 @@ export type ComposerProviderStateInput = {
   provider: ProviderDriverKind;
   model: string;
   models: ReadonlyArray<ServerProviderModel>;
-  prompt: string;
+  promptInjectionState?: ComposerPromptInjectionState;
   modelOptions: ReadonlyArray<ProviderOptionSelection> | null | undefined;
+  planModeEnabled: boolean;
 };
+
+export type ComposerPromptInjectionState = "none" | "ultrathink";
 
 export type ComposerProviderState = {
   provider: ProviderDriverKind;
@@ -44,11 +47,23 @@ type TraitsRenderInput = {
   modelOptions: ReadonlyArray<ProviderOptionSelection> | undefined;
   prompt: string;
   onPromptChange: (prompt: string) => void;
+  planModeEnabled: boolean;
 };
 
+export function getComposerPromptInjectionState(prompt: string): ComposerPromptInjectionState {
+  return isClaudeUltrathinkPrompt(prompt) ? "ultrathink" : "none";
+}
+
 export function getComposerProviderState(input: ComposerProviderStateInput): ComposerProviderState {
-  const { provider, model, models, prompt, modelOptions } = input;
-  const caps = getProviderModelCapabilities(models, model, provider);
+  const {
+    provider,
+    model,
+    models,
+    modelOptions,
+    promptInjectionState = "none",
+    planModeEnabled,
+  } = input;
+  const caps = getProviderModelCapabilities(models, model, provider, planModeEnabled);
   const descriptors = getProviderOptionDescriptors({ caps, selections: modelOptions });
   const primarySelectDescriptor = descriptors.find(
     (descriptor): descriptor is Extract<(typeof descriptors)[number], { type: "select" }> =>
@@ -58,7 +73,7 @@ export function getComposerProviderState(input: ComposerProviderStateInput): Com
   const promptEffort = typeof primaryValue === "string" ? primaryValue : null;
   const ultrathinkActive =
     (primarySelectDescriptor?.promptInjectedValues?.length ?? 0) > 0 &&
-    isClaudeUltrathinkPrompt(prompt);
+    promptInjectionState === "ultrathink";
 
   return {
     provider,
@@ -88,11 +103,19 @@ function renderTraitsControl(
     modelOptions,
     prompt,
     onPromptChange,
+    planModeEnabled,
   } = input;
   const hasTarget = threadRef !== undefined || draftId !== undefined;
   if (
     !hasTarget ||
-    !shouldRenderTraitsControls({ provider, models, model, modelOptions, prompt })
+    !shouldRenderTraitsControls({
+      provider,
+      models,
+      model,
+      modelOptions,
+      prompt,
+      planModeEnabled,
+    })
   ) {
     return null;
   }
@@ -107,6 +130,7 @@ function renderTraitsControl(
       modelOptions={modelOptions}
       prompt={prompt}
       onPromptChange={onPromptChange}
+      planModeEnabled={planModeEnabled}
     />
   );
 }

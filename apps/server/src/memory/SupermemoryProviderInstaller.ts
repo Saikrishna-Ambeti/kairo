@@ -7,7 +7,7 @@ import {
 import * as Effect from "effect/Effect";
 import * as Duration from "effect/Duration";
 
-import { ProcessRunner, type ProcessRunnerShape } from "../processRunner.ts";
+import { ProcessRunner } from "../processRunner.ts";
 import type { CodexSupermemoryIntegrationState } from "./SupermemoryCodexIntegration.ts";
 import { isSupermemoryDriverSupported } from "./SupermemoryProviderBindings.ts";
 import { redactSupermemorySecrets } from "./SupermemorySecrets.ts";
@@ -138,7 +138,7 @@ export function computeProviderMemoryStatus(input: {
 }
 
 const runInstaller = (input: {
-  readonly processRunner: ProcessRunnerShape;
+  readonly processRunner: ProcessRunner["Service"];
   readonly label: string;
   readonly command: string;
   readonly args: ReadonlyArray<string>;

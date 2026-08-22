@@ -8,7 +8,7 @@ import { VcsProcessExitError } from "@kairo/contracts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
 import * as GitLabCli from "./GitLabCli.ts";
 
-const mockedRun = vi.fn<VcsProcess.VcsProcessShape["run"]>();
+const mockedRun = vi.fn<VcsProcess.VcsProcess["Service"]["run"]>();
 const layer = it.layer(
   GitLabCli.layer.pipe(
     Layer.provide(
@@ -43,7 +43,7 @@ layer("GitLabCli.layer", (it) => {
             JSON.stringify({
               iid: 42,
               title: "Add MR thread creation",
-              web_url: "https://gitlab.com/pingdotgg/t3code/-/merge_requests/42",
+              web_url: "https://gitlab.com/pingdotgg/kairo/-/merge_requests/42",
               target_branch: "main",
               source_branch: "feature/mr-threads",
               state: "opened",
@@ -68,7 +68,7 @@ layer("GitLabCli.layer", (it) => {
       assert.deepStrictEqual(result, {
         number: 42,
         title: "Add MR thread creation",
-        url: "https://gitlab.com/pingdotgg/t3code/-/merge_requests/42",
+        url: "https://gitlab.com/pingdotgg/kairo/-/merge_requests/42",
         baseRefName: "main",
         headRefName: "feature/mr-threads",
         state: "open",
@@ -96,14 +96,14 @@ layer("GitLabCli.layer", (it) => {
               {
                 iid: 0,
                 title: "invalid",
-                web_url: "https://gitlab.com/pingdotgg/t3code/-/merge_requests/0",
+                web_url: "https://gitlab.com/pingdotgg/kairo/-/merge_requests/0",
                 target_branch: "main",
                 source_branch: "feature/invalid",
               },
               {
                 iid: 43,
                 title: "  Valid MR  ",
-                web_url: " https://gitlab.com/pingdotgg/t3code/-/merge_requests/43 ",
+                web_url: " https://gitlab.com/pingdotgg/kairo/-/merge_requests/43 ",
                 target_branch: " main ",
                 source_branch: " feature/mr-list ",
                 state: "merged",
@@ -126,7 +126,7 @@ layer("GitLabCli.layer", (it) => {
         {
           number: 43,
           title: "Valid MR",
-          url: "https://gitlab.com/pingdotgg/t3code/-/merge_requests/43",
+          url: "https://gitlab.com/pingdotgg/kairo/-/merge_requests/43",
           baseRefName: "main",
           headRefName: "feature/mr-list",
           state: "merged",
@@ -313,17 +313,15 @@ layer("GitLabCli.layer", (it) => {
 
   it.effect("surfaces a friendly error when the merge request is not found", () =>
     Effect.gen(function* () {
-      mockedRun.mockReturnValueOnce(
-        Effect.fail(
-          new VcsProcessExitError({
-            operation: "GitLabCli.execute",
-            command: "glab mr view 4888",
-            cwd: "/repo",
-            exitCode: 1,
-            detail: "GET 404 merge request not found",
-          }),
-        ),
-      );
+      const cause = new VcsProcessExitError({
+        operation: "GitLabCli.execute",
+        command: "glab",
+        cwd: "/repo",
+        exitCode: 1,
+        detail: "GET 404 merge request not found",
+        failureKind: "not-found",
+      });
+      mockedRun.mockReturnValueOnce(Effect.fail(cause));
 
       const error = yield* Effect.gen(function* () {
         const glab = yield* GitLabCli.GitLabCli;
@@ -333,7 +331,59 @@ layer("GitLabCli.layer", (it) => {
         });
       }).pipe(Effect.flip);
 
-      assert.equal(error.message.includes("Merge request not found"), true);
+      assert.equal(error.message.includes("Merge request 4888 was not found"), true);
+      assert.strictEqual(error._tag, "GitLabMergeRequestNotFoundError");
+      assert.strictEqual(error.command, "glab");
+      assert.strictEqual(error.cwd, "/repo");
+      assert.strictEqual(error.cause, cause);
+      assert.equal(error.message.includes(cause.detail), false);
+    }),
+  );
+
+  it.effect("keeps non-merge-request not-found failures generic", () =>
+    Effect.gen(function* () {
+      const cause = new VcsProcessExitError({
+        operation: "GitLabCli.execute",
+        command: "glab",
+        cwd: "/repo",
+        exitCode: 1,
+        detail: "GET 404 project not found",
+        failureKind: "not-found",
+      });
+      mockedRun.mockReturnValueOnce(Effect.fail(cause));
+
+      const error = yield* Effect.gen(function* () {
+        const glab = yield* GitLabCli.GitLabCli;
+        return yield* glab.getRepositoryCloneUrls({
+          cwd: "/repo",
+          repository: "missing/project",
+        });
+      }).pipe(Effect.flip);
+
+      assert.strictEqual(error._tag, "GitLabCliCommandError");
+      assert.strictEqual(error.cause, cause);
+    }),
+  );
+
+  it.effect("preserves rate-limit failures as a distinct error", () =>
+    Effect.gen(function* () {
+      const cause = new VcsProcessExitError({
+        operation: "GitLabCli.execute",
+        command: "glab",
+        cwd: "/repo",
+        exitCode: 1,
+        detail: "API rate limit exceeded.",
+        failureKind: "rate-limited",
+      });
+      mockedRun.mockReturnValueOnce(Effect.fail(cause));
+
+      const glab = yield* GitLabCli.GitLabCli;
+      const error = yield* glab
+        .execute({ cwd: "/repo", args: ["api", "projects"] })
+        .pipe(Effect.flip);
+
+      assert.strictEqual(error._tag, "GitLabCliRateLimitError");
+      assert.strictEqual(error.cause, cause);
     }),
   );
 });

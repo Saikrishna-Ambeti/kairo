@@ -3,8 +3,9 @@ import {
   type ProductSurfaceConfig,
   type ServerConfig,
 } from "@kairo/contracts";
+import { useAtomValue } from "@effect/atom-react";
 
-import { useServerConfig } from "./rpc/serverState";
+import { primaryServerConfigAtom } from "./state/server";
 
 export function resolveProductSurfaceConfig(
   config: Pick<ServerConfig, "surface"> | null | undefined,
@@ -13,7 +14,7 @@ export function resolveProductSurfaceConfig(
 }
 
 export function useProductSurfaceConfig(): ProductSurfaceConfig {
-  return resolveProductSurfaceConfig(useServerConfig());
+  return resolveProductSurfaceConfig(useAtomValue(primaryServerConfigAtom));
 }
 
 export function isSourceControlVisible(surface: ProductSurfaceConfig): boolean {

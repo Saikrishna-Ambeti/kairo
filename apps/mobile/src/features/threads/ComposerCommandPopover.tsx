@@ -1,12 +1,17 @@
-import { isLiquidGlassSupported, LiquidGlassView } from "@callstack/liquid-glass";
-import type { ComposerTriggerKind } from "@kairo/shared/composerTrigger";
+import {
+  resolveProviderSkillSourceKind,
+  type ProviderSkillSourceKind,
+} from "@kairo/client-runtime/providerSkills";
 import type { ServerProviderSkill, ServerProviderSlashCommand } from "@kairo/contracts";
-import { SymbolView } from "expo-symbols";
+import type { ComposerTriggerKind } from "@kairo/shared/composerTrigger";
 import { memo } from "react";
-import { Pressable, ScrollView, useColorScheme, View, type ViewStyle } from "react-native";
+import { Pressable, ScrollView, View, type ViewStyle } from "react-native";
 
+import { SymbolView, type AppSymbolName } from "../../components/AppSymbol";
 import { AppText as Text } from "../../components/AppText";
-
+import { GlassSurface } from "../../components/GlassSurface";
+import { PierreEntryIcon } from "../../components/PierreEntryIcon";
+import { useThemeColor } from "../../lib/useThemeColor";
 export type ComposerCommandItem =
   | {
       readonly id: string;
@@ -45,56 +50,39 @@ interface ComposerCommandPopoverProps {
   readonly onSelect: (item: ComposerCommandItem) => void;
 }
 
-function PopoverSurface(props: {
-  readonly children: React.ReactNode;
-  readonly isDarkMode: boolean;
-  readonly style?: ViewStyle;
-}) {
+function PopoverSurface(props: { readonly children: React.ReactNode; readonly style?: ViewStyle }) {
+  const tintColor = useThemeColor("--color-glass-surface");
   const baseStyle: ViewStyle = {
     borderRadius: 16,
     overflow: "hidden",
     ...props.style,
   };
 
-  if (isLiquidGlassSupported) {
-    return (
-      <LiquidGlassView
-        effect="clear"
-        interactive={false}
-        tintColor={props.isDarkMode ? "rgba(30,30,32,0.95)" : "rgba(255,255,255,0.92)"}
-        colorScheme={props.isDarkMode ? "dark" : "light"}
-        style={baseStyle}
-      >
-        {props.children}
-      </LiquidGlassView>
-    );
-  }
-
   return (
-    <View
-      style={[
-        baseStyle,
-        {
-          backgroundColor: props.isDarkMode ? "rgba(44,44,46,0.96)" : "rgba(255,255,255,0.96)",
-          borderWidth: 1,
-          borderColor: props.isDarkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
-        },
-      ]}
-    >
+    <GlassSurface glassEffectStyle="clear" tintColor={tintColor} style={baseStyle}>
       {props.children}
-    </View>
+    </GlassSurface>
   );
 }
 
-function itemIcon(item: ComposerCommandItem) {
+const SKILL_SOURCE_SYMBOL_BY_KIND: Record<ProviderSkillSourceKind, AppSymbolName> = {
+  app: "square.grid.2x2",
+  repo: "folder",
+  project: "folder",
+  personal: "person.crop.circle",
+  system: "gearshape",
+  other: "cube",
+};
+
+function itemIcon(item: ComposerCommandItem): AppSymbolName | null {
   switch (item.type) {
-    case "path":
-      return item.kind === "directory" ? ("folder" as const) : ("doc" as const);
     case "slash-command":
     case "provider-slash-command":
-      return "terminal" as const;
+      return "terminal";
     case "skill":
-      return "cube" as const;
+      return SKILL_SOURCE_SYMBOL_BY_KIND[resolveProviderSkillSourceKind(item.skill)];
+    case "path":
+      return null;
   }
 }
 
@@ -131,9 +119,11 @@ const CommandRow = memo(function CommandRow(props: {
   readonly item: ComposerCommandItem;
   readonly onPress: () => void;
   readonly isLast: boolean;
+  readonly isSlashSkill: boolean;
 }) {
   const iconName = itemIcon(props.item);
-  const iconColor = "#a1a1aa";
+  const iconColor = useThemeColor("--color-icon-subtle");
+  const borderColor = useThemeColor("--color-border");
 
   return (
     <Pressable
@@ -146,19 +136,26 @@ const CommandRow = memo(function CommandRow(props: {
         gap: 10,
         opacity: pressed ? 0.6 : 1,
         borderBottomWidth: props.isLast ? 0 : 0.5,
-        borderBottomColor: "rgba(255,255,255,0.1)",
+        borderBottomColor: borderColor,
       })}
     >
-      <SymbolView name={iconName} size={14} tintColor={iconColor} type="monochrome" />
-      <Text
-        className="text-[14px] font-kairo-medium text-foreground"
-        numberOfLines={1}
-        style={{ flexShrink: 0 }}
-      >
-        {props.item.label}
+      {props.item.type === "path" ? (
+        <PierreEntryIcon path={props.item.path} kind={props.item.kind} size={16} />
+      ) : iconName ? (
+        <SymbolView name={iconName} size={14} tintColor={iconColor} type="monochrome" />
+      ) : null}
+      <Text className="shrink-0 text-base font-kairo-medium text-foreground" numberOfLines={1}>
+        {props.isSlashSkill && props.item.type === "skill" ? (
+          <>
+            <Text className="text-foreground-muted">skill:</Text>
+            {props.item.skill.name}
+          </>
+        ) : (
+          props.item.label
+        )}
       </Text>
       {props.item.description ? (
-        <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, fontSize: 12, color: "#a1a1aa" }}>
+        <Text className="min-w-0 flex-1 text-xs text-foreground-muted" numberOfLines={1}>
           {props.item.description}
         </Text>
       ) : null}
@@ -169,24 +166,20 @@ const CommandRow = memo(function CommandRow(props: {
 export const ComposerCommandPopover = memo(function ComposerCommandPopover(
   props: ComposerCommandPopoverProps,
 ) {
-  const isDarkMode = useColorScheme() === "dark";
   const label = groupLabel(props.triggerKind);
 
   return (
-    <PopoverSurface isDarkMode={isDarkMode}>
+    <PopoverSurface>
       {label ? (
-        <View style={{ paddingHorizontal: 14, paddingTop: 10, paddingBottom: 4 }}>
-          <Text
-            className="text-[10px] font-kairo-bold text-foreground-muted"
-            style={{ letterSpacing: 0.8, textTransform: "uppercase" }}
-          >
+        <View className="px-3.5 pt-2.5 pb-1">
+          <Text className="text-3xs font-kairo-bold tracking-[0.8px] uppercase text-foreground-muted">
             {label}
           </Text>
         </View>
       ) : null}
       {props.items.length > 0 ? (
         <ScrollView
-          style={{ maxHeight: 180 }}
+          className="max-h-[180px]"
           keyboardShouldPersistTaps="always"
           showsVerticalScrollIndicator={false}
         >
@@ -196,12 +189,13 @@ export const ComposerCommandPopover = memo(function ComposerCommandPopover(
               item={item}
               onPress={() => props.onSelect(item)}
               isLast={index === props.items.length - 1}
+              isSlashSkill={props.triggerKind === "slash-command" && item.type === "skill"}
             />
           ))}
         </ScrollView>
       ) : (
-        <View style={{ paddingHorizontal: 14, paddingVertical: 10 }}>
-          <Text className="text-[12px] text-foreground-tertiary">
+        <View className="px-3.5 py-2.5">
+          <Text className="text-xs text-foreground-tertiary">
             {emptyText(props.triggerKind, props.isLoading)}
           </Text>
         </View>

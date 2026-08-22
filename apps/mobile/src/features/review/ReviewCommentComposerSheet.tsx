@@ -1,14 +1,14 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { SymbolView } from "expo-symbols";
+import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { TextInputWrapper } from "expo-paste-input";
 import type { EnvironmentId, ThreadId } from "@kairo/contracts";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, View, useColorScheme, useWindowDimensions } from "react-native";
-import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { Platform, Pressable, ScrollView, View, useWindowDimensions } from "react-native";
+import { KeyboardAvoidingView, KeyboardStickyView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ImageViewing from "react-native-image-viewing";
 
 import { AppText as Text, AppTextInput as TextInput } from "../../components/AppText";
+import { SymbolView } from "../../components/AppSymbol";
 import { ComposerAttachmentStrip } from "../../components/ComposerAttachmentStrip";
 import { ControlPill } from "../../components/ControlPill";
 import { cn } from "../../lib/cn";
@@ -25,32 +25,31 @@ import {
   getSelectedReviewCommentLines,
   useReviewCommentTarget,
 } from "./reviewCommentSelection";
-import {
-  changeTone,
-  DiffTokenText,
-  REVIEW_DIFF_LINE_HEIGHT,
-  REVIEW_MONO_FONT_FAMILY,
-  ReviewChangeBar,
-} from "./reviewDiffRendering";
+import { useAppearanceCodeSurface } from "../settings/appearance/useAppearanceCodeSurface";
+import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
+import { changeTone, DiffTokenText, ReviewChangeBar } from "./reviewDiffRendering";
 import {
   highlightReviewSelectedLines,
-  type ReviewDiffTheme,
   type ReviewHighlightedToken,
 } from "./shikiReviewHighlighter";
 
 const REVIEW_COMMENT_PREVIEW_MAX_LINES = 5;
 
-export function ReviewCommentComposerSheet() {
-  const router = useRouter();
+type ReviewCommentComposerSheetProps = StaticScreenProps<{
+  readonly environmentId: EnvironmentId;
+  readonly threadId: ThreadId;
+}>;
+
+export function ReviewCommentComposerSheet(props: ReviewCommentComposerSheetProps) {
+  const isAndroid = Platform.OS === "android";
+  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const colorScheme = useColorScheme();
+  const { themeAppearance: selectedTheme } = useAppearancePreferences();
   const iconTint = String(useThemeColor("--color-icon"));
   const target = useReviewCommentTarget();
-  const { environmentId, threadId } = useLocalSearchParams<{
-    environmentId: EnvironmentId;
-    threadId: ThreadId;
-  }>();
+  const { codeSurface } = useAppearanceCodeSurface();
+  const { environmentId, threadId } = props.route.params;
   const [commentText, setCommentText] = useState("");
   const [highlightedLinesById, setHighlightedLinesById] = useState<
     Record<string, ReadonlyArray<ReviewHighlightedToken>>
@@ -66,7 +65,6 @@ export function ReviewCommentComposerSheet() {
   const lastLine = selectedLines[selectedLines.length - 1] ?? null;
   const firstNumber = firstLine ? getReviewUnifiedLineNumber(firstLine) : null;
   const lastNumber = lastLine ? getReviewUnifiedLineNumber(lastLine) : null;
-  const selectedTheme = (colorScheme === "dark" ? "dark" : "light") satisfies ReviewDiffTheme;
   const canSubmit =
     commentText.trim().length > 0 && target !== null && !!environmentId && !!threadId;
   const selectionLabel =
@@ -78,14 +76,14 @@ export function ReviewCommentComposerSheet() {
         ? `Lines ${firstNumber}-${lastNumber}`
         : `${selectedLines.length} lines selected`;
   const previewHeight = Math.max(
-    Math.min(selectedLines.length, REVIEW_COMMENT_PREVIEW_MAX_LINES) * REVIEW_DIFF_LINE_HEIGHT,
-    REVIEW_DIFF_LINE_HEIGHT,
+    Math.min(selectedLines.length, REVIEW_COMMENT_PREVIEW_MAX_LINES) * codeSurface.rowHeight,
+    codeSurface.rowHeight,
   );
   const previewViewportWidth = Math.max(width - 40, 280);
   const dismissComposer = useCallback(() => {
     clearReviewCommentTarget();
-    router.dismiss();
-  }, [router]);
+    navigation.goBack();
+  }, [navigation]);
   const handleNativePaste = useNativePaste((uris) => {
     void (async () => {
       try {
@@ -140,15 +138,29 @@ export function ReviewCommentComposerSheet() {
     }
   }
 
+  const handleSubmit = useCallback(() => {
+    if (!target || !environmentId || !threadId || commentText.trim().length === 0) {
+      return;
+    }
+
+    appendReviewCommentToDraft({
+      environmentId,
+      threadId,
+      text: formatReviewCommentContext(target, commentText),
+      attachments,
+    });
+    setAttachments([]);
+    dismissComposer();
+  }, [attachments, commentText, dismissComposer, environmentId, target, threadId]);
+
   return (
-    <View style={{ flex: 1 }}>
-      <KeyboardAvoidingView automaticOffset behavior="padding" style={{ flex: 1 }}>
+    <View className="flex-1 bg-sheet">
+      <KeyboardAvoidingView automaticOffset behavior="padding" className="flex-1">
         <View
+          className="flex-1 px-5"
           style={{
-            flex: 1,
-            paddingHorizontal: 20,
-            paddingTop: 8,
-            paddingBottom: target ? 0 : Math.max(insets.bottom, 18),
+            paddingTop: isAndroid ? insets.top + 8 : 8,
+            paddingBottom: target ? (isAndroid ? 72 : 0) : Math.max(insets.bottom, 18),
           }}
         >
           <View className="flex-row items-center justify-between py-2">
@@ -159,26 +171,26 @@ export function ReviewCommentComposerSheet() {
               <SymbolView name="xmark" size={18} tintColor={iconTint} type="monochrome" />
             </Pressable>
 
-            <Text className="text-[18px] font-kairo-bold text-foreground">Add Comment</Text>
+            <Text className="text-lg font-kairo-bold text-foreground">Add Comment</Text>
 
             <View className="h-12 w-12" />
           </View>
 
           {!target ? (
             <View className="rounded-[22px] border border-border bg-card px-4 py-5">
-              <Text className="text-[15px] font-kairo-bold text-foreground">No selection</Text>
-              <Text className="mt-1 text-[13px] leading-[19px] text-foreground-muted">
+              <Text className="text-base font-kairo-bold text-foreground">No selection</Text>
+              <Text className="mt-1 text-sm leading-normal text-foreground-muted">
                 Select a diff line or range first.
               </Text>
             </View>
           ) : (
             <View className="min-h-0 flex-1 gap-4">
               <View className="gap-1 px-1">
-                <Text className="text-[11px] font-kairo-bold uppercase text-foreground-muted">
+                <Text className="text-2xs font-kairo-bold uppercase text-foreground-muted">
                   {selectionLabel}
                 </Text>
                 <Text
-                  className="font-mono text-[12px] leading-[17px] text-foreground-muted"
+                  className="font-mono text-xs leading-snug text-foreground-muted"
                   ellipsizeMode="middle"
                   numberOfLines={2}
                 >
@@ -211,13 +223,10 @@ export function ReviewCommentComposerSheet() {
                           <View
                             key={line.id}
                             className={cn("flex-row items-start", changeTone(line.change))}
-                            style={{ height: REVIEW_DIFF_LINE_HEIGHT }}
+                            style={{ height: codeSurface.rowHeight }}
                           >
-                            <ReviewChangeBar change={line.change} />
-                            <Text
-                              className="w-9 py-1 pr-1 text-right text-[11px] font-kairo-medium text-foreground-muted"
-                              style={{ fontFamily: REVIEW_MONO_FONT_FAMILY }}
-                            >
+                            <ReviewChangeBar change={line.change} height={codeSurface.rowHeight} />
+                            <Text className="w-9 py-1 pr-1 text-right text-2xs font-mono text-foreground-muted">
                               {lineNumber ?? ""}
                             </Text>
                             <View className="min-w-0 flex-1 shrink-0 px-1 py-1">
@@ -225,6 +234,8 @@ export function ReviewCommentComposerSheet() {
                                 fallback={line.content}
                                 tokens={highlightedLinesById[line.id] ?? null}
                                 change={line.change}
+                                fontSize={codeSurface.fontSize}
+                                lineHeight={codeSurface.rowHeight}
                               />
                             </View>
                           </View>
@@ -236,7 +247,7 @@ export function ReviewCommentComposerSheet() {
               </View>
 
               <View className="min-h-0 flex-1 gap-2">
-                <Text className="text-[13px] font-kairo-bold text-foreground">Comment</Text>
+                <Text className="text-sm font-kairo-bold text-foreground">Comment</Text>
                 <View className="min-h-[132px] flex-1 overflow-hidden rounded-[20px] border border-border bg-card">
                   <View className="min-h-0 flex-1 px-4 pt-3.5">
                     <TextInputWrapper onPaste={handleNativePaste} style={{ flex: 1, minHeight: 0 }}>
@@ -248,8 +259,7 @@ export function ReviewCommentComposerSheet() {
                         textAlignVertical="top"
                         value={commentText}
                         onChangeText={setCommentText}
-                        className="h-full flex-1 border-0 bg-transparent px-0 py-0 font-sans text-[15px]"
-                        style={{ flex: 1, minHeight: 0 }}
+                        className="h-full min-h-0 flex-1 border-0 bg-transparent px-0 py-0 font-sans text-base"
                       />
                     </TextInputWrapper>
                   </View>
@@ -274,7 +284,7 @@ export function ReviewCommentComposerSheet() {
             </View>
           )}
         </View>
-        {target ? (
+        {!isAndroid && target ? (
           <View className="flex-row items-center gap-3 bg-sheet px-5 py-2">
             <ControlPill
               accessibilityLabel="Add image"
@@ -288,24 +298,37 @@ export function ReviewCommentComposerSheet() {
               label="Comment"
               variant="primary"
               disabled={!canSubmit}
-              onPress={() => {
-                if (!target || !environmentId || !threadId || commentText.trim().length === 0) {
-                  return;
-                }
-
-                appendReviewCommentToDraft({
-                  environmentId,
-                  threadId,
-                  text: formatReviewCommentContext(target, commentText),
-                  attachments,
-                });
-                setAttachments([]);
-                dismissComposer();
-              }}
+              onPress={handleSubmit}
             />
           </View>
         ) : null}
       </KeyboardAvoidingView>
+      {isAndroid && target ? (
+        <KeyboardStickyView
+          className="absolute inset-x-0 bottom-0"
+          offset={{ closed: 0, opened: 0 }}
+        >
+          <View
+            className="flex-row items-center gap-3 border-t border-border bg-sheet px-5 pt-2"
+            style={{ paddingBottom: Math.max(insets.bottom, 10) }}
+          >
+            <ControlPill
+              accessibilityLabel="Add image"
+              icon="plus"
+              onPress={() => void handlePickImages()}
+            />
+            <View className="flex-1" />
+            <ControlPill
+              accessibilityLabel="Comment"
+              icon="arrow.up"
+              label="Comment"
+              variant="primary"
+              disabled={!canSubmit}
+              onPress={handleSubmit}
+            />
+          </View>
+        </KeyboardStickyView>
+      ) : null}
       <ImageViewing
         images={previewImageUri ? [{ uri: previewImageUri }] : []}
         imageIndex={0}

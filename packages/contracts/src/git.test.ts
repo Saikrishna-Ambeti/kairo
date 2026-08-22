@@ -28,6 +28,18 @@ describe("VcsCreateWorktreeInput", () => {
     expect(parsed.newRefName).toBeUndefined();
     expect(parsed.refName).toBe("feature/existing");
   });
+
+  it("accepts baseRefName metadata for a new worktree ref", () => {
+    const parsed = decodeCreateWorktreeInput({
+      cwd: "/repo",
+      refName: "0123456789abcdef",
+      newRefName: "feature/new",
+      baseRefName: "origin/main",
+      path: "/tmp/worktree",
+    });
+
+    expect(parsed.baseRefName).toBe("origin/main");
+  });
 });
 
 describe("GitPreparePullRequestThreadInput", () => {
@@ -49,7 +61,7 @@ describe("GitResolvePullRequestResult", () => {
       pullRequest: {
         number: 42,
         title: "PR threads",
-        url: "https://github.com/pingdotgg/t3code/pull/42",
+        url: "https://github.com/pingdotgg/kairo/pull/42",
         baseBranch: "main",
         headBranch: "feature/pr-threads",
         state: "open",

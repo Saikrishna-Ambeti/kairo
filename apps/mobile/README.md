@@ -34,6 +34,30 @@ Build and run the local iOS dev client:
 vp run ios:dev
 ```
 
+If your Xcode account only has a Personal Team, use a bundle identifier you control and opt into the
+reduced-capability local build. Personal Team builds omit the widget and share extensions, push
+entitlement, and native Sign in with Apple entitlement; builds without this opt-in are unchanged.
+
+```bash
+KAIRO_IOS_PERSONAL_TEAM=1 \
+KAIRO_IOS_PERSONAL_TEAM_BUNDLE_ID=com.example.kairo.dev \
+vp run ios:dev
+```
+
+Build and install a self-contained Release app that does not need Metro:
+
+```bash
+vp run ios:release
+```
+
+The Personal Team equivalent also needs a unique bundle identifier:
+
+```bash
+KAIRO_IOS_PERSONAL_TEAM=1 \
+KAIRO_IOS_PERSONAL_TEAM_BUNDLE_ID=com.example.kairo \
+vp run ios:release
+```
+
 Build and run the local iOS preview app:
 
 ```bash

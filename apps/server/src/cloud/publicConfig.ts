@@ -1,17 +1,25 @@
+import {
+  connectLoopbackRedirectUri,
+  CONNECT_OAUTH_SCOPES,
+  DEFAULT_HOSTED_APP_URL,
+} from "@kairo/shared/connectAuth";
 import { clerkFrontendApiUrlFromPublishableKey } from "@kairo/shared/relayAuth";
 import { normalizeSecureRelayUrl } from "@kairo/shared/relayUrl";
 import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
 
 declare const __KAIRO_BUILD_RELAY_URL__: string | undefined;
 declare const __KAIRO_BUILD_CLERK_PUBLISHABLE_KEY__: string | undefined;
 declare const __KAIRO_BUILD_CLERK_CLI_OAUTH_CLIENT_ID__: string | undefined;
+declare const __KAIRO_BUILD_RELAY_CLIENT_OTLP_TRACES_URL__: string | undefined;
+declare const __KAIRO_BUILD_RELAY_CLIENT_OTLP_TRACES_DATASET__: string | undefined;
+declare const __KAIRO_BUILD_RELAY_CLIENT_OTLP_TRACES_TOKEN__: string | undefined;
 
-const CLOUD_CLI_OAUTH_REDIRECT_URI = "http://127.0.0.1:34338/callback";
-const CLOUD_CLI_OAUTH_SCOPES = ["openid", "profile", "email"] as const;
+const CLOUD_CLI_OAUTH_LOOPBACK_PORT = 34338;
+const CLOUD_CLI_OAUTH_SCOPES = CONNECT_OAUTH_SCOPES;
 
 function validateRelayUrl(value: string) {
   const relayUrl = normalizeSecureRelayUrl(value);
@@ -19,7 +27,7 @@ function validateRelayUrl(value: string) {
     ? Effect.fail(
         new Config.ConfigError(
           new Schema.SchemaError(
-            new SchemaIssue.InvalidValue(Option.some(value), {
+            new SchemaIssue.InvalidValue({
               message: "Relay URL must be a secure absolute HTTPS origin.",
             }),
           ),
@@ -30,6 +38,15 @@ function validateRelayUrl(value: string) {
 
 function readBuildTimeValue(value: string | undefined): string {
   return typeof value === "undefined" ? "" : value.trim();
+}
+
+function normalizeSecureUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 export const buildTimeRelayUrl =
@@ -46,6 +63,37 @@ export const buildTimeClerkCliOAuthClientId = readBuildTimeValue(
     ? undefined
     : __KAIRO_BUILD_CLERK_CLI_OAUTH_CLIENT_ID__,
 );
+export const buildTimeRelayClientTracing = {
+  tracesUrl: readBuildTimeValue(
+    typeof __KAIRO_BUILD_RELAY_CLIENT_OTLP_TRACES_URL__ === "undefined"
+      ? undefined
+      : __KAIRO_BUILD_RELAY_CLIENT_OTLP_TRACES_URL__,
+  ),
+  tracesDataset: readBuildTimeValue(
+    typeof __KAIRO_BUILD_RELAY_CLIENT_OTLP_TRACES_DATASET__ === "undefined"
+      ? undefined
+      : __KAIRO_BUILD_RELAY_CLIENT_OTLP_TRACES_DATASET__,
+  ),
+  tracesToken: readBuildTimeValue(
+    typeof __KAIRO_BUILD_RELAY_CLIENT_OTLP_TRACES_TOKEN__ === "undefined"
+      ? undefined
+      : __KAIRO_BUILD_RELAY_CLIENT_OTLP_TRACES_TOKEN__,
+  ),
+} as const;
+
+export function resolveRelayClientTracingConfig(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+  fallback = buildTimeRelayClientTracing,
+) {
+  const tracesUrl = env.KAIRO_RELAY_CLIENT_OTLP_TRACES_URL?.trim() || fallback.tracesUrl;
+  const tracesDataset =
+    env.KAIRO_RELAY_CLIENT_OTLP_TRACES_DATASET?.trim() || fallback.tracesDataset;
+  const tracesToken = env.KAIRO_RELAY_CLIENT_OTLP_TRACES_TOKEN?.trim() || fallback.tracesToken;
+  const normalizedTracesUrl = normalizeSecureUrl(tracesUrl);
+  return normalizedTracesUrl && tracesDataset && tracesToken
+    ? { tracesUrl: normalizedTracesUrl, tracesDataset, tracesToken }
+    : null;
+}
 
 export function makeRelayUrlConfig(fallback = buildTimeRelayUrl) {
   const runtimeConfig = Config.nonEmptyString("KAIRO_RELAY_URL");
@@ -56,6 +104,44 @@ export function makeRelayUrlConfig(fallback = buildTimeRelayUrl) {
 
 export const relayUrlConfig = makeRelayUrlConfig();
 
+/**
+ * Hosted app origin used for out-of-band OAuth on headless
+ * machines. Overridable so staging/nightly builds can point their CLIs at a
+ * matching hosted deployment.
+ */
+export const hostedAppUrlConfig = makePublicValueConfig(
+  "KAIRO_HOSTED_APP_URL",
+  DEFAULT_HOSTED_APP_URL,
+).pipe(Config.mapOrFail(validateHostedAppUrl));
+
+function validateHostedAppUrl(value: string) {
+  try {
+    const url = new URL(value);
+    const isLoopbackHttp =
+      url.protocol === "http:" &&
+      (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]");
+    if (
+      (url.protocol !== "https:" && !isLoopbackHttp) ||
+      url.pathname !== "/" ||
+      url.search !== "" ||
+      url.hash !== ""
+    ) {
+      throw new Error("invalid hosted app origin");
+    }
+    return Effect.succeed(url.origin);
+  } catch {
+    return Effect.fail(
+      new Config.ConfigError(
+        new Schema.SchemaError(
+          new SchemaIssue.InvalidValue({
+            message: "Hosted app URL must be an absolute HTTPS origin (or HTTP loopback origin).",
+          }),
+        ),
+      ),
+    );
+  }
+}
+
 function makePublicValueConfig(name: string, fallback: string) {
   const runtimeConfig = Config.nonEmptyString(name);
   return (fallback ? runtimeConfig.pipe(Config.withDefault(fallback)) : runtimeConfig).pipe(
@@ -63,10 +149,16 @@ function makePublicValueConfig(name: string, fallback: string) {
   );
 }
 
+/**
+ * The CLI never calls Clerk's /oauth/authorize itself: the browser leg goes
+ * through the hosted /connect page, which builds the authorize URL after a
+ * Clerk session exists (see CliTokenManager.login). Only the token endpoint
+ * is contacted directly.
+ */
 export interface CloudCliOAuthConfig {
-  readonly authorizationEndpoint: string;
   readonly tokenEndpoint: string;
   readonly clientId: string;
+  readonly loopbackPort: number;
   readonly redirectUri: string;
   readonly scopes: typeof CLOUD_CLI_OAUTH_SCOPES;
 }
@@ -88,16 +180,29 @@ export function makeCloudCliOAuthConfig({
       clerkCliOAuthClientIdFallback,
     ),
   }).pipe(
-    Config.map(({ clerkPublishableKey, clientId }) => {
-      const clerkFrontendApiUrl = clerkFrontendApiUrlFromPublishableKey(clerkPublishableKey);
-      return {
-        authorizationEndpoint: `${clerkFrontendApiUrl}/oauth/authorize`,
-        tokenEndpoint: `${clerkFrontendApiUrl}/oauth/token`,
-        clientId,
-        redirectUri: CLOUD_CLI_OAUTH_REDIRECT_URI,
-        scopes: CLOUD_CLI_OAUTH_SCOPES,
-      } satisfies CloudCliOAuthConfig;
-    }),
+    Config.mapOrFail(({ clerkPublishableKey, clientId }) =>
+      Effect.try({
+        try: () => clerkFrontendApiUrlFromPublishableKey(clerkPublishableKey),
+        catch: (cause) =>
+          new Config.ConfigError(
+            new ConfigProvider.SourceError({
+              message: "Failed to derive Clerk Frontend API URL from the publishable key.",
+              cause,
+            }),
+          ),
+      }).pipe(
+        Effect.map(
+          (clerkFrontendApiUrl) =>
+            ({
+              tokenEndpoint: `${clerkFrontendApiUrl}/oauth/token`,
+              clientId,
+              loopbackPort: CLOUD_CLI_OAUTH_LOOPBACK_PORT,
+              redirectUri: connectLoopbackRedirectUri(CLOUD_CLI_OAUTH_LOOPBACK_PORT),
+              scopes: CLOUD_CLI_OAUTH_SCOPES,
+            }) satisfies CloudCliOAuthConfig,
+        ),
+      ),
+    ),
   );
 }
 

@@ -1,22 +1,22 @@
 import type { DesktopSshEnvironmentBootstrap, DesktopSshEnvironmentTarget } from "@kairo/contracts";
+import {
+  describeReadinessCause,
+  waitForHttpReady as waitForHttpReadyShared,
+} from "@kairo/shared/httpReadiness";
 import * as NetService from "@kairo/shared/Net";
 import { extractJsonObject, fromLenientJson } from "@kairo/shared/schemaJson";
 import { satisfiesSemverRange } from "@kairo/shared/semver";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as Ref from "effect/Ref";
-import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { HttpClient, HttpClientRequest } from "effect/unstable/http";
+import { HttpClient } from "effect/unstable/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import {
@@ -31,9 +31,9 @@ import {
   collectProcessOutput,
   getLastNonEmptyOutputLine,
   remoteStateKey,
+  resolveSshCommand,
   resolveSshTarget,
   runSshCommand,
-  SSH_COMMAND,
   targetConnectionKey,
 } from "./command.ts";
 import {
@@ -51,7 +51,8 @@ const REMOTE_PORT_SCAN_WINDOW = 200;
 const SSH_READY_TIMEOUT_MS = 20_000;
 const SSH_READY_PROBE_TIMEOUT_MS = 1_000;
 const TUNNEL_SHUTDOWN_TIMEOUT_MS = 2_000;
-const REMOTE_READY_TIMEOUT_MS = 15_000;
+const REMOTE_READY_TIMEOUT_MS = 60_000;
+const REMOTE_LAUNCH_TIMEOUT_MS = 90_000;
 const REMOTE_REUSE_READY_TIMEOUT_MS = 2_000;
 
 export interface RemoteKairoRunnerOptions {
@@ -229,33 +230,9 @@ function applyScriptPlaceholders(
   return result;
 }
 
-export function describeReadinessCause(cause: unknown): unknown {
-  if (cause instanceof SshReadinessError) {
-    return {
-      _tag: cause._tag,
-      message: cause.message,
-      ...(cause.cause === undefined ? {} : { cause: describeReadinessCause(cause.cause) }),
-    };
-  }
-  if (cause instanceof Error) {
-    return {
-      name: cause.name,
-      message: cause.message,
-      ...(cause.cause === undefined ? {} : { cause: describeReadinessCause(cause.cause) }),
-    };
-  }
-  if (typeof cause !== "object" || cause === null) {
-    return cause;
-  }
-
-  const record = cause as Readonly<Record<string, unknown>>;
-  return {
-    ...(typeof record._tag === "string" ? { _tag: record._tag } : {}),
-    ...(typeof record.message === "string" ? { message: record.message } : {}),
-    ...(record.reason === undefined ? {} : { reason: describeReadinessCause(record.reason) }),
-    ...(record.cause === undefined ? {} : { cause: describeReadinessCause(record.cause) }),
-  };
-}
+// Re-exported from the shared HTTP readiness module so existing importers
+// (notably tunnel.test.ts) keep resolving it from here.
+export { describeReadinessCause };
 
 export const REMOTE_PICK_PORT_SCRIPT = `const fs = require("node:fs");
 const net = require("node:net");
@@ -395,7 +372,8 @@ ensure_remote_node_path() {
   prepend_path_if_dir "$FNM_DIR"
   prepend_path_if_dir "$HOME/.fnm"
   if ! command -v node >/dev/null 2>&1 && command -v fnm >/dev/null 2>&1; then
-    eval "$(fnm env --use-on-cd --shell sh)" >/dev/null 2>&1 || eval "$(fnm env --shell sh)" >/dev/null 2>&1 || true
+    eval "$(fnm env --shell bash)" >/dev/null 2>&1 || true
+    fnm use --silent-if-unchanged >/dev/null 2>&1 || fnm use default >/dev/null 2>&1 || true
   fi
 
   prepend_path_if_dir "$HOME/.nodenv/bin"
@@ -445,10 +423,26 @@ fi
 if command -v kairo >/dev/null 2>&1; then
   exec kairo "$@"
 fi
+# npm extracts a package before it runs the native builds of its dependencies,
+# so a failed build (kairo depends on node-pty, which needs a C toolchain) leaves
+# the npx cache without a kairo executable. \`npx --yes\` then exits 0 without
+# running anything at all, which the caller only ever sees as a server that
+# never becomes ready. Resolve the CLI once up front so that install failure is
+# reported here, with npm's own output on stderr.
+require_installed_kairo_cli() {
+  KAIRO_CLI_PATH="$("$@" -- sh -c 'command -v kairo' || true)"
+  if [ -n "$KAIRO_CLI_PATH" ]; then
+    return 0
+  fi
+  printf 'Remote host installed %s but npm produced no kairo executable, which usually means a native dependency (node-pty) failed to build. Install a C toolchain on the remote host (Debian/Ubuntu: build-essential, Fedora/RHEL: gcc-c++ make, macOS: xcode-select --install) and try again.\\n' @@KAIRO_PACKAGE_SPEC@@ >&2
+  return 1
+}
 if command -v npx >/dev/null 2>&1; then
+  require_installed_kairo_cli npx --yes --package @@KAIRO_PACKAGE_SPEC@@ || exit 1
   exec npx --yes @@KAIRO_PACKAGE_SPEC@@ "$@"
 fi
 if command -v npm >/dev/null 2>&1; then
+  require_installed_kairo_cli npm exec --yes --package @@KAIRO_PACKAGE_SPEC@@ || exit 1
   exec npm exec --yes @@KAIRO_PACKAGE_SPEC@@ -- "$@"
 fi
 printf 'Remote host is missing the kairo CLI and could not install @@KAIRO_PACKAGE_SPEC@@ because node/npm/npx are unavailable on PATH. Install Node or configure a supported version manager for non-interactive shells.\\n' >&2
@@ -600,7 +594,11 @@ if [ -z "$REMOTE_PORT" ]; then
   printf 'managed\\n' >"$MANAGED_FILE"
   if ! wait_ready "@@KAIRO_READY_TIMEOUT_MS@@"; then
     printf 'Remote Kairo server did not become ready on 127.0.0.1:%s.\\n' "$REMOTE_PORT" >&2
-    tail -n 80 "$LOG_FILE" >&2 2>/dev/null || true
+    if [ -s "$LOG_FILE" ]; then
+      tail -n 80 "$LOG_FILE" >&2 2>/dev/null || true
+    else
+      printf 'It wrote nothing to %s, so it exited before producing any output.\\n' "$LOG_FILE" >&2
+    fi
     kill "$REMOTE_PID" 2>/dev/null || true
     wait_for_pid_exit "$REMOTE_PID"
     rm -f "$PID_FILE" "$PORT_FILE" "$MANAGED_FILE"
@@ -662,7 +660,7 @@ export function buildRemoteKairoRunnerScript(input?: RemoteKairoRunnerOptions): 
   );
 }
 
-function buildRemoteNodeEnvScript(input?: RemoteKairoRunnerOptions): string {
+export function buildRemoteNodeEnvScript(input?: RemoteKairoRunnerOptions): string {
   return stripTrailingNewlines(
     applyScriptPlaceholders(REMOTE_NODE_ENV_SCRIPT, {
       KAIRO_NODE_ENGINE_RANGE: shellSingleQuote(input?.nodeEngineRange?.trim() || ""),
@@ -725,6 +723,7 @@ export const launchOrReuseRemoteServer = Effect.fn("ssh/tunnel.launchOrReuseRemo
     const result = yield* runSshCommand(target, {
       remoteCommandArgs: ["sh", "-s", "--", remoteStateKey(target)],
       stdin: buildRemoteLaunchScript(runner),
+      timeoutMs: REMOTE_LAUNCH_TIMEOUT_MS,
       ...(input?.authSecret === undefined ? {} : { authSecret: input.authSecret }),
       ...(input?.batchMode === undefined ? {} : { batchMode: input.batchMode }),
       ...(input?.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
@@ -861,120 +860,46 @@ const readRemoteServerLogTail = Effect.fn("ssh/tunnel.readRemoteServerLogTail")(
   return result.stdout.trim();
 });
 
-export const waitForHttpReady = Effect.fn("ssh/tunnel.waitForHttpReady")(function* (input: {
+export const waitForHttpReady = (input: {
   readonly baseUrl: string;
   readonly timeoutMs?: number;
   readonly intervalMs?: number;
   readonly probeTimeoutMs?: number;
   readonly path?: string;
-}): Effect.fn.Return<void, SshReadinessError, HttpClient.HttpClient> {
-  const timeoutMs = input.timeoutMs ?? 30_000;
-  const intervalMs = input.intervalMs ?? 100;
-  const probeTimeoutMs = input.probeTimeoutMs ?? SSH_READY_PROBE_TIMEOUT_MS;
-  const retryPolicy = Schedule.spaced(Duration.millis(intervalMs)).pipe(
-    Schedule.take(Math.max(0, Math.ceil(timeoutMs / intervalMs))),
-  );
-  const requestUrl = new URL(input.path ?? "/", input.baseUrl).toString();
-  const client = yield* HttpClient.HttpClient;
-  const lastProbeFailure = yield* Ref.make<unknown>(null);
-  let attempt = 0;
-
-  yield* Effect.logDebug("ssh.tunnel.httpReady.start", {
+}): Effect.Effect<void, SshReadinessError, HttpClient.HttpClient> =>
+  waitForHttpReadyShared({
     baseUrl: input.baseUrl,
-    requestUrl,
-    timeoutMs,
-    intervalMs,
-    probeTimeoutMs,
-  });
-
-  const readinessClient = client.pipe(
-    HttpClient.filterStatusOk,
-    HttpClient.transform((effect) =>
-      Effect.gen(function* () {
-        attempt += 1;
-        const responseOption = yield* effect.pipe(
-          Effect.timeoutOption(Duration.millis(probeTimeoutMs)),
-          Effect.mapError(
-            (cause) =>
-              new SshReadinessError({
-                message: `Backend readiness probe failed at ${requestUrl}.`,
-                cause,
-              }),
-          ),
-        );
-        return yield* Option.match(responseOption, {
-          onSome: Effect.succeed,
-          onNone: () =>
-            Effect.fail(
-              new SshReadinessError({
-                message: `Backend readiness probe exceeded ${probeTimeoutMs}ms at ${requestUrl}.`,
-                cause: {
-                  kind: "probe-timeout",
-                  attempt,
-                  probeTimeoutMs,
-                },
-              }),
-            ),
-        });
-      }).pipe(
-        Effect.mapError((cause) =>
-          cause instanceof SshReadinessError
-            ? cause
-            : new SshReadinessError({
-                message: `Backend readiness probe failed at ${requestUrl}.`,
-                cause,
-              }),
-        ),
-        Effect.tapError((cause) =>
-          Ref.set(lastProbeFailure, {
-            attempt,
-            cause: describeReadinessCause(cause),
-          }),
-        ),
-      ),
-    ),
-    HttpClient.tap((response) => response.text.pipe(Effect.ignore)),
-    HttpClient.retry(retryPolicy),
-  );
-
-  const result = yield* readinessClient.execute(HttpClientRequest.get(requestUrl)).pipe(
-    Effect.mapError((cause) =>
-      cause instanceof SshReadinessError
-        ? cause
-        : new SshReadinessError({
-            message: `Backend readiness probe failed at ${requestUrl}.`,
+    ...(input.path === undefined ? {} : { path: input.path }),
+    ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
+    ...(input.intervalMs === undefined ? {} : { intervalMs: input.intervalMs }),
+    probeTimeoutMs: input.probeTimeoutMs ?? SSH_READY_PROBE_TIMEOUT_MS,
+    makeError: ({ requestUrl, probeTimeoutMs, cause }) => {
+      if (typeof cause === "object" && cause !== null && "kind" in cause) {
+        const kind = (cause as { readonly kind?: unknown }).kind;
+        if (kind === "probe-timeout") {
+          return new SshReadinessError({
+            message: `Backend readiness probe exceeded ${probeTimeoutMs}ms at ${requestUrl}.`,
             cause,
-          }),
-    ),
-    Effect.timeoutOption(Duration.millis(timeoutMs)),
-  );
-
-  return yield* Option.match(result, {
-    onSome: () =>
-      Effect.logDebug("ssh.tunnel.httpReady.succeeded", {
-        baseUrl: input.baseUrl,
-        requestUrl,
-        attempts: attempt,
-      }),
-    onNone: () =>
-      Effect.gen(function* () {
-        const lastFailure = yield* Ref.get(lastProbeFailure);
-        yield* Effect.logWarning("ssh.tunnel.httpReady.timedOut", {
-          baseUrl: input.baseUrl,
-          requestUrl,
-          timeoutMs,
-          intervalMs,
-          probeTimeoutMs,
-          attempts: attempt,
-          lastFailure,
-        });
-        return yield* new SshReadinessError({
-          message: `Timed out waiting ${timeoutMs}ms for backend readiness at ${input.baseUrl}.`,
-          cause: lastFailure,
-        });
-      }),
+          });
+        }
+        if (kind === "overall-timeout") {
+          const overall = cause as unknown as {
+            readonly baseUrl: string;
+            readonly timeoutMs: number;
+            readonly lastFailure: unknown;
+          };
+          return new SshReadinessError({
+            message: `Timed out waiting ${overall.timeoutMs}ms for backend readiness at ${overall.baseUrl}.`,
+            cause: overall.lastFailure,
+          });
+        }
+      }
+      return new SshReadinessError({
+        message: `Backend readiness probe failed at ${requestUrl}.`,
+        cause,
+      });
+    },
   });
-});
 
 function isLoopbackHostname(hostname: string): boolean {
   const normalized = hostname
@@ -1057,6 +982,12 @@ const startSshTunnel = Effect.fn("ssh/tunnel.startSshTunnel")(function* (input: 
     "-o",
     "ExitOnForwardFailure=yes",
     "-o",
+    "ControlMaster=no",
+    "-o",
+    "ControlPath=none",
+    "-o",
+    "ControlPersist=no",
+    "-o",
     "ServerAliveInterval=15",
     "-o",
     "ServerAliveCountMax=3",
@@ -1066,7 +997,8 @@ const startSshTunnel = Effect.fn("ssh/tunnel.startSshTunnel")(function* (input: 
     `${input.localPort}:127.0.0.1:${input.remotePort}`,
     hostSpec,
   ];
-  const tunnelCommand = [SSH_COMMAND, ...args];
+  const sshCommand = yield* resolveSshCommand;
+  const tunnelCommand = [sshCommand, ...args];
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const scope = yield* Scope.Scope;
   yield* Effect.logDebug("ssh.tunnel.spawn.start", {
@@ -1079,8 +1011,9 @@ const startSshTunnel = Effect.fn("ssh/tunnel.startSshTunnel")(function* (input: 
   });
   const child = yield* spawner
     .spawn(
-      ChildProcess.make(SSH_COMMAND, args, {
+      ChildProcess.make(sshCommand, args, {
         env: childEnvironment,
+        extendEnv: true,
         stdin: {
           stream: Stream.empty,
           endOnDone: true,

@@ -9,7 +9,7 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Tracer from "effect/Tracer";
-import { OtlpSerialization, OtlpTracer } from "effect/unstable/observability";
+import { OtlpExporter, OtlpSerialization, OtlpTracer } from "effect/unstable/observability";
 
 import { relayResourceNameForStage } from "./deploymentConfig.ts";
 
@@ -50,6 +50,14 @@ export const RelayObservability = Effect.gen(function* () {
     })),
   });
 
+  const clientIngestToken = yield* Axiom.ApiToken("RelayClientAxiomIngestToken", {
+    name: relayResourceNameForStage("kairo-code-relay-client-otel-ingest", stage),
+    description: "Owned by Alchemy. Scoped OTLP ingest token for first-party relay client spans.",
+    datasetCapabilities: Output.map(traces.name, (dataset) => ({
+      [dataset]: { ingest: ["create" as const] },
+    })),
+  });
+
   yield* Axiom.View("RelayRecentSpansView", {
     name: relayResourceNameForStage("kairo-relay-recent-spans", stage),
     description: "Recent relay HTTP request spans.",
@@ -57,7 +65,7 @@ export const RelayObservability = Effect.gen(function* () {
     aplQuery: Output.map(traces.name, relayRecentSpansQuery),
   });
 
-  return { traces, workerIngestToken, mobileIngestToken } as const;
+  return { traces, workerIngestToken, mobileIngestToken, clientIngestToken } as const;
 });
 
 export const withSpanAttributes =
@@ -226,4 +234,4 @@ export const makeRelayTraceLayer = (input: {
       },
       exportInterval: "1 second",
     }).pipe(Effect.map(withSchemaErrorAttributes)),
-  ).pipe(Layer.provide(OtlpSerialization.layerJson));
+  ).pipe(Layer.provideMerge(OtlpExporter.layerFlusher), Layer.provide(OtlpSerialization.layerJson));

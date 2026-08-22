@@ -29,12 +29,13 @@ import {
 import { ensureLocalApi } from "../../localApi";
 import { cn } from "../../lib/utils";
 import { useServerProviders } from "../../rpc/serverState";
+import { usePrimaryServerApi } from "../../state/primaryServerApi";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { Input } from "../ui/input";
 import { stackedThreadToast, toastManager } from "../ui/toast";
-import { ComposioSetupDialog } from "../settings/IntegrationsSettings";
+import { ComposioSetupDialog } from "../settings/ComposioSetupDialog";
 import {
   getAvailableComposioCatalogItems,
   getConnectedComposioToolkits,
@@ -756,6 +757,7 @@ function FinishStep({ onComplete }: { onComplete: () => void }) {
 }
 
 export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
+  const serverApi = usePrimaryServerApi();
   const serverProviders = useServerProviders();
   const [providersOverride, setProvidersOverride] = useState<ReadonlyArray<ServerProvider> | null>(
     null,
@@ -833,11 +835,10 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
   const refreshAll = useCallback(async () => {
     setBusy((current) => current ?? "refresh");
     try {
-      const localApi = ensureLocalApi();
       const [providerPayload, nextMemory, nextComposio] = await Promise.all([
-        localApi.server.refreshProviders(),
-        localApi.server.getMemoryStatus(),
-        localApi.server.getComposioStatus(),
+        serverApi.refreshProviders(),
+        serverApi.getMemoryStatus(),
+        serverApi.getComposioStatus(),
       ]);
       setProvidersOverride(providerPayload.providers);
       setMemoryStatus(nextMemory);
@@ -887,7 +888,7 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
     setBusy("install-agent");
     setBusyProviderInstanceId(provider.instanceId);
     try {
-      const next = await ensureLocalApi().server.updateProvider({
+      const next = await serverApi.updateProvider({
         provider: provider.driver,
         instanceId: provider.instanceId,
       });
@@ -913,7 +914,7 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
     setBusy("login-agent");
     setBusyProviderInstanceId(provider.instanceId);
     try {
-      const next = await ensureLocalApi().server.loginProvider({
+      const next = await serverApi.loginProvider({
         provider: provider.driver,
         instanceId: provider.instanceId,
       });
@@ -938,7 +939,7 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
     if (!trimmedApiKey || selectedMemoryProviderIds.size === 0) return;
     setBusy("save-memory");
     try {
-      const next = await ensureLocalApi().server.configureMemory({
+      const next = await serverApi.configureMemory({
         apiKey: trimmedApiKey,
         providerInstanceIds: [...selectedMemoryProviderIds],
       });
@@ -976,8 +977,8 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
       const input = { providerInstanceIds: selectedComposioProviderIds };
       const next =
         mode === "install_and_login"
-          ? await ensureLocalApi().server.installAndLoginComposio(input, appendComposioProgress)
-          : await ensureLocalApi().server.loginComposio(input, appendComposioProgress);
+          ? await serverApi.installAndLoginComposio(input, appendComposioProgress)
+          : await serverApi.loginComposio(input, appendComposioProgress);
       setComposioStatus(next);
       if (next.auth.status === "authenticated") {
         setActiveStep("finish");
@@ -994,7 +995,7 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
   const loadCatalog = async () => {
     setCatalogLoading(true);
     try {
-      const next = await ensureLocalApi().server.listComposioToolkits({ limit: 1000 });
+      const next = await serverApi.listComposioToolkits({ limit: 1000 });
       setCatalog(next);
     } catch (error) {
       showOnboardingError("Could not load Composio apps", error);
@@ -1011,10 +1012,7 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
     setAuthUrl(null);
     setDialogOpen(true);
     try {
-      const next = await ensureLocalApi().server.linkComposioToolkit(
-        { toolkit },
-        appendComposioProgress,
-      );
+      const next = await serverApi.linkComposioToolkit({ toolkit }, appendComposioProgress);
       setComposioStatus(next);
       toastManager.add(stackedThreadToast({ type: "success", title: `${toolkit} connected` }));
     } catch (error) {

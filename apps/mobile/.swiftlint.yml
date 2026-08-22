@@ -1,5 +1,7 @@
 included:
-  - ios/KairoCode
+  - ios/Kairo
+  - modules/kairo-composer-editor/ios
+  - modules/kairo-native-controls/ios
   - modules/kairo-terminal/ios
   - modules/kairo-review-diff/ios
 

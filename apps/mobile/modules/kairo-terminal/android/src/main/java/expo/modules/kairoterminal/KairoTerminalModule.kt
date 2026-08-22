@@ -7,6 +7,12 @@ class KairoTerminalModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("KairoTerminalSurface")
 
+    // Bumped when native hardware-keyboard handling changes; surfaced in the JS debug
+    // logs so a stale native binary is distinguishable from a broken key pipeline.
+    Constants(
+      "hardwareKeyRevision" to 2,
+    )
+
     View(KairoTerminalView::class) {
       Prop("terminalKey") { view: KairoTerminalView, terminalKey: String ->
         view.terminalKey = terminalKey
@@ -18,6 +24,14 @@ class KairoTerminalModule : Module() {
 
       Prop("fontSize") { view: KairoTerminalView, fontSize: Double ->
         view.fontSize = fontSize.toFloat()
+      }
+
+      Prop("focusRequest") { view: KairoTerminalView, focusRequest: Double ->
+        view.focusRequest = focusRequest
+      }
+
+      Prop("autoFocus") { view: KairoTerminalView, autoFocus: Boolean ->
+        view.autoFocus = autoFocus
       }
 
       Prop("appearanceScheme") { view: KairoTerminalView, appearanceScheme: String ->
@@ -41,6 +55,10 @@ class KairoTerminalModule : Module() {
       }
 
       Events("onInput", "onResize")
+
+      OnViewDestroys { view: KairoTerminalView ->
+        view.cleanup()
+      }
     }
   }
 }

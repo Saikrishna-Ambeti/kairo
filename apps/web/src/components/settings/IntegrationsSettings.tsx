@@ -1,535 +1,486 @@
+/**
+ * Integrations settings - preferences for surfaces Kairo embeds rather than
+ * owns. Browser is the first section: the defaults a preview tab opens at,
+ * applied to both hand-opened tabs and agent `preview_open` calls that don't
+ * state their own size.
+ *
+ * @module IntegrationsSettings
+ */
 import {
-  CheckCircle2Icon,
-  ExternalLinkIcon,
-  LoaderCircleIcon,
-  PlugZapIcon,
-  RefreshCwIcon,
-  TerminalIcon,
-} from "lucide-react";
-import { Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type {
-  ComposioOperationProgressEvent,
-  ComposioStatus,
-  ComposioToolkitStatus,
-  ProviderInstanceId,
+  DEFAULT_BROWSER_AUTO_SHOW_FLOATING_PREVIEW,
+  DEFAULT_BROWSER_VIEWPORT,
+  DEFAULT_PREVIEW_APPEARANCE,
+  DEFAULT_UNIFIED_SETTINGS,
+  DEFAULT_PREVIEW_ZOOM_FACTOR,
+  FILL_PREVIEW_VIEWPORT,
+  PREVIEW_VIEWPORT_MAX_AREA,
+  PREVIEW_VIEWPORT_MAX_DIMENSION,
+  PREVIEW_VIEWPORT_MIN_DIMENSION,
+  PREVIEW_ZOOM_LEVELS,
+  type PreviewAppearancePreference,
+  type PreviewViewportSetting,
 } from "@kairo/contracts";
+import { PREVIEW_VIEWPORT_PRESETS } from "@kairo/shared/previewViewport";
+import { InfoIcon } from "lucide-react";
+import type { ReactNode } from "react";
 
-import { ensureLocalApi } from "../../localApi";
-import { cn } from "../../lib/utils";
-import { Alert, AlertDescription } from "../ui/alert";
-import { Badge } from "../ui/badge";
+import { ScreenRotationIcon } from "~/browser/ScreenRotationIcon";
+import { isElectron } from "../../env";
+
 import { Button } from "../ui/button";
-import { Checkbox } from "../ui/checkbox";
+import { NumberField, NumberFieldGroup, NumberFieldInput } from "../ui/number-field";
 import {
-  Dialog,
-  DialogClose,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogPanel,
-  DialogPopup,
-  DialogTitle,
-} from "../ui/dialog";
-import { ScrollArea } from "../ui/scroll-area";
-import { stackedThreadToast, toastManager } from "../ui/toast";
+  Select,
+  SelectGroup,
+  SelectGroupLabel,
+  SelectItem,
+  SelectPopup,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
+import { Switch } from "../ui/switch";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
-  getComposioPrimaryButtonState,
-  getConnectedComposioToolkits,
-  getComposioSetupDialogCopy,
-  getComposioSetupSteps,
-  shouldShowComposioBackgroundOperation,
-  type SetupMode,
-} from "./IntegrationsSettings.logic";
-import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
+  useClientSettings,
+  usePrimarySettings,
+  useUpdatePrimarySettings,
+} from "~/hooks/useSettings";
 
-function showComposioError(title: string, error: unknown) {
-  toastManager.add(
-    stackedThreadToast({
-      type: "error",
-      title,
-      description: error instanceof Error ? error.message : String(error),
-    }),
-  );
-}
+import {
+  SettingResetButton,
+  SettingsPageContainer,
+  SettingsRow,
+  SettingsSection,
+} from "./settingsLayout";
+import { searchableSetting } from "./settingsSearch";
+import { ComposioSettingsPanel } from "./ComposioSettings";
 
-function cliBadgeVariant(status: ComposioStatus["cli"]["status"]) {
-  switch (status) {
-    case "authenticated":
-      return "success";
-    case "missing":
-    case "needs_login":
-    case "installing":
-      return "warning";
-    case "error":
-    case "unsupported":
-      return "error";
-    default:
-      return "outline";
+const FILL_VALUE = "fill";
+const RESPONSIVE_VALUE = "responsive";
+
+/**
+ * The size a "Responsive" default falls back to when the user switches away
+ * from Fill and hasn't typed dimensions yet. Fill has no dimensions to carry
+ * over, so the picker needs something concrete to seed the inputs with.
+ */
+const RESPONSIVE_SEED_SIZE = { width: 1280, height: 800 } as const;
+
+const NO_GROUPING: Intl.NumberFormatOptions = { useGrouping: false };
+
+const APPEARANCE_LABELS: Readonly<Record<PreviewAppearancePreference, string>> = {
+  system: "System",
+  light: "Light",
+  dark: "Dark",
+};
+
+const zoomLabel = (zoomFactor: number) => `${Math.round(zoomFactor * 100)}%`;
+
+const viewportSelectValue = (viewport: PreviewViewportSetting): string => {
+  if (viewport._tag === "fill") return FILL_VALUE;
+  if (
+    viewport._tag === "preset" &&
+    PREVIEW_VIEWPORT_PRESETS.some((preset) => preset.id === viewport.presetId)
+  ) {
+    return viewport.presetId;
   }
-}
+  return RESPONSIVE_VALUE;
+};
 
-function connectionBadgeVariant(status: ComposioToolkitStatus["connectionStatus"]) {
-  switch (status) {
-    case "connected":
-      return "success";
-    case "not_connected":
-      return "warning";
-    case "error":
-      return "error";
-    default:
-      return "outline";
-  }
-}
+/**
+ * The trigger renders this rather than a bare `SelectValue`, which would fall
+ * back to printing the raw stored value ("fill") because the options are built
+ * inline instead of from an `items` map.
+ */
+const viewportSelectLabel = (viewport: PreviewViewportSetting): string => {
+  const value = viewportSelectValue(viewport);
+  if (value === FILL_VALUE) return "Fill panel";
+  if (value === RESPONSIVE_VALUE) return "Responsive";
+  return PREVIEW_VIEWPORT_PRESETS.find((preset) => preset.id === value)?.label ?? "Responsive";
+};
 
-function formatStatus(value: string) {
-  return value.replace(/_/g, " ");
-}
+const isValidDimension = (value: number) =>
+  Number.isInteger(value) &&
+  value >= PREVIEW_VIEWPORT_MIN_DIMENSION &&
+  value <= PREVIEW_VIEWPORT_MAX_DIMENSION;
 
-function SetupStep({ label, active, done }: { label: string; active: boolean; done: boolean }) {
-  return (
-    <div className="flex items-center gap-2 text-xs">
-      <span
-        className={cn(
-          "flex size-5 items-center justify-center rounded-full border",
-          done && "border-success/40 bg-success/10 text-success",
-          active && !done && "border-info/40 bg-info/10 text-info",
-          !active && !done && "border-border text-muted-foreground",
-        )}
-      >
-        {done ? (
-          <CheckCircle2Icon className="size-3" />
-        ) : active ? (
-          <LoaderCircleIcon className="size-3 animate-spin" />
-        ) : (
-          <span className="size-1.5 rounded-full bg-current" />
-        )}
-      </span>
-      <span className={active || done ? "text-foreground" : "text-muted-foreground"}>{label}</span>
-    </div>
-  );
-}
+/**
+ * A sized viewport with width and height swapped. Presets keep their identity
+ * through a rotation — `resolvePreviewViewport` already stores rotated presets
+ * as the preset id plus swapped dimensions — so a rotated iPad is still an
+ * iPad, not an anonymous custom size.
+ */
+const rotateViewport = (
+  viewport: Exclude<PreviewViewportSetting, { readonly _tag: "fill" }>,
+): PreviewViewportSetting => ({
+  ...viewport,
+  width: viewport.height,
+  height: viewport.width,
+});
 
-export function ComposioSetupDialog({
-  open,
-  mode,
-  events,
-  authUrl,
-  onOpenChange,
-}: {
-  open: boolean;
-  mode: SetupMode;
-  events: ReadonlyArray<ComposioOperationProgressEvent>;
-  authUrl: string | null;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const latest = events.at(-1);
-  const { title, description } = getComposioSetupDialogCopy(mode);
-  const steps = getComposioSetupSteps(mode);
-  const activeIndex = Math.max(
-    0,
-    steps.findIndex((step) => step === latest?.stage),
-  );
+function BrowserViewportSetting({ disabled }: { readonly disabled: boolean }) {
+  const viewport = useClientSettings((settings) => settings.browserDefaultViewport);
+  const updateSettings = useUpdatePrimarySettings();
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPopup className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
-        <DialogPanel className="space-y-4">
-          <div className="grid gap-2 sm:grid-cols-2">
-            {steps.map((step, index) => (
-              <SetupStep
-                key={step}
-                label={step}
-                active={index === activeIndex && latest?.operation.status === "running"}
-                done={
-                  latest?.operation.status === "succeeded" ||
-                  (latest?.operation.status === "running" && index < activeIndex)
-                }
-              />
-            ))}
-          </div>
-          {authUrl ? (
-            <Alert>
-              <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <span className="break-all text-xs">{authUrl}</span>
-                <Button
-                  size="xs"
-                  variant="outline"
-                  onClick={() => void ensureLocalApi().shell.openExternal(authUrl)}
-                >
-                  <ExternalLinkIcon className="size-3.5" />
-                  Open in browser
-                </Button>
-              </AlertDescription>
-            </Alert>
-          ) : null}
-          <div className="rounded-xl border bg-muted/25">
-            <ScrollArea className="h-44">
-              <div className="space-y-2 p-3 font-mono text-[11px] leading-5 text-muted-foreground">
-                {events.length === 0 ? (
-                  <div>Waiting for setup progress...</div>
-                ) : (
-                  events.map((event) => (
-                    <div
-                      key={`${event.operation.id}:${event.operation.updatedAt}:${event.stage}:${event.message}`}
-                    >
-                      <span className="text-foreground">{event.stage}</span>: {event.message}
-                      {event.stdout ? (
-                        <pre className="whitespace-pre-wrap">{event.stdout}</pre>
-                      ) : null}
-                      {event.stderr ? (
-                        <pre className="whitespace-pre-wrap">{event.stderr}</pre>
-                      ) : null}
-                    </div>
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-          </div>
-        </DialogPanel>
-        <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>Close</DialogClose>
-        </DialogFooter>
-      </DialogPopup>
-    </Dialog>
-  );
-}
+  const sized = viewport._tag === "fill" ? null : viewport;
+  const presentedSize = {
+    width: sized?.width ?? RESPONSIVE_SEED_SIZE.width,
+    height: sized?.height ?? RESPONSIVE_SEED_SIZE.height,
+  };
 
-function ToolkitRow({
-  toolkit,
-  disabled,
-  onConnect,
-}: {
-  toolkit: ComposioToolkitStatus;
-  disabled: boolean;
-  onConnect: (toolkit: string) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-3 border-t border-border/60 px-4 py-3.5 first:border-t-0 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-      <div className="min-w-0 space-y-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="truncate text-[13px] font-semibold">{toolkit.label}</span>
-          <Badge size="sm" variant={connectionBadgeVariant(toolkit.connectionStatus)}>
-            {formatStatus(toolkit.connectionStatus)}
-          </Badge>
-        </div>
-        <p className="text-xs text-muted-foreground/80">
-          {toolkit.accountLabel
-            ? `Connected as ${toolkit.accountLabel}`
-            : (toolkit.message ?? `Toolkit slug: ${toolkit.toolkit}`)}
-        </p>
-      </div>
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={disabled}
-        onClick={() => onConnect(toolkit.toolkit)}
-      >
-        <PlugZapIcon className="size-3.5" />
-        Connect
-      </Button>
-    </div>
-  );
-}
-
-export function IntegrationsSettings() {
-  const [status, setStatus] = useState<ComposioStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [setupMode, setSetupMode] = useState<SetupMode>("install_and_login");
-  const [events, setEvents] = useState<ComposioOperationProgressEvent[]>([]);
-  const [authUrl, setAuthUrl] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const seenRunningOperationRef = useRef<string | null>(null);
-  const backgroundRefreshStartedRef = useRef(false);
-
-  const selectedProviderIds = useMemo(
-    () =>
-      status?.agentSupport
-        .filter((entry) => entry.selected)
-        .map((entry) => entry.providerInstanceId) ?? [],
-    [status?.agentSupport],
-  );
-
-  const refresh = useCallback(async () => {
-    const next = await ensureLocalApi().server.getComposioStatus();
-    setStatus((previous) => {
-      const previousOperation = previous?.operation;
-      const nextOperation = next.operation;
-      if (previousOperation?.status === "running" && nextOperation?.status === "succeeded") {
-        toastManager.add(stackedThreadToast({ type: "success", title: "Composio setup complete" }));
-      }
-      if (previousOperation?.status === "running" && nextOperation?.status === "failed") {
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Composio setup failed",
-            description: nextOperation.message ?? "Setup failed.",
-          }),
-        );
-      }
-      return next;
+  const selectViewport = (value: string | null) => {
+    if (value === FILL_VALUE) {
+      updateSettings({ browserDefaultViewport: FILL_PREVIEW_VIEWPORT });
+      return;
+    }
+    if (value === RESPONSIVE_VALUE) {
+      updateSettings({
+        browserDefaultViewport: {
+          _tag: "freeform",
+          width: sized?.width ?? RESPONSIVE_SEED_SIZE.width,
+          height: sized?.height ?? RESPONSIVE_SEED_SIZE.height,
+        },
+      });
+      return;
+    }
+    const preset = PREVIEW_VIEWPORT_PRESETS.find((candidate) => candidate.id === value);
+    if (!preset) return;
+    updateSettings({
+      browserDefaultViewport: {
+        _tag: "preset",
+        width: preset.width,
+        height: preset.height,
+        presetId: preset.id,
+      },
     });
-    return next;
-  }, []);
-
-  useEffect(() => {
-    let disposed = false;
-    setLoading(true);
-    void refresh()
-      .catch((error: unknown) => {
-        if (!disposed) showComposioError("Composio status unavailable", error);
-      })
-      .finally(() => {
-        if (!disposed) setLoading(false);
-      });
-    return () => {
-      disposed = true;
-    };
-  }, [refresh]);
-
-  useEffect(() => {
-    if (status?.operation?.status !== "running") return;
-    seenRunningOperationRef.current = status.operation.id;
-    const id = window.setInterval(() => void refresh().catch(() => undefined), 2_000);
-    return () => window.clearInterval(id);
-  }, [refresh, status?.operation]);
-
-  useEffect(() => {
-    if (!status || backgroundRefreshStartedRef.current) return;
-    backgroundRefreshStartedRef.current = true;
-    const timeoutIds = [1_500, 4_000, 8_000].map((delay) =>
-      window.setTimeout(() => void refresh().catch(() => undefined), delay),
-    );
-    return () => {
-      for (const id of timeoutIds) window.clearTimeout(id);
-    };
-  }, [refresh, status]);
-
-  const appendProgress = (event: ComposioOperationProgressEvent) => {
-    setEvents((previous) => [...previous, event].slice(-80));
-    if (event.authUrl) setAuthUrl(event.authUrl);
-    setStatus((previous) =>
-      previous
-        ? {
-            ...previous,
-            operation: event.operation,
-          }
-        : previous,
-    );
   };
 
-  const runSetup = async (mode: SetupMode) => {
-    setSetupMode(mode);
-    setEvents([]);
-    setAuthUrl(null);
-    setDialogOpen(true);
-    setBusy(true);
-    try {
-      const next =
-        mode === "install_and_login"
-          ? await ensureLocalApi().server.installAndLoginComposio(
-              { providerInstanceIds: selectedProviderIds },
-              appendProgress,
-            )
-          : await ensureLocalApi().server.loginComposio(
-              { providerInstanceIds: selectedProviderIds },
-              appendProgress,
-            );
-      setStatus(next);
-      if (next.operation?.status === "failed") {
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Composio setup failed",
-            description: next.operation.message ?? "Setup failed.",
-          }),
-        );
-      } else {
-        toastManager.add(stackedThreadToast({ type: "success", title: "Composio setup complete" }));
+  // Committed on blur rather than per keystroke: typing "2560" passes through
+  // "256", which is a legal dimension, so an onValueChange handler would
+  // persist that intermediate size and churn the settings file on every key.
+  const commitDimension = (axis: "width" | "height", value: number | null) => {
+    if (value === null || !isValidDimension(value)) return;
+    const next = { ...presentedSize, [axis]: value };
+    if (next.width * next.height > PREVIEW_VIEWPORT_MAX_AREA) return;
+    if (sized && next.width === sized.width && next.height === sized.height) return;
+    // Typing a size means the preset no longer describes it.
+    updateSettings({ browserDefaultViewport: { _tag: "freeform", ...next } });
+  };
+
+  return (
+    <SettingsRow
+      {...searchableSetting("browser-default-viewport")}
+      description="The viewport a browser tab opens at, for both you and agents. Fill sizes the page to the panel; any other choice opens the device toolbar at that size."
+      resetAction={
+        !disabled && viewport._tag !== DEFAULT_BROWSER_VIEWPORT._tag ? (
+          <SettingResetButton
+            label="default browser viewport"
+            onClick={() => updateSettings({ browserDefaultViewport: DEFAULT_BROWSER_VIEWPORT })}
+          />
+        ) : null
       }
-    } catch (error) {
-      showComposioError("Composio setup failed", error);
-      void refresh().catch(() => undefined);
-    } finally {
-      setBusy(false);
-    }
-  };
+      control={
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+          <Select
+            value={viewportSelectValue(viewport)}
+            onValueChange={selectViewport}
+            disabled={disabled}
+          >
+            <SelectTrigger
+              size="sm"
+              className="w-full min-w-0 sm:w-44"
+              aria-label="Default browser viewport"
+            >
+              <SelectValue>{viewportSelectLabel(viewport)}</SelectValue>
+            </SelectTrigger>
+            <SelectPopup align="end" alignItemWithTrigger={false} className="min-w-64">
+              <SelectItem value={FILL_VALUE}>Fill panel</SelectItem>
+              <SelectItem value={RESPONSIVE_VALUE}>Responsive</SelectItem>
+              <SelectGroup>
+                <SelectGroupLabel>Standard</SelectGroupLabel>
+                {PREVIEW_VIEWPORT_PRESETS.map((preset) => (
+                  <SelectItem key={preset.id} value={preset.id}>
+                    <span className="flex w-full items-center justify-between gap-5">
+                      <span>{preset.label}</span>
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {preset.detail}
+                      </span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectPopup>
+          </Select>
 
-  const connectToolkit = async (toolkit: string) => {
-    setSetupMode("login");
-    setEvents([]);
-    setAuthUrl(null);
-    setDialogOpen(true);
-    setBusy(true);
-    try {
-      const next = await ensureLocalApi().server.linkComposioToolkit({ toolkit }, appendProgress);
-      setStatus(next);
-      toastManager.add(stackedThreadToast({ type: "success", title: `${toolkit} connected` }));
-    } catch (error) {
-      showComposioError(`Could not connect ${toolkit}`, error);
-      void refresh().catch(() => undefined);
-    } finally {
-      setBusy(false);
-    }
-  };
+          {sized ? (
+            <div className="flex min-w-0 items-center gap-1">
+              <NumberField
+                value={presentedSize.width}
+                min={PREVIEW_VIEWPORT_MIN_DIMENSION}
+                max={PREVIEW_VIEWPORT_MAX_DIMENSION}
+                disabled={disabled}
+                // Pixel counts read as raw numbers; grouping would show "1,024".
+                format={NO_GROUPING}
+                size="sm"
+                className="w-20"
+                onValueCommitted={(value) => commitDimension("width", value)}
+              >
+                <NumberFieldGroup>
+                  <NumberFieldInput aria-label="Default viewport width" />
+                </NumberFieldGroup>
+              </NumberField>
+              <span className="text-xs text-muted-foreground">×</span>
+              <NumberField
+                value={presentedSize.height}
+                min={PREVIEW_VIEWPORT_MIN_DIMENSION}
+                max={PREVIEW_VIEWPORT_MAX_DIMENSION}
+                disabled={disabled}
+                format={NO_GROUPING}
+                size="sm"
+                className="w-20"
+                onValueCommitted={(value) => commitDimension("height", value)}
+              >
+                <NumberFieldGroup>
+                  <NumberFieldInput aria-label="Default viewport height" />
+                </NumberFieldGroup>
+              </NumberField>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      size="icon-sm"
+                      variant="ghost-muted"
+                      disabled={disabled}
+                      aria-label={`Rotate to ${
+                        presentedSize.height >= presentedSize.width ? "landscape" : "portrait"
+                      }`}
+                      onClick={() =>
+                        updateSettings({ browserDefaultViewport: rotateViewport(sized) })
+                      }
+                    >
+                      <ScreenRotationIcon />
+                    </Button>
+                  }
+                />
+                <TooltipPopup side="top">Rotate</TooltipPopup>
+              </Tooltip>
+            </div>
+          ) : null}
+        </div>
+      }
+    />
+  );
+}
 
-  const toggleProvider = async (providerInstanceId: ProviderInstanceId, checked: boolean) => {
-    if (!status) return;
-    const nextSelected = new Set(selectedProviderIds);
-    if (checked) nextSelected.add(providerInstanceId);
-    else nextSelected.delete(providerInstanceId);
-    try {
-      const next = await ensureLocalApi().server.installComposioAgentSupport({
-        providerInstanceIds: [...nextSelected],
-      });
-      setStatus(next);
-    } catch (error) {
-      showComposioError("Could not update agent access", error);
-    }
-  };
+function BrowserZoomSetting({ disabled }: { readonly disabled: boolean }) {
+  const zoomFactor = useClientSettings((settings) => settings.browserDefaultZoomFactor);
+  const updateSettings = useUpdatePrimarySettings();
 
-  const primaryAction = status?.primaryAction ?? "install_and_login";
-  const operationRunning = status?.operation?.status === "running";
-  const primaryButton = getComposioPrimaryButtonState({
-    primaryAction,
-    busy,
-    operationRunning,
-  });
-  const connectedToolkits = getConnectedComposioToolkits(status);
+  return (
+    <SettingsRow
+      {...searchableSetting("browser-default-zoom")}
+      description="Page zoom applied to new browser tabs."
+      resetAction={
+        !disabled && zoomFactor !== DEFAULT_PREVIEW_ZOOM_FACTOR ? (
+          <SettingResetButton
+            label="default browser zoom"
+            onClick={() =>
+              updateSettings({ browserDefaultZoomFactor: DEFAULT_PREVIEW_ZOOM_FACTOR })
+            }
+          />
+        ) : null
+      }
+      control={
+        <Select
+          disabled={disabled}
+          value={String(zoomFactor)}
+          onValueChange={(value) => {
+            const next = PREVIEW_ZOOM_LEVELS.find((level) => String(level) === value);
+            if (next !== undefined) updateSettings({ browserDefaultZoomFactor: next });
+          }}
+        >
+          <SelectTrigger className="w-full sm:w-40" aria-label="Default browser zoom">
+            <SelectValue>{zoomLabel(zoomFactor)}</SelectValue>
+          </SelectTrigger>
+          <SelectPopup align="end" alignItemWithTrigger={false}>
+            {PREVIEW_ZOOM_LEVELS.map((level) => (
+              <SelectItem hideIndicator key={level} value={String(level)}>
+                {zoomLabel(level)}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+      }
+    />
+  );
+}
 
-  if (loading && !status) {
-    return (
+function BrowserAppearanceSetting({ disabled }: { readonly disabled: boolean }) {
+  const appearance = useClientSettings((settings) => settings.browserDefaultAppearance);
+  const updateSettings = useUpdatePrimarySettings();
+
+  return (
+    <SettingsRow
+      {...searchableSetting("browser-default-appearance")}
+      description="The color scheme pages are told to prefer. System follows your OS setting."
+      resetAction={
+        !disabled && appearance !== DEFAULT_PREVIEW_APPEARANCE ? (
+          <SettingResetButton
+            label="default browser appearance"
+            onClick={() => updateSettings({ browserDefaultAppearance: DEFAULT_PREVIEW_APPEARANCE })}
+          />
+        ) : null
+      }
+      control={
+        <Select
+          disabled={disabled}
+          value={appearance}
+          onValueChange={(value) => {
+            if (value === "system" || value === "light" || value === "dark") {
+              updateSettings({ browserDefaultAppearance: value });
+            }
+          }}
+        >
+          <SelectTrigger className="w-full sm:w-40" aria-label="Default browser appearance">
+            <SelectValue>{APPEARANCE_LABELS[appearance]}</SelectValue>
+          </SelectTrigger>
+          <SelectPopup align="end" alignItemWithTrigger={false}>
+            {Object.entries(APPEARANCE_LABELS).map(([value, label]) => (
+              <SelectItem hideIndicator key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+      }
+    />
+  );
+}
+
+function AgentBrowserAccessSetting() {
+  const settings = usePrimarySettings();
+  const updateSettings = useUpdatePrimarySettings();
+
+  return (
+    <SettingsRow
+      {...searchableSetting("agent-browser-access")}
+      description="Let agents open and drive the preview browser. When off, the browser tools and the instructions describing them are withheld from agent sessions. Your own browser panel is unaffected."
+      status={
+        settings.enableAgentBrowserAccess
+          ? undefined
+          : "Applies to sessions started from now on; a running agent keeps the tools it was given."
+      }
+      resetAction={
+        settings.enableAgentBrowserAccess !== DEFAULT_UNIFIED_SETTINGS.enableAgentBrowserAccess ? (
+          <SettingResetButton
+            label="agent browser access"
+            onClick={() =>
+              updateSettings({
+                enableAgentBrowserAccess: DEFAULT_UNIFIED_SETTINGS.enableAgentBrowserAccess,
+              })
+            }
+          />
+        ) : null
+      }
+      control={
+        <Switch
+          checked={settings.enableAgentBrowserAccess}
+          onCheckedChange={(checked) =>
+            updateSettings({ enableAgentBrowserAccess: Boolean(checked) })
+          }
+          aria-label="Allow agent browser access"
+        />
+      }
+    />
+  );
+}
+
+function BrowserAutoShowFloatingPreviewSetting({ disabled }: { readonly disabled: boolean }) {
+  const autoShow = useClientSettings((settings) => settings.browserAutoShowFloatingPreview);
+  const updateSettings = useUpdatePrimarySettings();
+
+  return (
+    <SettingsRow
+      {...searchableSetting("browser-auto-show-floating-preview")}
+      description="Pop the floating preview into view when an agent opens a browser. An agent that explicitly asks to show or hide its preview still gets what it asked for."
+      resetAction={
+        !disabled && autoShow !== DEFAULT_BROWSER_AUTO_SHOW_FLOATING_PREVIEW ? (
+          <SettingResetButton
+            label="auto-show floating preview"
+            onClick={() =>
+              updateSettings({
+                browserAutoShowFloatingPreview: DEFAULT_BROWSER_AUTO_SHOW_FLOATING_PREVIEW,
+              })
+            }
+          />
+        ) : null
+      }
+      control={
+        <Switch
+          disabled={disabled}
+          checked={autoShow}
+          onCheckedChange={(checked) =>
+            updateSettings({ browserAutoShowFloatingPreview: Boolean(checked) })
+          }
+          aria-label="Auto-show floating preview"
+        />
+      }
+    />
+  );
+}
+
+/**
+ * Frames the client-local preview defaults as one unavailable block.
+ *
+ * Disabling each control on its own left the labels and descriptions at full
+ * strength, so the group still read as editable. Boxing it puts the reason at
+ * the top and dims everything it covers, which is also why the explanation
+ * sits outside the dimmed area — the one part that must stay readable is the
+ * part saying why the rest isn't.
+ *
+ * Disabled rather than hidden because these are *client* settings: editing
+ * them from a browser tab would write preferences belonging to a different
+ * client, reading as though the desktop app had been configured when it
+ * hadn't.
+ */
+function DesktopOnlyBrowserDefaults({ children }: { readonly children: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-border/60 bg-muted/20 py-1.5">
+      <div className="flex items-start gap-2 px-3 py-2 text-[12px] leading-relaxed text-muted-foreground sm:px-4">
+        <InfoIcon className="mt-0.5 size-3.5 shrink-0 text-warning" />
+        <p>Only available in the desktop app.</p>
+      </div>
+      <div className="[&_h3]:opacity-64 [&_p]:opacity-64">{children}</div>
+    </div>
+  );
+}
+
+export function IntegrationsSettingsPanel() {
+  // Client-local preview defaults are editable only where the preview exists.
+  const previewDefaultsDisabled = !isElectron;
+  const previewDefaults = (
+    <>
+      <BrowserViewportSetting disabled={previewDefaultsDisabled} />
+      <BrowserZoomSetting disabled={previewDefaultsDisabled} />
+      <BrowserAppearanceSetting disabled={previewDefaultsDisabled} />
+      <BrowserAutoShowFloatingPreviewSetting disabled={previewDefaultsDisabled} />
+    </>
+  );
+
+  return (
+    <>
       <SettingsPageContainer>
-        <SettingsSection icon={<PlugZapIcon className="size-3.5" />} title="Integrations">
-          <div className="p-5 text-sm text-muted-foreground">Loading integrations...</div>
+        <SettingsSection id="browser" title="Browser">
+          {/* Server-authoritative, so it stays editable on every client and sits
+            outside the block covering the desktop-only defaults. */}
+          <AgentBrowserAccessSetting />
+          {previewDefaultsDisabled ? (
+            <DesktopOnlyBrowserDefaults>{previewDefaults}</DesktopOnlyBrowserDefaults>
+          ) : (
+            previewDefaults
+          )}
         </SettingsSection>
       </SettingsPageContainer>
-    );
-  }
-
-  return (
-    <SettingsPageContainer>
-      <SettingsSection icon={<PlugZapIcon className="size-3.5" />} title="Composio CLI">
-        <div className="space-y-4 p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <TerminalIcon className="size-4 text-muted-foreground" />
-                <span className="text-sm font-semibold">Composio local tool access</span>
-                {status ? (
-                  <Badge size="sm" variant={cliBadgeVariant(status.cli.status)}>
-                    {formatStatus(operationRunning ? "installing" : status.cli.status)}
-                  </Badge>
-                ) : null}
-              </div>
-              <p className="text-xs text-muted-foreground/80">
-                {status?.cli.executablePath
-                  ? `Using ${status.cli.executablePath}`
-                  : (status?.cli.message ?? "Connect Composio to let agents use external apps.")}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              {primaryAction !== "none" ? (
-                <Button
-                  disabled={primaryButton.disabled}
-                  onClick={() => void runSetup(primaryAction)}
-                >
-                  {busy || operationRunning ? (
-                    <LoaderCircleIcon className="size-4 animate-spin" />
-                  ) : (
-                    <PlugZapIcon className="size-4" />
-                  )}
-                  {operationRunning ? primaryButton.runningLabel : primaryButton.label}
-                </Button>
-              ) : null}
-              {operationRunning ? (
-                <Button variant="outline" onClick={() => setDialogOpen(true)}>
-                  View progress
-                </Button>
-              ) : null}
-              <Button
-                variant="outline"
-                size="icon-sm"
-                aria-label="Refresh Composio status"
-                onClick={() => void refresh()}
-              >
-                <RefreshCwIcon className="size-4" />
-              </Button>
-            </div>
-          </div>
-          {shouldShowComposioBackgroundOperation(status, dialogOpen) ? (
-            <Alert>
-              <AlertDescription>
-                Composio setup is running in the background. You can reopen progress from this page.
-              </AlertDescription>
-            </Alert>
-          ) : null}
-        </div>
-      </SettingsSection>
-
-      <SettingsSection title="Connected apps">
-        {connectedToolkits.length === 0 ? (
-          <div className="px-4 py-4 text-sm text-muted-foreground sm:px-5">
-            No Composio apps are connected yet. Ask the agent to connect an app, or use Show more to
-            browse available toolkits.
-          </div>
-        ) : (
-          connectedToolkits.map((toolkit) => (
-            <ToolkitRow
-              key={toolkit.toolkit}
-              toolkit={toolkit}
-              disabled={busy || operationRunning || status?.auth.status !== "authenticated"}
-              onConnect={connectToolkit}
-            />
-          ))
-        )}
-        <div className="border-t border-border/60 px-4 py-4 sm:px-5">
-          <Button variant="outline" render={<Link to="/settings/integrations/apps" />}>
-            <PlugZapIcon className="size-3.5" />
-            Show more
-          </Button>
-        </div>
-      </SettingsSection>
-
-      <SettingsSection title="Agent access">
-        <div className="divide-y divide-border/60">
-          {(status?.agentSupport ?? []).map((provider) => (
-            <label
-              key={provider.providerInstanceId}
-              className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3.5 hover:bg-muted/35 sm:px-5"
-            >
-              <Checkbox
-                checked={provider.selected}
-                onCheckedChange={(checked) =>
-                  void toggleProvider(provider.providerInstanceId, Boolean(checked))
-                }
-              />
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-medium">{provider.displayName}</span>
-                <span className="block truncate text-xs text-muted-foreground">
-                  {provider.message}
-                </span>
-              </span>
-              <Badge size="sm" variant={provider.skillStatus === "ready" ? "success" : "outline"}>
-                {formatStatus(provider.skillStatus)}
-              </Badge>
-            </label>
-          ))}
-        </div>
-      </SettingsSection>
-
-      <ComposioSetupDialog
-        open={dialogOpen}
-        mode={setupMode}
-        events={events}
-        authUrl={authUrl}
-        onOpenChange={setDialogOpen}
-      />
-    </SettingsPageContainer>
+      <ComposioSettingsPanel />
+    </>
   );
 }

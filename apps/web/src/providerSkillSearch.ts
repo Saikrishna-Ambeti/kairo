@@ -1,13 +1,12 @@
 import type { ServerProviderSkill } from "@kairo/contracts";
+import { formatProviderSkillDisplayName } from "@kairo/client-runtime/providerSkills";
 import {
   insertRankedSearchResult,
   normalizeSearchQuery,
   scoreQueryMatch,
 } from "@kairo/shared/searchRanking";
 
-import { formatProviderSkillDisplayName } from "./providerSkillPresentation";
-
-function scoreProviderSkill(skill: ServerProviderSkill, query: string): number | null {
+export function scoreProviderSkill(skill: ServerProviderSkill, query: string): number | null {
   const normalizedName = skill.name.toLowerCase();
   const normalizedLabel = formatProviderSkillDisplayName(skill).toLowerCase();
   const normalizedShortDescription = skill.shortDescription?.toLowerCase() ?? "";

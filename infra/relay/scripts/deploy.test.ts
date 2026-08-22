@@ -1,11 +1,60 @@
-import { describe, expect, it } from "vite-plus/test";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { describe, expect, it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 
 import {
   hasDeployChanges,
+  missingRelayPublicConfigFields,
+  publicConfigFromOutput,
   reconcileRootEnvPublicConfig,
-  reconcileRootEnvRelayUrl,
+  RelayDeployError,
+  RelayDeployPublicConfigUnavailableError,
   serializeGithubOutput,
+  serializeRelayClientTracingEnvironment,
 } from "./deploy.ts";
+
+describe("RelayDeployError", () => {
+  it("reports the incomplete state source, stage, and missing fields", () => {
+    const missingFields = missingRelayPublicConfigFields({
+      url: "https://relay.example.test",
+      mobileTracingUrl: "https://api.axiom.co/v1/traces",
+    });
+    const error = new RelayDeployError({
+      source: "alchemy_state",
+      stage: "production",
+      missingFields,
+    });
+
+    expect(error).toMatchObject({
+      source: "alchemy_state",
+      stage: "production",
+      missingFields: [
+        "mobileTracingDataset",
+        "mobileTracingToken",
+        "clientTracingUrl",
+        "clientTracingDataset",
+        "clientTracingToken",
+      ],
+    });
+    expect(error.message).toBe(
+      "Relay deploy output from 'alchemy_state' for stage 'production' is missing required public config fields: mobileTracingDataset, mobileTracingToken, clientTracingUrl, clientTracingDataset, clientTracingToken",
+    );
+  });
+
+  it("distinguishes deploy results that do not produce public config", () => {
+    const error = new RelayDeployPublicConfigUnavailableError({
+      result: "dry-run",
+      stage: "production",
+      outputPath: "/tmp/relay-client.env",
+    });
+
+    expect(error.message).toBe(
+      "Relay deploy result 'dry-run' for stage 'production' did not produce public config required by GitHub environment output '/tmp/relay-client.env'.",
+    );
+  });
+});
 
 describe("hasDeployChanges", () => {
   it("detects resource, binding, and deletion changes", () => {
@@ -37,31 +86,15 @@ describe("hasDeployChanges", () => {
   });
 });
 
-describe("reconcileRootEnvRelayUrl", () => {
-  it("adds the relay URL to an empty root env file", () => {
-    expect(reconcileRootEnvRelayUrl("", "https://relay.example.test")).toBe(
-      "KAIRO_RELAY_URL=https://relay.example.test\n",
-    );
-  });
-
-  it("preserves unrelated root env entries while replacing a previous relay URL", () => {
-    expect(
-      reconcileRootEnvRelayUrl(
-        "KAIRO_CLERK_PUBLISHABLE_KEY=pk_test_example\nKAIRO_RELAY_URL=https://old.example.test\n",
-        "https://relay.example.test",
-      ),
-    ).toBe(
-      "KAIRO_CLERK_PUBLISHABLE_KEY=pk_test_example\nKAIRO_RELAY_URL=https://relay.example.test\n",
-    );
-  });
-});
-
 describe("reconcileRootEnvPublicConfig", () => {
   const config = {
     relayUrl: "https://relay.example.test",
     mobileTracingUrl: "https://api.axiom.co/v1/traces",
     mobileTracingDataset: "kairo-mobile-traces-dev",
     mobileTracingToken: "xaat-public-ingest",
+    clientTracingUrl: "https://api.axiom.co/v1/traces",
+    clientTracingDataset: "kairo-code-relay-client-traces-dev",
+    clientTracingToken: "xaat-relay-client-ingest",
   } as const;
 
   it("adds the complete local client config", () => {
@@ -71,6 +104,9 @@ describe("reconcileRootEnvPublicConfig", () => {
         "KAIRO_MOBILE_OTLP_TRACES_URL=https://api.axiom.co/v1/traces",
         "KAIRO_MOBILE_OTLP_TRACES_DATASET=kairo-mobile-traces-dev",
         "KAIRO_MOBILE_OTLP_TRACES_TOKEN=xaat-public-ingest",
+        "KAIRO_RELAY_CLIENT_OTLP_TRACES_URL=https://api.axiom.co/v1/traces",
+        "KAIRO_RELAY_CLIENT_OTLP_TRACES_DATASET=kairo-code-relay-client-traces-dev",
+        "KAIRO_RELAY_CLIENT_OTLP_TRACES_TOKEN=xaat-relay-client-ingest",
         "",
       ].join("\n"),
     );
@@ -85,6 +121,9 @@ describe("reconcileRootEnvPublicConfig", () => {
           "KAIRO_MOBILE_OTLP_TRACES_URL=https://old.example.test/v1/traces",
           "KAIRO_MOBILE_OTLP_TRACES_DATASET=old-dataset",
           "KAIRO_MOBILE_OTLP_TRACES_TOKEN=old-token",
+          "KAIRO_RELAY_CLIENT_OTLP_TRACES_URL=https://old.example.test/v1/traces",
+          "KAIRO_RELAY_CLIENT_OTLP_TRACES_DATASET=old-client-dataset",
+          "KAIRO_RELAY_CLIENT_OTLP_TRACES_TOKEN=old-client-token",
           "",
         ].join("\n"),
         config,
@@ -96,6 +135,9 @@ describe("reconcileRootEnvPublicConfig", () => {
         "KAIRO_MOBILE_OTLP_TRACES_URL=https://api.axiom.co/v1/traces",
         "KAIRO_MOBILE_OTLP_TRACES_DATASET=kairo-mobile-traces-dev",
         "KAIRO_MOBILE_OTLP_TRACES_TOKEN=xaat-public-ingest",
+        "KAIRO_RELAY_CLIENT_OTLP_TRACES_URL=https://api.axiom.co/v1/traces",
+        "KAIRO_RELAY_CLIENT_OTLP_TRACES_DATASET=kairo-code-relay-client-traces-dev",
+        "KAIRO_RELAY_CLIENT_OTLP_TRACES_TOKEN=xaat-relay-client-ingest",
         "",
       ].join("\n"),
     );
@@ -111,5 +153,75 @@ describe("serializeGithubOutput", () => {
         relay_url: "https://relay.example.test",
       }),
     ).toBe("changed=false\nresult=noop\nrelay_url=https://relay.example.test\n");
+  });
+});
+
+describe("serializeRelayClientTracingEnvironment", () => {
+  it("serializes tracing config for downstream GITHUB_ENV loading", () => {
+    expect(
+      serializeRelayClientTracingEnvironment({
+        relayUrl: "https://relay.example.test",
+        mobileTracingUrl: "https://api.axiom.co/v1/traces",
+        mobileTracingDataset: "mobile",
+        mobileTracingToken: "mobile-token",
+        clientTracingUrl: "https://api.axiom.co/v1/traces",
+        clientTracingDataset: "relay",
+        clientTracingToken: "client-token",
+      }),
+    ).toBe(
+      [
+        "KAIRO_RELAY_CLIENT_OTLP_TRACES_URL=https://api.axiom.co/v1/traces",
+        "KAIRO_RELAY_CLIENT_OTLP_TRACES_DATASET=relay",
+        "KAIRO_RELAY_CLIENT_OTLP_TRACES_TOKEN=client-token",
+        "",
+      ].join("\n"),
+    );
+  });
+});
+
+describe("release workflow tracing config propagation", () => {
+  it.effect("uses an artifact instead of a masked cross-job token output", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const workflowPath = yield* path.fromFileUrl(
+        new URL("../../../.github/workflows/release.yml", import.meta.url),
+      );
+      const workflow = yield* fileSystem.readFileString(workflowPath);
+
+      expect(workflow).not.toContain("client_tracing_token:");
+      expect(workflow).not.toContain("needs.relay_public_config.outputs.client_tracing_token");
+      expect(workflow).toContain('--github-env-file "$RUNNER_TEMP/relay-client-tracing.env"');
+      expect(workflow).toContain("name: relay-client-tracing-config");
+      expect(workflow).toContain('cat "$config_path" >> "$GITHUB_ENV"');
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+});
+
+describe("publicConfigFromOutput", () => {
+  it("reads the complete public tracing config from persisted Alchemy output", () => {
+    expect(
+      publicConfigFromOutput({
+        url: "https://relay.example.test",
+        mobileTracingUrl: "https://api.axiom.co/v1/traces",
+        mobileTracingDataset: "mobile",
+        mobileTracingToken: "mobile-token",
+        clientTracingUrl: "https://api.axiom.co/v1/traces",
+        clientTracingDataset: "relay",
+        clientTracingToken: "client-token",
+      }),
+    ).toEqual({
+      relayUrl: "https://relay.example.test",
+      mobileTracingUrl: "https://api.axiom.co/v1/traces",
+      mobileTracingDataset: "mobile",
+      mobileTracingToken: "mobile-token",
+      clientTracingUrl: "https://api.axiom.co/v1/traces",
+      clientTracingDataset: "relay",
+      clientTracingToken: "client-token",
+    });
+  });
+
+  it("rejects incomplete stack output", () => {
+    expect(publicConfigFromOutput({ url: "https://relay.example.test" })).toBeNull();
   });
 });

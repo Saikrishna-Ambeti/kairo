@@ -18,14 +18,24 @@ const AppPackageMetadata = Schema.Struct({
 });
 const decodeAppPackageMetadata = Schema.decodeEffect(Schema.fromJsonString(AppPackageMetadata));
 
-export interface DesktopAppIdentityShape {
-  readonly resolveUserDataPath: Effect.Effect<string>;
-  readonly configure: Effect.Effect<void>;
+export class DesktopUserDataPathResolutionError extends Schema.TaggedErrorClass<DesktopUserDataPathResolutionError>()(
+  "DesktopUserDataPathResolutionError",
+  {
+    legacyPath: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {
+  override get message(): string {
+    return `Failed to inspect legacy desktop user-data path at "${this.legacyPath}".`;
+  }
 }
 
 export class DesktopAppIdentity extends Context.Service<
   DesktopAppIdentity,
-  DesktopAppIdentityShape
+  {
+    readonly resolveUserDataPath: Effect.Effect<string, DesktopUserDataPathResolutionError>;
+    readonly configure: Effect.Effect<void>;
+  }
 >()("@kairo/desktop/app/DesktopAppIdentity") {}
 
 const normalizeCommitHash = (value: string): Option.Option<string> => {
@@ -35,7 +45,28 @@ const normalizeCommitHash = (value: string): Option.Option<string> => {
     : Option.none();
 };
 
-const make = Effect.gen(function* () {
+export const resolveUserDataPath = Effect.gen(function* () {
+  const environment = yield* DesktopEnvironment.DesktopEnvironment;
+  const fileSystem = yield* FileSystem.FileSystem;
+  const legacyPath = environment.path.join(
+    environment.appDataDirectory,
+    environment.legacyUserDataDirName,
+  );
+  const legacyPathExists = yield* fileSystem.exists(legacyPath).pipe(
+    Effect.mapError(
+      (cause) =>
+        new DesktopUserDataPathResolutionError({
+          legacyPath,
+          cause,
+        }),
+    ),
+  );
+  return legacyPathExists
+    ? legacyPath
+    : environment.path.join(environment.appDataDirectory, environment.userDataDirName);
+}).pipe(Effect.withSpan("desktop.appIdentity.resolveUserDataPath"));
+
+export const make = Effect.gen(function* () {
   const assets = yield* DesktopAssets.DesktopAssets;
   const electronApp = yield* ElectronApp.ElectronApp;
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
@@ -80,18 +111,11 @@ const make = Effect.gen(function* () {
     return commitHash;
   });
 
-  const resolveUserDataPath = Effect.gen(function* () {
-    const legacyPath = environment.path.join(
-      environment.appDataDirectory,
-      environment.legacyUserDataDirName,
-    );
-    const legacyPathExists = yield* fileSystem
-      .exists(legacyPath)
-      .pipe(Effect.orElseSucceed(() => false));
-    return legacyPathExists
-      ? legacyPath
-      : environment.path.join(environment.appDataDirectory, environment.userDataDirName);
-  }).pipe(Effect.withSpan("desktop.appIdentity.resolveUserDataPath"));
+  const userDataPath = resolveUserDataPath.pipe(
+    Effect.provide(
+      yield* Effect.context<DesktopEnvironment.DesktopEnvironment | FileSystem.FileSystem>(),
+    ),
+  );
 
   const configure = Effect.gen(function* () {
     const commitHash = yield* resolveAboutCommitHash;
@@ -110,7 +134,10 @@ const make = Effect.gen(function* () {
       yield* electronApp.setDesktopName(environment.linuxDesktopEntryName);
     }
 
-    if (environment.platform === "darwin") {
+    // Unpackaged runs only. A packaged bundle already carries its icon in
+    // Info.plist, so setting the dock tile again changes nothing except to
+    // overwrite a custom icon the user attached to the app themselves.
+    if (environment.platform === "darwin" && !environment.isPackaged) {
       const iconPaths = yield* assets.iconPaths;
       yield* Option.match(iconPaths.png, {
         onNone: () => Effect.void,
@@ -120,7 +147,7 @@ const make = Effect.gen(function* () {
   }).pipe(Effect.withSpan("desktop.appIdentity.configure"));
 
   return DesktopAppIdentity.of({
-    resolveUserDataPath,
+    resolveUserDataPath: userDataPath,
     configure,
   });
 });

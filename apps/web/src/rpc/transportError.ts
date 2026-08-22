@@ -1,4 +1,4 @@
 export {
   isTransportConnectionErrorMessage,
   sanitizeThreadErrorMessage,
-} from "@kairo/client-runtime";
+} from "@kairo/client-runtime/errors";

@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["KairoNativeControlsModule", "KairoKeyboardCommandsModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.kaironativecontrols.KairoNativeControlsModule"]
+  }
+}
