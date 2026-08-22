@@ -43,19 +43,26 @@ Configuration precedence is:
 3. Repository-root `.env`.
 
 The Clerk publishable key, JWT template name, CLI OAuth client ID, and relay URL are public
-identifiers, not secrets.
+identifiers, not secrets. Client capability checks are separate:
+
+- Kairo Cloud identity requires the Clerk publishable key and JWT template name.
+- Kairo Connect requires Cloud identity plus the relay URL.
+- The `kairo connect` CLI also requires its Clerk OAuth client ID.
+
 Web, desktop, mobile, and bundled server builds statically inject the values they consume during
 their build step. A built artifact does not need an environment file at runtime. CI release builds
 should set `KAIRO_CLERK_PUBLISHABLE_KEY`, `KAIRO_CLERK_JWT_TEMPLATE`,
 `KAIRO_CLERK_CLI_OAUTH_CLIENT_ID`, and `KAIRO_RELAY_URL` before building. EAS preview and
-production builds only need the Clerk publishable key, JWT template name, and relay URL in their EAS
-environment.
+production builds need the Clerk publishable key and JWT template name for Kairo Cloud identity and
+hosted memory. They need the relay URL only when Kairo Connect is enabled.
 
-When any client-facing public value is absent, cloud UI is omitted. The `kairo connect` command group is
-always registered: when the CLI public values are absent, `makeCli` in `apps/server/src/bin.ts`
-registers a hidden fallback `connect` command that reports the missing configuration instead of
-silently vanishing from help. The bundled server still accepts runtime overrides for self-hosted or
-operator-managed deployments.
+Clients mount Clerk whenever Cloud identity is configured. Without a relay URL they hide Kairo
+Connect setup, linking, and discovery while account sign-in and hosted memory remain available. The
+`kairo connect` command group is always registered: when the CLI public values are absent, `makeCli`
+in `apps/server/src/bin.ts` registers a hidden fallback `connect` command that reports the missing
+configuration instead of silently vanishing from help. Server relay startup uses the separate
+`hasManagedRelayPublicConfig` gate. The bundled server still accepts runtime overrides for
+self-hosted or operator-managed deployments.
 
 For a hosted relay deployment, copy `infra/relay/.env.example` to `infra/relay/.env`. The relay
 deployment reads `RELAY_DOMAIN`, `RELAY_API_ZONE_NAME`, `RELAY_TUNNEL_ZONE_NAME`,

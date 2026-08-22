@@ -9,7 +9,7 @@ import "./index.css";
 
 import { isElectron } from "./env";
 import { ManagedRelayAuthProvider } from "./cloud/managedAuth";
-import { hasCloudPublicConfig } from "./cloud/publicConfig";
+import { hasCloudIdentityConfig, resolveCloudPublicConfig } from "./cloud/publicConfig";
 import { getRouter } from "./router";
 import {
   syncDocumentElectronPlatformClasses,
@@ -28,7 +28,8 @@ if (isElectron) {
   syncDocumentWindowControlsOverlayClass();
 }
 
-const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
+const cloudConfig = resolveCloudPublicConfig();
+const clerkPublishableKey = cloudConfig.clerkPublishableKey;
 
 // Clerk's Electron bridge reports conditional passkey autofill as supported,
 // but Windows opens it as a modal prompt while the sign-in form mounts.
@@ -42,7 +43,7 @@ const app = <AppRoot router={router} />;
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    {clerkPublishableKey && hasCloudPublicConfig() ? (
+    {clerkPublishableKey && hasCloudIdentityConfig(cloudConfig) ? (
       isElectron ? (
         <ElectronClerkProvider
           appearance={clerkAppearance}

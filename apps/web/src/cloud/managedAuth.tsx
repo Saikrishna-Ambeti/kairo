@@ -12,7 +12,7 @@ import { environmentCatalog } from "../connection/catalog";
 import { runtime } from "../lib/runtime";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { useAtomCommand } from "../state/use-atom-command";
-import { resolveRelayClerkTokenOptions } from "./publicConfig";
+import { resolveCloudClerkTokenOptions } from "./publicConfig";
 
 let relayTokenProvider: (() => Promise<string | null>) | null = null;
 
@@ -83,7 +83,7 @@ export function ManagedRelayAuthProvider({ children }: { readonly children: Reac
         void queueAccountCleanup();
       }
     } else {
-      const tokenProvider = () => getToken(resolveRelayClerkTokenOptions());
+      const tokenProvider = () => getToken(resolveCloudClerkTokenOptions());
       const activateSession = () => {
         if (!cancelled) {
           activateManagedRelayAuthentication(userId, tokenProvider);

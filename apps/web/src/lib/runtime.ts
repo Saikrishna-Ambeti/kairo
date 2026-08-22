@@ -12,10 +12,6 @@ import { browserCryptoLayer } from "../cloud/dpop";
 import { managedRelayClientLayer } from "../cloud/managedRelayLayer";
 import { resolveCloudPublicConfig, resolveRelayTracingConfig } from "../cloud/publicConfig";
 
-function configuredRelayUrl(): string {
-  return resolveCloudPublicConfig().relayUrl ?? "http://relay.invalid";
-}
-
 const httpClientLayer = remoteHttpClientLayer((input, init) => globalThis.fetch(input, init));
 const relayTracingLayer = makeRelayClientTracingLayer(resolveRelayTracingConfig(), {
   serviceName: "kairo-web-relay-client",
@@ -59,7 +55,7 @@ const runtimeLayer = Layer.mergeAll(
   browserCryptoLayer,
   Socket.layerWebSocketConstructorGlobal,
   relayTracingLayer,
-  managedRelayClientLayer(configuredRelayUrl()).pipe(
+  managedRelayClientLayer(resolveCloudPublicConfig().relayUrl).pipe(
     Layer.provide(Layer.mergeAll(httpClientLayer, browserCryptoLayer)),
   ),
 );

@@ -13,7 +13,7 @@ import { CloudEnvironmentRows } from "../connection/CloudEnvironmentRows";
 import { splitEnvironmentSections } from "../connection/environmentSections";
 import { useConnectionController } from "../connection/useConnectionController";
 import { optOutOfConnectOnboarding } from "./connectOnboardingOptOut";
-import { hasCloudPublicConfig } from "./publicConfig";
+import { hasManagedRelayConfig } from "./publicConfig";
 
 /**
  * Post-sign-in onboarding sheet for Kairo Connect. Mobile never publishes
@@ -28,7 +28,7 @@ export function ConnectOnboardingRouteScreen() {
   // The route is deep-linkable; without cloud config the sheet would present
   // empty with no chrome to dismiss it, so bail back out instead.
   useEffect(() => {
-    if (hasCloudPublicConfig()) {
+    if (hasManagedRelayConfig()) {
       return;
     }
     if (navigation.canGoBack()) {
@@ -38,7 +38,7 @@ export function ConnectOnboardingRouteScreen() {
     }
   }, [navigation]);
 
-  return hasCloudPublicConfig() ? <ConfiguredConnectOnboardingRouteScreen /> : null;
+  return hasManagedRelayConfig() ? <ConfiguredConnectOnboardingRouteScreen /> : null;
 }
 
 function ConfiguredConnectOnboardingRouteScreen() {

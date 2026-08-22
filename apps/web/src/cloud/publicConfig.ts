@@ -69,12 +69,19 @@ export function resolveRelayTracingConfig() {
     : null;
 }
 
-export function hasCloudPublicConfig(): boolean {
-  const config = resolveCloudPublicConfig();
-  return Boolean(config.clerkPublishableKey && config.clerkJwtTemplate && config.relayUrl);
+export function hasCloudIdentityConfig(
+  config: CloudPublicConfig = resolveCloudPublicConfig(),
+): boolean {
+  return Boolean(config.clerkPublishableKey && config.clerkJwtTemplate);
 }
 
-export function resolveRelayClerkTokenOptions() {
+export function hasManagedRelayConfig(
+  config: CloudPublicConfig = resolveCloudPublicConfig(),
+): boolean {
+  return hasCloudIdentityConfig(config) && config.relayUrl !== null;
+}
+
+export function resolveCloudClerkTokenOptions() {
   const { clerkJwtTemplate } = resolveCloudPublicConfig();
   if (!clerkJwtTemplate) {
     throw new CloudPublicConfigMissingError({ key: "KAIRO_CLERK_JWT_TEMPLATE" });
