@@ -151,7 +151,7 @@ function OnboardingProgress({
         const complete = index < activeIndex;
         const canEditProfession = step.key === "profession" && activeStep === "setup";
         const className = cn(
-          "flex min-w-0 items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm outline-none transition-colors",
+          "flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm outline-none transition-colors",
           active && "border-primary/45 bg-primary/8 text-foreground",
           complete && !active && "border-success/25 bg-success/8 text-success-foreground",
           !active && !complete && "border-border bg-background/55 text-muted-foreground",
@@ -197,17 +197,17 @@ function OnboardingFrame({
 }) {
   return (
     <div className="h-dvh overflow-auto bg-background text-foreground">
-      <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-        <header className="space-y-5 rounded-2xl border border-border/80 bg-card p-5 shadow-lg shadow-black/5 sm:p-6">
+      <div className="mx-auto flex min-h-dvh w-full max-w-4xl flex-col gap-4 px-4 py-5 sm:px-6 sm:py-6">
+        <header className="space-y-4 rounded-xl border border-border/80 bg-card p-5 sm:p-6">
           <div className="space-y-2">
-            <h1 className="text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">Set up Kairo</h1>
+            <h1 className="text-3xl font-semibold tracking-[-0.03em]">Set up Kairo</h1>
             <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
               Sign in, tell us how you work, then connect a coding agent.
             </p>
           </div>
           <OnboardingProgress activeStep={activeStep} onProfessionEdit={onProfessionEdit} />
         </header>
-        <main className="rounded-2xl border border-border/80 bg-card p-5 shadow-xl shadow-black/7 sm:p-6">
+        <main className="min-h-64 rounded-xl border border-border/80 bg-card p-5 sm:p-8">
           {children}
         </main>
       </div>
@@ -228,15 +228,15 @@ function SignInStep({
 }) {
   if (!loading && !signedIn) {
     return (
-      <section className="mx-auto flex min-h-80 max-w-lg flex-col items-center justify-center text-center">
-        <span className="mb-5 flex size-12 items-center justify-center rounded-xl border border-primary/25 bg-primary/10 text-primary">
+      <section className="mx-auto flex min-h-48 max-w-lg flex-col items-center justify-center text-center">
+        <span className="mb-4 flex size-11 items-center justify-center rounded-xl border border-primary/25 bg-primary/10 text-primary">
           <LogInIcon className="size-5" />
         </span>
         <h2 className="text-2xl font-semibold tracking-[-0.025em]">Sign in to continue</h2>
         <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
           Clerk securely connects this device to your Kairo account.
         </p>
-        <Button className="mt-6 min-w-48" onClick={onSignIn}>
+        <Button className="mt-5 min-w-48" onClick={onSignIn}>
           Continue with Clerk
           <ArrowRightIcon className="size-4" />
         </Button>
@@ -245,8 +245,8 @@ function SignInStep({
   }
 
   return (
-    <section className="mx-auto flex min-h-80 max-w-lg flex-col items-center justify-center text-center">
-      <span className="mb-5 flex size-12 items-center justify-center rounded-xl border border-border bg-muted text-foreground">
+    <section className="mx-auto flex min-h-48 max-w-lg flex-col items-center justify-center text-center">
+      <span className="mb-4 flex size-11 items-center justify-center rounded-xl border border-border bg-muted text-foreground">
         {loading ? (
           <LoaderCircleIcon className="size-5 animate-spin" />
         ) : (
@@ -261,7 +261,7 @@ function SignInStep({
           ? "Loading secure sign-in."
           : "Your Kairo account is ready. Next, tell us how you work."}
       </p>
-      <Button className="mt-6 min-w-40" disabled={loading} onClick={onContinue}>
+      <Button className="mt-5 min-w-40" disabled={loading} onClick={onContinue}>
         Continue
         <ArrowRightIcon className="size-4" />
       </Button>
@@ -271,15 +271,15 @@ function SignInStep({
 
 function LocalSignInStep({ onContinue }: { readonly onContinue: () => void }) {
   return (
-    <section className="mx-auto flex min-h-80 max-w-lg flex-col items-center justify-center text-center">
-      <span className="mb-5 flex size-12 items-center justify-center rounded-xl border border-border bg-muted text-foreground">
+    <section className="mx-auto flex min-h-48 max-w-lg flex-col items-center justify-center text-center">
+      <span className="mb-4 flex size-11 items-center justify-center rounded-xl border border-border bg-muted text-foreground">
         <LogInIcon className="size-5" />
       </span>
       <h2 className="text-2xl font-semibold tracking-[-0.025em]">Continue without an account</h2>
       <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
         Clerk is not configured in this self-hosted build. You can still finish local setup.
       </p>
-      <Button className="mt-6 min-w-40" onClick={onContinue}>
+      <Button className="mt-5 min-w-40" onClick={onContinue}>
         Continue
         <ArrowRightIcon className="size-4" />
       </Button>
@@ -289,15 +289,15 @@ function LocalSignInStep({ onContinue }: { readonly onContinue: () => void }) {
 
 function ClerkLoadErrorStep({ onRetry }: { readonly onRetry: () => void }) {
   return (
-    <section className="mx-auto flex min-h-80 max-w-lg flex-col items-center justify-center text-center">
-      <span className="mb-5 flex size-12 items-center justify-center rounded-xl border border-destructive/25 bg-destructive/10 text-destructive">
+    <section className="mx-auto flex min-h-48 max-w-lg flex-col items-center justify-center text-center">
+      <span className="mb-4 flex size-11 items-center justify-center rounded-xl border border-destructive/25 bg-destructive/10 text-destructive">
         <RefreshCwIcon className="size-5" />
       </span>
       <h2 className="text-2xl font-semibold tracking-[-0.025em]">Sign-in could not load</h2>
       <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
         Check your connection, then retry. Your onboarding will stay here.
       </p>
-      <Button className="mt-6 min-w-40" onClick={onRetry}>
+      <Button className="mt-5 min-w-40" onClick={onRetry}>
         Retry sign-in
         <RefreshCwIcon className="size-4" />
       </Button>
@@ -596,7 +596,7 @@ function ProviderSetupGate({
       {loading ? (
         <div
           role="status"
-          className="flex min-h-80 items-center justify-center text-sm text-muted-foreground"
+          className="flex min-h-48 items-center justify-center text-sm text-muted-foreground"
         >
           <LoaderCircleIcon className="mr-2 size-4 animate-spin" />
           Checking providers
