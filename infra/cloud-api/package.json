@@ -1,0 +1,25 @@
+{
+  "name": "kairo-cloud-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "issue-installation-grant": "node -- scripts/issue-installation-grant.ts",
+    "test": "vp test run",
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "@effect/platform-node": "catalog:",
+    "@kairo/contracts": "workspace:*",
+    "effect": "catalog:",
+    "jose": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@types/node": "catalog:",
+    "@vercel/config": "^0.3.0",
+    "vite-plus": "catalog:"
+  },
+  "engines": {
+    "node": "24.x"
+  }
+}

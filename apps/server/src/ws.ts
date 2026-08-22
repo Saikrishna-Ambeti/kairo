@@ -1711,18 +1711,6 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.serverConfigureMemory, supermemory.configure(input), {
             "rpc.aggregate": "server.memory",
           }),
-        [WS_METHODS.serverTestMemoryConnection]: (input) =>
-          observeRpcEffect(
-            WS_METHODS.serverTestMemoryConnection,
-            supermemory.testConnection(input),
-            { "rpc.aggregate": "server.memory" },
-          ),
-        [WS_METHODS.serverInstallMemoryProviders]: (input) =>
-          observeRpcEffect(
-            WS_METHODS.serverInstallMemoryProviders,
-            supermemory.installProviders(input),
-            { "rpc.aggregate": "server.memory" },
-          ),
         [WS_METHODS.serverDisableMemory]: (_input) =>
           observeRpcEffect(WS_METHODS.serverDisableMemory, supermemory.disable, {
             "rpc.aggregate": "server.memory",

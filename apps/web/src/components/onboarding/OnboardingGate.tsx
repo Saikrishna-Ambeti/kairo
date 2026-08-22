@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ElementType } from "react";
 import {
+  ProviderDriverKind,
+  type ProviderDriverKind as ProviderDriverKindValue,
   type ProviderInstanceId,
   type ServerProvider,
   type SupermemoryProviderStatus,
@@ -54,8 +56,11 @@ import {
   resolveOnboardingAgentReadiness,
 } from "./OnboardingGate.logic";
 
-const MEMORY_AGENT_DRIVERS = ONBOARDING_CODING_AGENT_DRIVERS;
-const SUPERMEMORY_CONSOLE_URL = "https://app.supermemory.ai/?view=integrations";
+const MEMORY_AGENT_DRIVERS = new Set<ProviderDriverKindValue>([
+  ...ONBOARDING_CODING_AGENT_DRIVERS,
+  ProviderDriverKind.make("cursor"),
+  ProviderDriverKind.make("grok"),
+]);
 
 type StepKey = "agents" | "memory" | "composio" | "finish";
 type BusyAction =
@@ -123,7 +128,6 @@ function memoryProviderBadgeVariant(status: SupermemoryProviderStatus["status"])
   switch (status) {
     case "ready":
       return "success";
-    case "needs_install":
     case "needs_action":
       return "warning";
     case "error":
@@ -431,9 +435,7 @@ function MemoryStep({
   status,
   providers,
   selectedProviderIds,
-  apiKey,
   busy,
-  onApiKeyChange,
   onProviderSelectionChange,
   onSave,
   onContinue,
@@ -441,41 +443,23 @@ function MemoryStep({
   status: SupermemoryStatus | null;
   providers: ReadonlyArray<SupermemoryProviderStatus>;
   selectedProviderIds: ReadonlySet<ProviderInstanceId>;
-  apiKey: string;
   busy: BusyAction;
-  onApiKeyChange: (value: string) => void;
   onProviderSelectionChange: (next: ReadonlySet<ProviderInstanceId>) => void;
   onSave: () => void;
   onContinue: () => void;
 }) {
-  const configured = Boolean(status?.enabled && status.auth.hasApiKey);
-  const canSave = apiKey.trim().length > 0 && selectedProviderIds.size > 0;
+  const configured = Boolean(status?.enabled && status.service.available);
+  const canSave = selectedProviderIds.size > 0 && Boolean(status?.service.available);
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <section className="space-y-4">
         <div className="space-y-1">
           <h2 className="text-2xl font-semibold tracking-tight">Memory</h2>
           <p className="text-sm text-muted-foreground">
-            Supermemory stores long-running agent context behind your API key.
+            Kairo hosts Supermemory and keeps long-running context available across agent sessions.
           </p>
         </div>
         <div className="grid gap-4 rounded-lg border bg-card p-4">
-          <div className="grid gap-2">
-            <label
-              className="text-xs font-medium text-muted-foreground"
-              htmlFor="onboarding-sm-key"
-            >
-              Supermemory API key
-            </label>
-            <Input
-              id="onboarding-sm-key"
-              nativeInput
-              type="password"
-              placeholder={configured ? "API key saved" : "sm_..."}
-              value={apiKey}
-              onChange={(event) => onApiKeyChange(event.currentTarget.value)}
-            />
-          </div>
           <div className="grid gap-2">
             <div className="text-xs font-medium text-muted-foreground">Agent access</div>
             <MemoryProviderSelector
@@ -495,9 +479,9 @@ function MemoryStep({
               {busy === "save-memory" ? (
                 <LoaderCircleIcon className="size-4 animate-spin" />
               ) : (
-                <KeyRoundIcon className="size-4" />
+                <BrainCircuitIcon className="size-4" />
               )}
-              Save key
+              Enable memory
             </Button>
           </div>
         </div>
@@ -505,21 +489,12 @@ function MemoryStep({
       <aside className="space-y-4 rounded-lg border bg-muted/20 p-4 text-sm">
         <div className="flex items-center gap-2 font-semibold">
           <BrainCircuitIcon className="size-4 text-muted-foreground" />
-          API key
+          Zero setup
         </div>
-        <ol className="list-decimal space-y-2 pl-4 text-muted-foreground">
-          <li>Open the Supermemory Personal App</li>
-          <li>Go to API Keys, then create a new key.</li>
-          <li>Copy the key and save it here.</li>
-        </ol>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void ensureLocalApi().shell.openExternal(SUPERMEMORY_CONSOLE_URL)}
-        >
-          <ExternalLinkIcon className="size-3.5" />
-          Open console
-        </Button>
+        <p className="leading-6 text-muted-foreground">
+          No Supermemory account, API key, CLI, or provider plugin is needed. The Kairo host needs a
+          valid Kairo Cloud grant; the cloud service keeps each user's memory isolated.
+        </p>
       </aside>
     </div>
   );
@@ -798,7 +773,6 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
   const [busyProviderInstanceId, setBusyProviderInstanceId] = useState<ProviderInstanceId | null>(
     null,
   );
-  const [memoryApiKey, setMemoryApiKey] = useState("");
   const [selectedMemoryProviderIds, setSelectedMemoryProviderIds] = useState<
     ReadonlySet<ProviderInstanceId>
   >(new Set());
@@ -852,7 +826,7 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
   );
 
   const agentComplete = usableAgents.length > 0;
-  const memoryComplete = Boolean(memoryStatus?.enabled && memoryStatus.auth.hasApiKey);
+  const memoryComplete = Boolean(memoryStatus?.enabled && memoryStatus.service.available);
   const composioComplete = composioStatus?.auth.status === "authenticated";
   const completed = useMemo(() => {
     const next = new Set<StepKey>();
@@ -1001,16 +975,13 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
   };
 
   const saveMemory = async () => {
-    const trimmedApiKey = memoryApiKey.trim();
-    if (!trimmedApiKey || selectedMemoryProviderIds.size === 0) return;
+    if (selectedMemoryProviderIds.size === 0) return;
     setBusy("save-memory");
     try {
       const next = await serverApi.configureMemory({
-        apiKey: trimmedApiKey,
         providerInstanceIds: [...selectedMemoryProviderIds],
       });
       setMemoryStatus(next);
-      setMemoryApiKey("");
       setActiveStep("composio");
       toastManager.add(stackedThreadToast({ type: "success", title: "Memory configured" }));
     } catch (error) {
@@ -1138,9 +1109,7 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
               status={memoryStatus}
               providers={memoryProviders}
               selectedProviderIds={selectedMemoryProviderIds}
-              apiKey={memoryApiKey}
               busy={busy}
-              onApiKeyChange={setMemoryApiKey}
               onProviderSelectionChange={setSelectedMemoryProviderIds}
               onSave={() => void saveMemory()}
               onContinue={() => setActiveStep("composio")}
