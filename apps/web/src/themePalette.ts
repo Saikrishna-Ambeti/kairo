@@ -20,7 +20,7 @@ export { EMBER_THEME, GROVE_THEME, IRIS_THEME, OCEAN_THEME, KAIRO_CHAT_THEME, TH
 export type { ThemeAppearance, ThemeColorRole, ThemeColors, ThemeDefinition, ThemeVariants };
 
 export const KAIRO_CHAT_THEME_ID = "kairo-chat" as const;
-export const KAIRO_CHAT_THEME_LABEL = "Kairo Chat";
+export const KAIRO_CHAT_THEME_LABEL = "T3 Chat";
 export const GROVE_THEME_ID = "grove" as const;
 export const GROVE_THEME_LABEL = "Grove";
 export const OCEAN_THEME_ID = "ocean" as const;

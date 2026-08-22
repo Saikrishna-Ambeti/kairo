@@ -16,6 +16,7 @@ export interface SettingsSearchItem {
   readonly title: string;
   readonly to: SettingsPath;
   readonly targetId?: string;
+  readonly hideFromSearch?: boolean;
   // Its row only renders in the desktop app, so a browser result would land on
   // an anchor that isn't there.
   readonly desktopOnly?: boolean;
@@ -205,39 +206,10 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/memory",
   },
   {
-    id: "agent-browser-access",
-    title: "Agent browser access",
-    to: "/settings/integrations",
-    targetId: "browser",
-  },
-  {
-    id: "browser-default-viewport",
-    title: "Default browser viewport",
-    to: "/settings/integrations",
-    targetId: "browser",
-  },
-  {
-    id: "browser-default-zoom",
-    title: "Default browser zoom",
-    to: "/settings/integrations",
-    targetId: "browser",
-  },
-  {
-    id: "browser-default-appearance",
-    title: "Default browser appearance",
-    to: "/settings/integrations",
-    targetId: "browser",
-  },
-  {
-    id: "browser-auto-show-floating-preview",
-    title: "Auto-show floating preview",
-    to: "/settings/integrations",
-    targetId: "browser",
-  },
-  {
     id: "source-control",
     title: "Source control",
     to: "/settings/source-control",
+    hideFromSearch: true,
   },
   {
     id: "remote-environments",
@@ -288,6 +260,7 @@ export function searchSettings(
 
   return items.filter(
     (item) =>
+      item.hideFromSearch !== true &&
       (isElectron || item.desktopOnly !== true) &&
       normalizeSearchText(item.title).includes(normalizedQuery),
   );

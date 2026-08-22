@@ -1,7 +1,7 @@
-import type { PreviewSessionSnapshot, ProjectScript } from "@kairo/contracts";
+import type { PreviewSessionSnapshot } from "@kairo/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { getConfiguredPreviewUrls, shouldShowPreviewEmptyState } from "./previewEmptyStateLogic";
+import { shouldShowPreviewEmptyState } from "./previewEmptyStateLogic";
 
 const snapshot = (navStatus: PreviewSessionSnapshot["navStatus"]): PreviewSessionSnapshot => ({
   threadId: "thread-1",
@@ -23,20 +23,5 @@ describe("shouldShowPreviewEmptyState", () => {
         snapshot({ _tag: "Loading", url: "http://localhost:5173", title: "" }),
       ),
     ).toBe(false);
-  });
-});
-
-describe("getConfiguredPreviewUrls", () => {
-  it("collects configured preview URLs from project scripts", () => {
-    const scripts = [
-      { previewUrl: "http://localhost:5173" },
-      {},
-      { previewUrl: "http://localhost:3000" },
-    ] as ProjectScript[];
-
-    expect(getConfiguredPreviewUrls(scripts)).toEqual([
-      "http://localhost:5173",
-      "http://localhost:3000",
-    ]);
   });
 });

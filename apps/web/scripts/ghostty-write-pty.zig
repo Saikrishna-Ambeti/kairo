@@ -1,5 +1,5 @@
-extern "env" fn kairo_write_pty(terminal: u32, userdata: u32, data: u32, len: u32) void;
+extern "env" fn t3_write_pty(terminal: u32, userdata: u32, data: u32, len: u32) void;
 
 export fn ghostty_write_pty(terminal: u32, userdata: u32, data: u32, len: u32) void {
-    kairo_write_pty(terminal, userdata, data, len);
+    t3_write_pty(terminal, userdata, data, len);
 }
