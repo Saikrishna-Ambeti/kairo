@@ -6,6 +6,7 @@ import {
   Files,
   GitPullRequest,
   Globe2,
+  PackageOpen,
   Plus,
   TerminalSquare,
   Volume2,
@@ -74,12 +75,14 @@ interface RightPanelTabsProps {
   onAddFiles: () => void;
   onAddPullRequest: () => void;
   onAddAgents: () => void;
+  onAddArtifacts: () => void;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
   filesAvailable: boolean;
   pullRequestAvailable: boolean;
   agentsAvailable: boolean;
+  artifactsAvailable: boolean;
   pullRequestStatuses?: Readonly<Record<string, PullRequestTabStatus>>;
   /** Running + waiting subagents; badges the Agents card in the empty state. */
   liveAgentCount: number;
@@ -98,6 +101,7 @@ const SURFACE_DISABLED_REASONS = {
   browser: "Browser previews are only available in the Kairo desktop app.",
   files: "Files are only available when a project is open.",
   agents: "Agents are only available from a thread.",
+  artifacts: "Artifacts are only available from a thread.",
 } as const;
 
 /** Overlays that must win over the launcher's letter shortcuts. */
@@ -117,6 +121,7 @@ const SURFACE_UNAVAILABLE_HINTS = {
   browser: "Only available in the desktop app.",
   files: "Available when a project is open.",
   agents: "Available from a thread.",
+  artifacts: "Available from a thread.",
 } as const;
 
 type TabContextMenuAction =
@@ -243,9 +248,11 @@ function RightPanelEmptyState(props: {
   onAddBrowser: () => void;
   onAddFiles: () => void;
   onAddAgents: () => void;
+  onAddArtifacts: () => void;
   browserAvailable: boolean;
   filesAvailable: boolean;
   agentsAvailable: boolean;
+  artifactsAvailable: boolean;
   liveAgentCount: number;
 }) {
   // -1 means no highlight: it only appears on hover or arrow use.
@@ -281,6 +288,16 @@ function RightPanelEmptyState(props: {
       disabledReason: SURFACE_UNAVAILABLE_HINTS.agents,
       onClick: props.onAddAgents,
       badgeCount: props.liveAgentCount,
+    },
+    {
+      label: "Artifacts",
+      description: "Open documents and PDFs from this thread.",
+      icon: PackageOpen,
+      shortcut: "R",
+      available: props.artifactsAvailable,
+      disabledReason: SURFACE_UNAVAILABLE_HINTS.artifacts,
+      onClick: props.onAddArtifacts,
+      badgeCount: 0,
     },
   ] as const;
 
@@ -466,6 +483,8 @@ function surfaceTitle(
       return `#${surface.number}`;
     case "agents":
       return "Agents";
+    case "artifacts":
+      return "Artifacts";
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       if (!snapshot || snapshot.navStatus._tag === "Idle") return "Browser";
@@ -551,6 +570,8 @@ function SurfaceIcon({
     }
     case "agents":
       return <Bot className="size-3 shrink-0" />;
+    case "artifacts":
+      return <PackageOpen className="size-3 shrink-0" />;
   }
 }
 
@@ -584,6 +605,14 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       available: props.agentsAvailable,
       disabledReason: SURFACE_DISABLED_REASONS.agents,
       onClick: props.onAddAgents,
+    },
+    {
+      label: "Artifacts",
+      icon: PackageOpen,
+      shortcut: "R",
+      available: props.artifactsAvailable,
+      disabledReason: SURFACE_DISABLED_REASONS.artifacts,
+      onClick: props.onAddArtifacts,
     },
   ] as const;
 
@@ -878,9 +907,11 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddBrowser={props.onAddBrowser}
             onAddFiles={props.onAddFiles}
             onAddAgents={props.onAddAgents}
+            onAddArtifacts={props.onAddArtifacts}
             browserAvailable={props.browserAvailable}
             filesAvailable={props.filesAvailable}
             agentsAvailable={props.agentsAvailable}
+            artifactsAvailable={props.artifactsAvailable}
             liveAgentCount={props.liveAgentCount}
           />
         ) : (

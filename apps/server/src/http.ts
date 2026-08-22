@@ -45,8 +45,12 @@ const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "::1", "localhost"]);
 const DESKTOP_RENDERER_ORIGINS = ["kairo://app", "kairo-dev://app"];
 const SVG_CONTENT_SECURITY_POLICY = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
 
-export function assetResponseHeaders(filePath: string): Record<string, string> {
+export function assetResponseHeaders(
+  filePath: string,
+  disposition?: "inline" | "attachment",
+): Record<string, string> {
   const lowerPath = filePath.toLowerCase();
+  const filename = filePath.split(/[\\/]/).at(-1) ?? "artifact";
   return {
     "Cache-Control": "private, max-age=3600",
     "X-Content-Type-Options": "nosniff",
@@ -55,6 +59,11 @@ export function assetResponseHeaders(filePath: string): Record<string, string> {
       : {}),
     ...(lowerPath.endsWith(".svg")
       ? { "Content-Security-Policy": SVG_CONTENT_SECURITY_POLICY }
+      : {}),
+    ...(disposition
+      ? {
+          "Content-Disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(filename)}`,
+        }
       : {}),
   };
 }
@@ -223,7 +232,7 @@ export const assetRouteLayer = HttpRouter.add(
     }
     return yield* HttpServerResponse.file(asset.path, {
       status: 200,
-      headers: assetResponseHeaders(asset.path),
+      headers: assetResponseHeaders(asset.path, asset.disposition),
     }).pipe(
       Effect.orElseSucceed(() => HttpServerResponse.text("Internal Server Error", { status: 500 })),
     );

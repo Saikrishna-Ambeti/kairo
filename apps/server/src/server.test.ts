@@ -114,6 +114,7 @@ import * as OrchestrationEngine from "./orchestration/Services/OrchestrationEngi
 import { OrchestrationListenerCallbackError } from "./orchestration/Errors.ts";
 import * as ProjectionSnapshotQuery from "./orchestration/Services/ProjectionSnapshotQuery.ts";
 import { SqlitePersistenceMemory } from "./persistence/Layers/Sqlite.ts";
+import { ArtifactMetadataRepository } from "./persistence/Services/ArtifactMetadata.ts";
 import { PersistenceSqlError } from "./persistence/Errors.ts";
 import * as ProviderRegistry from "./provider/Services/ProviderRegistry.ts";
 import { makeManualOnlyProviderMaintenanceCapabilities } from "./provider/providerMaintenance.ts";
@@ -789,6 +790,15 @@ const buildAppUnderTest = (options?: {
       Layer.provide(
         Layer.mock(TerminalManager.TerminalManager)({
           ...options?.layers?.terminalManager,
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(ArtifactMetadataRepository)({
+          upsert: () => Effect.void,
+          deletePath: () => Effect.void,
+          deleteByThreadId: () => Effect.void,
+          deleteByProjectId: () => Effect.void,
+          list: () => Effect.succeed([]),
         }),
       ),
     );

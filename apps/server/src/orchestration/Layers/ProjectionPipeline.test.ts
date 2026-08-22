@@ -54,6 +54,157 @@ const exists = (filePath: string) =>
 
 const BaseTestLayer = makeProjectionPipelinePrefixedTestLayer("kairo-projection-pipeline-test-");
 
+it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("kairo-projection-artifacts-test-")))(
+  "artifact projection",
+  (it) => {
+    it.effect("indexes generated documents and removes deleted files", () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const projectionPipeline = yield* OrchestrationProjectionPipeline;
+        const eventStore = yield* OrchestrationEventStore;
+        const sql = yield* SqlClient.SqlClient;
+        const workspaceRoot = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "kairo-artifacts-workspace-",
+        });
+        const relativePath = "artifacts/thermodynamics-week-1.docx";
+        const absolutePath = path.join(workspaceRoot, relativePath);
+        const now = "2026-04-01T10:00:00.000Z";
+        const threadId = ThreadId.make("thread-artifacts");
+
+        yield* fileSystem.makeDirectory(path.dirname(absolutePath), { recursive: true });
+        yield* fileSystem.writeFileString(absolutePath, "document bytes");
+
+        const appendAndProject = (event: Parameters<typeof eventStore.append>[0]) =>
+          eventStore
+            .append(event)
+            .pipe(Effect.flatMap((savedEvent) => projectionPipeline.projectEvent(savedEvent)));
+
+        yield* appendAndProject({
+          type: "project.created",
+          eventId: EventId.make("evt-artifacts-1"),
+          aggregateKind: "project",
+          aggregateId: ProjectId.make("project-artifacts"),
+          occurredAt: now,
+          commandId: CommandId.make("cmd-artifacts-1"),
+          causationEventId: null,
+          correlationId: CorrelationId.make("cmd-artifacts-1"),
+          metadata: {},
+          payload: {
+            projectId: ProjectId.make("project-artifacts"),
+            title: "Physics Lab",
+            workspaceRoot,
+            defaultModelSelection: null,
+            scripts: [],
+            createdAt: now,
+            updatedAt: now,
+          },
+        });
+        yield* appendAndProject({
+          type: "thread.created",
+          eventId: EventId.make("evt-artifacts-2"),
+          aggregateKind: "thread",
+          aggregateId: threadId,
+          occurredAt: now,
+          commandId: CommandId.make("cmd-artifacts-2"),
+          causationEventId: null,
+          correlationId: CorrelationId.make("cmd-artifacts-2"),
+          metadata: {},
+          payload: {
+            threadId,
+            projectId: ProjectId.make("project-artifacts"),
+            title: "Thermodynamics assignment",
+            modelSelection: {
+              instanceId: ProviderInstanceId.make("codex"),
+              model: "gpt-5-codex",
+            },
+            runtimeMode: "full-access",
+            branch: null,
+            worktreePath: null,
+            createdAt: now,
+            updatedAt: now,
+          },
+        });
+        yield* appendAndProject({
+          type: "thread.turn-diff-completed",
+          eventId: EventId.make("evt-artifacts-3"),
+          aggregateKind: "thread",
+          aggregateId: threadId,
+          occurredAt: now,
+          commandId: CommandId.make("cmd-artifacts-3"),
+          causationEventId: null,
+          correlationId: CorrelationId.make("cmd-artifacts-3"),
+          metadata: {},
+          payload: {
+            threadId,
+            turnId: TurnId.make("turn-artifacts-1"),
+            checkpointTurnCount: 1,
+            checkpointRef: CheckpointRef.make("refs/kairo/checkpoints/thread-artifacts/turn/1"),
+            status: "ready",
+            files: [{ path: relativePath, kind: "added", additions: 1, deletions: 0 }],
+            assistantMessageId: MessageId.make("message-artifacts-1"),
+            completedAt: now,
+          },
+        });
+
+        const indexed = yield* sql<{
+          readonly kind: string;
+          readonly title: string;
+          readonly relativePath: string;
+          readonly searchText: string;
+        }>`
+        SELECT
+          kind,
+          title,
+          relative_path AS "relativePath",
+          search_text AS "searchText"
+        FROM artifact_metadata
+        WHERE thread_id = ${threadId}
+      `;
+        assert.deepEqual(indexed, [
+          {
+            kind: "document",
+            title: "Thermodynamics week 1",
+            relativePath,
+            searchText:
+              "thermodynamics week 1 thermodynamics-week-1.docx artifacts/thermodynamics-week-1.docx physics lab thermodynamics assignment document",
+          },
+        ]);
+
+        yield* fileSystem.remove(absolutePath);
+        yield* appendAndProject({
+          type: "thread.turn-diff-completed",
+          eventId: EventId.make("evt-artifacts-4"),
+          aggregateKind: "thread",
+          aggregateId: threadId,
+          occurredAt: "2026-04-01T10:01:00.000Z",
+          commandId: CommandId.make("cmd-artifacts-4"),
+          causationEventId: null,
+          correlationId: CorrelationId.make("cmd-artifacts-4"),
+          metadata: {},
+          payload: {
+            threadId,
+            turnId: TurnId.make("turn-artifacts-2"),
+            checkpointTurnCount: 2,
+            checkpointRef: CheckpointRef.make("refs/kairo/checkpoints/thread-artifacts/turn/2"),
+            status: "ready",
+            files: [{ path: relativePath, kind: "deleted", additions: 0, deletions: 1 }],
+            assistantMessageId: MessageId.make("message-artifacts-2"),
+            completedAt: "2026-04-01T10:01:00.000Z",
+          },
+        });
+
+        const remaining = yield* sql<{ readonly count: number }>`
+        SELECT COUNT(*) AS "count"
+        FROM artifact_metadata
+        WHERE thread_id = ${threadId}
+      `;
+        assert.equal(remaining[0]?.count ?? 0, 0);
+      }),
+    );
+  },
+);
+
 it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
   it.effect("bootstraps all projection states and writes projection rows", () =>
     Effect.gen(function* () {

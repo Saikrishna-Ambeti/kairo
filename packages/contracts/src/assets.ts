@@ -10,6 +10,10 @@ export const AssetResource = Schema.Union([
     threadId: ThreadId,
     path: TrimmedNonEmptyString.check(Schema.isMaxLength(ASSET_PATH_MAX_LENGTH)),
   }),
+  Schema.TaggedStruct("workspace-document", {
+    threadId: ThreadId,
+    path: TrimmedNonEmptyString.check(Schema.isMaxLength(ASSET_PATH_MAX_LENGTH)),
+  }),
   Schema.TaggedStruct("attachment", {
     attachmentId: TrimmedNonEmptyString.check(Schema.isMaxLength(256)),
   }),
@@ -91,6 +95,17 @@ export class AssetPreviewTypeValidationError extends Schema.TaggedErrorClass<Ass
 ) {
   override get message(): string {
     return "Only browser documents and images can be previewed.";
+  }
+}
+
+export class AssetDocumentTypeValidationError extends Schema.TaggedErrorClass<AssetDocumentTypeValidationError>()(
+  "AssetDocumentTypeValidationError",
+  {
+    resource: AssetResource,
+  },
+) {
+  override get message(): string {
+    return "Only PDF and Word document artifacts can be opened.";
   }
 }
 
@@ -193,6 +208,7 @@ export const AssetAccessError = Schema.Union([
   AssetWorkspaceRootNormalizationError,
   AssetWorkspacePathValidationError,
   AssetPreviewTypeValidationError,
+  AssetDocumentTypeValidationError,
   AssetWorkspaceAssetInspectionError,
   AssetWorkspaceAssetNotFoundError,
   AssetWorkspaceResolutionError,
