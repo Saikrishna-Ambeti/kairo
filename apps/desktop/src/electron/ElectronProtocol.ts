@@ -68,11 +68,16 @@ export function makeDesktopContentSecurityPolicy(input: DesktopProtocolRegistrat
   const clerkOrigin = input.clerkFrontendApiHostname
     ? `https://${input.clerkFrontendApiHostname}`
     : undefined;
+  const clerkScriptSources = clerkOrigin
+    ? [clerkOrigin]
+    : input.scheme === DESKTOP_DEVELOPMENT_SCHEME
+      ? ["https://*.clerk.accounts.dev"]
+      : [];
   const scriptSources = [
     "'self'",
     "'unsafe-inline'",
     "'wasm-unsafe-eval'",
-    ...(clerkOrigin ? [clerkOrigin] : []),
+    ...clerkScriptSources,
     "https://challenges.cloudflare.com",
   ];
 
