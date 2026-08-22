@@ -11,7 +11,7 @@ Create a dedicated Vercel project with Root Directory set to `infra/cloud-api`. 
 Configure these runtime values in Vercel:
 
 - `CLERK_SECRET_KEY`, sensitive
-- `CLERK_JWT_AUDIENCE`, matching the audience in Kairo's existing Clerk JWT template
+- `CLERK_JWT_AUDIENCE`, `kairo-code-relay`, matching Kairo's `kairo-relay` JWT template
 - `SUPERMEMORY_API_KEY`, sensitive
 - `COMPOSIO_API_KEY`, sensitive, required to advertise Composio support
 - `KAIRO_CLOUD_TOKEN_PRIVATE_KEY`, sensitive

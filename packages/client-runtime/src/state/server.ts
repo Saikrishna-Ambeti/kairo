@@ -690,7 +690,7 @@ export function createServerEnvironmentAtoms<R, E>(
     }
     yield* request(WS_METHODS.serverProvisionMemoryAccess, {
       clerkToken: clerkToken.value,
-    }).pipe(Effect.ignore);
+    });
   });
   const getMemoryStatus = createEnvironmentCommand(runtime, {
     label: "environment-data:server:memory-status",
