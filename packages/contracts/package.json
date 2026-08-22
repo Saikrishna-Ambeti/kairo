@@ -18,6 +18,10 @@
     "./relay": {
       "types": "./src/relay.ts",
       "import": "./src/relay.ts"
+    },
+    "./cloud": {
+      "types": "./src/cloudApi.ts",
+      "import": "./src/cloudApi.ts"
     }
   },
   "scripts": {

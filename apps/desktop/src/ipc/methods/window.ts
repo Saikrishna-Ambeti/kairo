@@ -2,6 +2,7 @@ import {
   ContextMenuItemSchema,
   DesktopAppBrandingSchema,
   DesktopEnvironmentBootstrapSchema,
+  DesktopNotificationSoundSchema,
   DesktopThemeSchema,
   EDITORS,
   EditorId,
@@ -30,6 +31,7 @@ import * as DesktopWslEnvironment from "../../wsl/DesktopWslEnvironment.ts";
 import * as ElectronApp from "../../electron/ElectronApp.ts";
 import * as ElectronDialog from "../../electron/ElectronDialog.ts";
 import * as ElectronMenu from "../../electron/ElectronMenu.ts";
+import * as ElectronNotificationSound from "../../electron/ElectronNotificationSound.ts";
 import * as ElectronShell from "../../electron/ElectronShell.ts";
 import * as ElectronTheme from "../../electron/ElectronTheme.ts";
 import * as ElectronWindow from "../../electron/ElectronWindow.ts";
@@ -264,6 +266,16 @@ export const setTheme = DesktopIpc.makeIpcMethod({
   handler: Effect.fn("desktop.ipc.window.setTheme")(function* (theme) {
     const electronTheme = yield* ElectronTheme.ElectronTheme;
     yield* electronTheme.setSource(theme);
+  }),
+});
+
+export const playNotificationSound = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PLAY_NOTIFICATION_SOUND_CHANNEL,
+  payload: DesktopNotificationSoundSchema,
+  result: Schema.Void,
+  handler: Effect.fn("desktop.ipc.window.playNotificationSound")(function* (sound) {
+    const notificationSound = yield* ElectronNotificationSound.ElectronNotificationSound;
+    yield* notificationSound.play(sound);
   }),
 });
 

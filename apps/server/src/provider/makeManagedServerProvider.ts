@@ -18,6 +18,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 import type { ServerProviderShape } from "./Services/ServerProvider.ts";
+import { createProviderVersionAdvisory } from "./providerMaintenance.ts";
 
 interface ProviderSnapshotState {
   readonly snapshot: ServerProvider;
@@ -47,13 +48,25 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
 > {
   const backgroundPolicy = yield* BackgroundPolicy.BackgroundPolicy;
   const serverSettings = yield* ServerSettingsService;
+  const attachMaintenanceAdvisory = (snapshot: ServerProvider): ServerProvider => {
+    if (snapshot.versionAdvisory) return snapshot;
+    return {
+      ...snapshot,
+      versionAdvisory: createProviderVersionAdvisory({
+        driver: snapshot.driver,
+        currentVersion: snapshot.version,
+        checkedAt: snapshot.checkedAt,
+        maintenanceCapabilities: input.maintenanceCapabilities,
+      }),
+    };
+  };
   const refreshSemaphore = yield* Semaphore.make(1);
   const changesPubSub = yield* Effect.acquireRelease(
     PubSub.unbounded<ServerProvider>(),
     PubSub.shutdown,
   );
   const initialSettings = yield* input.getSettings;
-  const initialSnapshot = yield* input.initialSnapshot(initialSettings);
+  const initialSnapshot = attachMaintenanceAdvisory(yield* input.initialSnapshot(initialSettings));
   const snapshotStateRef = yield* Ref.make<ProviderSnapshotState>({
     snapshot: initialSnapshot,
     enrichmentGeneration: 0,
@@ -66,15 +79,19 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
     generation: number,
     nextSnapshot: ServerProvider,
   ) {
+    const snapshotWithMaintenanceAdvisory = attachMaintenanceAdvisory(nextSnapshot);
     const snapshotToPublish = yield* Ref.modify(snapshotStateRef, (state) => {
-      if (state.enrichmentGeneration !== generation || Equal.equals(state.snapshot, nextSnapshot)) {
+      if (
+        state.enrichmentGeneration !== generation ||
+        Equal.equals(state.snapshot, snapshotWithMaintenanceAdvisory)
+      ) {
         return [null, state] as const;
       }
       return [
-        nextSnapshot,
+        snapshotWithMaintenanceAdvisory,
         {
           ...state,
-          snapshot: nextSnapshot,
+          snapshot: snapshotWithMaintenanceAdvisory,
         },
       ] as const;
     });
@@ -121,7 +138,7 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
       return yield* Ref.get(snapshotStateRef).pipe(Effect.map((state) => state.snapshot));
     }
 
-    const nextSnapshot = yield* input.checkProvider;
+    const nextSnapshot = attachMaintenanceAdvisory(yield* input.checkProvider);
     const nextGeneration = yield* Ref.modify(snapshotStateRef, (state) => {
       const generation = input.enrichSnapshot
         ? state.enrichmentGeneration + 1

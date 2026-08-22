@@ -58,6 +58,9 @@ import {
 import * as ServerConfig from "../../config.ts";
 import * as ServerSettings from "../../serverSettings.ts";
 import * as AnalyticsService from "../../telemetry/AnalyticsService.ts";
+import * as ServerSecretStore from "../../auth/ServerSecretStore.ts";
+import type { McpCapability } from "../../mcp/McpInvocationContext.ts";
+import { KAIRO_CLOUD_ACCESS_TOKEN_SECRET } from "../../memory/SupermemorySecrets.ts";
 import { makeAdapterRegistryMock } from "../testUtils/providerAdapterRegistryMock.ts";
 
 const defaultServerSettingsLayer = ServerSettings.ServerSettingsService.layerTest();
@@ -1961,9 +1964,14 @@ validation.layer("ProviderServiceLive validation", (it) => {
 describe("agent browser access", () => {
   const revokedThreads: Array<ThreadId> = [];
 
-  const startSessionWith = (enableAgentBrowserAccess: boolean, threadId: ThreadId) =>
+  const startSessionWith = (
+    enableAgentBrowserAccess: boolean,
+    threadId: ThreadId,
+    hostedMemory = false,
+  ) =>
     Effect.gen(function* () {
       const issued: Array<ThreadId> = [];
+      const issuedCapabilities: Array<ReadonlySet<McpCapability>> = [];
       const codex = makeFakeCodexAdapter();
       const providerAdapterLayer = Layer.succeed(
         ProviderAdapterRegistry.ProviderAdapterRegistry,
@@ -1979,13 +1987,45 @@ describe("agent browser access", () => {
         issueMcpCredential: (request) =>
           Effect.sync(() => {
             issued.push(request.threadId);
+            issuedCapabilities.push(request.capabilities ?? new Set<McpCapability>(["preview"]));
             return undefined;
           }),
         revokeMcpCredential: (revoked) => Effect.sync(() => void revokedThreads.push(revoked)),
       }).pipe(
         Layer.provide(providerAdapterLayer),
         Layer.provide(directoryLayer),
-        Layer.provide(ServerSettings.ServerSettingsService.layerTest({ enableAgentBrowserAccess })),
+        Layer.provide(
+          ServerSettings.ServerSettingsService.layerTest({
+            enableAgentBrowserAccess,
+            ...(hostedMemory
+              ? {
+                  memory: {
+                    supermemory: {
+                      enabled: true,
+                      providerInstanceIds: [codexInstanceId],
+                    },
+                  },
+                }
+              : {}),
+          }),
+        ),
+        Layer.provideMerge(
+          Layer.succeed(
+            ServerSecretStore.ServerSecretStore,
+            ServerSecretStore.ServerSecretStore.of({
+              get: (name) =>
+                Effect.succeed(
+                  hostedMemory && name === KAIRO_CLOUD_ACCESS_TOKEN_SECRET
+                    ? Option.some(new TextEncoder().encode(`server-${name}`))
+                    : Option.none(),
+                ),
+              set: () => Effect.die("unused"),
+              create: () => Effect.die("unused"),
+              getOrCreateRandom: () => Effect.die("unused"),
+              remove: () => Effect.die("unused"),
+            }),
+          ),
+        ),
         Layer.provide(serverConfigTestLayer),
         Layer.provide(AnalyticsService.layerTest),
         Layer.provide(
@@ -2006,7 +2046,7 @@ describe("agent browser access", () => {
         });
       }).pipe(Effect.provide(providerLayer));
 
-      return issued;
+      return { issued, issuedCapabilities };
     });
 
   // Credential issuance is the observable that matters: it is the only place a
@@ -2014,7 +2054,7 @@ describe("agent browser access", () => {
   // what actually denies every provider and external MCP client.
   it.effect("requests no MCP credential when agent browser access is off", () =>
     Effect.gen(function* () {
-      const issued = yield* startSessionWith(false, asThreadId("thread-browser-off"));
+      const { issued } = yield* startSessionWith(false, asThreadId("thread-browser-off"));
 
       assert.deepEqual(issued, []);
     }).pipe(Effect.provide(NodeServices.layer)),
@@ -2038,9 +2078,19 @@ describe("agent browser access", () => {
     Effect.gen(function* () {
       const threadId = asThreadId("thread-browser-on");
 
-      const issued = yield* startSessionWith(true, threadId);
+      const { issued } = yield* startSessionWith(true, threadId);
 
       assert.deepEqual(issued, [threadId]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("requests memory MCP without enabling browser access", () =>
+    Effect.gen(function* () {
+      const threadId = asThreadId("thread-memory-on");
+      const { issued, issuedCapabilities } = yield* startSessionWith(false, threadId, true);
+
+      assert.deepEqual(issued, [threadId]);
+      assert.deepEqual(issuedCapabilities, [new Set<McpCapability>(["memory"])]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 });

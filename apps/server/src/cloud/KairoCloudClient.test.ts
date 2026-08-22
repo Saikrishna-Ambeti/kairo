@@ -1,0 +1,92 @@
+import { describe, expect, it } from "@effect/vitest";
+import { KairoCloudMemorySaveRequest } from "@kairo/contracts";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+
+import { KairoCloudClient, layer as KairoCloudClientLayer } from "./KairoCloudClient.ts";
+
+const decodeSaveRequest = Schema.decodeUnknownSync(
+  Schema.fromJsonString(KairoCloudMemorySaveRequest),
+);
+
+describe("KairoCloudClient", () => {
+  it.effect("uses the configured gateway and installation grant", () =>
+    Effect.gen(function* () {
+      const requests: Array<{
+        readonly url: string;
+        readonly authorization: string | undefined;
+        readonly body: unknown;
+      }> = [];
+      const httpLayer = Layer.succeed(
+        HttpClient.HttpClient,
+        HttpClient.make((request) =>
+          Effect.sync(() => {
+            const body =
+              request.body._tag === "Uint8Array"
+                ? decodeSaveRequest(new TextDecoder().decode(request.body.body))
+                : undefined;
+            requests.push({
+              url: request.url,
+              authorization: request.headers.authorization,
+              body,
+            });
+            return HttpClientResponse.fromWeb(
+              request,
+              Response.json({ id: "memory_1", status: "queued" }),
+            );
+          }),
+        ),
+      );
+      const configLayer = ConfigProvider.layer(
+        ConfigProvider.fromEnv({
+          env: { KAIRO_CLOUD_API_URL: "https://memory-gateway.test" },
+        }),
+      );
+      const clientLayer = KairoCloudClientLayer.pipe(
+        Layer.provide(httpLayer),
+        Layer.provide(configLayer),
+      );
+
+      const response = yield* Effect.gen(function* () {
+        const client = yield* KairoCloudClient;
+        return yield* client.saveMemory(Redacted.make("installation_grant"), {
+          content: "Prefers compact answers",
+        });
+      }).pipe(Effect.provide(clientLayer));
+
+      expect(response).toEqual({ id: "memory_1", status: "queued" });
+      expect(requests).toEqual([
+        {
+          url: "https://memory-gateway.test/v1/memory/save",
+          authorization: "Bearer installation_grant",
+          body: { content: "Prefers compact answers" },
+        },
+      ]);
+    }),
+  );
+
+  it.effect("reports an invalid or expired grant without exposing it", () =>
+    Effect.gen(function* () {
+      const httpLayer = Layer.succeed(
+        HttpClient.HttpClient,
+        HttpClient.make((request) =>
+          Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 401 }))),
+        ),
+      );
+      const result = yield* Effect.gen(function* () {
+        const client = yield* KairoCloudClient;
+        return yield* Effect.result(client.getCapabilities(Redacted.make("secret_grant_value")));
+      }).pipe(Effect.provide(KairoCloudClientLayer.pipe(Layer.provide(httpLayer))));
+
+      expect(result._tag).toBe("Failure");
+      if (result._tag === "Failure") {
+        expect(result.failure.message).toContain("invalid or expired");
+        expect(result.failure.message).not.toContain("secret_grant_value");
+      }
+    }),
+  );
+});

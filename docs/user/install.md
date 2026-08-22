@@ -58,6 +58,13 @@ integrations remain available in **Settings** after setup.
 Builds without Kairo Connect configuration show the sign-in step and let you continue without an
 account.
 
+### Session sounds
+
+The desktop app plays the operating system's success sound when a turn finishes and its error
+sound when a session ends in error. Connection retries and temporary network failures stay silent.
+The error sound plays only after the session stops retrying. On Linux, Kairo uses the desktop sound
+theme when `canberra-gtk-play` is available and falls back to the system beep otherwise.
+
 ## Providers
 
 Kairo drives provider CLIs; it does not ship them. Install the CLI for each provider you want

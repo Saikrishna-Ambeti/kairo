@@ -20,6 +20,7 @@ import { TestClock } from "effect/testing";
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 import { makeManagedServerProvider } from "./makeManagedServerProvider.ts";
+import { createProviderVersionAdvisory } from "./providerMaintenance.ts";
 
 const emptyCapabilities = createModelCapabilities({ optionDescriptors: [] });
 const TEST_EPOCH = DateTime.makeUnsafe("1970-01-01T00:00:00.000Z");
@@ -149,6 +150,16 @@ const enrichedSnapshotSecond: ServerProvider = {
   ],
 };
 
+const withMaintenanceAdvisory = (snapshot: ServerProvider): ServerProvider => ({
+  ...snapshot,
+  versionAdvisory: createProviderVersionAdvisory({
+    driver: snapshot.driver,
+    currentVersion: snapshot.version,
+    checkedAt: snapshot.checkedAt,
+    maintenanceCapabilities,
+  }),
+});
+
 describe("makeManagedServerProvider", () => {
   it.effect(
     "runs the initial provider check in the background and streams the refreshed snapshot",
@@ -171,7 +182,7 @@ describe("makeManagedServerProvider", () => {
           });
 
           const initial = yield* provider.getSnapshot;
-          assert.deepStrictEqual(initial, initialSnapshot);
+          assert.deepStrictEqual(initial, withMaintenanceAdvisory(initialSnapshot));
 
           const updatesFiber = yield* Stream.take(provider.streamChanges, 1).pipe(
             Stream.runCollect,
@@ -185,8 +196,8 @@ describe("makeManagedServerProvider", () => {
           const updates = Array.from(yield* Fiber.join(updatesFiber));
           const latest = yield* provider.getSnapshot;
 
-          assert.deepStrictEqual(updates, [refreshedSnapshot]);
-          assert.deepStrictEqual(latest, refreshedSnapshot);
+          assert.deepStrictEqual(updates, [withMaintenanceAdvisory(refreshedSnapshot)]);
+          assert.deepStrictEqual(latest, withMaintenanceAdvisory(refreshedSnapshot));
           assert.strictEqual(yield* Ref.get(checkCalls), 1);
         }),
       ).pipe(Effect.provide(AlwaysRunTestLayer)),
@@ -348,8 +359,11 @@ describe("makeManagedServerProvider", () => {
         const updates = Array.from(yield* Fiber.join(updatesFiber));
         const latest = yield* provider.getSnapshot;
 
-        assert.deepStrictEqual(updates, [refreshedSnapshot, refreshedSnapshotSecond]);
-        assert.deepStrictEqual(latest, refreshedSnapshotSecond);
+        assert.deepStrictEqual(updates, [
+          withMaintenanceAdvisory(refreshedSnapshot),
+          withMaintenanceAdvisory(refreshedSnapshotSecond),
+        ]);
+        assert.deepStrictEqual(latest, withMaintenanceAdvisory(refreshedSnapshotSecond));
         assert.strictEqual(yield* Ref.get(checkCalls), 2);
       }),
     ).pipe(Effect.provide(AlwaysRunTestLayer)),
@@ -387,8 +401,11 @@ describe("makeManagedServerProvider", () => {
         const updates = Array.from(yield* Fiber.join(updatesFiber));
         const latest = yield* provider.getSnapshot;
 
-        assert.deepStrictEqual(updates, [refreshedSnapshot, enrichedSnapshot]);
-        assert.deepStrictEqual(latest, enrichedSnapshot);
+        assert.deepStrictEqual(updates, [
+          withMaintenanceAdvisory(refreshedSnapshot),
+          withMaintenanceAdvisory(enrichedSnapshot),
+        ]);
+        assert.deepStrictEqual(latest, withMaintenanceAdvisory(enrichedSnapshot));
       }),
     ).pipe(Effect.provide(AlwaysRunTestLayer)),
   );
@@ -445,11 +462,11 @@ describe("makeManagedServerProvider", () => {
         const latest = yield* provider.getSnapshot;
 
         assert.deepStrictEqual(updates, [
-          refreshedSnapshot,
-          refreshedSnapshotSecond,
-          enrichedSnapshotSecond,
+          withMaintenanceAdvisory(refreshedSnapshot),
+          withMaintenanceAdvisory(refreshedSnapshotSecond),
+          withMaintenanceAdvisory(enrichedSnapshotSecond),
         ]);
-        assert.deepStrictEqual(latest, enrichedSnapshotSecond);
+        assert.deepStrictEqual(latest, withMaintenanceAdvisory(enrichedSnapshotSecond));
       }),
     ).pipe(Effect.provide(AlwaysRunTestLayer)),
   );

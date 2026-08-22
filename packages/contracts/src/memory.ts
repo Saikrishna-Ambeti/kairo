@@ -16,11 +16,6 @@ export const SupermemorySettings = Schema.Struct({
   providerInstanceIds: Schema.Array(ProviderInstanceId).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
-  hosted: Schema.Struct({
-    apiUrl: Schema.String.pipe(
-      Schema.withDecodingDefault(Effect.succeed("https://api.supermemory.ai")),
-    ),
-  }).pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 });
 export type SupermemorySettings = typeof SupermemorySettings.Type;
 
@@ -42,42 +37,24 @@ export const MemorySettingsPatch = Schema.Struct({
       mode: Schema.optionalKey(SupermemoryMode),
       scope: Schema.optionalKey(SupermemoryScope),
       providerInstanceIds: Schema.optionalKey(Schema.Array(ProviderInstanceId)),
-      hosted: Schema.optionalKey(
-        Schema.Struct({
-          apiUrl: Schema.optionalKey(Schema.String),
-        }),
-      ),
     }),
   ),
 });
 export type MemorySettingsPatch = typeof MemorySettingsPatch.Type;
 
 export const ConfigureMemoryInput = Schema.Struct({
-  apiKey: Schema.optionalKey(Schema.String),
   providerInstanceIds: Schema.Array(ProviderInstanceId),
 });
 export type ConfigureMemoryInput = typeof ConfigureMemoryInput.Type;
 
-export const TestMemoryConnectionInput = Schema.Struct({
-  apiKey: Schema.optionalKey(Schema.String),
-});
-export type TestMemoryConnectionInput = typeof TestMemoryConnectionInput.Type;
-
-export const InstallMemoryProvidersInput = Schema.Struct({
-  providerInstanceIds: Schema.Array(ProviderInstanceId),
-});
-export type InstallMemoryProvidersInput = typeof InstallMemoryProvidersInput.Type;
-
-export const SupermemoryProviderInstallStatus = Schema.Literals([
+export const SupermemoryProviderState = Schema.Literals([
   "not_selected",
   "ready",
-  "needs_install",
-  "installing",
   "needs_action",
   "error",
   "unsupported",
 ]);
-export type SupermemoryProviderInstallStatus = typeof SupermemoryProviderInstallStatus.Type;
+export type SupermemoryProviderState = typeof SupermemoryProviderState.Type;
 
 export const SupermemoryProviderStatus = Schema.Struct({
   instanceId: ProviderInstanceId,
@@ -85,7 +62,7 @@ export const SupermemoryProviderStatus = Schema.Struct({
   displayName: Schema.String,
   selected: Schema.Boolean,
   supported: Schema.Boolean,
-  status: SupermemoryProviderInstallStatus,
+  status: SupermemoryProviderState,
   message: Schema.optionalKey(Schema.String),
 });
 export type SupermemoryProviderStatus = typeof SupermemoryProviderStatus.Type;
@@ -94,10 +71,8 @@ export const SupermemoryStatus = Schema.Struct({
   enabled: Schema.Boolean,
   mode: SupermemoryMode,
   scope: SupermemoryScope,
-  auth: Schema.Struct({
-    hasApiKey: Schema.Boolean,
-    lastTestedAt: Schema.optionalKey(Schema.String),
-    lastError: Schema.optionalKey(Schema.String),
+  service: Schema.Struct({
+    available: Schema.Boolean,
   }),
   providers: Schema.Array(SupermemoryProviderStatus),
 });

@@ -129,6 +129,7 @@ export const ComposioOperation = Schema.Struct({
   startedAt: Schema.String,
   updatedAt: Schema.String,
   message: Schema.optionalKey(Schema.String),
+  errorDetail: Schema.optionalKey(Schema.String),
 });
 export type ComposioOperation = typeof ComposioOperation.Type;
 

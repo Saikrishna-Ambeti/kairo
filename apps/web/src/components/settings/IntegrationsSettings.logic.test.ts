@@ -2,6 +2,7 @@ import type { ComposioStatus } from "@kairo/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  getComposioFailureDescription,
   getAvailableComposioCatalogItems,
   getConnectedComposioToolkits,
   getComposioPrimaryButtonState,
@@ -25,6 +26,25 @@ const baseStatus: ComposioStatus = {
 };
 
 describe("Composio integrations settings logic", () => {
+  it("includes installer output in failed setup guidance", () => {
+    expect(
+      getComposioFailureDescription({
+        ...baseStatus,
+        operation: {
+          id: "operation-failed",
+          kind: "install_and_login",
+          status: "failed",
+          startedAt: "2026-06-14T00:00:00.000Z",
+          updatedAt: "2026-06-14T00:00:01.000Z",
+          message: "Composio CLI install failed. Fix the reported problem, then retry.",
+          errorDetail: "curl: could not resolve host",
+        },
+      }),
+    ).toBe(
+      "Composio CLI install failed. Fix the reported problem, then retry. curl: could not resolve host",
+    );
+  });
+
   it("shows Install & Login when the CLI is missing", () => {
     expect(
       getComposioPrimaryButtonState({

@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { ChildProcessSpawner } from "effect/unstable/process";
+import { HostProcessPlatform } from "@kairo/shared/hostProcess";
 
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
 import { makeManualOnlyProviderMaintenanceCapabilities } from "../provider/providerMaintenance.ts";
@@ -23,6 +24,45 @@ function ok(stdout = "", stderr = ""): ProcessRunOutput {
     stdoutInvalidUtf8: false,
     stderrInvalidUtf8: false,
   };
+}
+
+function failed(stderr: string): ProcessRunOutput {
+  return {
+    ...ok(),
+    stderr,
+    code: ChildProcessSpawner.ExitCode(1),
+  };
+}
+
+function makeTestDeps(
+  run: (input: ProcessRunInput) => Effect.Effect<ProcessRunOutput, never, never>,
+  composioSettings: Partial<typeof DEFAULT_SERVER_SETTINGS.integrations.composio> = {},
+  hostPlatform: NodeJS.Platform = "linux",
+) {
+  return Layer.mergeAll(
+    NodeServices.layer,
+    ServerSettingsService.layerTest({
+      integrations: {
+        composio: {
+          ...DEFAULT_SERVER_SETTINGS.integrations.composio,
+          ...composioSettings,
+        },
+      },
+    }),
+    Layer.succeed(ProcessRunner, ProcessRunner.of({ run })),
+    Layer.succeed(HostProcessPlatform, hostPlatform),
+    Layer.mock(ProviderRegistry)({
+      getProviders: Effect.succeed([]),
+      refresh: () => Effect.succeed([]),
+      refreshInstance: () => Effect.succeed([]),
+      getProviderMaintenanceCapabilitiesForInstance: (_instanceId, provider) =>
+        Effect.succeed(
+          makeManualOnlyProviderMaintenanceCapabilities({ provider, packageName: null }),
+        ),
+      setProviderMaintenanceActionState: () => Effect.succeed([]),
+      streamChanges: Stream.empty,
+    }),
+  );
 }
 
 describe("ComposioService", () => {
@@ -54,35 +94,7 @@ describe("ComposioService", () => {
         }),
       );
 
-      const TestDeps = Layer.mergeAll(
-        NodeServices.layer,
-        ServerSettingsService.layerTest({
-          integrations: {
-            composio: {
-              ...DEFAULT_SERVER_SETTINGS.integrations.composio,
-              enabled: true,
-              preferredToolkits: [],
-            },
-          },
-        }),
-        Layer.succeed(
-          ProcessRunner,
-          ProcessRunner.of({
-            run: (input) => runMock(input),
-          }),
-        ),
-        Layer.mock(ProviderRegistry)({
-          getProviders: Effect.succeed([]),
-          refresh: () => Effect.succeed([]),
-          refreshInstance: () => Effect.succeed([]),
-          getProviderMaintenanceCapabilitiesForInstance: (_instanceId, provider) =>
-            Effect.succeed(
-              makeManualOnlyProviderMaintenanceCapabilities({ provider, packageName: null }),
-            ),
-          setProviderMaintenanceActionState: () => Effect.succeed([]),
-          streamChanges: Stream.empty,
-        }),
-      );
+      const TestDeps = makeTestDeps(runMock, { enabled: true, preferredToolkits: [] });
 
       const ComposioTest = Layer.effect(ComposioService, makeComposioService).pipe(
         Layer.provide(TestDeps),
@@ -147,35 +159,10 @@ describe("ComposioService", () => {
         }),
       );
 
-      const TestDeps = Layer.mergeAll(
-        NodeServices.layer,
-        ServerSettingsService.layerTest({
-          integrations: {
-            composio: {
-              ...DEFAULT_SERVER_SETTINGS.integrations.composio,
-              enabled: true,
-              preferredToolkits: ["slack", "gmail"],
-            },
-          },
-        }),
-        Layer.succeed(
-          ProcessRunner,
-          ProcessRunner.of({
-            run: (input) => runMock(input),
-          }),
-        ),
-        Layer.mock(ProviderRegistry)({
-          getProviders: Effect.succeed([]),
-          refresh: () => Effect.succeed([]),
-          refreshInstance: () => Effect.succeed([]),
-          getProviderMaintenanceCapabilitiesForInstance: (_instanceId, provider) =>
-            Effect.succeed(
-              makeManualOnlyProviderMaintenanceCapabilities({ provider, packageName: null }),
-            ),
-          setProviderMaintenanceActionState: () => Effect.succeed([]),
-          streamChanges: Stream.empty,
-        }),
-      );
+      const TestDeps = makeTestDeps(runMock, {
+        enabled: true,
+        preferredToolkits: ["slack", "gmail"],
+      });
 
       const ComposioTest = Layer.effect(ComposioService, makeComposioService).pipe(
         Layer.provide(TestDeps),
@@ -228,34 +215,7 @@ describe("ComposioService", () => {
         }),
       );
 
-      const TestDeps = Layer.mergeAll(
-        NodeServices.layer,
-        ServerSettingsService.layerTest({
-          integrations: {
-            composio: {
-              ...DEFAULT_SERVER_SETTINGS.integrations.composio,
-              enabled: false,
-            },
-          },
-        }),
-        Layer.succeed(
-          ProcessRunner,
-          ProcessRunner.of({
-            run: (input) => runMock(input),
-          }),
-        ),
-        Layer.mock(ProviderRegistry)({
-          getProviders: Effect.succeed([]),
-          refresh: () => Effect.succeed([]),
-          refreshInstance: () => Effect.succeed([]),
-          getProviderMaintenanceCapabilitiesForInstance: (_instanceId, provider) =>
-            Effect.succeed(
-              makeManualOnlyProviderMaintenanceCapabilities({ provider, packageName: null }),
-            ),
-          setProviderMaintenanceActionState: () => Effect.succeed([]),
-          streamChanges: Stream.empty,
-        }),
-      );
+      const TestDeps = makeTestDeps(runMock, { enabled: false });
 
       const ComposioTest = Layer.effect(ComposioService, makeComposioService).pipe(
         Layer.provide(TestDeps),
@@ -287,6 +247,92 @@ describe("ComposioService", () => {
         expect(runs.some((run) => run.command === "bash" || run.command === "powershell.exe")).toBe(
           false,
         );
+      } finally {
+        if (previousInstallDir === undefined) {
+          delete process.env.COMPOSIO_INSTALL_DIR;
+        } else {
+          process.env.COMPOSIO_INSTALL_DIR = previousInstallDir;
+        }
+      }
+    }),
+  );
+
+  it.effect("reports native Windows as unsupported instead of running npm install", () =>
+    Effect.gen(function* () {
+      const previousInstallDir = process.env.COMPOSIO_INSTALL_DIR;
+      process.env.COMPOSIO_INSTALL_DIR = "/tmp/kairo-composio-test-windows";
+      const runs: ProcessRunInput[] = [];
+      const runMock = vi.fn((input: ProcessRunInput) =>
+        Effect.sync(() => {
+          runs.push(input);
+          return failed("not found");
+        }),
+      );
+      const ComposioTest = Layer.effect(ComposioService, makeComposioService).pipe(
+        Layer.provide(makeTestDeps(runMock, {}, "win32")),
+      );
+
+      try {
+        const status = yield* Effect.gen(function* () {
+          const composio = yield* ComposioService;
+          return yield* composio.getStatus;
+        }).pipe(Effect.provide(ComposioTest));
+
+        expect(status).toMatchObject({
+          primaryAction: "none",
+          cli: {
+            status: "unsupported",
+            platform: "win32",
+            installCommandLabel: "WSL: curl -fsSL https://composio.dev/install | sh",
+          },
+        });
+        expect(status.cli.message).toContain("Run Kairo in WSL");
+        expect(runs.some((run) => run.command === "powershell.exe" || run.command === "npm")).toBe(
+          false,
+        );
+      } finally {
+        if (previousInstallDir === undefined) {
+          delete process.env.COMPOSIO_INSTALL_DIR;
+        } else {
+          process.env.COMPOSIO_INSTALL_DIR = previousInstallDir;
+        }
+      }
+    }),
+  );
+
+  it.effect("keeps installer output on a failed setup operation", () =>
+    Effect.gen(function* () {
+      const previousInstallDir = process.env.COMPOSIO_INSTALL_DIR;
+      process.env.COMPOSIO_INSTALL_DIR = "/tmp/kairo-composio-test-install-failure";
+      const runMock = vi.fn((input: ProcessRunInput) =>
+        Effect.sync(() =>
+          input.command === "bash"
+            ? failed("curl: (6) Could not resolve host: composio.dev")
+            : failed("composio not found"),
+        ),
+      );
+      const ComposioTest = Layer.effect(ComposioService, makeComposioService).pipe(
+        Layer.provide(makeTestDeps(runMock)),
+      );
+
+      try {
+        const result = yield* Effect.gen(function* () {
+          const composio = yield* ComposioService;
+          const events = yield* composio
+            .installAndLogin({ providerInstanceIds: [] })
+            .pipe(Stream.runCollect);
+          const status = yield* composio.getStatus;
+          return { events: Array.from(events), status };
+        }).pipe(Effect.provide(ComposioTest));
+
+        expect(result.status.operation).toMatchObject({
+          status: "failed",
+          errorDetail: "curl: (6) Could not resolve host: composio.dev",
+        });
+        expect(result.events.at(-1)).toMatchObject({
+          stage: "Failed",
+          stderr: "curl: (6) Could not resolve host: composio.dev",
+        });
       } finally {
         if (previousInstallDir === undefined) {
           delete process.env.COMPOSIO_INSTALL_DIR;
