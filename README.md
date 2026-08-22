@@ -6,6 +6,24 @@ Kairo works with local provider CLIs for Claude, Codex, Cursor, Grok Build, and 
 
 Kairo is built on the MIT-licensed [T3 Code](https://github.com/pingdotgg/t3code) project. See [LICENSE](./LICENSE) for attribution.
 
+## What Kairo can do
+
+- Run Codex, Claude, Cursor, Grok Build, and OpenCode from one web, desktop, or mobile client.
+- Switch each thread between **Build**, **Plan**, and **Study**. Study Mode is available to users
+  who select the Student role and can continue a learning plan across threads when memory is on.
+- Keep optional, user-scoped memory through Kairo Cloud without exposing the hosted Supermemory
+  credential to the local server or provider process.
+- Connect agents to approved apps and services through the integrations settings.
+- Work with Git branches, worktrees, checkpoints, diffs, terminals, and pull requests without
+  leaving the conversation.
+- Control a local or remote Kairo environment from another browser, desktop, phone, or tablet.
+- Save student routine drafts for assignment check-ins, revision planning, lecture-note cleanup,
+  and weekly resets. These drafts stay in the browser and do not run automatically yet.
+
+Kairo keeps the agent runtime on the environment machine. Remote clients control that environment
+through Kairo's typed WebSocket protocol, so the same project and thread history remain available
+across supported clients.
+
 ## "Wait, what are you selling me?"
 
 Nothing. Kairo exists to make capable local agents easier to use for practical daily work.
@@ -78,6 +96,9 @@ We are (mostly) not accepting contributions yet. Small fixes may be considered. 
 Full docs live in [docs/](./docs). There's no docs site yet.
 
 - [Install and first run](./docs/user/install.md)
+- [Build, Plan, and Study modes](./docs/user/composer.md#interaction-modes)
+- [Persistent memory](./docs/user/memory.md)
+- [Scheduled tasks for students](./docs/user/scheduled-tasks.md)
 - [Permission modes](./docs/user/permission-modes.md)
 - [Keyboard shortcuts](./docs/user/keybindings.md)
 - [Customize a project icon](./docs/user/project-settings.md)
@@ -86,6 +107,7 @@ Full docs live in [docs/](./docs). There's no docs site yet.
 - [Source control integrations](./docs/user/source-control.md)
 - Multiple accounts: [Codex](./docs/user/providers-codex.md) · [Claude](./docs/user/providers-claude.md)
 - Linux: [run Kairo as a background service](./docs/user/background-service.md)
+- [Product development timeline](./docs/documentation/development-timeline.md)
 
 Building from source? Start at [docs/internals/overview.md](./docs/internals/overview.md).
 
