@@ -13,9 +13,6 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ElementType } from "react";
 import {
-  ProviderDriverKind as ProviderDriverKindSchema,
-  isProviderAvailable,
-  type ProviderDriverKind,
   type ProviderInstanceId,
   type ServerProvider,
   type SupermemoryProviderStatus,
@@ -29,6 +26,7 @@ import {
 import { ensureLocalApi } from "../../localApi";
 import { cn } from "../../lib/utils";
 import { useServerProviders } from "../../rpc/serverState";
+import { usePrimaryEnvironmentId } from "../../state/environments";
 import { usePrimaryServerApi } from "../../state/primaryServerApi";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -43,17 +41,19 @@ import {
   type SetupMode,
 } from "../settings/IntegrationsSettings.logic";
 import { PROVIDER_CLIENT_DEFINITIONS } from "../settings/providerDriverMeta";
-
-const CODING_AGENT_DRIVERS = new Set<ProviderDriverKind>([
-  ProviderDriverKindSchema.make("codex"),
-  ProviderDriverKindSchema.make("claudeAgent"),
-  ProviderDriverKindSchema.make("opencode"),
-]);
+import {
+  canNavigateBackToOnboardingStep,
+  CODING_AGENT_DRIVERS,
+  getOnboardingAgentAction,
+  getOnboardingAgentDescription,
+  isUsableOnboardingAgent,
+  type OnboardingStepKey,
+} from "./OnboardingGate.logic";
 
 const MEMORY_AGENT_DRIVERS = CODING_AGENT_DRIVERS;
 const SUPERMEMORY_CONSOLE_URL = "https://app.supermemory.ai/?view=integrations";
 
-type StepKey = "agents" | "memory" | "composio" | "finish";
+type StepKey = OnboardingStepKey;
 type BusyAction =
   | "refresh"
   | "install-agent"
@@ -74,46 +74,6 @@ const ONBOARDING_STEPS: ReadonlyArray<{ key: StepKey; label: string; icon: Eleme
   { key: "composio", label: "Composio", icon: PlugZapIcon },
   { key: "finish", label: "Finish", icon: CheckCircle2Icon },
 ];
-
-function onboardingStepIndex(step: StepKey): number {
-  return ONBOARDING_STEPS.findIndex((candidate) => candidate.key === step);
-}
-
-export function canNavigateBackToOnboardingStep(activeStep: StepKey, targetStep: StepKey): boolean {
-  return onboardingStepIndex(targetStep) < onboardingStepIndex(activeStep);
-}
-
-export function isUsableOnboardingAgent(provider: ServerProvider): boolean {
-  return (
-    CODING_AGENT_DRIVERS.has(provider.driver) &&
-    provider.enabled &&
-    provider.installed &&
-    isProviderAvailable(provider) &&
-    provider.status === "ready"
-  );
-}
-
-export function getOnboardingAgentAction(
-  provider: ServerProvider | undefined,
-): "detected" | "install" | "login" {
-  if (provider && isUsableOnboardingAgent(provider)) return "detected";
-  if (provider?.enabled && provider.installed && provider.auth.status === "unauthenticated") {
-    return "login";
-  }
-  return "install";
-}
-
-export function getOnboardingAgentDescription(provider: ServerProvider | undefined): string {
-  const action = getOnboardingAgentAction(provider);
-  if (action === "login") {
-    return "Sign in to this provider to finish detection.";
-  }
-  return (
-    provider?.versionAdvisory?.updateCommand ??
-    provider?.message ??
-    "Install the CLI and refresh detection."
-  );
-}
 
 function showOnboardingError(title: string, error: unknown) {
   toastManager.add(
@@ -306,6 +266,20 @@ function AgentStep({
                         <KeyRoundIcon className="size-3.5" />
                       )}
                       Login
+                    </Button>
+                  ) : action === "retry" ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy !== null}
+                      onClick={onRefresh}
+                    >
+                      {busy === "refresh" ? (
+                        <LoaderCircleIcon className="size-3.5 animate-spin" />
+                      ) : (
+                        <RefreshCwIcon className="size-3.5" />
+                      )}
+                      Retry
                     </Button>
                   ) : (
                     <Button
@@ -758,6 +732,8 @@ function FinishStep({ onComplete }: { onComplete: () => void }) {
 
 export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
   const serverApi = usePrimaryServerApi();
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const serverApiRef = useRef(serverApi);
   const serverProviders = useServerProviders();
   const [providersOverride, setProvidersOverride] = useState<ReadonlyArray<ServerProvider> | null>(
     null,
@@ -785,6 +761,10 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
   const [connectingToolkit, setConnectingToolkit] = useState<string | null>(null);
   const didInitialLoadRef = useRef(false);
   const userSelectedStepRef = useRef(false);
+
+  useEffect(() => {
+    serverApiRef.current = serverApi;
+  }, [serverApi]);
 
   const agentOptions = useMemo<ReadonlyArray<AgentOption>>(
     () =>
@@ -836,9 +816,9 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
     setBusy((current) => current ?? "refresh");
     try {
       const [providerPayload, nextMemory, nextComposio] = await Promise.all([
-        serverApi.refreshProviders(),
-        serverApi.getMemoryStatus(),
-        serverApi.getComposioStatus(),
+        serverApiRef.current.refreshProviders(),
+        serverApiRef.current.getMemoryStatus(),
+        serverApiRef.current.getComposioStatus(),
       ]);
       setProvidersOverride(providerPayload.providers);
       setMemoryStatus(nextMemory);
@@ -850,13 +830,13 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
   }, []);
 
   useEffect(() => {
-    if (didInitialLoadRef.current) return;
+    if (primaryEnvironmentId === null || didInitialLoadRef.current) return;
     didInitialLoadRef.current = true;
     setLoading(true);
     void refreshAll()
       .catch((error) => showOnboardingError("Setup status unavailable", error))
       .finally(() => setLoading(false));
-  }, [refreshAll]);
+  }, [primaryEnvironmentId, refreshAll]);
 
   useEffect(() => {
     if (selectedMemoryProviderIds.size > 0 || memoryProviders.length === 0) return;

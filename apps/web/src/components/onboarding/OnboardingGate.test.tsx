@@ -6,7 +6,7 @@ import {
   getOnboardingAgentAction,
   getOnboardingAgentDescription,
   isUsableOnboardingAgent,
-} from "./OnboardingGate";
+} from "./OnboardingGate.logic";
 
 function provider(input: Partial<ServerProvider> = {}): ServerProvider {
   return {
@@ -78,5 +78,27 @@ describe("onboarding agent detection", () => {
         }),
       ),
     ).toBe("install");
+  });
+
+  it("retries detection for an installed provider instead of reinstalling it", () => {
+    const failedProvider = provider({
+      status: "error",
+      auth: { status: "unknown" },
+      message: "Codex app-server provider probe failed: connection closed.",
+      versionAdvisory: {
+        status: "unknown",
+        currentVersion: null,
+        latestVersion: null,
+        checkedAt: null,
+        message: null,
+        canUpdate: true,
+        updateCommand: "vp i -g @openai/codex",
+      },
+    });
+
+    expect(getOnboardingAgentAction(failedProvider)).toBe("retry");
+    expect(getOnboardingAgentDescription(failedProvider)).toBe(
+      "Codex app-server provider probe failed: connection closed.",
+    );
   });
 });
