@@ -1,0 +1,1944 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="./support.js"></script>
+  </head>
+  <body>
+    <x-dc>
+      <helmet data-dc-atomics
+        ><meta name="design_doc_mode" content="canvas" /><link
+          rel="preconnect"
+          href="https://fonts.googleapis.com"
+        /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /><link
+          href="https://fonts.googleapis.com/css2?family=Architects+Daughter&family=Caveat:wght@500;600&display=swap"
+          rel="stylesheet"
+        />
+        <style>
+          body {
+            margin: 0;
+            background: #f0eee9;
+            font-family: system-ui, sans-serif;
+          }
+          a {
+            color: #2a78d6;
+          }
+          a:hover {
+            color: #1a5fb0;
+          }
+          .dv-turn {
+            padding: 40px 44px 32px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+            scroll-margin-top: 16px;
+          }
+          .dv-thd {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            margin: 0 0 20px;
+          }
+          .dv-tid {
+            font:
+              600 10px ui-monospace,
+              Menlo,
+              monospace;
+            padding: 3px 7px;
+            background: #1a1a1a;
+            color: #fff;
+            border-radius: 4px;
+            text-decoration: none;
+          }
+          .dv-tname {
+            font:
+              600 13px/1.2 system-ui,
+              sans-serif;
+            color: #1a1a1a;
+          }
+          .dv-opts {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 28px;
+            align-items: flex-start;
+          }
+          .dv-opt {
+            flex: none;
+            display: flex;
+            flex-direction: column;
+            gap: 9px;
+            scroll-margin-top: 16px;
+          }
+          .dv-oid {
+            font:
+              600 10.5px ui-monospace,
+              Menlo,
+              monospace;
+            padding: 3px 7px;
+            background: rgba(0, 0, 0, 0.08);
+            color: #1a1a1a;
+            border-radius: 5px;
+            text-decoration: none;
+          }
+          .dv-olabel {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            font:
+              400 11px/1.3 system-ui,
+              sans-serif;
+            color: rgba(0, 0, 0, 0.55);
+          }
+          .dv-card {
+            max-width: 100%;
+            background: #fff;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+            overflow: hidden;
+          }
+          .dv-opt:target .dv-oid {
+            background: #2a78d6;
+            color: #fff;
+          }
+          .dv-next {
+            margin: 22px 0 0;
+            font:
+              12px/1.5 system-ui,
+              sans-serif;
+            color: rgba(0, 0, 0, 0.5);
+          }
+          .dv-sub {
+            font:
+              600 11px/1 ui-monospace,
+              Menlo,
+              monospace;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: rgba(0, 0, 0, 0.4);
+            margin: 26px 0 14px;
+            width: 100%;
+          }
+        </style></helmet
+      >
+
+      <section class="dv-turn" id="t2">
+        <div class="dv-thd">
+          <a class="dv-tid" href="#t2">2</a><span class="dv-tname">Landing page — full scroll</span>
+        </div>
+        <div class="dv-opts">
+          <div class="dv-opt" id="2a">
+            <div class="dv-olabel">
+              <a class="dv-oid" href="#2a">2a</a>Hero video, trailer, specialities, install, footer
+            </div>
+            <div
+              class="dv-card"
+              style="
+                width: 1100px;
+                font-family: &quot;Architects Daughter&quot;, cursive;
+                color: #1a1a1a;
+              "
+            >
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  padding: 16px 34px;
+                  border-bottom: 1.5px solid #1a1a1a;
+                "
+              >
+                <div style="display: flex; align-items: center; gap: 9px">
+                  <div
+                    style="
+                      width: 18px;
+                      height: 18px;
+                      border: 1.5px solid #1a1a1a;
+                      border-radius: 50%;
+                    "
+                  ></div>
+                  <span style="font-size: 17px">kairo</span>
+                </div>
+                <div
+                  style="
+                    display: flex;
+                    gap: 20px;
+                    align-items: center;
+                    font-size: 14px;
+                    color: #5a564e;
+                  "
+                >
+                  <span>What it does</span><span>Providers</span><span>Docs</span>
+                  <div
+                    style="
+                      border: 1.5px solid #1a1a1a;
+                      border-radius: 18px;
+                      padding: 6px 16px;
+                      color: #1a1a1a;
+                    "
+                  >
+                    Download
+                  </div>
+                </div>
+              </div>
+
+              <div
+                onMouseMove="{{ onMove }}"
+                style="
+                  position: relative;
+                  height: 620px;
+                  overflow: hidden;
+                  border-bottom: 1.5px solid #1a1a1a;
+                  background: radial-gradient(
+                    120% 90% at 78% 25%,
+                    #6b3fb8 0%,
+                    #4a2585 42%,
+                    #2c1550 78%,
+                    #1c0d36 100%
+                  );
+                "
+              >
+                <div
+                  style="
+                    position: absolute;
+                    inset: 0;
+                    background-image: radial-gradient(
+                      rgba(255, 255, 255, 0.16) 1px,
+                      transparent 1px
+                    );
+                    background-size: 26px 26px;
+                    opacity: 0.5;
+                  "
+                ></div>
+                <div
+                  style="
+                    position: absolute;
+                    inset: 0;
+                    background-image:
+                      radial-gradient(
+                        ellipse at 50% 35%,
+                        rgba(200, 160, 255, 0.25) 0%,
+                        transparent 65%
+                      ),
+                      url(&quot;/caustics.webp&quot;);
+                    background-size: cover, cover;
+                    background-position: center center;
+                    mix-blend-mode: screen;
+                    opacity: 0.65;
+                    pointer-events: none;
+                  "
+                ></div>
+                <div
+                  style="
+                    position: absolute;
+                    inset: 0;
+                    background: linear-gradient(
+                      180deg,
+                      rgba(255, 255, 255, 0.05) 0%,
+                      transparent 30%
+                    );
+                  "
+                ></div>
+                <div
+                  style="
+                    position: absolute;
+                    left: 0;
+                    right: 0;
+                    bottom: 118px;
+                    height: 1px;
+                    background: linear-gradient(
+                      90deg,
+                      transparent,
+                      rgba(190, 150, 255, 0.45),
+                      transparent
+                    );
+                  "
+                ></div>
+                <div
+                  style="
+                    position: absolute;
+                    left: 0;
+                    right: 0;
+                    bottom: 96px;
+                    height: 1px;
+                    background: linear-gradient(
+                      90deg,
+                      transparent,
+                      rgba(190, 150, 255, 0.2),
+                      transparent
+                    );
+                  "
+                ></div>
+                <div
+                  style="
+                    position: absolute;
+                    right: 96px;
+                    top: 74px;
+                    width: 120px;
+                    height: 120px;
+                    border: 1px solid rgba(200, 170, 255, 0.28);
+                    border-radius: 50%;
+                  "
+                ></div>
+                <div
+                  style="
+                    position: absolute;
+                    right: 132px;
+                    top: 110px;
+                    width: 48px;
+                    height: 48px;
+                    border: 1px solid rgba(200, 170, 255, 0.2);
+                    border-radius: 50%;
+                  "
+                ></div>
+                <div
+                  style="
+                    position: absolute;
+                    right: 60px;
+                    bottom: 170px;
+                    width: 8px;
+                    height: 8px;
+                    background: rgba(214, 186, 255, 0.55);
+                    border-radius: 2px;
+                  "
+                ></div>
+                <div
+                  style="
+                    position: absolute;
+                    right: 250px;
+                    top: 210px;
+                    width: 5px;
+                    height: 5px;
+                    background: rgba(214, 186, 255, 0.4);
+                    border-radius: 50%;
+                  "
+                ></div>
+                <div
+                  style="
+                    position: absolute;
+                    left: 70px;
+                    top: 96px;
+                    width: 5px;
+                    height: 5px;
+                    background: rgba(214, 186, 255, 0.35);
+                    border-radius: 50%;
+                  "
+                ></div>
+                <div
+                  style="
+                    position: absolute;
+                    right: 44px;
+                    top: 40px;
+                    font:
+                      10px ui-monospace,
+                      Menlo,
+                      monospace;
+                    color: rgba(214, 186, 255, 0.5);
+                    letter-spacing: 0.14em;
+                  "
+                >
+                  MEMORY · ONLINE
+                </div>
+
+                <x-import
+                  component-from-global-scope="kairo-robot"
+                  hint-size="100%,100%"
+                  style="position: absolute; inset: 0; width: 100%; height: 100%"
+                ></x-import>
+
+                <div
+                  style="
+                    position: absolute;
+                    left: 44px;
+                    bottom: 52px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 20px;
+                    max-width: 540px;
+                    color: #fff;
+                  "
+                >
+                  <div style="font-size: 48px; line-height: 1.1">
+                    A calmer way to get<br />through everyday work.
+                  </div>
+                  <div style="font-size: 16px; color: rgba(255, 255, 255, 0.72); line-height: 1.55">
+                    One place to ask for help, keep useful context in persistent memory, and connect
+                    the assistant to the tools you already use.
+                  </div>
+                  <div style="display: flex; gap: 12px; align-items: center">
+                    <div
+                      style="
+                        background: #fff;
+                        color: #1a1a1a;
+                        border-radius: 10px;
+                        padding: 13px 26px;
+                        font-size: 16px;
+                      "
+                    >
+                      Download the app
+                    </div>
+                    <div
+                      style="
+                        border: 1.5px solid rgba(255, 255, 255, 0.55);
+                        border-radius: 10px;
+                        padding: 11px 18px;
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                      "
+                    >
+                      <div
+                        style="
+                          width: 26px;
+                          height: 26px;
+                          border: 1.5px solid rgba(255, 255, 255, 0.7);
+                          border-radius: 50%;
+                          display: flex;
+                          align-items: center;
+                          justify-content: center;
+                          font-size: 11px;
+                        "
+                      >
+                        ▶
+                      </div>
+                      <div style="display: flex; flex-direction: column">
+                        <span style="font-size: 14px">Watch the trailer</span
+                        ><span style="font-size: 12px; color: rgba(255, 255, 255, 0.6)">1 min</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div style="font-family: Caveat, cursive; font-size: 17px; color: #c9a9ff">
+                    robot follows the cursor across the hero
+                  </div>
+                </div>
+              </div>
+
+              <div
+                style="
+                  padding: 56px 44px;
+                  border-bottom: 1.5px solid #1a1a1a;
+                  display: flex;
+                  flex-direction: column;
+                  gap: 22px;
+                  align-items: center;
+                "
+              >
+                <div
+                  style="
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                    align-items: center;
+                    text-align: center;
+                  "
+                >
+                  <div style="font-size: 30px">See Kairo in a minute</div>
+                  <div style="font-size: 15px; color: #5a564e; max-width: 520px">
+                    Ask for help, keep context, connect your tools. No setup theatre.
+                  </div>
+                </div>
+                <div
+                  style="
+                    width: 100%;
+                    border: 1.5px solid #1a1a1a;
+                    border-radius: 14px;
+                    overflow: hidden;
+                    background: #000;
+                  "
+                >
+                  <video
+                    src="/uploads/kairo-promo-v2.mp4"
+                    controls
+                    playsinline
+                    style="display: block; width: 100%; height: 440px; object-fit: cover"
+                  ></video>
+                </div>
+              </div>
+
+              <div
+                style="
+                  padding: 56px 44px;
+                  border-bottom: 1.5px solid #1a1a1a;
+                  display: flex;
+                  flex-direction: column;
+                  gap: 30px;
+                "
+              >
+                <div
+                  style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: flex-end;
+                    gap: 40px;
+                  "
+                >
+                  <div style="font-size: 30px; max-width: 520px">
+                    Built for people who are new to AI
+                  </div>
+                  <div style="font-size: 15px; color: #5a564e; max-width: 420px">
+                    And for anyone who wants a calmer way to use it in daily life and work.
+                  </div>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px">
+                  <div
+                    style="
+                      border: 1.5px solid #1a1a1a;
+                      border-radius: 12px;
+                      padding: 20px;
+                      display: flex;
+                      flex-direction: column;
+                      gap: 10px;
+                    "
+                  >
+                    <div
+                      style="
+                        width: 26px;
+                        height: 26px;
+                        border: 1.5px solid #1a1a1a;
+                        border-radius: 7px;
+                      "
+                    ></div>
+                    <div style="font-size: 18px">Understand documents</div>
+                    <div style="font-size: 14px; color: #5a564e; line-height: 1.5">
+                      Drop in a file and ask what matters.
+                    </div>
+                  </div>
+                  <div
+                    style="
+                      border: 1.5px solid #1a1a1a;
+                      border-radius: 12px;
+                      padding: 20px;
+                      display: flex;
+                      flex-direction: column;
+                      gap: 10px;
+                    "
+                  >
+                    <div
+                      style="
+                        width: 26px;
+                        height: 26px;
+                        border: 1.5px solid #1a1a1a;
+                        border-radius: 7px;
+                      "
+                    ></div>
+                    <div style="font-size: 18px">Draft and summarize</div>
+                    <div style="font-size: 14px; color: #5a564e; line-height: 1.5">
+                      Replies, notes, and next steps in your voice.
+                    </div>
+                  </div>
+                  <div
+                    style="
+                      border: 1.5px solid #1a1a1a;
+                      border-radius: 12px;
+                      padding: 20px;
+                      display: flex;
+                      flex-direction: column;
+                      gap: 10px;
+                    "
+                  >
+                    <div
+                      style="
+                        width: 26px;
+                        height: 26px;
+                        border: 1.5px solid #1a1a1a;
+                        border-radius: 7px;
+                      "
+                    ></div>
+                    <div style="font-size: 18px">Persistent memory</div>
+                    <div style="font-size: 14px; color: #5a564e; line-height: 1.5">
+                      Useful context stays, so you stop repeating yourself.
+                    </div>
+                  </div>
+                  <div
+                    style="
+                      border: 1.5px solid #1a1a1a;
+                      border-radius: 12px;
+                      padding: 20px;
+                      display: flex;
+                      flex-direction: column;
+                      gap: 10px;
+                    "
+                  >
+                    <div
+                      style="
+                        width: 26px;
+                        height: 26px;
+                        border: 1.5px solid #1a1a1a;
+                        border-radius: 7px;
+                      "
+                    ></div>
+                    <div style="font-size: 18px">Connected data</div>
+                    <div style="font-size: 14px; color: #5a564e; line-height: 1.5">
+                      Uses information from your tools when you authorize it.
+                    </div>
+                  </div>
+                  <div
+                    style="
+                      border: 1.5px solid #1a1a1a;
+                      border-radius: 12px;
+                      padding: 20px;
+                      display: flex;
+                      flex-direction: column;
+                      gap: 10px;
+                      grid-column: span 2;
+                      background: #fbfaf8;
+                    "
+                  >
+                    <div style="font-size: 18px">Runs multiple AI providers</div>
+                    <div style="font-size: 14px; color: #5a564e; line-height: 1.5">
+                      Codex, Claude, and OpenCode — under one interface.
+                    </div>
+                    <div style="display: flex; gap: 10px; margin-top: 4px">
+                      <div
+                        style="
+                          border: 1.5px dashed #9a968e;
+                          border-radius: 16px;
+                          padding: 5px 14px;
+                          font-size: 13px;
+                          color: #5a564e;
+                        "
+                      >
+                        Codex
+                      </div>
+                      <div
+                        style="
+                          border: 1.5px dashed #9a968e;
+                          border-radius: 16px;
+                          padding: 5px 14px;
+                          font-size: 13px;
+                          color: #5a564e;
+                        "
+                      >
+                        Claude
+                      </div>
+                      <div
+                        style="
+                          border: 1.5px dashed #9a968e;
+                          border-radius: 16px;
+                          padding: 5px 14px;
+                          font-size: 13px;
+                          color: #5a564e;
+                        "
+                      >
+                        OpenCode
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div
+                  style="
+                    border: 1.5px dashed #9a968e;
+                    border-radius: 10px;
+                    padding: 14px 18px;
+                    font-size: 14px;
+                    color: #5a564e;
+                  "
+                >
+                  Kairo is still very early. Some flows are changing from a coding-agent workbench
+                  into a more general assistant experience.
+                </div>
+              </div>
+
+              <div
+                style="
+                  padding: 60px 44px;
+                  border-bottom: 1.5px solid #1a1a1a;
+                  background: #fbfaf8;
+                  display: flex;
+                  gap: 40px;
+                  align-items: center;
+                "
+              >
+                <div style="flex: 1; display: flex; flex-direction: column; gap: 18px">
+                  <div style="font-size: 34px; line-height: 1.15">
+                    Install Kairo on your desktop
+                  </div>
+                  <div style="font-size: 15px; color: #5a564e; line-height: 1.55">
+                    Latest release for Windows and macOS. Install and authenticate at least one AI
+                    provider CLI before first use.
+                  </div>
+                  <div style="display: flex; gap: 14px">
+                    <div
+                      style="
+                        border: 1.5px solid #1a1a1a;
+                        border-radius: 12px;
+                        padding: 16px 22px;
+                        display: flex;
+                        align-items: center;
+                        gap: 12px;
+                        background: #fff;
+                      "
+                    >
+                      <div
+                        style="
+                          width: 28px;
+                          height: 28px;
+                          border: 1.5px solid #1a1a1a;
+                          border-radius: 6px;
+                        "
+                      ></div>
+                      <div style="display: flex; flex-direction: column">
+                        <span style="font-size: 16px">Download for Windows</span
+                        ><span style="font-size: 12px; color: #5a564e">.exe · 64-bit</span>
+                      </div>
+                    </div>
+                    <div
+                      style="
+                        border: 1.5px solid #1a1a1a;
+                        border-radius: 12px;
+                        padding: 16px 22px;
+                        display: flex;
+                        align-items: center;
+                        gap: 12px;
+                        background: #fff;
+                      "
+                    >
+                      <div
+                        style="
+                          width: 28px;
+                          height: 28px;
+                          border: 1.5px solid #1a1a1a;
+                          border-radius: 6px;
+                        "
+                      ></div>
+                      <div style="display: flex; flex-direction: column">
+                        <span style="font-size: 16px">Download for macOS</span
+                        ><span style="font-size: 12px; color: #5a564e">.dmg · Apple silicon</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div style="font-size: 13px; color: #5a564e">All releases on GitHub</div>
+                </div>
+                <div
+                  style="
+                    width: 300px;
+                    border: 1.5px solid #1a1a1a;
+                    border-radius: 12px;
+                    padding: 18px;
+                    background: #fff;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+                  "
+                >
+                  <div style="font-size: 15px">Set up a provider</div>
+                  <div
+                    style="
+                      display: flex;
+                      flex-direction: column;
+                      gap: 8px;
+                      font:
+                        12px ui-monospace,
+                        Menlo,
+                        monospace;
+                      color: #5a564e;
+                    "
+                  >
+                    <div style="background: #f2f0ec; border-radius: 6px; padding: 8px 10px">
+                      codex login
+                    </div>
+                    <div style="background: #f2f0ec; border-radius: 6px; padding: 8px 10px">
+                      claude auth login
+                    </div>
+                    <div style="background: #f2f0ec; border-radius: 6px; padding: 8px 10px">
+                      opencode auth login
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                style="
+                  padding: 34px 44px;
+                  display: flex;
+                  justify-content: space-between;
+                  gap: 40px;
+                  align-items: flex-start;
+                "
+              >
+                <div style="display: flex; flex-direction: column; gap: 8px">
+                  <div style="display: flex; align-items: center; gap: 9px">
+                    <div
+                      style="
+                        width: 16px;
+                        height: 16px;
+                        border: 1.5px solid #1a1a1a;
+                        border-radius: 50%;
+                      "
+                    ></div>
+                    <span style="font-size: 15px">kairo</span>
+                  </div>
+                  <div style="font-size: 13px; color: #5a564e">
+                    An AI assistant for everyday work.
+                  </div>
+                </div>
+                <div style="display: flex; gap: 56px; font-size: 13px; color: #5a564e">
+                  <div style="display: flex; flex-direction: column; gap: 7px">
+                    <span style="color: #1a1a1a">Product</span><span>Download</span
+                    ><span>Providers</span><span>Releases</span>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 7px">
+                    <span style="color: #1a1a1a">Docs</span><span>Getting started</span
+                    ><span>Architecture</span><span>Reference</span>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 7px">
+                    <span style="color: #1a1a1a">Project</span><span>GitHub</span
+                    ><span>Contributing</span><span>Early access notes</span>
+                  </div>
+                </div>
+              </div>
+              <div
+                style="
+                  border-top: 1.5px solid #1a1a1a;
+                  padding: 14px 44px;
+                  font-size: 12px;
+                  color: #5a564e;
+                "
+              >
+                © 2026 Kairo · Early software, expect bugs
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="dv-next">
+          Try next: "use the smiling robot loop in the hero instead" · "give me two more hero
+          layouts" · "make the install section a single OS-detected button"
+        </p>
+      </section>
+
+      <section class="dv-turn" id="t1">
+        <div class="dv-thd">
+          <a class="dv-tid" href="#t1">1</a
+          ><span class="dv-tname">Kairo — home explorations + one pass across the flow</span>
+        </div>
+
+        <div class="dv-sub">Home / assistant screen — four structures</div>
+        <div class="dv-opts">
+          <div class="dv-opt" id="1a">
+            <div class="dv-olabel">
+              <a class="dv-oid" href="#1a">1a</a>Calm canvas — one input, nothing else
+            </div>
+            <div
+              class="dv-card"
+              style="
+                width: 520px;
+                font-family: &quot;Architects Daughter&quot;, cursive;
+                color: #1a1a1a;
+              "
+            >
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  padding: 14px 18px;
+                  border-bottom: 1.5px solid #1a1a1a;
+                "
+              >
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <div
+                    style="
+                      width: 18px;
+                      height: 18px;
+                      border: 1.5px solid #1a1a1a;
+                      border-radius: 50%;
+                    "
+                  ></div>
+                  <span style="font-size: 15px">kairo</span>
+                </div>
+                <div style="display: flex; gap: 10px">
+                  <div
+                    style="
+                      width: 22px;
+                      height: 22px;
+                      border: 1.5px solid #1a1a1a;
+                      border-radius: 5px;
+                    "
+                  ></div>
+                  <div
+                    style="
+                      width: 22px;
+                      height: 22px;
+                      border: 1.5px solid #1a1a1a;
+                      border-radius: 50%;
+                    "
+                  ></div>
+                </div>
+              </div>
+              <div
+                style="
+                  display: flex;
+                  flex-direction: column;
+                  align-items: center;
+                  gap: 22px;
+                  padding: 64px 40px 30px;
+                "
+              >
+                <div style="font-size: 22px">Good morning. What's on your plate?</div>
+                <div
+                  style="
+                    width: 100%;
+                    border: 1.5px solid #1a1a1a;
+                    border-radius: 14px;
+                    padding: 16px 18px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 16px;
+                    background: #fbfaf8;
+                  "
+                >
+                  <div
+                    style="height: 9px; width: 46%; background: #d8d5cf; border-radius: 3px"
+                  ></div>
+                  <div style="display: flex; justify-content: space-between; align-items: center">
+                    <div style="display: flex; gap: 8px">
+                      <div
+                        style="
+                          width: 26px;
+                          height: 26px;
+                          border: 1.5px solid #9a968e;
+                          border-radius: 6px;
+                        "
+                      ></div>
+                      <div
+                        style="
+                          width: 26px;
+                          height: 26px;
+                          border: 1.5px solid #9a968e;
+                          border-radius: 6px;
+                        "
+                      ></div>
+                    </div>
+                    <div
+                      style="width: 34px; height: 26px; background: #1a1a1a; border-radius: 6px"
+                    ></div>
+                  </div>
+                </div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center">
+                  <div
+                    style="
+                      border: 1.5px dashed #9a968e;
+                      border-radius: 20px;
+                      padding: 7px 14px;
+                      font-size: 13px;
+                      color: #5a564e;
+                    "
+                  >
+                    summarize my inbox
+                  </div>
+                  <div
+                    style="
+                      border: 1.5px dashed #9a968e;
+                      border-radius: 20px;
+                      padding: 7px 14px;
+                      font-size: 13px;
+                      color: #5a564e;
+                    "
+                  >
+                    draft a reply
+                  </div>
+                  <div
+                    style="
+                      border: 1.5px dashed #9a968e;
+                      border-radius: 20px;
+                      padding: 7px 14px;
+                      font-size: 13px;
+                      color: #5a564e;
+                    "
+                  >
+                    plan my week
+                  </div>
+                </div>
+                <div style="font-family: Caveat, cursive; font-size: 16px; color: #2a78d6">
+                  ↑ suggestions come from memory + connected tools
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="dv-opt" id="1b">
+            <div class="dv-olabel">
+              <a class="dv-oid" href="#1b">1b</a>Workspace — rail of threads, memory always visible
+            </div>
+            <div
+              class="dv-card"
+              style="
+                width: 560px;
+                font-family: &quot;Architects Daughter&quot;, cursive;
+                color: #1a1a1a;
+              "
+            >
+              <div style="display: flex; height: 340px">
+                <div
+                  style="
+                    width: 150px;
+                    border-right: 1.5px solid #1a1a1a;
+                    padding: 14px 12px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+                    background: #fbfaf8;
+                  "
+                >
+                  <div style="display: flex; align-items: center; gap: 7px">
+                    <div
+                      style="
+                        width: 16px;
+                        height: 16px;
+                        border: 1.5px solid #1a1a1a;
+                        border-radius: 50%;
+                      "
+                    ></div>
+                    <span style="font-size: 14px">kairo</span>
+                  </div>
+                  <div
+                    style="
+                      border: 1.5px solid #1a1a1a;
+                      border-radius: 8px;
+                      padding: 7px 10px;
+                      font-size: 13px;
+                      text-align: center;
+                    "
+                  >
+                    + new
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 9px; margin-top: 6px">
+                    <div
+                      style="height: 8px; width: 90%; background: #1a1a1a; border-radius: 3px"
+                    ></div>
+                    <div
+                      style="height: 8px; width: 70%; background: #d8d5cf; border-radius: 3px"
+                    ></div>
+                    <div
+                      style="height: 8px; width: 82%; background: #d8d5cf; border-radius: 3px"
+                    ></div>
+                    <div
+                      style="height: 8px; width: 60%; background: #d8d5cf; border-radius: 3px"
+                    ></div>
+                  </div>
+                  <div style="margin-top: auto; display: flex; flex-direction: column; gap: 7px">
+                    <div style="font-size: 12px; color: #5a564e">connected</div>
+                    <div style="display: flex; gap: 6px">
+                      <div
+                        style="
+                          width: 20px;
+                          height: 20px;
+                          border: 1.5px solid #9a968e;
+                          border-radius: 5px;
+                        "
+                      ></div>
+                      <div
+                        style="
+                          width: 20px;
+                          height: 20px;
+                          border: 1.5px solid #9a968e;
+                          border-radius: 5px;
+                        "
+                      ></div>
+                      <div
+                        style="
+                          width: 20px;
+                          height: 20px;
+                          border: 1.5px dashed #9a968e;
+                          border-radius: 5px;
+                        "
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+                <div style="flex: 1; display: flex; flex-direction: column">
+                  <div
+                    style="flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 12px"
+                  >
+                    <div
+                      style="
+                        align-self: flex-end;
+                        max-width: 70%;
+                        border: 1.5px solid #1a1a1a;
+                        border-radius: 12px 12px 4px 12px;
+                        padding: 10px 12px;
+                        display: flex;
+                        flex-direction: column;
+                        gap: 6px;
+                      "
+                    >
+                      <div
+                        style="height: 7px; width: 120px; background: #d8d5cf; border-radius: 3px"
+                      ></div>
+                      <div
+                        style="height: 7px; width: 80px; background: #d8d5cf; border-radius: 3px"
+                      ></div>
+                    </div>
+                    <div style="max-width: 80%; display: flex; flex-direction: column; gap: 6px">
+                      <div
+                        style="height: 7px; width: 100%; background: #d8d5cf; border-radius: 3px"
+                      ></div>
+                      <div
+                        style="height: 7px; width: 92%; background: #d8d5cf; border-radius: 3px"
+                      ></div>
+                      <div
+                        style="height: 7px; width: 64%; background: #d8d5cf; border-radius: 3px"
+                      ></div>
+                      <div
+                        style="
+                          border: 1.5px solid #2a78d6;
+                          border-radius: 8px;
+                          padding: 8px 10px;
+                          font-size: 12px;
+                          color: #2a78d6;
+                          margin-top: 4px;
+                        "
+                      >
+                        saved to memory: prefers short summaries
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    style="
+                      border-top: 1.5px solid #1a1a1a;
+                      padding: 12px 14px;
+                      display: flex;
+                      gap: 10px;
+                      align-items: center;
+                    "
+                  >
+                    <div
+                      style="flex: 1; height: 9px; background: #d8d5cf; border-radius: 3px"
+                    ></div>
+                    <div
+                      style="width: 30px; height: 24px; background: #1a1a1a; border-radius: 6px"
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="dv-opt" id="1c">
+            <div class="dv-olabel">
+              <a class="dv-oid" href="#1c">1c</a>Today — briefing cards above the input
+            </div>
+            <div
+              class="dv-card"
+              style="
+                width: 520px;
+                font-family: &quot;Architects Daughter&quot;, cursive;
+                color: #1a1a1a;
+              "
+            >
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  padding: 14px 18px;
+                  border-bottom: 1.5px solid #1a1a1a;
+                "
+              >
+                <span style="font-size: 15px">Tuesday, 21 Aug</span>
+                <div
+                  style="width: 22px; height: 22px; border: 1.5px solid #1a1a1a; border-radius: 50%"
+                ></div>
+              </div>
+              <div style="padding: 18px; display: flex; flex-direction: column; gap: 14px">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+                  <div
+                    style="
+                      border: 1.5px solid #1a1a1a;
+                      border-radius: 10px;
+                      padding: 12px;
+                      display: flex;
+                      flex-direction: column;
+                      gap: 8px;
+                    "
+                  >
+                    <div style="font-size: 13px; color: #5a564e">Needs a reply</div>
+                    <div
+                      style="height: 7px; width: 85%; background: #d8d5cf; border-radius: 3px"
+                    ></div>
+                    <div
+                      style="height: 7px; width: 60%; background: #d8d5cf; border-radius: 3px"
+                    ></div>
+                    <div
+                      style="
+                        align-self: flex-start;
+                        border: 1.5px solid #1a1a1a;
+                        border-radius: 16px;
+                        padding: 4px 10px;
+                        font-size: 12px;
+                      "
+                    >
+                      draft →
+                    </div>
+                  </div>
+                  <div
+                    style="
+                      border: 1.5px solid #1a1a1a;
+                      border-radius: 10px;
+                      padding: 12px;
+                      display: flex;
+                      flex-direction: column;
+                      gap: 8px;
+                    "
+                  >
+                    <div style="font-size: 13px; color: #5a564e">Meeting prep</div>
+                    <div
+                      style="height: 7px; width: 70%; background: #d8d5cf; border-radius: 3px"
+                    ></div>
+                    <div
+                      style="height: 7px; width: 88%; background: #d8d5cf; border-radius: 3px"
+                    ></div>
+                    <div
+                      style="
+                        align-self: flex-start;
+                        border: 1.5px solid #1a1a1a;
+                        border-radius: 16px;
+                        padding: 4px 10px;
+                        font-size: 12px;
+                      "
+                    >
+                      open →
+                    </div>
+                  </div>
+                  <div
+                    style="
+                      border: 1.5px dashed #9a968e;
+                      border-radius: 10px;
+                      padding: 12px;
+                      display: flex;
+                      flex-direction: column;
+                      gap: 8px;
+                      grid-column: span 2;
+                    "
+                  >
+                    <div style="font-size: 13px; color: #5a564e">Picked up from last week</div>
+                    <div
+                      style="height: 7px; width: 78%; background: #d8d5cf; border-radius: 3px"
+                    ></div>
+                  </div>
+                </div>
+                <div
+                  style="
+                    border: 1.5px solid #1a1a1a;
+                    border-radius: 12px;
+                    padding: 14px 16px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    background: #fbfaf8;
+                  "
+                >
+                  <div
+                    style="height: 9px; width: 50%; background: #d8d5cf; border-radius: 3px"
+                  ></div>
+                  <div
+                    style="width: 32px; height: 26px; background: #1a1a1a; border-radius: 6px"
+                  ></div>
+                </div>
+                <div style="font-family: Caveat, cursive; font-size: 16px; color: #2a78d6">
+                  cards are dismissible; input stays pinned bottom
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="dv-opt" id="1d">
+            <div class="dv-olabel">
+              <a class="dv-oid" href="#1d">1d</a>Split — answer left, sources &amp; memory right
+            </div>
+            <div
+              class="dv-card"
+              style="
+                width: 560px;
+                font-family: &quot;Architects Daughter&quot;, cursive;
+                color: #1a1a1a;
+              "
+            >
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 10px;
+                  padding: 12px 16px;
+                  border-bottom: 1.5px solid #1a1a1a;
+                "
+              >
+                <div
+                  style="width: 16px; height: 16px; border: 1.5px solid #1a1a1a; border-radius: 50%"
+                ></div>
+                <div style="flex: 1; height: 8px; background: #d8d5cf; border-radius: 3px"></div>
+                <div
+                  style="width: 20px; height: 20px; border: 1.5px solid #1a1a1a; border-radius: 5px"
+                ></div>
+              </div>
+              <div style="display: flex; height: 300px">
+                <div
+                  style="
+                    flex: 1.6;
+                    padding: 16px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                    border-right: 1.5px solid #1a1a1a;
+                  "
+                >
+                  <div style="font-size: 16px">Here's what I found</div>
+                  <div
+                    style="height: 7px; width: 100%; background: #d8d5cf; border-radius: 3px"
+                  ></div>
+                  <div
+                    style="height: 7px; width: 95%; background: #d8d5cf; border-radius: 3px"
+                  ></div>
+                  <div
+                    style="height: 7px; width: 88%; background: #d8d5cf; border-radius: 3px"
+                  ></div>
+                  <div
+                    style="
+                      height: 7px;
+                      width: 40%;
+                      background: #d8d5cf;
+                      border-radius: 3px;
+                      margin-top: 6px;
+                    "
+                  ></div>
+                  <div
+                    style="height: 7px; width: 92%; background: #d8d5cf; border-radius: 3px"
+                  ></div>
+                  <div
+                    style="height: 7px; width: 70%; background: #d8d5cf; border-radius: 3px"
+                  ></div>
+                  <div style="margin-top: auto; display: flex; gap: 8px">
+                    <div
+                      style="
+                        border: 1.5px solid #1a1a1a;
+                        border-radius: 16px;
+                        padding: 5px 12px;
+                        font-size: 12px;
+                      "
+                    >
+                      copy
+                    </div>
+                    <div
+                      style="
+                        border: 1.5px solid #1a1a1a;
+                        border-radius: 16px;
+                        padding: 5px 12px;
+                        font-size: 12px;
+                      "
+                    >
+                      refine
+                    </div>
+                  </div>
+                </div>
+                <div
+                  style="
+                    width: 190px;
+                    padding: 14px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+                    background: #fbfaf8;
+                  "
+                >
+                  <div style="font-size: 13px; color: #5a564e">Sources</div>
+                  <div style="display: flex; flex-direction: column; gap: 8px">
+                    <div
+                      style="
+                        border: 1.5px solid #9a968e;
+                        border-radius: 8px;
+                        padding: 8px;
+                        display: flex;
+                        gap: 7px;
+                        align-items: center;
+                      "
+                    >
+                      <div
+                        style="
+                          width: 14px;
+                          height: 14px;
+                          border: 1.5px solid #9a968e;
+                          border-radius: 3px;
+                        "
+                      ></div>
+                      <div
+                        style="height: 6px; flex: 1; background: #d8d5cf; border-radius: 3px"
+                      ></div>
+                    </div>
+                    <div
+                      style="
+                        border: 1.5px solid #9a968e;
+                        border-radius: 8px;
+                        padding: 8px;
+                        display: flex;
+                        gap: 7px;
+                        align-items: center;
+                      "
+                    >
+                      <div
+                        style="
+                          width: 14px;
+                          height: 14px;
+                          border: 1.5px solid #9a968e;
+                          border-radius: 3px;
+                        "
+                      ></div>
+                      <div
+                        style="height: 6px; flex: 1; background: #d8d5cf; border-radius: 3px"
+                      ></div>
+                    </div>
+                  </div>
+                  <div style="font-size: 13px; color: #5a564e; margin-top: 6px">Memory used</div>
+                  <div
+                    style="
+                      border: 1.5px solid #2a78d6;
+                      border-radius: 8px;
+                      padding: 8px;
+                      font-size: 12px;
+                      color: #2a78d6;
+                    "
+                  >
+                    your team &amp; timezone
+                  </div>
+                  <div
+                    style="
+                      font-family: Caveat, cursive;
+                      font-size: 15px;
+                      color: #2a78d6;
+                      margin-top: auto;
+                    "
+                  >
+                    every claim traceable
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dv-sub">One pass across the rest of the flow</div>
+        <div class="dv-opts">
+          <div class="dv-opt" id="1e">
+            <div class="dv-olabel">
+              <a class="dv-oid" href="#1e">1e</a>Onboarding — three steps, no account wall first
+            </div>
+            <div
+              class="dv-card"
+              style="
+                width: 520px;
+                font-family: &quot;Architects Daughter&quot;, cursive;
+                color: #1a1a1a;
+              "
+            >
+              <div
+                style="
+                  padding: 16px 18px;
+                  display: flex;
+                  gap: 6px;
+                  border-bottom: 1.5px solid #1a1a1a;
+                "
+              >
+                <div style="flex: 1; height: 5px; background: #1a1a1a; border-radius: 3px"></div>
+                <div style="flex: 1; height: 5px; background: #d8d5cf; border-radius: 3px"></div>
+                <div style="flex: 1; height: 5px; background: #d8d5cf; border-radius: 3px"></div>
+              </div>
+              <div
+                style="padding: 28px 36px 30px; display: flex; flex-direction: column; gap: 18px"
+              >
+                <div style="font-size: 20px">What should Kairo remember about you?</div>
+                <div style="font-size: 14px; color: #5a564e">
+                  Answer as much or as little as you like. You can change this later.
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 10px">
+                  <div
+                    style="
+                      border: 1.5px solid #1a1a1a;
+                      border-radius: 10px;
+                      padding: 12px;
+                      display: flex;
+                      flex-direction: column;
+                      gap: 7px;
+                    "
+                  >
+                    <div style="font-size: 13px; color: #5a564e">What do you do?</div>
+                    <div
+                      style="height: 8px; width: 60%; background: #d8d5cf; border-radius: 3px"
+                    ></div>
+                  </div>
+                  <div
+                    style="
+                      border: 1.5px solid #1a1a1a;
+                      border-radius: 10px;
+                      padding: 12px;
+                      display: flex;
+                      flex-direction: column;
+                      gap: 7px;
+                    "
+                  >
+                    <div style="font-size: 13px; color: #5a564e">How should I write to you?</div>
+                    <div style="display: flex; gap: 8px">
+                      <div
+                        style="
+                          border: 1.5px solid #1a1a1a;
+                          border-radius: 16px;
+                          padding: 4px 12px;
+                          font-size: 12px;
+                        "
+                      >
+                        short
+                      </div>
+                      <div
+                        style="
+                          border: 1.5px dashed #9a968e;
+                          border-radius: 16px;
+                          padding: 4px 12px;
+                          font-size: 12px;
+                          color: #5a564e;
+                        "
+                      >
+                        detailed
+                      </div>
+                      <div
+                        style="
+                          border: 1.5px dashed #9a968e;
+                          border-radius: 16px;
+                          padding: 4px 12px;
+                          font-size: 12px;
+                          color: #5a564e;
+                        "
+                      >
+                        casual
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center">
+                  <div style="font-size: 13px; color: #5a564e">Skip</div>
+                  <div
+                    style="
+                      background: #1a1a1a;
+                      color: #fff;
+                      border-radius: 8px;
+                      padding: 9px 20px;
+                      font-size: 14px;
+                    "
+                  >
+                    Continue
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="dv-opt" id="1f">
+            <div class="dv-olabel">
+              <a class="dv-oid" href="#1f">1f</a>Detail — a saved task/thread with its context
+            </div>
+            <div
+              class="dv-card"
+              style="
+                width: 520px;
+                font-family: &quot;Architects Daughter&quot;, cursive;
+                color: #1a1a1a;
+              "
+            >
+              <div
+                style="
+                  padding: 14px 18px;
+                  border-bottom: 1.5px solid #1a1a1a;
+                  display: flex;
+                  align-items: center;
+                  gap: 12px;
+                "
+              >
+                <span style="font-size: 16px">←</span>
+                <div style="flex: 1; font-size: 16px">Q3 vendor comparison</div>
+                <div
+                  style="width: 20px; height: 20px; border: 1.5px solid #1a1a1a; border-radius: 5px"
+                ></div>
+              </div>
+              <div style="padding: 18px; display: flex; flex-direction: column; gap: 14px">
+                <div style="display: flex; gap: 8px; flex-wrap: wrap">
+                  <div
+                    style="
+                      border: 1.5px dashed #9a968e;
+                      border-radius: 16px;
+                      padding: 4px 10px;
+                      font-size: 12px;
+                      color: #5a564e;
+                    "
+                  >
+                    3 sources
+                  </div>
+                  <div
+                    style="
+                      border: 1.5px dashed #9a968e;
+                      border-radius: 16px;
+                      padding: 4px 10px;
+                      font-size: 12px;
+                      color: #5a564e;
+                    "
+                  >
+                    updated 2h ago
+                  </div>
+                </div>
+                <div
+                  style="
+                    height: 110px;
+                    border: 1.5px solid #9a968e;
+                    border-radius: 8px;
+                    background: repeating-linear-gradient(135deg, #f2f0ec 0 8px, #e6e3dd 8px 16px);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font:
+                      11px ui-monospace,
+                      Menlo,
+                      monospace;
+                    color: #5a564e;
+                  "
+                >
+                  comparison table / output block
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 6px">
+                  <div
+                    style="height: 7px; width: 100%; background: #d8d5cf; border-radius: 3px"
+                  ></div>
+                  <div
+                    style="height: 7px; width: 82%; background: #d8d5cf; border-radius: 3px"
+                  ></div>
+                </div>
+                <div style="display: flex; gap: 8px">
+                  <div
+                    style="
+                      background: #1a1a1a;
+                      color: #fff;
+                      border-radius: 8px;
+                      padding: 8px 16px;
+                      font-size: 13px;
+                    "
+                  >
+                    Continue this
+                  </div>
+                  <div
+                    style="
+                      border: 1.5px solid #1a1a1a;
+                      border-radius: 8px;
+                      padding: 8px 16px;
+                      font-size: 13px;
+                    "
+                  >
+                    Share
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="dv-opt" id="1g">
+            <div class="dv-olabel">
+              <a class="dv-oid" href="#1g">1g</a>Settings — memory and connections are the content
+            </div>
+            <div
+              class="dv-card"
+              style="
+                width: 520px;
+                font-family: &quot;Architects Daughter&quot;, cursive;
+                color: #1a1a1a;
+              "
+            >
+              <div style="padding: 14px 18px; border-bottom: 1.5px solid #1a1a1a; font-size: 16px">
+                Settings
+              </div>
+              <div style="display: flex; height: 290px">
+                <div
+                  style="
+                    width: 140px;
+                    border-right: 1.5px solid #1a1a1a;
+                    padding: 14px 12px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 11px;
+                    font-size: 13px;
+                    background: #fbfaf8;
+                  "
+                >
+                  <div>Memory</div>
+                  <div style="color: #9a968e">Connections</div>
+                  <div style="color: #9a968e">Account</div>
+                  <div style="color: #9a968e">Privacy</div>
+                </div>
+                <div
+                  style="flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 12px"
+                >
+                  <div style="font-size: 14px; color: #5a564e">What Kairo remembers</div>
+                  <div style="display: flex; flex-direction: column; gap: 9px">
+                    <div
+                      style="
+                        border: 1.5px solid #1a1a1a;
+                        border-radius: 8px;
+                        padding: 10px;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                      "
+                    >
+                      <div
+                        style="height: 7px; width: 60%; background: #d8d5cf; border-radius: 3px"
+                      ></div>
+                      <span style="font-size: 13px; color: #9a968e">×</span>
+                    </div>
+                    <div
+                      style="
+                        border: 1.5px solid #1a1a1a;
+                        border-radius: 8px;
+                        padding: 10px;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                      "
+                    >
+                      <div
+                        style="height: 7px; width: 74%; background: #d8d5cf; border-radius: 3px"
+                      ></div>
+                      <span style="font-size: 13px; color: #9a968e">×</span>
+                    </div>
+                    <div
+                      style="
+                        border: 1.5px dashed #9a968e;
+                        border-radius: 8px;
+                        padding: 10px;
+                        font-size: 13px;
+                        color: #5a564e;
+                      "
+                    >
+                      + add something
+                    </div>
+                  </div>
+                  <div
+                    style="
+                      display: flex;
+                      justify-content: space-between;
+                      align-items: center;
+                      margin-top: 6px;
+                    "
+                  >
+                    <div style="font-size: 13px">Let Kairo learn as we go</div>
+                    <div
+                      style="
+                        width: 40px;
+                        height: 22px;
+                        border: 1.5px solid #1a1a1a;
+                        border-radius: 11px;
+                        display: flex;
+                        align-items: center;
+                        padding: 2px;
+                        justify-content: flex-end;
+                      "
+                    >
+                      <div
+                        style="width: 16px; height: 16px; background: #1a1a1a; border-radius: 50%"
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="dv-opt" id="1h">
+            <div class="dv-olabel">
+              <a class="dv-oid" href="#1h">1h</a>Marketing hero — calm, single promise
+            </div>
+            <div
+              class="dv-card"
+              style="
+                width: 620px;
+                font-family: &quot;Architects Daughter&quot;, cursive;
+                color: #1a1a1a;
+              "
+            >
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  padding: 14px 22px;
+                  border-bottom: 1.5px solid #1a1a1a;
+                "
+              >
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <div
+                    style="
+                      width: 16px;
+                      height: 16px;
+                      border: 1.5px solid #1a1a1a;
+                      border-radius: 50%;
+                    "
+                  ></div>
+                  <span style="font-size: 15px">kairo</span>
+                </div>
+                <div
+                  style="
+                    display: flex;
+                    gap: 16px;
+                    align-items: center;
+                    font-size: 13px;
+                    color: #5a564e;
+                  "
+                >
+                  <span>How it works</span><span>Pricing</span>
+                  <div
+                    style="
+                      border: 1.5px solid #1a1a1a;
+                      border-radius: 16px;
+                      padding: 5px 14px;
+                      color: #1a1a1a;
+                    "
+                  >
+                    Try it
+                  </div>
+                </div>
+              </div>
+              <div style="padding: 44px 44px 34px; display: flex; gap: 32px; align-items: center">
+                <div style="flex: 1; display: flex; flex-direction: column; gap: 16px">
+                  <div style="font-size: 30px; line-height: 1.15">
+                    A calmer way to<br />use AI at work.
+                  </div>
+                  <div style="font-size: 15px; color: #5a564e; line-height: 1.5">
+                    One place to ask for help, keep what matters in memory, and connect the tools
+                    you already use.
+                  </div>
+                  <div style="display: flex; gap: 10px; align-items: center">
+                    <div
+                      style="
+                        background: #1a1a1a;
+                        color: #fff;
+                        border-radius: 8px;
+                        padding: 10px 20px;
+                        font-size: 14px;
+                      "
+                    >
+                      Start free
+                    </div>
+                    <div style="font-size: 13px; color: #5a564e">no card needed</div>
+                  </div>
+                </div>
+                <div
+                  style="
+                    width: 230px;
+                    height: 170px;
+                    border: 1.5px solid #9a968e;
+                    border-radius: 10px;
+                    background: repeating-linear-gradient(135deg, #f2f0ec 0 8px, #e6e3dd 8px 16px);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font:
+                      11px ui-monospace,
+                      Menlo,
+                      monospace;
+                    color: #5a564e;
+                    text-align: center;
+                  "
+                >
+                  product shot /<br />short loop
+                </div>
+              </div>
+              <div
+                style="
+                  border-top: 1.5px solid #1a1a1a;
+                  padding: 14px 44px;
+                  display: flex;
+                  gap: 26px;
+                  align-items: center;
+                "
+              >
+                <span style="font-size: 13px; color: #5a564e">works with</span>
+                <div style="display: flex; gap: 10px">
+                  <div
+                    style="
+                      width: 22px;
+                      height: 22px;
+                      border: 1.5px solid #9a968e;
+                      border-radius: 5px;
+                    "
+                  ></div>
+                  <div
+                    style="
+                      width: 22px;
+                      height: 22px;
+                      border: 1.5px solid #9a968e;
+                      border-radius: 5px;
+                    "
+                  ></div>
+                  <div
+                    style="
+                      width: 22px;
+                      height: 22px;
+                      border: 1.5px solid #9a968e;
+                      border-radius: 5px;
+                    "
+                  ></div>
+                  <div
+                    style="
+                      width: 22px;
+                      height: 22px;
+                      border: 1.5px solid #9a968e;
+                      border-radius: 5px;
+                    "
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="dv-next">
+          Try next: "take <a class="dv-oid" href="#1c">1c</a> further, mobile width too" · "combine
+          <a class="dv-oid" href="#1b">1b</a>'s rail with <a class="dv-oid" href="#1d">1d</a>'s
+          sources panel" · "more hero directions"
+        </p>
+      </section>
+    </x-dc>
+    <script type="text/x-dc" data-dc-script>
+      class Component extends DCLogic {
+        state = { rx: 0, tilt: 0, flip: 1 };
+        target = { x: 0, tilt: 0 };
+        cur = { x: 0, tilt: 0 };
+        componentDidMount() {
+          const tick = () => {
+            const dx = this.target.x - this.cur.x, dt = this.target.tilt - this.cur.tilt;
+            if (Math.abs(dx) > 0.3 || Math.abs(dt) > 0.05) {
+              this.cur.x += dx * 0.06;
+              this.cur.tilt += dt * 0.08;
+              this.setState({ rx: this.cur.x, tilt: this.cur.tilt, flip: dx < -0.5 ? -1 : dx > 0.5 ? 1 : this.state.flip });
+            }
+            this.raf = requestAnimationFrame(tick);
+          };
+          this.raf = requestAnimationFrame(tick);
+        }
+        componentWillUnmount() { cancelAnimationFrame(this.raf); }
+        renderVals() {
+          const onMove = (e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            const p = (e.clientX - r.left) / r.width;
+            this.target.x = (p - 0.62) * r.width * 0.62;
+            this.target.tilt = (p - 0.5) * 5;
+          };
+          const { rx, tilt, flip } = this.state;
+          const heroRef = (el) => {
+            if (!el || el.__kicked) return;
+            el.__kicked = true;
+            el.muted = true; el.playsInline = true; el.loop = true;
+            const go = () => el.play().catch(() => {});
+            go();
+            document.addEventListener('pointerdown', go, { once: true });
+            document.addEventListener('mousemove', go, { once: true });
+          };
+          return {
+            onMove, heroRef,
+            robotStyle: `translateX(${rx.toFixed(1)}px) rotate(${tilt.toFixed(2)}deg) scaleX(${flip})`
+          };
+        }
+      }
+    </script>
+  </body>
+</html>
