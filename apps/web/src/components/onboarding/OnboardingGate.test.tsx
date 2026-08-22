@@ -1,11 +1,12 @@
 import { ProviderDriverKind, ProviderInstanceId, type ServerProvider } from "@kairo/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
+import { canNavigateBackToOnboardingStep } from "./OnboardingGate";
 import {
-  canNavigateBackToOnboardingStep,
   getOnboardingAgentAction,
   getOnboardingAgentDescription,
   isUsableOnboardingAgent,
+  resolveOnboardingAgentInstallOutcome,
 } from "./OnboardingGate.logic";
 
 function provider(input: Partial<ServerProvider> = {}): ServerProvider {
@@ -64,11 +65,11 @@ describe("onboarding agent detection", () => {
     });
     expect(getOnboardingAgentAction(unauthenticatedProvider)).toBe("login");
     expect(getOnboardingAgentDescription(unauthenticatedProvider)).toBe(
-      "Sign in to this provider to finish detection.",
+      "Codex CLI is not authenticated. Run `codex login` and try again. Sign in, then refresh detection.",
     );
   });
 
-  it("keeps failed unauthenticated providers on install when they are missing", () => {
+  it("keeps missing providers on install", () => {
     expect(
       getOnboardingAgentAction(
         provider({
@@ -80,25 +81,74 @@ describe("onboarding agent detection", () => {
     ).toBe("install");
   });
 
-  it("retries detection for an installed provider instead of reinstalling it", () => {
-    const failedProvider = provider({
+  it("offers login after an installed provider probe fails with unknown auth", () => {
+    const failedProbe = provider({
       status: "error",
       auth: { status: "unknown" },
-      message: "Codex app-server provider probe failed: connection closed.",
-      versionAdvisory: {
-        status: "unknown",
-        currentVersion: null,
-        latestVersion: null,
-        checkedAt: null,
-        message: null,
-        canUpdate: true,
-        updateCommand: "vp i -g @openai/codex",
-      },
+      message: "Codex App Server process exited with code 1.",
     });
-
-    expect(getOnboardingAgentAction(failedProvider)).toBe("retry");
-    expect(getOnboardingAgentDescription(failedProvider)).toBe(
-      "Codex app-server provider probe failed: connection closed.",
+    expect(getOnboardingAgentAction(failedProbe)).toBe("login");
+    expect(getOnboardingAgentDescription(failedProbe)).toContain(
+      "Sign in, then refresh detection.",
     );
+  });
+
+  it("offers refresh when an authenticated provider still fails its probe", () => {
+    expect(
+      getOnboardingAgentAction(
+        provider({
+          status: "error",
+          auth: { status: "authenticated" },
+          message: "Provider startup check failed.",
+        }),
+      ),
+    ).toBe("refresh");
+  });
+});
+
+describe("onboarding provider install outcome", () => {
+  it("treats encoded maintenance failures as install failures", () => {
+    const outcome = resolveOnboardingAgentInstallOutcome(
+      provider({
+        installed: false,
+        status: "error",
+        auth: { status: "unknown" },
+        updateState: {
+          status: "failed",
+          startedAt: "2026-01-01T00:00:00.000Z",
+          finishedAt: "2026-01-01T00:00:01.000Z",
+          message: "Update command exited with code 1.",
+          output: "npm permission denied",
+        },
+      }),
+    );
+
+    expect(outcome).toEqual({
+      kind: "failed",
+      description:
+        "Update command exited with code 1.\n\nnpm permission denied\n\nFix the installer error, then retry.",
+    });
+  });
+
+  it("requires login when install finishes but provider remains unauthenticated", () => {
+    expect(
+      resolveOnboardingAgentInstallOutcome(
+        provider({
+          status: "error",
+          auth: { status: "unauthenticated" },
+          message: "Codex CLI is not authenticated.",
+          updateState: {
+            status: "succeeded",
+            startedAt: "2026-01-01T00:00:00.000Z",
+            finishedAt: "2026-01-01T00:00:01.000Z",
+            message: "Provider updated.",
+            output: null,
+          },
+        }),
+      ),
+    ).toEqual({
+      kind: "needs_login",
+      description: "Codex CLI is not authenticated. Sign in, then refresh detection.",
+    });
   });
 });

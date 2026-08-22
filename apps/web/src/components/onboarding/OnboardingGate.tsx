@@ -35,6 +35,8 @@ import { Input } from "../ui/input";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { ComposioSetupDialog } from "../settings/ComposioSetupDialog";
 import {
+  COMPOSIO_CLI_DOCS_URL,
+  getComposioFailureDescription,
   getAvailableComposioCatalogItems,
   getConnectedComposioToolkits,
   getComposioPrimaryButtonState,
@@ -42,18 +44,20 @@ import {
 } from "../settings/IntegrationsSettings.logic";
 import { PROVIDER_CLIENT_DEFINITIONS } from "../settings/providerDriverMeta";
 import {
-  canNavigateBackToOnboardingStep,
-  CODING_AGENT_DRIVERS,
+  ONBOARDING_CODING_AGENT_DRIVERS,
+  findOnboardingProvider,
   getOnboardingAgentAction,
   getOnboardingAgentDescription,
+  getOnboardingAgentProgressLabel,
   isUsableOnboardingAgent,
-  type OnboardingStepKey,
+  resolveOnboardingAgentInstallOutcome,
+  resolveOnboardingAgentReadiness,
 } from "./OnboardingGate.logic";
 
-const MEMORY_AGENT_DRIVERS = CODING_AGENT_DRIVERS;
+const MEMORY_AGENT_DRIVERS = ONBOARDING_CODING_AGENT_DRIVERS;
 const SUPERMEMORY_CONSOLE_URL = "https://app.supermemory.ai/?view=integrations";
 
-type StepKey = OnboardingStepKey;
+type StepKey = "agents" | "memory" | "composio" | "finish";
 type BusyAction =
   | "refresh"
   | "install-agent"
@@ -74,6 +78,14 @@ const ONBOARDING_STEPS: ReadonlyArray<{ key: StepKey; label: string; icon: Eleme
   { key: "composio", label: "Composio", icon: PlugZapIcon },
   { key: "finish", label: "Finish", icon: CheckCircle2Icon },
 ];
+
+function onboardingStepIndex(step: StepKey): number {
+  return ONBOARDING_STEPS.findIndex((candidate) => candidate.key === step);
+}
+
+export function canNavigateBackToOnboardingStep(activeStep: StepKey, targetStep: StepKey): boolean {
+  return onboardingStepIndex(targetStep) < onboardingStepIndex(activeStep);
+}
 
 function showOnboardingError(title: string, error: unknown) {
   toastManager.add(
@@ -233,6 +245,11 @@ function AgentStep({
             const action = getOnboardingAgentAction(provider);
             const targetBusy =
               provider && busyProviderInstanceId === provider.instanceId ? busy : null;
+            const progressLabel = getOnboardingAgentProgressLabel(
+              provider,
+              targetBusy === "install-agent",
+              option.definition.label,
+            );
             return (
               <div
                 className="grid gap-3 rounded-lg border bg-card p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center"
@@ -248,9 +265,28 @@ function AgentStep({
                       {agentStatusLabel(provider)}
                     </Badge>
                   </div>
-                  <p className="truncate text-xs text-muted-foreground">
+                  <p
+                    className={cn(
+                      "text-xs leading-5 text-muted-foreground",
+                      !progressLabel && "sm:line-clamp-2",
+                    )}
+                  >
                     {getOnboardingAgentDescription(provider)}
                   </p>
+                  {progressLabel ? (
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex items-center justify-between gap-3 text-xs">
+                        <span aria-live="polite" className="font-medium text-foreground">
+                          {progressLabel}
+                        </span>
+                        <span className="text-muted-foreground">Keep Kairo open</span>
+                      </div>
+                      <progress
+                        aria-label={`${option.definition.label} installation progress`}
+                        className="h-1.5 w-full appearance-none overflow-hidden rounded-full bg-muted [&::-moz-progress-bar]:rounded-full [&::-moz-progress-bar]:bg-primary [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-value]:bg-primary"
+                      />
+                    </div>
+                  ) : null}
                 </div>
                 <div className="flex gap-2 sm:justify-end">
                   {action === "detected" ? (
@@ -267,7 +303,7 @@ function AgentStep({
                       )}
                       Login
                     </Button>
-                  ) : action === "retry" ? (
+                  ) : action === "refresh" ? (
                     <Button
                       size="sm"
                       variant="outline"
@@ -279,7 +315,7 @@ function AgentStep({
                       ) : (
                         <RefreshCwIcon className="size-3.5" />
                       )}
-                      Retry
+                      Refresh
                     </Button>
                   ) : (
                     <Button
@@ -292,7 +328,10 @@ function AgentStep({
                       ) : (
                         <TerminalIcon className="size-3.5" />
                       )}
-                      Install
+                      {provider?.updateState?.status === "failed" ||
+                      provider?.updateState?.status === "unchanged"
+                        ? "Retry install"
+                        : "Install"}
                     </Button>
                   )}
                 </div>
@@ -563,6 +602,7 @@ function ComposioStep({
     operationRunning,
   });
   const authenticated = status?.auth.status === "authenticated";
+  const nativeWindowsUnsupported = status?.cli.status === "unsupported";
   const connectedToolkits = getConnectedComposioToolkits(status);
   const availableApps = getAvailableComposioCatalogItems(catalog?.items ?? [], status, query).slice(
     0,
@@ -597,7 +637,15 @@ function ComposioStep({
                 {status?.cli.executablePath ?? status?.cli.message ?? "Checking local CLI status."}
               </p>
             </div>
-            {primaryAction !== "none" ? (
+            {nativeWindowsUnsupported ? (
+              <Button
+                variant="outline"
+                onClick={() => void ensureLocalApi().shell.openExternal(COMPOSIO_CLI_DOCS_URL)}
+              >
+                <ExternalLinkIcon className="size-4" />
+                WSL setup guide
+              </Button>
+            ) : primaryAction !== "none" ? (
               <Button
                 disabled={primaryButton.disabled || busy !== null}
                 onClick={() => onRunSetup(primaryAction)}
@@ -616,6 +664,12 @@ function ComposioStep({
               </Button>
             )}
           </div>
+          {nativeWindowsUnsupported ? (
+            <p className="text-xs text-muted-foreground">
+              Native Windows installation is unavailable. Run Kairo from WSL and install Composio in
+              that environment.
+            </p>
+          ) : null}
         </div>
 
         {authenticated ? (
@@ -735,10 +789,7 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const serverApiRef = useRef(serverApi);
   const serverProviders = useServerProviders();
-  const [providersOverride, setProvidersOverride] = useState<ReadonlyArray<ServerProvider> | null>(
-    null,
-  );
-  const providers = providersOverride ?? serverProviders;
+  const providers = serverProviders;
   const [memoryStatus, setMemoryStatus] = useState<SupermemoryStatus | null>(null);
   const [composioStatus, setComposioStatus] = useState<ComposioStatus | null>(null);
   const [activeStep, setActiveStep] = useState<StepKey>("agents");
@@ -769,7 +820,7 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
   const agentOptions = useMemo<ReadonlyArray<AgentOption>>(
     () =>
       PROVIDER_CLIENT_DEFINITIONS.filter((definition) =>
-        CODING_AGENT_DRIVERS.has(definition.value),
+        ONBOARDING_CODING_AGENT_DRIVERS.has(definition.value),
       ).map((definition) => ({
         definition,
         provider: providers.find((provider) => provider.driver === definition.value),
@@ -820,7 +871,6 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
         serverApiRef.current.getMemoryStatus(),
         serverApiRef.current.getComposioStatus(),
       ]);
-      setProvidersOverride(providerPayload.providers);
       setMemoryStatus(nextMemory);
       setComposioStatus(nextComposio);
       return { providers: providerPayload.providers, memory: nextMemory, composio: nextComposio };
@@ -872,14 +922,42 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
         provider: provider.driver,
         instanceId: provider.instanceId,
       });
-      setProvidersOverride(next.providers);
-      await refreshAll();
-      toastManager.add(
-        stackedThreadToast({
-          type: "success",
-          title: `${option.definition.label} install command finished`,
-        }),
+      const commandProvider = findOnboardingProvider(next.providers, provider.instanceId);
+      const refreshed = await refreshAll();
+      const refreshedProvider = findOnboardingProvider(refreshed.providers, provider.instanceId);
+      const outcome = resolveOnboardingAgentInstallOutcome(
+        commandProvider?.updateState?.status === "failed" ||
+          commandProvider?.updateState?.status === "unchanged"
+          ? commandProvider
+          : (refreshedProvider ?? commandProvider),
       );
+      if (outcome.kind === "ready") {
+        toastManager.add(
+          stackedThreadToast({
+            type: "success",
+            title: `${option.definition.label} ready`,
+          }),
+        );
+      } else if (outcome.kind === "failed" || outcome.kind === "missing") {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: `Could not install ${option.definition.label}`,
+            description: outcome.description,
+          }),
+        );
+      } else {
+        toastManager.add(
+          stackedThreadToast({
+            type: "warning",
+            title:
+              outcome.kind === "needs_login"
+                ? `${option.definition.label} installed. Sign in next.`
+                : `${option.definition.label} needs attention`,
+            description: outcome.description,
+          }),
+        );
+      }
     } catch (error) {
       showOnboardingError(`Could not install ${option.definition.label}`, error);
     } finally {
@@ -898,13 +976,21 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
         provider: provider.driver,
         instanceId: provider.instanceId,
       });
-      setProvidersOverride(next.providers);
-      await refreshAll();
+      const refreshed = await refreshAll();
+      const refreshedProvider =
+        findOnboardingProvider(refreshed.providers, provider.instanceId) ??
+        findOnboardingProvider(next.providers, provider.instanceId);
+      const outcome = resolveOnboardingAgentReadiness(refreshedProvider);
       toastManager.add(
-        stackedThreadToast({
-          type: "success",
-          title: `${option.definition.label} login command finished`,
-        }),
+        stackedThreadToast(
+          outcome.kind === "ready"
+            ? { type: "success", title: `${option.definition.label} ready` }
+            : {
+                type: "warning",
+                title: `${option.definition.label} still needs attention`,
+                description: outcome.description,
+              },
+        ),
       );
     } catch (error) {
       showOnboardingError(`Could not login ${option.definition.label}`, error);
@@ -963,6 +1049,14 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
       if (next.auth.status === "authenticated") {
         setActiveStep("finish");
         toastManager.add(stackedThreadToast({ type: "success", title: "Composio ready" }));
+      } else if (next.operation?.status === "failed") {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Composio setup failed",
+            description: getComposioFailureDescription(next),
+          }),
+        );
       }
     } catch (error) {
       showOnboardingError("Composio setup failed", error);

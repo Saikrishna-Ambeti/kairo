@@ -35,6 +35,8 @@ import {
 import { ScrollArea } from "../ui/scroll-area";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import {
+  COMPOSIO_CLI_DOCS_URL,
+  getComposioFailureDescription,
   getComposioPrimaryButtonState,
   getConnectedComposioToolkits,
   getComposioSetupDialogCopy,
@@ -270,7 +272,7 @@ export function ComposioSettingsPanel() {
           stackedThreadToast({
             type: "error",
             title: "Composio setup failed",
-            description: nextOperation.message ?? "Setup failed.",
+            description: getComposioFailureDescription(next),
           }),
         );
       }
@@ -348,7 +350,7 @@ export function ComposioSettingsPanel() {
           stackedThreadToast({
             type: "error",
             title: "Composio setup failed",
-            description: next.operation.message ?? "Setup failed.",
+            description: getComposioFailureDescription(next),
           }),
         );
       } else {
@@ -403,6 +405,7 @@ export function ComposioSettingsPanel() {
     operationRunning,
   });
   const connectedToolkits = getConnectedComposioToolkits(status);
+  const nativeWindowsUnsupported = status?.cli.status === "unsupported";
 
   if (loading && !status) {
     return (
@@ -436,7 +439,15 @@ export function ComposioSettingsPanel() {
               </p>
             </div>
             <div className="flex gap-2">
-              {primaryAction !== "none" ? (
+              {nativeWindowsUnsupported ? (
+                <Button
+                  variant="outline"
+                  onClick={() => void ensureLocalApi().shell.openExternal(COMPOSIO_CLI_DOCS_URL)}
+                >
+                  <ExternalLinkIcon className="size-4" />
+                  WSL setup guide
+                </Button>
+              ) : primaryAction !== "none" ? (
                 <Button
                   disabled={primaryButton.disabled}
                   onClick={() => void runSetup(primaryAction)}
@@ -468,6 +479,14 @@ export function ComposioSettingsPanel() {
             <Alert>
               <AlertDescription>
                 Composio setup is running in the background. You can reopen progress from this page.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          {nativeWindowsUnsupported ? (
+            <Alert>
+              <AlertDescription>
+                Native Windows installation is unavailable. Run Kairo from WSL and install Composio
+                in that environment.
               </AlertDescription>
             </Alert>
           ) : null}

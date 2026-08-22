@@ -1,35 +1,31 @@
 import {
-  ProviderDriverKind as ProviderDriverKindSchema,
+  ProviderDriverKind,
   isProviderAvailable,
-  type ProviderDriverKind,
+  type ProviderInstanceId,
   type ServerProvider,
 } from "@kairo/contracts";
 
-export const CODING_AGENT_DRIVERS = new Set<ProviderDriverKind>([
-  ProviderDriverKindSchema.make("codex"),
-  ProviderDriverKindSchema.make("claudeAgent"),
-  ProviderDriverKindSchema.make("opencode"),
+export const ONBOARDING_CODING_AGENT_DRIVERS = new Set([
+  ProviderDriverKind.make("codex"),
+  ProviderDriverKind.make("claudeAgent"),
+  ProviderDriverKind.make("opencode"),
 ]);
 
-export type OnboardingStepKey = "agents" | "memory" | "composio" | "finish";
+export type OnboardingAgentAction = "detected" | "install" | "login" | "refresh";
 
-const ONBOARDING_STEP_ORDER: ReadonlyArray<OnboardingStepKey> = [
-  "agents",
-  "memory",
-  "composio",
-  "finish",
-];
+export type OnboardingAgentReadiness =
+  | { readonly kind: "ready" }
+  | { readonly kind: "needs_login"; readonly description: string }
+  | { readonly kind: "needs_attention"; readonly description: string }
+  | { readonly kind: "missing"; readonly description: string };
 
-export function canNavigateBackToOnboardingStep(
-  activeStep: OnboardingStepKey,
-  targetStep: OnboardingStepKey,
-): boolean {
-  return ONBOARDING_STEP_ORDER.indexOf(targetStep) < ONBOARDING_STEP_ORDER.indexOf(activeStep);
-}
+export type OnboardingAgentInstallOutcome =
+  | OnboardingAgentReadiness
+  | { readonly kind: "failed"; readonly description: string };
 
 export function isUsableOnboardingAgent(provider: ServerProvider): boolean {
   return (
-    CODING_AGENT_DRIVERS.has(provider.driver) &&
+    ONBOARDING_CODING_AGENT_DRIVERS.has(provider.driver) &&
     provider.enabled &&
     provider.installed &&
     isProviderAvailable(provider) &&
@@ -39,26 +35,110 @@ export function isUsableOnboardingAgent(provider: ServerProvider): boolean {
 
 export function getOnboardingAgentAction(
   provider: ServerProvider | undefined,
-): "detected" | "install" | "login" | "retry" {
+): OnboardingAgentAction {
   if (provider && isUsableOnboardingAgent(provider)) return "detected";
-  if (provider?.enabled && provider.installed && provider.auth.status === "unauthenticated") {
+  if (!provider?.installed) return "install";
+  if (provider.auth.status === "unauthenticated" || provider.auth.status === "unknown") {
     return "login";
   }
-  if (provider?.enabled && provider.installed) return "retry";
-  return "install";
+  return "refresh";
+}
+
+function appendRecovery(message: string | undefined, recovery: string): string {
+  if (!message) return recovery;
+  return `${message} ${recovery}`;
 }
 
 export function getOnboardingAgentDescription(provider: ServerProvider | undefined): string {
   const action = getOnboardingAgentAction(provider);
   if (action === "login") {
-    return "Sign in to this provider to finish detection.";
+    return appendRecovery(provider?.message, "Sign in, then refresh detection.");
   }
-  if (action === "retry") {
-    return provider?.message ?? "The CLI was found, but its health check failed. Retry detection.";
+  if (action === "refresh") {
+    return appendRecovery(provider?.message, "Fix the CLI issue, then refresh detection.");
+  }
+  if (action === "install") {
+    const updateState = provider?.updateState;
+    if (updateState?.status === "failed") {
+      return appendRecovery(updateState.message ?? undefined, "Fix the installer error and retry.");
+    }
+    if (updateState?.status === "unchanged") {
+      return appendRecovery(
+        updateState.message ?? undefined,
+        "Check the install command and retry.",
+      );
+    }
   }
   return (
     provider?.versionAdvisory?.updateCommand ??
     provider?.message ??
-    "Install the CLI and refresh detection."
+    "Checking installer availability."
   );
+}
+
+export function getOnboardingAgentProgressLabel(
+  provider: ServerProvider | undefined,
+  installRequested: boolean,
+  providerLabel: string,
+): string | null {
+  if (provider?.updateState?.status === "queued") return "Waiting for installer";
+  if (provider?.updateState?.status === "running") return `Installing ${providerLabel}`;
+  return installRequested ? "Starting installer" : null;
+}
+
+export function resolveOnboardingAgentReadiness(
+  provider: ServerProvider | undefined,
+): OnboardingAgentReadiness {
+  if (!provider || !provider.installed) {
+    return {
+      kind: "missing",
+      description: "Kairo still cannot find the CLI. Check PATH, then retry detection.",
+    };
+  }
+  if (isUsableOnboardingAgent(provider)) return { kind: "ready" };
+  if (provider.auth.status === "unauthenticated" || provider.auth.status === "unknown") {
+    return {
+      kind: "needs_login",
+      description: appendRecovery(provider.message, "Sign in, then refresh detection."),
+    };
+  }
+  return {
+    kind: "needs_attention",
+    description: appendRecovery(provider.message, "Fix the CLI issue, then refresh detection."),
+  };
+}
+
+export function resolveOnboardingAgentInstallOutcome(
+  provider: ServerProvider | undefined,
+): OnboardingAgentInstallOutcome {
+  const updateState = provider?.updateState;
+  if (updateState?.status === "failed") {
+    return {
+      kind: "failed",
+      description: [
+        updateState.message ?? "Install command failed.",
+        updateState.output,
+        "Fix the installer error, then retry.",
+      ]
+        .filter((part): part is string => Boolean(part))
+        .join("\n\n"),
+    };
+  }
+  if (updateState?.status === "unchanged") {
+    return {
+      kind: "failed",
+      description: appendRecovery(
+        updateState.message ?? undefined,
+        "Check the install command, then retry.",
+      ),
+    };
+  }
+  return resolveOnboardingAgentReadiness(provider);
+}
+
+export function findOnboardingProvider(
+  providers: ReadonlyArray<ServerProvider>,
+  instanceId: ProviderInstanceId,
+): ServerProvider | undefined {
+  return providers.find((provider) => provider.instanceId === instanceId);
 }
