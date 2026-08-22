@@ -78,13 +78,9 @@ import type {
   TestMemoryConnectionInput,
 } from "./memory.ts";
 import type {
-  ComposioOperationProgressEvent,
   ComposioStatus,
-  ComposioToolkitCatalog,
-  InstallComposioAgentSupportInput,
-  InstallComposioInput,
-  LinkComposioToolkitInput,
-  ListComposioToolkitsInput,
+  ConfigureComposioInput,
+  TestComposioConnectionInput,
 } from "./composio.ts";
 import type {
   SourceControlCloneRepositoryInput,
@@ -535,22 +531,8 @@ export interface LocalApi {
     installMemoryProviders: (input: InstallMemoryProvidersInput) => Promise<SupermemoryStatus>;
     disableMemory: () => Promise<SupermemoryStatus>;
     getComposioStatus: () => Promise<ComposioStatus>;
-    listComposioToolkits: (input: ListComposioToolkitsInput) => Promise<ComposioToolkitCatalog>;
-    installAndLoginComposio: (
-      input: InstallComposioInput,
-      onProgress?: (event: ComposioOperationProgressEvent) => void,
-    ) => Promise<ComposioStatus>;
-    loginComposio: (
-      input: InstallComposioInput,
-      onProgress?: (event: ComposioOperationProgressEvent) => void,
-    ) => Promise<ComposioStatus>;
-    linkComposioToolkit: (
-      input: LinkComposioToolkitInput,
-      onProgress?: (event: ComposioOperationProgressEvent) => void,
-    ) => Promise<ComposioStatus>;
-    installComposioAgentSupport: (
-      input: InstallComposioAgentSupportInput,
-    ) => Promise<ComposioStatus>;
+    configureComposio: (input: ConfigureComposioInput) => Promise<ComposioStatus>;
+    testComposioConnection: (input?: TestComposioConnectionInput) => Promise<ComposioStatus>;
     disableComposio: () => Promise<ComposioStatus>;
     discoverSourceControl: () => Promise<SourceControlDiscoveryResult>;
     getTraceDiagnostics: () => Promise<ServerTraceDiagnosticsResult>;

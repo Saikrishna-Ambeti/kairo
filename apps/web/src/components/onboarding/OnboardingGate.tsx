@@ -3,12 +3,12 @@ import {
   ArrowRightIcon,
   BrainCircuitIcon,
   CheckCircle2Icon,
+  CloudIcon,
   ExternalLinkIcon,
   KeyRoundIcon,
   LoaderCircleIcon,
   PlugZapIcon,
   RefreshCwIcon,
-  SearchIcon,
   TerminalIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ElementType } from "react";
@@ -17,10 +17,7 @@ import {
   type ServerProvider,
   type SupermemoryProviderStatus,
   type SupermemoryStatus,
-  type ComposioOperationProgressEvent,
   type ComposioStatus,
-  type ComposioToolkitCatalog,
-  type ComposioToolkitCatalogItem,
 } from "@kairo/contracts";
 
 import { ensureLocalApi } from "../../localApi";
@@ -31,15 +28,6 @@ import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { Input } from "../ui/input";
 import { stackedThreadToast, toastManager } from "../ui/toast";
-import { ComposioSetupDialog } from "../settings/IntegrationsSettings";
-import {
-  COMPOSIO_CLI_DOCS_URL,
-  getComposioFailureDescription,
-  getAvailableComposioCatalogItems,
-  getConnectedComposioToolkits,
-  getComposioPrimaryButtonState,
-  type SetupMode,
-} from "../settings/IntegrationsSettings.logic";
 import { PROVIDER_CLIENT_DEFINITIONS } from "../settings/providerDriverMeta";
 import {
   ONBOARDING_CODING_AGENT_DRIVERS,
@@ -54,6 +42,7 @@ import {
 
 const MEMORY_AGENT_DRIVERS = ONBOARDING_CODING_AGENT_DRIVERS;
 const SUPERMEMORY_CONSOLE_URL = "https://app.supermemory.ai/?view=integrations";
+const COMPOSIO_DASHBOARD_URL = "https://dashboard.composio.dev";
 
 type StepKey = "agents" | "memory" | "composio" | "finish";
 type BusyAction =
@@ -62,7 +51,6 @@ type BusyAction =
   | "login-agent"
   | "save-memory"
   | "setup-composio"
-  | "connect-app"
   | null;
 
 interface AgentOption {
@@ -130,10 +118,6 @@ function memoryProviderBadgeVariant(status: SupermemoryProviderStatus["status"])
     default:
       return "outline";
   }
-}
-
-function connectedAppLabel(item: ComposioToolkitCatalogItem): string {
-  return item.label.trim() || item.toolkit;
 }
 
 function StepRail({
@@ -523,89 +507,30 @@ function MemoryStep({
   );
 }
 
-function CatalogAppRow({
-  item,
-  connecting,
-  disabled,
-  onConnect,
-}: {
-  item: ComposioToolkitCatalogItem;
-  connecting: boolean;
-  disabled: boolean;
-  onConnect: (toolkit: string) => void;
-}) {
-  return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-t px-4 py-3 first:border-t-0">
-      <div className="min-w-0 space-y-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          {item.logoUrl ? (
-            <img alt="" className="size-5 rounded-sm object-contain" src={item.logoUrl} />
-          ) : null}
-          <span className="truncate text-sm font-semibold">{connectedAppLabel(item)}</span>
-          <Badge size="sm" variant="outline">
-            {item.toolkit}
-          </Badge>
-        </div>
-        <p className="line-clamp-2 text-xs text-muted-foreground">
-          {item.description ?? "Connect this app through Composio."}
-        </p>
-      </div>
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={disabled}
-        onClick={() => onConnect(item.toolkit)}
-      >
-        {connecting ? (
-          <LoaderCircleIcon className="size-3.5 animate-spin" />
-        ) : (
-          <PlugZapIcon className="size-3.5" />
-        )}
-        Connect
-      </Button>
-    </div>
-  );
-}
-
 function ComposioStep({
   status,
-  catalog,
-  query,
+  apiKey,
+  selectedProviderIds,
   busy,
-  connectingToolkit,
-  catalogLoading,
-  onQueryChange,
-  onRunSetup,
-  onLoadCatalog,
-  onConnectToolkit,
+  onApiKeyChange,
+  onProviderSelectionChange,
+  onSave,
   onContinue,
 }: {
   status: ComposioStatus | null;
-  catalog: ComposioToolkitCatalog | null;
-  query: string;
+  apiKey: string;
+  selectedProviderIds: ReadonlySet<ProviderInstanceId>;
   busy: BusyAction;
-  connectingToolkit: string | null;
-  catalogLoading: boolean;
-  onQueryChange: (value: string) => void;
-  onRunSetup: (mode: SetupMode) => void;
-  onLoadCatalog: () => void;
-  onConnectToolkit: (toolkit: string) => void;
+  onApiKeyChange: (value: string) => void;
+  onProviderSelectionChange: (next: ReadonlySet<ProviderInstanceId>) => void;
+  onSave: () => void;
   onContinue: () => void;
 }) {
-  const primaryAction = status?.primaryAction ?? "install_and_login";
-  const operationRunning = status?.operation?.status === "running";
-  const primaryButton = getComposioPrimaryButtonState({
-    primaryAction,
-    busy: busy === "setup-composio",
-    operationRunning,
-  });
-  const authenticated = status?.auth.status === "authenticated";
-  const nativeWindowsUnsupported = status?.cli.status === "unsupported";
-  const connectedToolkits = getConnectedComposioToolkits(status);
-  const availableApps = getAvailableComposioCatalogItems(catalog?.items ?? [], status, query).slice(
-    0,
-    12,
-  );
+  const configured = status?.auth.status === "configured";
+  const canSave =
+    busy === null &&
+    selectedProviderIds.size > 0 &&
+    (status?.auth.hasApiKey === true || apiKey.trim().length > 0);
 
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
@@ -613,123 +538,54 @@ function ComposioStep({
         <div className="space-y-1">
           <h2 className="text-2xl font-semibold tracking-tight">Composio</h2>
           <p className="text-sm text-muted-foreground">
-            Composio lets agents connect to external apps from this device.
+            Connect agents to hosted app tools without installing another runtime.
           </p>
         </div>
         <div className="space-y-4 rounded-lg border bg-card p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0 space-y-1">
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <TerminalIcon className="size-4 text-muted-foreground" />
-                <span className="truncate text-sm font-semibold">Composio CLI</span>
-                <Badge
-                  size="sm"
-                  variant={
-                    authenticated ? "success" : primaryAction === "none" ? "outline" : "warning"
-                  }
-                >
-                  {authenticated ? "Authenticated" : statusText(status?.cli.status ?? "checking")}
-                </Badge>
-              </div>
-              <p className="truncate text-xs text-muted-foreground">
-                {status?.cli.executablePath ?? status?.cli.message ?? "Checking local CLI status."}
-              </p>
-            </div>
-            {nativeWindowsUnsupported ? (
-              <Button
-                variant="outline"
-                onClick={() => void ensureLocalApi().shell.openExternal(COMPOSIO_CLI_DOCS_URL)}
-              >
-                <ExternalLinkIcon className="size-4" />
-                WSL setup guide
-              </Button>
-            ) : primaryAction !== "none" ? (
-              <Button
-                disabled={primaryButton.disabled || busy !== null}
-                onClick={() => onRunSetup(primaryAction)}
-              >
-                {busy === "setup-composio" || operationRunning ? (
-                  <LoaderCircleIcon className="size-4 animate-spin" />
-                ) : (
-                  <PlugZapIcon className="size-4" />
-                )}
-                {operationRunning ? primaryButton.runningLabel : primaryButton.label}
-              </Button>
-            ) : (
-              <Button disabled={!authenticated || busy !== null} onClick={onContinue}>
+          <div className="flex items-center gap-2">
+            <CloudIcon className="size-4 text-muted-foreground" />
+            <span className="text-sm font-semibold">Composio Connect</span>
+            <Badge size="sm" variant={configured ? "success" : "outline"}>
+              {configured ? "Connected" : "Needs API key"}
+            </Badge>
+          </div>
+          <Input
+            nativeInput
+            type="password"
+            autoComplete="off"
+            placeholder={
+              status?.auth.hasApiKey
+                ? "Saved. Enter a new key to replace it."
+                : "Paste your x-consumer-api-key"
+            }
+            value={apiKey}
+            onChange={(event) => onApiKeyChange(event.currentTarget.value)}
+          />
+          {status?.auth.lastError ? (
+            <p className="text-xs text-destructive">{status.auth.lastError}</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Key stays in this environment's secret store. New agent sessions receive hosted MCP
+              access.
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Button disabled={!canSave} onClick={onSave}>
+              {busy === "setup-composio" ? (
+                <LoaderCircleIcon className="size-4 animate-spin" />
+              ) : (
+                <PlugZapIcon className="size-4" />
+              )}
+              Save and test
+            </Button>
+            {configured ? (
+              <Button variant="outline" disabled={busy !== null} onClick={onContinue}>
                 Continue
                 <ArrowRightIcon className="size-3.5" />
               </Button>
-            )}
-          </div>
-          {nativeWindowsUnsupported ? (
-            <p className="text-xs text-muted-foreground">
-              Native Windows installation is unavailable. Run Kairo from WSL and install Composio in
-              that environment.
-            </p>
-          ) : null}
-        </div>
-
-        {authenticated ? (
-          <div className="space-y-4 rounded-lg border bg-card p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="space-y-1">
-                <h3 className="text-sm font-semibold">Connected apps</h3>
-                <p className="text-xs text-muted-foreground">
-                  Apps can also be added later from Settings, then Integrations.
-                </p>
-              </div>
-              <Button variant="outline" size="sm" disabled={busy !== null} onClick={onLoadCatalog}>
-                {catalogLoading ? (
-                  <LoaderCircleIcon className="size-3.5 animate-spin" />
-                ) : (
-                  <PlugZapIcon className="size-3.5" />
-                )}
-                Connect new apps
-              </Button>
-            </div>
-            {connectedToolkits.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {connectedToolkits.map((toolkit) => (
-                  <Badge key={toolkit.toolkit} variant="success">
-                    {toolkit.label}
-                  </Badge>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No connected apps detected yet.</p>
-            )}
-            {catalog ? (
-              <div className="space-y-3">
-                <div className="relative">
-                  <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    nativeInput
-                    className="pl-9"
-                    placeholder="Search apps"
-                    value={query}
-                    onChange={(event) => onQueryChange(event.currentTarget.value)}
-                  />
-                </div>
-                <div className="max-h-80 overflow-auto rounded-lg border">
-                  {availableApps.length > 0 ? (
-                    availableApps.map((item) => (
-                      <CatalogAppRow
-                        key={item.toolkit}
-                        item={item}
-                        disabled={busy !== null}
-                        connecting={connectingToolkit === item.toolkit}
-                        onConnect={onConnectToolkit}
-                      />
-                    ))
-                  ) : (
-                    <div className="px-4 py-4 text-sm text-muted-foreground">No apps found.</div>
-                  )}
-                </div>
-              </div>
             ) : null}
           </div>
-        ) : null}
+        </div>
       </section>
       <aside className="space-y-3 rounded-lg border bg-muted/20 p-4">
         <div className="flex items-center gap-2 text-sm font-semibold">
@@ -739,22 +595,37 @@ function ComposioStep({
         {(status?.agentSupport ?? []).length > 0 ? (
           <div className="space-y-2">
             {status?.agentSupport.map((entry) => (
-              <div
-                className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 text-sm"
+              <label
+                className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 text-sm"
                 key={entry.providerInstanceId}
               >
+                <Checkbox
+                  checked={selectedProviderIds.has(entry.providerInstanceId)}
+                  disabled={!entry.supported || busy !== null}
+                  onCheckedChange={(checked) => {
+                    const next = new Set(selectedProviderIds);
+                    if (checked) next.add(entry.providerInstanceId);
+                    else next.delete(entry.providerInstanceId);
+                    onProviderSelectionChange(next);
+                  }}
+                />
                 <span className="truncate">{entry.displayName}</span>
-                <Badge size="sm" variant={entry.selected ? "success" : "outline"}>
-                  {entry.selected ? "Enabled" : statusText(entry.skillStatus)}
-                </Badge>
-              </div>
+              </label>
             ))}
           </div>
         ) : (
           <p className="text-sm leading-6 text-muted-foreground">
-            Agent access will be installed for the detected providers during setup.
+            Select a supported agent after installing it.
           </p>
         )}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void ensureLocalApi().shell.openExternal(COMPOSIO_DASHBOARD_URL)}
+        >
+          <ExternalLinkIcon className="size-3.5" />
+          Get API key
+        </Button>
       </aside>
     </div>
   );
@@ -769,7 +640,7 @@ function FinishStep({ onComplete }: { onComplete: () => void }) {
       <div className="space-y-2">
         <h2 className="text-2xl font-semibold tracking-tight">Setup complete</h2>
         <p className="text-sm leading-6 text-muted-foreground">
-          Your coding agent, memory, and Composio integrations are ready on this device.
+          Your coding agent, memory, and hosted Composio tools are ready.
         </p>
       </div>
       <div className="flex justify-center">
@@ -797,14 +668,10 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
   const [selectedMemoryProviderIds, setSelectedMemoryProviderIds] = useState<
     ReadonlySet<ProviderInstanceId>
   >(new Set());
-  const [setupMode, setSetupMode] = useState<SetupMode>("install_and_login");
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [events, setEvents] = useState<ComposioOperationProgressEvent[]>([]);
-  const [authUrl, setAuthUrl] = useState<string | null>(null);
-  const [catalog, setCatalog] = useState<ComposioToolkitCatalog | null>(null);
-  const [catalogLoading, setCatalogLoading] = useState(false);
-  const [catalogQuery, setCatalogQuery] = useState("");
-  const [connectingToolkit, setConnectingToolkit] = useState<string | null>(null);
+  const [composioApiKey, setComposioApiKey] = useState("");
+  const [selectedComposioProviderIds, setSelectedComposioProviderIds] = useState<
+    ReadonlySet<ProviderInstanceId>
+  >(new Set());
   const didInitialLoadRef = useRef(false);
   const userSelectedStepRef = useRef(false);
 
@@ -833,18 +700,11 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
     }));
   }, [usableAgents, memoryStatus?.providers]);
 
-  const selectedComposioProviderIds = useMemo(
-    () =>
-      composioStatus?.agentSupport
-        .filter((entry) => entry.selected)
-        .map((entry) => entry.providerInstanceId) ??
-      usableAgents.map((provider) => provider.instanceId),
-    [composioStatus?.agentSupport, usableAgents],
-  );
-
   const agentComplete = usableAgents.length > 0;
   const memoryComplete = Boolean(memoryStatus?.enabled && memoryStatus.auth.hasApiKey);
-  const composioComplete = composioStatus?.auth.status === "authenticated";
+  const composioComplete = Boolean(
+    composioStatus?.enabled && composioStatus.auth.status === "configured",
+  );
   const completed = useMemo(() => {
     const next = new Set<StepKey>();
     if (agentComplete) next.add("agents");
@@ -890,6 +750,24 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
     );
     setSelectedMemoryProviderIds(new Set(selected.map((provider) => provider.instanceId)));
   }, [usableAgents, memoryProviders, memoryStatus?.enabled, selectedMemoryProviderIds.size]);
+
+  useEffect(() => {
+    if (selectedComposioProviderIds.size > 0 || !composioStatus?.agentSupport.length) return;
+    const selected = composioStatus.agentSupport.filter((provider) =>
+      composioStatus.enabled
+        ? provider.selected
+        : provider.supported &&
+          usableAgents.some((agent) => agent.instanceId === provider.providerInstanceId),
+    );
+    setSelectedComposioProviderIds(
+      new Set(selected.map((provider) => provider.providerInstanceId)),
+    );
+  }, [
+    composioStatus?.agentSupport,
+    composioStatus?.enabled,
+    selectedComposioProviderIds.size,
+    usableAgents,
+  ]);
 
   useEffect(() => {
     if (userSelectedStepRef.current) return;
@@ -1012,82 +890,35 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
     }
   };
 
-  const appendComposioProgress = (event: ComposioOperationProgressEvent) => {
-    setEvents((previous) => [...previous, event].slice(-80));
-    if (event.authUrl) setAuthUrl(event.authUrl);
-    setComposioStatus((previous) =>
-      previous
-        ? {
-            ...previous,
-            operation: event.operation,
-          }
-        : previous,
-    );
-  };
-
-  const runComposioSetup = async (mode: SetupMode) => {
-    setSetupMode(mode);
-    setEvents([]);
-    setAuthUrl(null);
-    setDialogOpen(true);
+  const saveComposio = async () => {
+    const trimmedApiKey = composioApiKey.trim();
+    if (
+      selectedComposioProviderIds.size === 0 ||
+      (!trimmedApiKey && !composioStatus?.auth.hasApiKey)
+    ) {
+      return;
+    }
     setBusy("setup-composio");
     try {
-      const input = { providerInstanceIds: selectedComposioProviderIds };
-      const next =
-        mode === "install_and_login"
-          ? await ensureLocalApi().server.installAndLoginComposio(input, appendComposioProgress)
-          : await ensureLocalApi().server.loginComposio(input, appendComposioProgress);
+      const localApi = ensureLocalApi();
+      await localApi.server.configureComposio({
+        ...(trimmedApiKey ? { apiKey: trimmedApiKey } : {}),
+        providerInstanceIds: [...selectedComposioProviderIds],
+      });
+      const next = await localApi.server.testComposioConnection(
+        trimmedApiKey ? { apiKey: trimmedApiKey } : {},
+      );
       setComposioStatus(next);
-      if (next.auth.status === "authenticated") {
-        setActiveStep("finish");
-        toastManager.add(stackedThreadToast({ type: "success", title: "Composio ready" }));
-      } else if (next.operation?.status === "failed") {
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Composio setup failed",
-            description: getComposioFailureDescription(next),
-          }),
-        );
+      setComposioApiKey("");
+      if (next.auth.status !== "configured") {
+        throw new Error(next.auth.lastError ?? "Composio rejected the API key.");
       }
+      setActiveStep("finish");
+      toastManager.add(stackedThreadToast({ type: "success", title: "Composio ready" }));
     } catch (error) {
       showOnboardingError("Composio setup failed", error);
       void refreshAll().catch(() => undefined);
     } finally {
-      setBusy(null);
-    }
-  };
-
-  const loadCatalog = async () => {
-    setCatalogLoading(true);
-    try {
-      const next = await ensureLocalApi().server.listComposioToolkits({ limit: 1000 });
-      setCatalog(next);
-    } catch (error) {
-      showOnboardingError("Could not load Composio apps", error);
-    } finally {
-      setCatalogLoading(false);
-    }
-  };
-
-  const connectToolkit = async (toolkit: string) => {
-    setConnectingToolkit(toolkit);
-    setBusy("connect-app");
-    setSetupMode("login");
-    setEvents([]);
-    setAuthUrl(null);
-    setDialogOpen(true);
-    try {
-      const next = await ensureLocalApi().server.linkComposioToolkit(
-        { toolkit },
-        appendComposioProgress,
-      );
-      setComposioStatus(next);
-      toastManager.add(stackedThreadToast({ type: "success", title: `${toolkit} connected` }));
-    } catch (error) {
-      showOnboardingError(`Could not connect ${toolkit}`, error);
-    } finally {
-      setConnectingToolkit(null);
       setBusy(null);
     }
   };
@@ -1143,15 +974,12 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
           ) : activeStep === "composio" ? (
             <ComposioStep
               status={composioStatus}
-              catalog={catalog}
-              query={catalogQuery}
+              apiKey={composioApiKey}
+              selectedProviderIds={selectedComposioProviderIds}
               busy={busy}
-              connectingToolkit={connectingToolkit}
-              catalogLoading={catalogLoading}
-              onQueryChange={setCatalogQuery}
-              onRunSetup={(mode) => void runComposioSetup(mode)}
-              onLoadCatalog={() => void loadCatalog()}
-              onConnectToolkit={(toolkit) => void connectToolkit(toolkit)}
+              onApiKeyChange={setComposioApiKey}
+              onProviderSelectionChange={setSelectedComposioProviderIds}
+              onSave={() => void saveComposio()}
               onContinue={() => setActiveStep("finish")}
             />
           ) : (
@@ -1159,14 +987,6 @@ export function OnboardingGate({ onComplete }: { onComplete: () => void }) {
           )}
         </main>
       </div>
-
-      <ComposioSetupDialog
-        open={dialogOpen}
-        mode={setupMode}
-        events={events}
-        authUrl={authUrl}
-        onOpenChange={setDialogOpen}
-      />
     </div>
   );
 }

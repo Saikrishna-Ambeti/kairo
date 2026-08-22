@@ -41,6 +41,7 @@ import {
   CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
   CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
 } from "../CodexDeveloperInstructions.ts";
+import { buildComposioCodexArgs } from "../../composio/ComposioMcp.ts";
 
 export const CODEX_SUPERMEMORY_DEVELOPER_INSTRUCTIONS = `## Persistent Memory
 
@@ -737,9 +738,10 @@ export const makeCodexSessionRuntime = (
       ...(options.environment ?? process.env),
       ...(resolvedHomePath ? { CODEX_HOME: resolvedHomePath } : {}),
     };
+    const appServerArgs = [...buildComposioCodexArgs(env), "app-server"];
     const child = yield* spawner
       .spawn(
-        ChildProcess.make(options.binaryPath, ["app-server"], {
+        ChildProcess.make(options.binaryPath, appServerArgs, {
           cwd: options.cwd,
           env,
           forceKillAfter: CODEX_APP_SERVER_FORCE_KILL_AFTER,

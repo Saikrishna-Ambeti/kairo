@@ -111,15 +111,19 @@ const deriveEffectiveProviderInstanceConfigMap = (
 ): Effect.Effect<ProviderInstanceConfigMap, never> =>
   Effect.gen(function* () {
     const baseConfigMap = deriveProviderInstanceConfigMap(settings);
-    let effectiveConfigMap = settings.integrations.composio.enabled
-      ? applyComposioProviderBindings(settings, baseConfigMap)
-      : baseConfigMap;
+    let effectiveConfigMap = baseConfigMap;
+
+    const secretStoreOption = yield* Effect.serviceOption(ServerSecretStore.ServerSecretStore);
+    if (settings.integrations.composio.enabled && Option.isSome(secretStoreOption)) {
+      effectiveConfigMap = yield* applyComposioProviderBindings(settings, effectiveConfigMap).pipe(
+        Effect.provideService(ServerSecretStore.ServerSecretStore, secretStoreOption.value),
+      );
+    }
 
     if (!settings.memory.supermemory.enabled) {
       return effectiveConfigMap;
     }
 
-    const secretStoreOption = yield* Effect.serviceOption(ServerSecretStore.ServerSecretStore);
     if (Option.isNone(secretStoreOption)) {
       return effectiveConfigMap;
     }

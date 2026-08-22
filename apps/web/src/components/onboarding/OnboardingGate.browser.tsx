@@ -31,14 +31,8 @@ const memoryStatus: SupermemoryStatus = {
 
 const composioStatus: ComposioStatus = {
   enabled: false,
-  primaryAction: "install_and_login",
-  cli: {
-    status: "missing",
-    platform: "darwin",
-    installCommandLabel: "npm install -g composio-core",
-  },
-  auth: { status: "unauthenticated" },
-  toolkits: [],
+  endpoint: "https://connect.composio.dev/mcp",
+  auth: { status: "not_configured", hasApiKey: false },
   agentSupport: [],
 };
 

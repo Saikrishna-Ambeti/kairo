@@ -164,11 +164,8 @@ vi.mock("@kairo/client-runtime", async (importOriginal) => {
       installMemoryProviders: vi.fn(),
       disableMemory: vi.fn(),
       getComposioStatus: vi.fn(),
-      listComposioToolkits: vi.fn(),
-      installAndLoginComposio: vi.fn(),
-      loginComposio: vi.fn(),
-      linkComposioToolkit: vi.fn(),
-      installComposioAgentSupport: vi.fn(),
+      configureComposio: vi.fn(),
+      testComposioConnection: vi.fn(),
       disableComposio: vi.fn(),
     },
   };

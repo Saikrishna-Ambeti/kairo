@@ -1,10 +1,24 @@
-import type {
-  ProviderInstanceConfig,
-  ProviderInstanceConfigMap,
-  ProviderInstanceEnvironmentVariable,
-  ProviderInstanceId,
-  ServerSettings,
+import {
+  type ProviderDriverKind,
+  type ProviderInstanceConfig,
+  type ProviderInstanceConfigMap,
+  type ProviderInstanceEnvironmentVariable,
+  type ProviderInstanceId,
+  type ServerSettings,
 } from "@kairo/contracts";
+import * as Effect from "effect/Effect";
+
+import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
+import { getComposioApiKey } from "./ComposioSecrets.ts";
+
+export const COMPOSIO_MCP_URL = "https://connect.composio.dev/mcp";
+export const COMPOSIO_API_KEY_ENV = "KAIRO_COMPOSIO_API_KEY";
+
+const SUPPORTED_DRIVERS = new Set<string>(["codex", "claudeAgent", "cursor", "grok"]);
+
+export function isComposioDriverSupported(driver: ProviderDriverKind): boolean {
+  return SUPPORTED_DRIVERS.has(driver);
+}
 
 function mergeGeneratedEnvironment(
   existing: ProviderInstanceConfig["environment"],
@@ -17,50 +31,41 @@ function mergeGeneratedEnvironment(
   ];
 }
 
-function prependPath(installDir: string): string {
-  const delimiter = process.platform === "win32" ? ";" : ":";
-  return [installDir, process.env.PATH].filter(Boolean).join(delimiter);
-}
-
 export function buildComposioProviderEnvironment(input: {
-  readonly installDir?: string | undefined;
+  readonly apiKey: string;
 }): ReadonlyArray<ProviderInstanceEnvironmentVariable> {
-  if (!input.installDir) return [];
   return [
     {
-      name: "COMPOSIO_INSTALL_DIR",
-      value: input.installDir,
-      sensitive: false,
-    },
-    {
-      name: "PATH",
-      value: prependPath(input.installDir),
-      sensitive: false,
+      name: COMPOSIO_API_KEY_ENV,
+      value: input.apiKey,
+      sensitive: true,
     },
   ];
 }
 
-export function applyComposioProviderBindings(
+export const applyComposioProviderBindings = (
   settings: ServerSettings,
   configMap: ProviderInstanceConfigMap,
-): ProviderInstanceConfigMap {
-  const composio = settings.integrations.composio;
-  if (!composio.enabled || composio.providerInstanceIds.length === 0) {
-    return configMap;
-  }
+): Effect.Effect<ProviderInstanceConfigMap, never, ServerSecretStore.ServerSecretStore> =>
+  Effect.gen(function* () {
+    const composio = settings.integrations.composio;
+    if (!composio.enabled || composio.providerInstanceIds.length === 0) {
+      return configMap;
+    }
 
-  const installDir = process.env.COMPOSIO_INSTALL_DIR || `${process.env.HOME ?? ""}/.composio`;
-  const generated = buildComposioProviderEnvironment({ installDir });
-  if (generated.length === 0) return configMap;
+    const apiKey = yield* getComposioApiKey().pipe(Effect.orElseSucceed(() => null));
+    if (!apiKey) return configMap;
 
-  const selectedIds = new Set(composio.providerInstanceIds);
-  const merged: Record<string, ProviderInstanceConfig> = { ...configMap };
-  for (const [rawInstanceId, instance] of Object.entries(configMap)) {
-    if (!selectedIds.has(rawInstanceId as ProviderInstanceId)) continue;
-    merged[rawInstanceId] = {
-      ...instance,
-      environment: mergeGeneratedEnvironment(instance.environment, generated),
-    };
-  }
-  return merged as ProviderInstanceConfigMap;
-}
+    const generated = buildComposioProviderEnvironment({ apiKey });
+    const selectedIds = new Set<ProviderInstanceId>(composio.providerInstanceIds);
+    const merged: Record<string, ProviderInstanceConfig> = { ...configMap };
+    for (const [rawInstanceId, instance] of Object.entries(configMap)) {
+      const instanceId = rawInstanceId as ProviderInstanceId;
+      if (!selectedIds.has(instanceId) || !isComposioDriverSupported(instance.driver)) continue;
+      merged[rawInstanceId] = {
+        ...instance,
+        environment: mergeGeneratedEnvironment(instance.environment, generated),
+      };
+    }
+    return merged as ProviderInstanceConfigMap;
+  });

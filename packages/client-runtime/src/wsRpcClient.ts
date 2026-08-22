@@ -4,9 +4,6 @@ import {
   type GitRunStackedActionResult,
   type LocalApi,
   ORCHESTRATION_WS_METHODS,
-  type ComposioOperationProgressEvent,
-  type ComposioStatus,
-  type ComposioToolkitCatalog,
   type RelayClientInstallProgressEvent,
   type RelayClientStatus,
   type ServerSettingsPatch,
@@ -152,24 +149,10 @@ export interface WsRpcClient {
     readonly installMemoryProviders: RpcUnaryMethod<typeof WS_METHODS.serverInstallMemoryProviders>;
     readonly disableMemory: RpcUnaryNoArgMethod<typeof WS_METHODS.serverDisableMemory>;
     readonly getComposioStatus: RpcUnaryNoArgMethod<typeof WS_METHODS.serverGetComposioStatus>;
-    readonly listComposioToolkits: (
-      input: RpcInput<typeof WS_METHODS.serverListComposioToolkits>,
-    ) => Promise<ComposioToolkitCatalog>;
-    readonly installAndLoginComposio: (
-      input: RpcInput<typeof WS_METHODS.serverInstallAndLoginComposio>,
-      onProgress?: (event: ComposioOperationProgressEvent) => void,
-    ) => Promise<ComposioStatus>;
-    readonly loginComposio: (
-      input: RpcInput<typeof WS_METHODS.serverLoginComposio>,
-      onProgress?: (event: ComposioOperationProgressEvent) => void,
-    ) => Promise<ComposioStatus>;
-    readonly linkComposioToolkit: (
-      input: RpcInput<typeof WS_METHODS.serverLinkComposioToolkit>,
-      onProgress?: (event: ComposioOperationProgressEvent) => void,
-    ) => Promise<ComposioStatus>;
-    readonly installComposioAgentSupport: RpcUnaryMethod<
-      typeof WS_METHODS.serverInstallComposioAgentSupport
-    >;
+    readonly configureComposio: RpcUnaryMethod<typeof WS_METHODS.serverConfigureComposio>;
+    readonly testComposioConnection: (
+      input?: RpcInput<typeof WS_METHODS.serverTestComposioConnection>,
+    ) => ReturnType<RpcUnaryMethod<typeof WS_METHODS.serverTestComposioConnection>>;
     readonly disableComposio: RpcUnaryNoArgMethod<typeof WS_METHODS.serverDisableComposio>;
     readonly subscribeConfig: RpcStreamMethod<typeof WS_METHODS.subscribeServerConfig>;
     readonly subscribeLifecycle: RpcStreamMethod<typeof WS_METHODS.subscribeServerLifecycle>;
@@ -346,31 +329,10 @@ export function createWsRpcClient(
         transport.request((client) => client[WS_METHODS.serverDisableMemory]({})),
       getComposioStatus: () =>
         transport.request((client) => client[WS_METHODS.serverGetComposioStatus]({})),
-      listComposioToolkits: (input) =>
-        transport.request((client) => client[WS_METHODS.serverListComposioToolkits](input)),
-      installAndLoginComposio: async (input, onProgress) => {
-        await transport.requestStream(
-          (client) => client[WS_METHODS.serverInstallAndLoginComposio](input),
-          (event) => onProgress?.(event),
-        );
-        return transport.request((client) => client[WS_METHODS.serverGetComposioStatus]({}));
-      },
-      loginComposio: async (input, onProgress) => {
-        await transport.requestStream(
-          (client) => client[WS_METHODS.serverLoginComposio](input),
-          (event) => onProgress?.(event),
-        );
-        return transport.request((client) => client[WS_METHODS.serverGetComposioStatus]({}));
-      },
-      linkComposioToolkit: async (input, onProgress) => {
-        await transport.requestStream(
-          (client) => client[WS_METHODS.serverLinkComposioToolkit](input),
-          (event) => onProgress?.(event),
-        );
-        return transport.request((client) => client[WS_METHODS.serverGetComposioStatus]({}));
-      },
-      installComposioAgentSupport: (input) =>
-        transport.request((client) => client[WS_METHODS.serverInstallComposioAgentSupport](input)),
+      configureComposio: (input) =>
+        transport.request((client) => client[WS_METHODS.serverConfigureComposio](input)),
+      testComposioConnection: (input) =>
+        transport.request((client) => client[WS_METHODS.serverTestComposioConnection](input ?? {})),
       disableComposio: () =>
         transport.request((client) => client[WS_METHODS.serverDisableComposio]({})),
       subscribeConfig: (listener, options) =>
