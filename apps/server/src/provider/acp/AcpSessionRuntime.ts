@@ -19,6 +19,8 @@ import * as EffectAcpClient from "effect-acp/client";
 import * as EffectAcpErrors from "effect-acp/errors";
 import type * as EffectAcpSchema from "effect-acp/schema";
 import type * as EffectAcpProtocol from "effect-acp/protocol";
+
+import { buildComposioAcpMcpServers } from "../../composio/ComposioMcp.ts";
 import { resolveSpawnCommand } from "@kairo/shared/shell";
 
 import {
@@ -529,6 +531,10 @@ export const make = (
       );
 
     const startOnce = Effect.gen(function* () {
+      const mcpServers = [
+        ...(options.mcpServers ?? []),
+        ...buildComposioAcpMcpServers(options.spawn.env),
+      ];
       const initializePayload = {
         protocolVersion: 1,
         clientCapabilities: initializeClientCapabilities,
@@ -560,7 +566,7 @@ export const make = (
         const loadPayload = {
           sessionId: options.resumeSessionId,
           cwd: options.cwd,
-          mcpServers: options.mcpServers ?? [],
+          mcpServers,
         } satisfies EffectAcpSchema.LoadSessionRequest;
         const sessionLoadTimeout = Duration.fromInputUnsafe(
           options.sessionLoadTimeout ?? defaultSessionLoadTimeout,
@@ -633,7 +639,7 @@ export const make = (
       } else {
         const createPayload = {
           cwd: options.cwd,
-          mcpServers: options.mcpServers ?? [],
+          mcpServers,
         } satisfies EffectAcpSchema.NewSessionRequest;
         const created = yield* runLoggedRequest(
           "session/new",

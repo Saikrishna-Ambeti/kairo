@@ -1,5 +1,4 @@
 import {
-  type ComposioOperationProgressEvent,
   type EnvironmentId,
   type ServerConfig,
   type ServerConfigStreamEvent,
@@ -24,7 +23,6 @@ import { AsyncResult, Atom } from "effect/unstable/reactivity";
 
 import {
   createAtomCommandScheduler,
-  createEnvironmentCommand,
   createEnvironmentRpcCommand,
   createEnvironmentRpcQueryAtomFamily,
   createEnvironmentRpcSubscriptionAtomFamily,
@@ -682,40 +680,6 @@ export function createServerEnvironmentAtoms<R, E>(
     ),
   );
 
-  const composioInstallAndLogin = createEnvironmentCommand(runtime, {
-    label: "environment-data:server:composio-install-and-login",
-    execute: (operation: {
-      readonly input: EnvironmentRpcInput<typeof WS_METHODS.serverInstallAndLoginComposio>;
-      readonly onProgress?: (event: ComposioOperationProgressEvent) => void;
-    }) =>
-      runStream(WS_METHODS.serverInstallAndLoginComposio, operation.input).pipe(
-        Stream.runForEach((event) => Effect.sync(() => operation.onProgress?.(event))),
-        Effect.andThen(request(WS_METHODS.serverGetComposioStatus, {})),
-      ),
-  });
-  const composioLogin = createEnvironmentCommand(runtime, {
-    label: "environment-data:server:composio-login",
-    execute: (operation: {
-      readonly input: EnvironmentRpcInput<typeof WS_METHODS.serverLoginComposio>;
-      readonly onProgress?: (event: ComposioOperationProgressEvent) => void;
-    }) =>
-      runStream(WS_METHODS.serverLoginComposio, operation.input).pipe(
-        Stream.runForEach((event) => Effect.sync(() => operation.onProgress?.(event))),
-        Effect.andThen(request(WS_METHODS.serverGetComposioStatus, {})),
-      ),
-  });
-  const composioLinkToolkit = createEnvironmentCommand(runtime, {
-    label: "environment-data:server:composio-link-toolkit",
-    execute: (operation: {
-      readonly input: EnvironmentRpcInput<typeof WS_METHODS.serverLinkComposioToolkit>;
-      readonly onProgress?: (event: ComposioOperationProgressEvent) => void;
-    }) =>
-      runStream(WS_METHODS.serverLinkComposioToolkit, operation.input).pipe(
-        Stream.runForEach((event) => Effect.sync(() => operation.onProgress?.(event))),
-        Effect.andThen(request(WS_METHODS.serverGetComposioStatus, {})),
-      ),
-  });
-
   return {
     configValueAtom,
     updateStateAtom,
@@ -814,16 +778,13 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:server:composio-status",
       tag: WS_METHODS.serverGetComposioStatus,
     }),
-    listComposioToolkits: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:server:composio-list-toolkits",
-      tag: WS_METHODS.serverListComposioToolkits,
+    configureComposio: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:composio-configure",
+      tag: WS_METHODS.serverConfigureComposio,
     }),
-    composioInstallAndLogin,
-    composioLogin,
-    composioLinkToolkit,
-    installComposioAgentSupport: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:server:composio-install-agent-support",
-      tag: WS_METHODS.serverInstallComposioAgentSupport,
+    testComposioConnection: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:composio-test",
+      tag: WS_METHODS.serverTestComposioConnection,
     }),
     disableComposio: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:composio-disable",
