@@ -14,7 +14,7 @@
     "@kairo/client-runtime": "workspace:*",
     "@kairo/contracts": "workspace:*",
     "@kairo/shared": "workspace:*",
-    "alchemy": "https://pkg.ing/alchemy/078ff00",
+    "alchemy": "2.0.0-beta.56",
     "drizzle-orm": "1.0.0-rc.3",
     "effect": "4.0.0-beta.78"
   },

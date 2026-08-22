@@ -38,6 +38,7 @@ onlyBuiltDependencies:
   - msgpackr-extract
   - node-pty
   - sharp
+  - workerd
 
 overrides:
   "@clerk/clerk-js>@base-org/account": "-"
