@@ -39,7 +39,7 @@ describe("GitHubCli.layer", () => {
             JSON.stringify({
               number: 42,
               title: "Add PR thread creation",
-              url: "https://github.com/pingdotgg/kairo/pull/42",
+              url: "https://github.com/pingdotgg/t3code/pull/42",
               baseRefName: "main",
               headRefName: "feature/pr-threads",
               state: "OPEN",
@@ -65,7 +65,7 @@ describe("GitHubCli.layer", () => {
       assert.deepStrictEqual(result, {
         number: 42,
         title: "Add PR thread creation",
-        url: "https://github.com/pingdotgg/kairo/pull/42",
+        url: "https://github.com/pingdotgg/t3code/pull/42",
         baseRefName: "main",
         headRefName: "feature/pr-threads",
         state: "open",
@@ -98,7 +98,7 @@ describe("GitHubCli.layer", () => {
             JSON.stringify({
               number: 42,
               title: "  Add PR thread creation  \n",
-              url: " https://github.com/pingdotgg/kairo/pull/42 ",
+              url: " https://github.com/pingdotgg/t3code/pull/42 ",
               baseRefName: " main ",
               headRefName: "\tfeature/pr-threads\t",
               state: "OPEN",
@@ -124,7 +124,7 @@ describe("GitHubCli.layer", () => {
       assert.deepStrictEqual(result, {
         number: 42,
         title: "Add PR thread creation",
-        url: "https://github.com/pingdotgg/kairo/pull/42",
+        url: "https://github.com/pingdotgg/t3code/pull/42",
         baseRefName: "main",
         headRefName: "feature/pr-threads",
         state: "open",
@@ -145,14 +145,14 @@ describe("GitHubCli.layer", () => {
               {
                 number: 0,
                 title: "invalid",
-                url: "https://github.com/pingdotgg/kairo/pull/0",
+                url: "https://github.com/pingdotgg/t3code/pull/0",
                 baseRefName: "main",
                 headRefName: "feature/invalid",
               },
               {
                 number: 43,
                 title: "  Valid PR  ",
-                url: " https://github.com/pingdotgg/kairo/pull/43 ",
+                url: " https://github.com/pingdotgg/t3code/pull/43 ",
                 baseRefName: " main ",
                 headRefName: " feature/pr-list ",
                 headRepository: {
@@ -177,7 +177,7 @@ describe("GitHubCli.layer", () => {
         {
           number: 43,
           title: "Valid PR",
-          url: "https://github.com/pingdotgg/kairo/pull/43",
+          url: "https://github.com/pingdotgg/t3code/pull/43",
           baseRefName: "main",
           headRefName: "feature/pr-list",
           state: "open",

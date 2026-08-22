@@ -4,7 +4,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/pingdotgg/kairo",
+    "url": "https://github.com/Saikrishna-Ambeti/kairo",
     "directory": "apps/server"
   },
   "bin": {

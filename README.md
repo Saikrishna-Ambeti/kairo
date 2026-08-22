@@ -21,7 +21,7 @@ Kairo can help with practical tasks like understanding documents, drafting respo
 
 ### Desktop app
 
-Install the latest version of the desktop app from [GitHub Releases](https://github.com/pingdotgg/kairo/releases).
+Install the latest version of the desktop app from [GitHub Releases](https://github.com/Saikrishna-Ambeti/kairo/releases).
 
 ## Some notes
 

@@ -21,7 +21,7 @@ it.effect("maps GitLab MR summaries into provider-neutral change requests", () =
         Effect.succeed({
           number: 42,
           title: "Add GitLab provider",
-          url: "https://gitlab.com/pingdotgg/kairo/-/merge_requests/42",
+          url: "https://gitlab.com/pingdotgg/t3code/-/merge_requests/42",
           baseRefName: "main",
           headRefName: "feature/source-control",
           state: "open",
@@ -40,7 +40,7 @@ it.effect("maps GitLab MR summaries into provider-neutral change requests", () =
       provider: "gitlab",
       number: 42,
       title: "Add GitLab provider",
-      url: "https://gitlab.com/pingdotgg/kairo/-/merge_requests/42",
+      url: "https://gitlab.com/pingdotgg/t3code/-/merge_requests/42",
       baseRefName: "main",
       headRefName: "feature/source-control",
       state: "open",

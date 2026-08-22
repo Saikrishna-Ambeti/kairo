@@ -156,7 +156,7 @@ describe("ChatMarkdown", () => {
   });
 
   it("keeps a favicon with the leading segment of a wrapping URL", async () => {
-    const url = "https://github.com/pingdotgg/kairo/pull/3017/changes";
+    const url = "https://github.com/pingdotgg/t3code/pull/3017/changes";
     const screen = await render(
       <div style={{ width: 180 }}>
         <ChatMarkdown text={`[${url}](${url})`} cwd="/repo/project" />
