@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, ChartNoAxesColumnIcon, SettingsIcon } from "lucide-react";
+import { ArrowLeftIcon, ChartNoAxesColumnIcon, LibraryBigIcon, SettingsIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { memo, useCallback } from "react";
 import { Link, useCanGoBack, useLocation, useNavigate } from "@tanstack/react-router";
@@ -132,11 +132,13 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
         ? "settings"
         : location.pathname === "/usage"
           ? "usage"
-          : location.pathname === "/scheduled-tasks"
-            ? "scheduled-tasks"
-            : location.pathname === "/pull-requests"
-              ? "pull-requests"
-              : null,
+          : location.pathname === "/library"
+            ? "library"
+            : location.pathname === "/scheduled-tasks"
+              ? "scheduled-tasks"
+              : location.pathname === "/pull-requests"
+                ? "pull-requests"
+                : null,
   });
   const closeMobileSidebar = useCallback(() => {
     if (isMobile) {
@@ -154,6 +156,11 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
     }
     void navigate({ to: "/usage" });
   }, [isMobile, navigate, setOpenMobile]);
+
+  const handleLibraryClick = useCallback(() => {
+    closeMobileSidebar();
+    void navigate({ to: "/library" });
+  }, [closeMobileSidebar, navigate]);
 
   const handleBackClick = useCallback(() => {
     closeMobileSidebar();
@@ -184,6 +191,11 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
             icon={<ChartNoAxesColumnIcon />}
             label="Usage"
             onClick={handleUsageClick}
+          />
+          <SidebarUtilityItem
+            icon={<LibraryBigIcon />}
+            label="Library"
+            onClick={handleLibraryClick}
           />
         </>
       )}

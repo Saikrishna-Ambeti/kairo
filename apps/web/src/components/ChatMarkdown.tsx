@@ -106,6 +106,10 @@ import {
   openUrlInPreview,
   BrowserPreviewUnavailableError,
 } from "../browser/openFileInPreview";
+import {
+  isDocumentArtifactPath,
+  MarkdownDocumentArtifactLink,
+} from "./student/MarkdownDocumentArtifactLink";
 
 interface ChatMarkdownProps {
   text: string;
@@ -1517,7 +1521,23 @@ function ChatMarkdown({
       fileLinkMeta: MarkdownFileLinkMeta,
       copyMarkdown: string,
       className?: string,
+      renderDocumentArtifact = false,
     ) => {
+      if (
+        renderDocumentArtifact &&
+        threadRef &&
+        fileLinkMeta.workspaceRelativePath &&
+        isDocumentArtifactPath(fileLinkMeta.filePath)
+      ) {
+        return (
+          <MarkdownDocumentArtifactLink
+            meta={fileLinkMeta}
+            threadRef={threadRef}
+            copyMarkdown={copyMarkdown}
+            {...(className === undefined ? {} : { className })}
+          />
+        );
+      }
       const parentSuffix = fileLinkParentSuffixByPath.get(fileLinkMeta.filePath);
       const labelParts = [fileLinkMeta.basename];
       if (typeof parentSuffix === "string" && parentSuffix.length > 0) {
@@ -1710,6 +1730,7 @@ function ChatMarkdown({
           fileLinkMeta,
           `[${fileLinkMeta.basename}](${normalizedHref})`,
           props.className,
+          true,
         );
       },
       img({ node: _node, title: _title, ...props }) {

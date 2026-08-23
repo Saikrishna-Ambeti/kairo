@@ -65,7 +65,7 @@ different code depending on it:
 
 - How is Kairo running on this machine: \`npx kairo serve\` in a terminal, the
   background service, or the desktop app?
-- Which surface is the user connecting from: the website (app.kairo.codes), the
+- Which surface is the user connecting from: the website (kairo-web-ebon-three.vercel.app), the
   desktop app against a local server, the desktop app against a remote server,
   or the mobile app?
 

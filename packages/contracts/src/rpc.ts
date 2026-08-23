@@ -19,6 +19,7 @@ import {
   FilesystemBrowseError,
 } from "./filesystem.ts";
 import { AssetAccessError, AssetCreateUrlInput, AssetCreateUrlResult } from "./assets.ts";
+import { ArtifactLibraryReadError, ArtifactListInput, ArtifactListResult } from "./artifacts.ts";
 import {
   GitActionProgressEvent,
   VcsSwitchRefInput,
@@ -313,6 +314,7 @@ export const WS_METHODS = {
   serverReportHostPowerState: "server.reportHostPowerState",
   serverGetBackgroundPolicy: "server.getBackgroundPolicy",
   serverGetUsageSummary: "server.getUsageSummary",
+  serverListArtifacts: "server.listArtifacts",
   serverGetMemoryStatus: "server.getMemoryStatus",
   serverProvisionMemoryAccess: "server.provisionMemoryAccess",
   serverConfigureMemory: "server.configureMemory",
@@ -492,6 +494,12 @@ export const WsServerGetUsageSummaryRpc = Rpc.make(WS_METHODS.serverGetUsageSumm
   payload: UsageSummaryInput,
   success: UsageSummary,
   error: Schema.Union([EnvironmentAuthorizationError, UsageReadError]),
+});
+
+export const WsServerListArtifactsRpc = Rpc.make(WS_METHODS.serverListArtifacts, {
+  payload: ArtifactListInput,
+  success: ArtifactListResult,
+  error: Schema.Union([EnvironmentAuthorizationError, ArtifactLibraryReadError]),
 });
 
 export const WsServerSignalProcessRpc = Rpc.make(WS_METHODS.serverSignalProcess, {
@@ -1152,6 +1160,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetResourceTelemetryHistoryRpc,
   WsServerRetryResourceTelemetryRpc,
   WsServerGetUsageSummaryRpc,
+  WsServerListArtifactsRpc,
   WsServerSignalProcessRpc,
   WsServerReportClientActivityRpc,
   WsServerReportHostPowerStateRpc,

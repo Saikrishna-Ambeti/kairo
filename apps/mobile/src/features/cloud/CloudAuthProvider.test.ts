@@ -1,8 +1,10 @@
 import { managedRelaySessionAtom } from "@kairo/client-runtime/relay";
+import { it as effectIt } from "@effect/vitest";
+import * as Effect from "effect/Effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { appAtomRegistry } from "../../state/atom-registry";
-import { activateCloudRelayAccount, deactivateCloudRelayAccount } from "./CloudAuthProvider";
+import { activateCloudAccount, deactivateCloudAccount } from "./CloudAuthProvider";
 import { setAgentAwarenessRelayTokenProvider } from "../agent-awareness/remoteRegistration";
 
 vi.mock("@clerk/expo", () => ({
@@ -27,11 +29,13 @@ vi.mock("../../connection/catalog", () => ({
 }));
 
 vi.mock("./publicConfig", () => ({
+  hasCloudIdentityConfig: vi.fn(() => false),
+  hasManagedRelayConfig: vi.fn(() => false),
   resolveCloudPublicConfig: vi.fn(() => ({
-    clerk: { publishableKey: null },
+    clerk: { publishableKey: null, jwtTemplate: null },
     relay: { url: null },
   })),
-  resolveRelayClerkTokenOptions: vi.fn(),
+  resolveCloudClerkTokenOptions: vi.fn(),
 }));
 
 vi.mock("../agent-awareness/remoteRegistration", () => ({
@@ -40,17 +44,29 @@ vi.mock("../agent-awareness/remoteRegistration", () => ({
 }));
 
 afterEach(() => {
-  deactivateCloudRelayAccount();
+  deactivateCloudAccount();
   vi.clearAllMocks();
 });
 
-describe("CloudAuthProvider relay account isolation", () => {
+describe("CloudAuthProvider account isolation", () => {
+  effectIt.effect("keeps Clerk token available when managed relay is disabled", () =>
+    Effect.gen(function* () {
+      const tokenProvider = async () => "account-1-token";
+
+      activateCloudAccount("account-1", tokenProvider, false);
+
+      const session = appAtomRegistry.get(managedRelaySessionAtom);
+      expect(yield* session!.readClerkToken()).toBe("account-1-token");
+      expect(vi.mocked(setAgentAwarenessRelayTokenProvider)).toHaveBeenLastCalledWith(null);
+    }),
+  );
+
   it("clears relay and agent-awareness credentials before cleanup can fail", async () => {
     const tokenProvider = async () => "account-1-token";
-    activateCloudRelayAccount("account-1", tokenProvider);
+    activateCloudAccount("account-1", tokenProvider);
     expect(appAtomRegistry.get(managedRelaySessionAtom)?.accountId).toBe("account-1");
 
-    deactivateCloudRelayAccount();
+    deactivateCloudAccount();
     const cleanup = Promise.reject(new Error("Persistence removal failed.")).catch(() => undefined);
 
     expect(appAtomRegistry.get(managedRelaySessionAtom)).toBeNull();

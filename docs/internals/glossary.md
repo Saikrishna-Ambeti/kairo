@@ -106,7 +106,9 @@ The safety/access mode for a thread or session. [The contracts][1] define four v
 
 #### Interaction mode
 
-The agent interaction style for a thread. In [the contracts][1], the values are `default` and `plan`.
+The agent interaction style for a thread. In [the contracts][1], the values are `default`, `plan`,
+and `study`. Clients expose `study` only for student profiles and only when the connected provider
+advertises support.
 
 #### Assistant delivery mode
 

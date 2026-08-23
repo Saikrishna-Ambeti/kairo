@@ -55,8 +55,9 @@ Each app launch starts with three setup steps: sign in, choose your profession, 
 coding-agent provider. Selecting **Other** lets you enter your own profession. Memory and app
 integrations remain available in **Settings** after setup.
 
-Builds without Kairo Connect configuration show the sign-in step and let you continue without an
-account.
+Builds without Kairo Cloud identity configuration show the sign-in step and let you continue
+without an account. Kairo Connect may be unavailable even when account sign-in and hosted memory
+are available.
 
 ### Session sounds
 

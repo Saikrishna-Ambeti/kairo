@@ -1,4 +1,5 @@
 import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 import { EnvironmentId, TrimmedNonEmptyString } from "./baseSchemas.ts";
@@ -8,8 +9,14 @@ export const DEFAULT_KAIRO_CLOUD_API_URL = "https://kairo-cloud-api.vercel.app";
 export const KAIRO_CLOUD_MEMORY_CONTENT_MAX_CHARS = 65_536;
 export const KAIRO_CLOUD_MEMORY_QUERY_MAX_CHARS = 4_096;
 export const KAIRO_CLOUD_REQUEST_BODY_MAX_BYTES = 98_304;
+export const KAIRO_CLOUD_COMPOSIO_REQUEST_BODY_MAX_BYTES = 1_048_576;
 
-export const KairoCloudScope = Schema.Literals(["memory:read", "memory:write"]);
+export const KairoCloudScope = Schema.Literals([
+  "memory:read",
+  "memory:write",
+  "composio:provision",
+  "composio:connect",
+]);
 export type KairoCloudScope = typeof KairoCloudScope.Type;
 
 export const KairoCloudMemorySaveRequest = Schema.Struct({
@@ -50,6 +57,7 @@ export type KairoCloudHealthResponse = typeof KairoCloudHealthResponse.Type;
 
 export const KairoCloudCapabilitiesResponse = Schema.Struct({
   memory: Schema.Literal(true),
+  composio: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   principal: Schema.Literal("installation"),
 });
 export type KairoCloudCapabilitiesResponse = typeof KairoCloudCapabilitiesResponse.Type;
@@ -66,6 +74,12 @@ export const KairoCloudInstallationExchangeResponse = Schema.Struct({
 });
 export type KairoCloudInstallationExchangeResponse =
   typeof KairoCloudInstallationExchangeResponse.Type;
+
+export const KairoCloudComposioAccessResponse = Schema.Struct({
+  accessToken: TrimmedNonEmptyString,
+  expiresAtEpochSeconds: Schema.Int.check(Schema.isGreaterThan(0)),
+});
+export type KairoCloudComposioAccessResponse = typeof KairoCloudComposioAccessResponse.Type;
 
 export const KairoCloudMemorySaveResponse = Schema.Struct({
   id: TrimmedNonEmptyString,

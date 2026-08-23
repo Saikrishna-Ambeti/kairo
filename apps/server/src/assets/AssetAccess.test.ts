@@ -1,5 +1,9 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { AssetPreviewTypeValidationError, ThreadId } from "@kairo/contracts";
+import {
+  AssetDocumentTypeValidationError,
+  AssetPreviewTypeValidationError,
+  ThreadId,
+} from "@kairo/contracts";
 import { PROJECT_FAVICON_FALLBACK_MARKER } from "@kairo/shared/projectFavicon";
 import { describe, expect, it } from "@effect/vitest";
 import * as Crypto from "effect/Crypto";
@@ -181,6 +185,82 @@ describe("AssetAccess", () => {
       });
       expect(yield* resolveAsset(token, "other.png")).toBeNull();
       expect(yield* resolveAsset(token, "../icon.png")).toBeNull();
+    }).pipe(Effect.provide(testLayer)),
+  );
+
+  it.effect("issues exact capabilities for PDF and Word document artifacts", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "kairo-document-artifact-",
+      });
+      const pdfPath = path.join(root, "artifacts", "guide.pdf");
+      const documentPath = path.join(root, "artifacts", "guide.docx");
+      yield* fileSystem.makeDirectory(path.dirname(pdfPath), { recursive: true });
+      yield* fileSystem.writeFile(pdfPath, new Uint8Array([37, 80, 68, 70]));
+      yield* fileSystem.writeFile(documentPath, new Uint8Array([80, 75, 3, 4]));
+
+      const pdfResult = yield* issueAssetUrl({
+        resource: {
+          _tag: "workspace-document",
+          threadId: ThreadId.make("thread-1"),
+          path: "artifacts/guide.pdf",
+        },
+        workspaceRoot: root,
+      });
+      const documentResult = yield* issueAssetUrl({
+        resource: {
+          _tag: "workspace-document",
+          threadId: ThreadId.make("thread-1"),
+          path: "artifacts/guide.docx",
+        },
+        workspaceRoot: root,
+      });
+      const pdfSuffix = pdfResult.relativeUrl.slice(`${ASSET_ROUTE_PREFIX}/`.length);
+      const pdfSeparatorIndex = pdfSuffix.indexOf("/");
+      const documentSuffix = documentResult.relativeUrl.slice(`${ASSET_ROUTE_PREFIX}/`.length);
+      const documentSeparatorIndex = documentSuffix.indexOf("/");
+
+      expect(
+        yield* resolveAsset(
+          pdfSuffix.slice(0, pdfSeparatorIndex),
+          pdfSuffix.slice(pdfSeparatorIndex + 1),
+        ),
+      ).toEqual({ kind: "file", path: yield* fileSystem.realPath(pdfPath), disposition: "inline" });
+      expect(
+        yield* resolveAsset(
+          documentSuffix.slice(0, documentSeparatorIndex),
+          documentSuffix.slice(documentSeparatorIndex + 1),
+        ),
+      ).toEqual({
+        kind: "file",
+        path: yield* fileSystem.realPath(documentPath),
+        disposition: "attachment",
+      });
+      expect(documentResult.sourcePath).toBe("artifacts/guide.docx");
+    }).pipe(Effect.provide(testLayer)),
+  );
+
+  it.effect("rejects non-document workspace downloads", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "kairo-document-artifact-type-",
+      });
+      yield* fileSystem.writeFileString(path.join(root, "secret.txt"), "secret");
+
+      const error = yield* issueAssetUrl({
+        resource: {
+          _tag: "workspace-document",
+          threadId: ThreadId.make("thread-1"),
+          path: "secret.txt",
+        },
+        workspaceRoot: root,
+      }).pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(AssetDocumentTypeValidationError);
     }).pipe(Effect.provide(testLayer)),
   );
 

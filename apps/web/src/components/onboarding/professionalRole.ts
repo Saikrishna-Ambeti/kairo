@@ -1,19 +1,15 @@
+import {
+  ProfessionalRole as ProfessionalRoleSchema,
+  type ProfessionalRole,
+} from "@kairo/contracts/settings";
 import * as Schema from "effect/Schema";
 
 export const PROFESSIONAL_ROLE_STORAGE_KEY = "kairo:professional-role:v1";
 export const PROFESSIONAL_ROLE_OTHER_STORAGE_KEY = "kairo:professional-role-other:v1";
 
-export const ProfessionalRoleSchema = Schema.Literals([
-  "student",
-  "founder",
-  "freelancer",
-  "content-creator",
-  "other",
-]);
-
 export const ProfessionalRoleOtherSchema = Schema.String;
-
-export type ProfessionalRole = typeof ProfessionalRoleSchema.Type;
+export { ProfessionalRoleSchema };
+export type { ProfessionalRole };
 
 export const PROFESSIONAL_ROLES: ReadonlyArray<{
   readonly value: ProfessionalRole;

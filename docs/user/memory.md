@@ -6,6 +6,9 @@ Supermemory account, Supermemory API key, CLI, or provider plugin.
 Sign in to your Kairo account. Kairo provisions hosted memory automatically; there is no key or
 environment variable to copy into the app or the machine running Kairo.
 
+Hosted memory works with local, direct, and Tailscale environment connections. Kairo Connect and a
+managed relay are not required.
+
 Open **Settings → Memory**, choose which provider instances may use memory, then select **Enable
 memory**. Memory tools appear when those providers start a new session. Existing sessions keep the
 tools they started with.

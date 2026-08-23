@@ -55,12 +55,15 @@ function status(
   };
 }
 
-const makeHarness = Effect.fn("RelayDiscoveryTest.makeHarness")(function* () {
+const makeHarness = Effect.fn("RelayDiscoveryTest.makeHarness")(function* (
+  relayUrl: string | null = "https://relay.example.test",
+) {
   const networkStatus = yield* SubscriptionRef.make<NetworkStatus>("online");
   const listCalls = yield* Ref.make(0);
   const listFailure = yield* Ref.make<ManagedRelay.ManagedRelayClientError | null>(null);
   const secondListCall = yield* Deferred.make<void>();
   const clerkToken = yield* Ref.make<string | null>("clerk-token");
+  const clerkTokenReads = yield* Ref.make(0);
   const wakeups = yield* SubscriptionRef.make<{
     readonly sequence: number;
     readonly reason: "application-active" | "credentials-changed";
@@ -87,7 +90,7 @@ const makeHarness = Effect.fn("RelayDiscoveryTest.makeHarness")(function* () {
   }
 
   const client = ManagedRelay.ManagedRelayClient.of({
-    relayUrl: "https://relay.example.test",
+    relayUrl,
     listEnvironments: () =>
       Effect.gen(function* () {
         const count = yield* Ref.updateAndGet(listCalls, (current) => current + 1);
@@ -126,7 +129,8 @@ const makeHarness = Effect.fn("RelayDiscoveryTest.makeHarness")(function* () {
         Layer.succeed(
           ClientCapabilities.CloudSession,
           ClientCapabilities.CloudSession.of({
-            clerkToken: Ref.get(clerkToken).pipe(
+            clerkToken: Ref.update(clerkTokenReads, (current) => current + 1).pipe(
+              Effect.andThen(Ref.get(clerkToken)),
               Effect.flatMap((token) =>
                 token === null
                   ? Effect.fail(
@@ -159,6 +163,7 @@ const makeHarness = Effect.fn("RelayDiscoveryTest.makeHarness")(function* () {
     listCalls,
     listFailure,
     clerkToken,
+    clerkTokenReads,
     networkStatus,
     secondListCall,
     statusRequests,
@@ -171,6 +176,24 @@ const makeHarness = Effect.fn("RelayDiscoveryTest.makeHarness")(function* () {
 });
 
 describe("RelayEnvironmentDiscovery", () => {
+  it.effect("stays dormant when managed relay configuration is absent", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness(null);
+      yield* Effect.gen(function* () {
+        const discovery = yield* RelayEnvironmentDiscovery.RelayEnvironmentDiscovery;
+
+        yield* discovery.refresh;
+        yield* harness.wake("credentials-changed");
+        yield* Effect.yieldNow;
+
+        const state = yield* SubscriptionRef.get(discovery.state);
+        expect(state).toEqual(RelayEnvironmentDiscovery.EMPTY_RELAY_ENVIRONMENT_DISCOVERY_STATE);
+        expect(yield* Ref.get(harness.clerkTokenReads)).toBe(0);
+        expect(yield* Ref.get(harness.listCalls)).toBe(0);
+      }).pipe(Effect.provide(harness.layer), Effect.scoped);
+    }),
+  );
+
   it.effect("publishes each environment status as soon as that lookup completes", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness();
