@@ -27,16 +27,29 @@ export class ClerkSessionVerifier extends Context.Service<
 
 const make = Effect.gen(function* () {
   const configuration = yield* CloudApiConfiguration;
+  const secretKeys = [
+    configuration.clerkSecretKey,
+    ...(configuration.clerkDevelopmentSecretKey ? [configuration.clerkDevelopmentSecretKey] : []),
+  ];
 
   const verify: ClerkSessionVerifier["Service"]["verify"] = Effect.fn(
     "cloudApi.clerkSession.verify",
   )(function* (token) {
     const verified = yield* Effect.tryPromise({
-      try: () =>
-        verifyToken(token, {
-          secretKey: Redacted.value(configuration.clerkSecretKey),
-          audience: configuration.clerkJwtAudience,
-        }),
+      try: async () => {
+        let lastError: unknown;
+        for (const secretKey of secretKeys) {
+          try {
+            return await verifyToken(token, {
+              secretKey: Redacted.value(secretKey),
+              audience: configuration.clerkJwtAudience,
+            });
+          } catch (error) {
+            lastError = error;
+          }
+        }
+        throw lastError;
+      },
       catch: (cause) => new ClerkSessionVerificationError({ cause }),
     });
     if (typeof verified.sub !== "string" || verified.sub.length === 0) {

@@ -22,5 +22,6 @@ part of the memory request path.
 `CloudSession.clerkToken` comes from Clerk identity, not managed relay availability. Web, desktop,
 and mobile keep that session available for local, direct, Tailscale, and relay-backed connections.
 The client connection driver sends the token through `serverProvisionMemoryAccess` after any
-environment session becomes ready. A missing relay URL leaves relay discovery dormant and does not
-change grant provisioning.
+environment session becomes ready. The legacy RPC name now provisions shared Kairo Cloud access,
+including a separate Composio-only provider grant. A missing relay URL leaves relay discovery
+dormant and does not change grant provisioning.

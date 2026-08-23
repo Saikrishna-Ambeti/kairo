@@ -589,6 +589,7 @@ function GeneralSettingsSection() {
 
   return (
     <SettingsSection title="General">
+      <SettingsRow icon="clock" label="Scheduled tasks" target="SettingsScheduledTasks" />
       <SettingsRow icon="folder" label="Project Grouping" target="SettingsProjectGrouping" />
       <SettingsRow
         icon="person.crop.circle"

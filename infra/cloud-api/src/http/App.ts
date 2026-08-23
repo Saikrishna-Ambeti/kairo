@@ -20,6 +20,7 @@ import * as CloudApiConfig from "../Config.ts";
 import { CloudApiRequestFailure } from "../Errors.ts";
 import * as ClerkSession from "../auth/ClerkSession.ts";
 import * as InstallationGrant from "../auth/InstallationGrant.ts";
+import * as Composio from "../composio/ComposioGateway.ts";
 import * as Supermemory from "../supermemory/SupermemoryGateway.ts";
 
 const decodeSaveRequest = Schema.decodeUnknownEffect(
@@ -224,7 +225,7 @@ export const handleCloudApiRequest = Effect.fn("cloudApi.http.handleRequest")(fu
       subjectId: `environment:${payload.environmentId}`,
       tokenId: NodeCrypto.randomUUID(),
       memoryNamespace,
-      scopes: ["memory:read", "memory:write"],
+      scopes: ["memory:read", "memory:write", "composio:provision"],
       issuedAtEpochSeconds,
       expiresAtEpochSeconds,
     }).pipe(
@@ -252,7 +253,57 @@ export const handleCloudApiRequest = Effect.fn("cloudApi.http.handleRequest")(fu
   );
 
   if (request.method === "GET" && pathname === "/v1/capabilities") {
-    return responseJson({ memory: true, principal: "installation" });
+    const configuration = yield* CloudApiConfig.CloudApiConfiguration;
+    return responseJson({
+      memory: true,
+      composio: configuration.composioApiKey !== null,
+      principal: "installation",
+    });
+  }
+
+  if (request.method === "POST" && pathname === "/v1/composio/access") {
+    yield* requireScope(principal.scopes, "composio:provision", requestId);
+    const configuration = yield* CloudApiConfig.CloudApiConfiguration;
+    if (configuration.composioApiKey === null) {
+      return yield* requestFailure({
+        requestId,
+        code: "internal",
+        message: "Composio is unavailable.",
+        status: 503,
+      });
+    }
+    const issuedAtEpochSeconds = Math.floor((yield* Clock.currentTimeMillis) / 1_000);
+    const expiresAtEpochSeconds = issuedAtEpochSeconds + 30 * 24 * 60 * 60;
+    const accessToken = yield* InstallationGrant.issueInstallationGrant({
+      privateKey: Redacted.value(configuration.tokenPrivateKey),
+      issuer: configuration.tokenIssuer,
+      subjectId: `composio:${principal.subjectId}`,
+      tokenId: NodeCrypto.randomUUID(),
+      memoryNamespace: principal.memoryNamespace,
+      scopes: ["composio:connect"],
+      issuedAtEpochSeconds,
+      expiresAtEpochSeconds,
+    }).pipe(
+      Effect.mapError(() =>
+        requestFailure({
+          requestId,
+          code: "internal",
+          message: "Composio access could not be provisioned.",
+          status: 500,
+        }),
+      ),
+    );
+    return responseJson({ accessToken, expiresAtEpochSeconds });
+  }
+
+  if (pathname === "/v1/composio/mcp") {
+    yield* requireScope(principal.scopes, "composio:connect", requestId);
+    const composio = yield* Composio.ComposioGateway;
+    return yield* composio.proxy({
+      request,
+      requestId,
+      accountNamespace: principal.memoryNamespace,
+    });
   }
 
   const gateway = yield* Supermemory.SupermemoryGateway;
@@ -320,17 +371,21 @@ export function makeCloudApiHandler(
   fetchImplementation: typeof globalThis.fetch = globalThis.fetch,
   clerkSessionVerifier?: ClerkSession.ClerkSessionVerifier["Service"],
 ) {
-  const httpLayer = FetchHttpClient.layer.pipe(
-    Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetchImplementation)),
-  );
+  const fetchLayer = Layer.succeed(FetchHttpClient.Fetch, fetchImplementation);
+  const httpLayer = FetchHttpClient.layer.pipe(Layer.provide(fetchLayer));
   const clerkSessionLayer = clerkSessionVerifier
     ? Layer.succeed(ClerkSession.ClerkSessionVerifier, clerkSessionVerifier)
     : ClerkSession.layer;
   const runtimeLayer = Layer.mergeAll(
     InstallationGrant.layer,
+    Composio.layer,
     Supermemory.layer,
     clerkSessionLayer,
-  ).pipe(Layer.provideMerge(CloudApiConfig.layer(configuration)), Layer.provideMerge(httpLayer));
+  ).pipe(
+    Layer.provideMerge(CloudApiConfig.layer(configuration)),
+    Layer.provideMerge(fetchLayer),
+    Layer.provideMerge(httpLayer),
+  );
   const runtime = ManagedRuntime.make(runtimeLayer);
   return {
     handler: (request: Request) => runtime.runPromise(handleCloudApiRequestSafely(request)),

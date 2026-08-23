@@ -1,6 +1,7 @@
 import type { AssetResource } from "@kairo/contracts";
 import {
   AssetAttachmentNotFoundError,
+  AssetDocumentTypeValidationError,
   AssetPreviewTypeValidationError,
   AssetProjectFaviconInspectionError,
   AssetProjectFaviconNotFoundError,
@@ -59,6 +60,7 @@ const PREVIEW_ASSET_EXTENSIONS = new Set([
   ".woff",
   ".woff2",
 ]);
+const DOCUMENT_ARTIFACT_EXTENSIONS = new Set([".docx", ".pdf"]);
 
 const AssetClaimsSchema = Schema.Union([
   Schema.Struct({
@@ -71,6 +73,13 @@ const AssetClaimsSchema = Schema.Union([
   Schema.Struct({
     version: Schema.Literal(1),
     kind: Schema.Literal("workspace-file-exact"),
+    workspaceRoot: Schema.String,
+    relativePath: Schema.String,
+    expiresAt: Schema.Number,
+  }),
+  Schema.Struct({
+    version: Schema.Literal(1),
+    kind: Schema.Literal("workspace-document-exact"),
     workspaceRoot: Schema.String,
     relativePath: Schema.String,
     expiresAt: Schema.Number,
@@ -101,7 +110,11 @@ const AssetClaimsJson = Schema.fromJsonString(AssetClaimsSchema);
 const decodeAssetClaims = Schema.decodeUnknownOption(AssetClaimsJson);
 const encodeAssetClaims = Schema.encodeSync(AssetClaimsJson);
 
-export type ResolvedAsset = { readonly kind: "file"; readonly path: string };
+export type ResolvedAsset = {
+  readonly kind: "file";
+  readonly path: string;
+  readonly disposition?: "inline" | "attachment";
+};
 
 function decodeClaims(encodedPayload: string): AssetClaims | null {
   try {
@@ -273,6 +286,59 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
             expiresAt,
           };
       fileName = path.basename(resolved.relativePath);
+      break;
+    }
+    case "workspace-document": {
+      if (!input.workspaceRoot) {
+        return yield* new AssetWorkspaceContextNotFoundError({ resource: input.resource });
+      }
+      const workspaceRoot = yield* workspacePaths
+        .normalizeWorkspaceRoot(input.workspaceRoot)
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new AssetWorkspaceRootNormalizationError({ resource: input.resource, cause }),
+          ),
+        );
+      const relativePath = path.isAbsolute(input.resource.path)
+        ? path.relative(workspaceRoot, input.resource.path)
+        : input.resource.path;
+      const resolved = yield* workspacePaths
+        .resolveRelativePathWithinRoot({ workspaceRoot, relativePath })
+        .pipe(
+          Effect.mapError(
+            (cause) => new AssetWorkspacePathValidationError({ resource: input.resource, cause }),
+          ),
+        );
+      if (!DOCUMENT_ARTIFACT_EXTENSIONS.has(path.extname(resolved.relativePath).toLowerCase())) {
+        return yield* new AssetDocumentTypeValidationError({ resource: input.resource });
+      }
+      const canonicalFile = yield* resolveCanonicalWorkspaceFile({
+        workspaceRoot,
+        relativePath: resolved.relativePath,
+      }).pipe(
+        Effect.mapError(
+          (cause) => new AssetWorkspaceAssetInspectionError({ resource: input.resource, cause }),
+        ),
+      );
+      if (!canonicalFile) {
+        return yield* new AssetWorkspaceAssetNotFoundError({ resource: input.resource });
+      }
+      claims = {
+        version: 1,
+        kind: "workspace-document-exact",
+        workspaceRoot: yield* fileSystem
+          .realPath(workspaceRoot)
+          .pipe(
+            Effect.mapError(
+              (cause) => new AssetWorkspaceResolutionError({ resource: input.resource, cause }),
+            ),
+          ),
+        relativePath: resolved.relativePath,
+        expiresAt,
+      };
+      fileName = path.basename(resolved.relativePath);
+      sourcePath = resolved.relativePath;
       break;
     }
     case "attachment": {
@@ -495,15 +561,22 @@ export const resolveAsset = Effect.fn("AssetAccess.resolveAsset")(function* (
   const decodedPath = decodeRelativePath(relativePath);
   if (decodedPath === null) return null;
   const path = yield* Path.Path;
-  if (claims.kind === "workspace-file-exact") {
+  if (claims.kind === "workspace-file-exact" || claims.kind === "workspace-document-exact") {
     if (decodedPath !== path.basename(claims.relativePath)) return null;
     const exactWorkspaceFile = yield* resolveCanonicalWorkspaceFileForRequest({
       workspaceRoot: claims.workspaceRoot,
       relativePath: claims.relativePath,
     });
-    return exactWorkspaceFile
-      ? ({ kind: "file", path: exactWorkspaceFile } satisfies ResolvedAsset)
-      : null;
+    if (!exactWorkspaceFile) return null;
+    if (claims.kind === "workspace-document-exact") {
+      return {
+        kind: "file",
+        path: exactWorkspaceFile,
+        disposition:
+          path.extname(claims.relativePath).toLowerCase() === ".pdf" ? "inline" : "attachment",
+      } satisfies ResolvedAsset;
+    }
+    return { kind: "file", path: exactWorkspaceFile } satisfies ResolvedAsset;
   }
   const segments = decodedPath.split(/[\\/]/);
   if (

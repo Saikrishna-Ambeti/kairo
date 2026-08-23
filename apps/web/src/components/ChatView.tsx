@@ -1,4 +1,5 @@
 import {
+  CommandId,
   type ApprovalRequestId,
   DEFAULT_MODEL,
   defaultInstanceIdForDriver,
@@ -80,6 +81,7 @@ import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { isElectron } from "../env";
 import { readLocalApi } from "../localApi";
+import { randomUUID } from "../lib/utils";
 import { useDiffPanelStore } from "../diffPanelStore";
 import {
   collapseExpandedComposerCursor,
@@ -159,6 +161,7 @@ import { PullRequestDetailGhost } from "./pullRequest/PullRequestGhosts";
 import { PullRequestsUnavailableState } from "./pullRequest/PullRequestsUnavailableState";
 import { RightPanelTabs, type PullRequestTabStatus } from "./RightPanelTabs";
 import { AgentsPanel } from "./AgentsPanel";
+import { ThreadArtifactsPanel } from "./artifacts/ThreadArtifactsPanel";
 import {
   deriveAgentPanelModel,
   foldSubagentActivities,
@@ -245,6 +248,11 @@ import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../termina
 import { useKnownTerminalSessions, useThreadRunningTerminalIds } from "../state/terminalSessions";
 import { projectEnvironment } from "../state/projects";
 import { useEnvironmentQuery } from "../state/query";
+import { scheduledTaskEnvironment } from "../state/scheduledTasks";
+import {
+  normalizeRoutineTitle,
+  parseScheduledTaskConversation,
+} from "../scheduledTaskConversation";
 import {
   primaryServerAvailableEditorsAtom,
   primaryServerKeybindingsAtom,
@@ -1265,6 +1273,12 @@ function ChatViewContent(props: ChatViewProps) {
     reportFailure: false,
   });
   const startThreadTurn = useAtomCommand(threadEnvironment.startTurn, { reportFailure: false });
+  const scheduledTaskSnapshot = useEnvironmentQuery(
+    scheduledTaskEnvironment.snapshot({ environmentId, input: {} }),
+  );
+  const dispatchScheduledTask = useAtomCommand(scheduledTaskEnvironment.dispatch, {
+    reportFailure: false,
+  });
   const interruptThreadTurn = useAtomCommand(threadEnvironment.interruptTurn, {
     reportFailure: false,
   });
@@ -3347,6 +3361,10 @@ function ChatViewContent(props: ChatViewProps) {
     if (!activeThreadRef) return;
     useRightPanelStore.getState().open(activeThreadRef, "agents");
   }, [activeThreadRef]);
+  const addArtifactsSurface = useCallback(() => {
+    if (!activeThreadRef) return;
+    useRightPanelStore.getState().open(activeThreadRef, "artifacts");
+  }, [activeThreadRef]);
   const openFileSurface = useCallback(
     (relativePath: string) => {
       if (!activeThreadRef || !activeProject) return;
@@ -5131,6 +5149,66 @@ function ChatViewContent(props: ChatViewProps) {
         composerPreviewAnnotations.length +
         composerReviewComments.length,
     });
+    const routineIntent =
+      composerImages.length === 0 &&
+      sendableComposerTerminalContexts.length === 0 &&
+      composerElementContexts.length === 0 &&
+      composerPreviewAnnotations.length === 0 &&
+      composerReviewComments.length === 0
+        ? parseScheduledTaskConversation(trimmed)
+        : null;
+    if (routineIntent) {
+      const wanted = normalizeRoutineTitle(routineIntent.title);
+      const matches = (scheduledTaskSnapshot.data?.tasks ?? []).filter((task) => {
+        const title = normalizeRoutineTitle(task.title);
+        return title === wanted || title.includes(wanted);
+      });
+      if (matches.length !== 1) {
+        toastManager.add(
+          stackedThreadToast({
+            type: "warning",
+            title: matches.length === 0 ? "Routine not found" : "Routine name is ambiguous",
+            description:
+              matches.length === 0
+                ? `No scheduled task matches “${routineIntent.title}”.`
+                : "Use more of the routine name and try again.",
+          }),
+        );
+        return;
+      }
+      const task = matches[0];
+      if (!task) return;
+      const result = await dispatchScheduledTask({
+        environmentId,
+        input: {
+          type: `scheduled-task.${routineIntent.action}`,
+          commandId: CommandId.make(randomUUID()),
+          taskId: task.id,
+          expectedRevision: task.revision,
+          createdAt: new Date().toISOString(),
+        },
+      });
+      if (result._tag === "Failure") {
+        scheduledTaskSnapshot.refresh();
+        toastManager.add(
+          stackedThreadToast({
+            type: "warning",
+            title: "Routine changed elsewhere",
+            description: "The latest version was loaded. Try the command again.",
+          }),
+        );
+        return;
+      }
+      promptRef.current = "";
+      clearComposerDraftContent(composerDraftTarget);
+      composerRef.current?.resetCursorState();
+      scheduledTaskSnapshot.refresh();
+      toastManager.add({
+        type: "success",
+        title: `${task.title}: ${routineIntent.action === "run-now" ? "run queued" : routineIntent.action + "d"}`,
+      });
+      return;
+    }
     if (!directAnnotation && showPlanFollowUpPrompt && activeProposedPlan) {
       const followUp = resolvePlanFollowUpSubmission({
         draftText: trimmed,
@@ -6379,6 +6457,12 @@ function ChatViewContent(props: ChatViewProps) {
         environmentId={activeThreadRef?.environmentId ?? null}
         threadId={activeThreadRef?.threadId ?? null}
       />
+    ) : activeRightPanelSurface?.kind === "artifacts" ? (
+      <ThreadArtifactsPanel
+        environmentId={activeThreadRef.environmentId}
+        refreshToken={activeThread.updatedAt}
+        threadId={activeThreadRef.threadId}
+      />
     ) : (activeRightPanelSurface?.kind === "files" || activeRightPanelSurface?.kind === "file") &&
       activeProject &&
       activeWorkspaceRoot ? (
@@ -6846,12 +6930,14 @@ function ChatViewContent(props: ChatViewProps) {
           onAddFiles={addFilesSurface}
           onAddPullRequest={addPullRequestSurface}
           onAddAgents={addAgentsSurface}
+          onAddArtifacts={addArtifactsSurface}
           browserAvailable={isPreviewSupportedInRuntime()}
           terminalAvailable={activeProject !== null}
           diffAvailable={isServerThread && isGitRepo}
           filesAvailable={activeProject !== null}
           pullRequestAvailable={pullRequestSurfaceAvailable}
           agentsAvailable
+          artifactsAvailable
           pullRequestStatuses={pullRequestTabStatuses}
           liveAgentCount={agentPanelModel.liveCount}
         >
@@ -6886,12 +6972,14 @@ function ChatViewContent(props: ChatViewProps) {
             onAddFiles={addFilesSurface}
             onAddPullRequest={addPullRequestSurface}
             onAddAgents={addAgentsSurface}
+            onAddArtifacts={addArtifactsSurface}
             browserAvailable={isPreviewSupportedInRuntime()}
             terminalAvailable={activeProject !== null}
             diffAvailable={isServerThread && isGitRepo}
             filesAvailable={activeProject !== null}
             pullRequestAvailable={pullRequestSurfaceAvailable}
             agentsAvailable
+            artifactsAvailable
             pullRequestStatuses={pullRequestTabStatuses}
             liveAgentCount={agentPanelModel.liveCount}
           >

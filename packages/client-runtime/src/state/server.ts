@@ -682,7 +682,7 @@ export function createServerEnvironmentAtoms<R, E>(
     ),
   );
 
-  const provisionMemoryAccess = Effect.gen(function* () {
+  const provisionCloudAccess = Effect.gen(function* () {
     const cloudSession = yield* CloudSession;
     const clerkToken = yield* cloudSession.clerkToken.pipe(Effect.option);
     if (Option.isNone(clerkToken)) {
@@ -690,17 +690,34 @@ export function createServerEnvironmentAtoms<R, E>(
     }
     yield* request(WS_METHODS.serverProvisionMemoryAccess, {
       clerkToken: clerkToken.value,
-    }).pipe(Effect.ignore);
+    });
   });
   const getMemoryStatus = createEnvironmentCommand(runtime, {
     label: "environment-data:server:memory-status",
     execute: (input: EnvironmentRpcInput<typeof WS_METHODS.serverGetMemoryStatus>) =>
-      provisionMemoryAccess.pipe(Effect.andThen(request(WS_METHODS.serverGetMemoryStatus, input))),
+      provisionCloudAccess.pipe(Effect.andThen(request(WS_METHODS.serverGetMemoryStatus, input))),
   });
   const configureMemory = createEnvironmentCommand(runtime, {
     label: "environment-data:server:memory-configure",
     execute: (input: EnvironmentRpcInput<typeof WS_METHODS.serverConfigureMemory>) =>
-      provisionMemoryAccess.pipe(Effect.andThen(request(WS_METHODS.serverConfigureMemory, input))),
+      provisionCloudAccess.pipe(Effect.andThen(request(WS_METHODS.serverConfigureMemory, input))),
+  });
+  const getComposioStatus = createEnvironmentCommand(runtime, {
+    label: "environment-data:server:composio-status",
+    execute: (input: EnvironmentRpcInput<typeof WS_METHODS.serverGetComposioStatus>) =>
+      provisionCloudAccess.pipe(Effect.andThen(request(WS_METHODS.serverGetComposioStatus, input))),
+  });
+  const configureComposio = createEnvironmentCommand(runtime, {
+    label: "environment-data:server:composio-configure",
+    execute: (input: EnvironmentRpcInput<typeof WS_METHODS.serverConfigureComposio>) =>
+      provisionCloudAccess.pipe(Effect.andThen(request(WS_METHODS.serverConfigureComposio, input))),
+  });
+  const testComposioConnection = createEnvironmentCommand(runtime, {
+    label: "environment-data:server:composio-test",
+    execute: (input: EnvironmentRpcInput<typeof WS_METHODS.serverTestComposioConnection>) =>
+      provisionCloudAccess.pipe(
+        Effect.andThen(request(WS_METHODS.serverTestComposioConnection, input)),
+      ),
   });
 
   return {
@@ -736,6 +753,11 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:server:usage-summary",
       tag: WS_METHODS.serverGetUsageSummary,
       staleTimeMs: 60_000,
+    }),
+    artifacts: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:server:artifacts",
+      tag: WS_METHODS.serverListArtifacts,
+      staleTimeMs: 2_000,
     }),
     configProjection,
     welcome: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
@@ -791,18 +813,9 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:server:memory-disable",
       tag: WS_METHODS.serverDisableMemory,
     }),
-    getComposioStatus: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:server:composio-status",
-      tag: WS_METHODS.serverGetComposioStatus,
-    }),
-    configureComposio: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:server:composio-configure",
-      tag: WS_METHODS.serverConfigureComposio,
-    }),
-    testComposioConnection: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:server:composio-test",
-      tag: WS_METHODS.serverTestComposioConnection,
-    }),
+    getComposioStatus,
+    configureComposio,
+    testComposioConnection,
     disableComposio: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:composio-disable",
       tag: WS_METHODS.serverDisableComposio,
