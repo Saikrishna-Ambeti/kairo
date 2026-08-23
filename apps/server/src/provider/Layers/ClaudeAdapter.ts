@@ -73,8 +73,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
-import { buildComposioMcpHeaders } from "../../composio/ComposioMcp.ts";
-import { COMPOSIO_MCP_URL } from "../../composio/ComposioProviderBindings.ts";
+import { buildComposioMcpHeaders, getComposioMcpUrl } from "../../composio/ComposioMcp.ts";
 import { ServerConfig } from "../../config.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import { resolveClaudeSdkExecutablePath } from "../Drivers/ClaudeExecutable.ts";
@@ -96,6 +95,7 @@ import {
   type ProviderAdapterError,
 } from "../Errors.ts";
 import { type ClaudeAdapterShape } from "../Services/ClaudeAdapter.ts";
+import { applyStudyModeInstructions } from "../StudyModeInstructions.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 const encodeUnknownJsonStringExit = Schema.encodeUnknownExit(Schema.fromJsonString(Schema.Unknown));
 const decodeUnknownJsonStringExit = Schema.decodeUnknownExit(Schema.fromJsonString(Schema.Unknown));
@@ -1222,7 +1222,10 @@ function buildPromptText(
   const caps = getClaudeModelCapabilities(claudeModel);
 
   const promptEffort = resolvePromptInjectedEffort(caps, rawEffort);
-  return applyClaudePromptEffortPrefix(input.input?.trim() ?? "", promptEffort);
+  return applyStudyModeInstructions(
+    applyClaudePromptEffortPrefix(input.input?.trim() ?? "", promptEffort),
+    input.interactionMode,
+  );
 }
 
 function buildUserMessage(input: {
@@ -4146,6 +4149,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       };
       const mcpSession = McpProviderSession.readMcpProviderSession(input.threadId);
       const composioMcpHeaders = buildComposioMcpHeaders(claudeEnvironment);
+      const composioMcpUrl = getComposioMcpUrl(claudeEnvironment);
       const mcpServers = {
         ...(mcpSession
           ? {
@@ -4156,11 +4160,11 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
               },
             }
           : {}),
-        ...(composioMcpHeaders
+        ...(composioMcpHeaders && composioMcpUrl
           ? {
               composio: {
                 type: "http" as const,
-                url: COMPOSIO_MCP_URL,
+                url: composioMcpUrl,
                 headers: composioMcpHeaders,
               },
             }
@@ -4413,7 +4417,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         try: () => context.query.setPermissionMode("plan"),
         catch: (cause) => toRequestError(input.threadId, "turn/setPermissionMode", cause),
       });
-    } else if (input.interactionMode === "default") {
+    } else if (input.interactionMode === "default" || input.interactionMode === "study") {
       yield* Effect.tryPromise({
         try: () => context.query.setPermissionMode(context.basePermissionMode ?? "default"),
         catch: (cause) => toRequestError(input.threadId, "turn/setPermissionMode", cause),

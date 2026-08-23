@@ -3,6 +3,7 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { beforeEach, vi } from "vite-plus/test";
+import type * as Electron from "electron";
 
 const { createClerkBridgeMock, storageAdapter, storageMock } = vi.hoisted(() => ({
   createClerkBridgeMock: vi.fn(),
@@ -72,6 +73,75 @@ describe("DesktopClerk", () => {
     );
     assert.equal(DesktopClerk.resolveDesktopClerkFrontendApiHostname(""), undefined);
     assert.equal(DesktopClerk.resolveDesktopClerkFrontendApiHostname("invalid"), undefined);
+  });
+
+  it("adapts native Clerk requests and responses for Electron", () => {
+    const requestHeaders = DesktopClerk.normalizeDesktopClerkNativeRequestHeaders(
+      "https://clerk.example.test/v1/client?_is_native=1",
+      {
+        Authorization: "Bearer client-token",
+        Origin: "kairo-dev://app",
+        Accept: "application/json",
+      },
+    );
+    assert.deepEqual(requestHeaders, {
+      Authorization: "Bearer client-token",
+      Accept: "application/json",
+    });
+
+    const responseHeaders = DesktopClerk.normalizeDesktopClerkNativeResponseHeaders(
+      "https://clerk.example.test/v1/client?_is_native=1",
+      "kairo-dev://app",
+      {
+        "content-type": ["application/json"],
+        "access-control-allow-origin": ["https://old.example.test"],
+      },
+    );
+    assert.deepEqual(responseHeaders, {
+      "content-type": ["application/json"],
+      "Access-Control-Allow-Origin": ["kairo-dev://app"],
+    });
+  });
+
+  it("preserves non-native Clerk request and response headers", () => {
+    const requestHeaders = {
+      Authorization: "Bearer client-token",
+      Origin: "kairo-dev://app",
+    };
+    const responseHeaders = { "content-type": ["application/json"] };
+
+    assert.deepEqual(
+      DesktopClerk.normalizeDesktopClerkNativeRequestHeaders(
+        "https://clerk.example.test/v1/client",
+        requestHeaders,
+      ),
+      requestHeaders,
+    );
+    assert.deepEqual(
+      DesktopClerk.normalizeDesktopClerkNativeResponseHeaders(
+        "https://clerk.example.test/v1/client",
+        "kairo-dev://app",
+        responseHeaders,
+      ),
+      responseHeaders,
+    );
+  });
+
+  it("scopes native Clerk session filters to the configured host", () => {
+    const onBeforeSendHeaders = vi.fn();
+    const onHeadersReceived = vi.fn();
+    const cleanup = DesktopClerk.registerDesktopClerkNativeSessionFilters(
+      { onBeforeSendHeaders, onHeadersReceived } as unknown as Electron.WebRequest,
+      "clerk.example.test",
+      "kairo-dev://app",
+    );
+
+    const filter = { urls: ["https://clerk.example.test/*"] };
+    assert.deepEqual(onBeforeSendHeaders.mock.calls[0]?.[0], filter);
+    assert.deepEqual(onHeadersReceived.mock.calls[0]?.[0], filter);
+    cleanup();
+    assert.strictEqual(onBeforeSendHeaders.mock.calls[1]?.[0], null);
+    assert.strictEqual(onHeadersReceived.mock.calls[1]?.[0], null);
   });
 
   it.effect("acquires and releases the SDK bridge with the layer", () => {

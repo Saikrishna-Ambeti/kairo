@@ -5,7 +5,7 @@ import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import type { SidebarProjectGroupingMode } from "@kairo/contracts";
+import type { ProfessionalRole, SidebarProjectGroupingMode } from "@kairo/contracts";
 import { MOBILE_THEME_IDS, type MobileThemeId, type MobileThemeMode } from "../lib/mobileTheme";
 
 import * as MobileDatabase from "./mobile-database";
@@ -32,6 +32,7 @@ export interface Preferences {
   readonly projectGroupingEnabled?: boolean;
   readonly projectGroupingMode?: SidebarProjectGroupingMode;
   readonly autoSettleOnMerge?: boolean;
+  readonly professionalRole?: ProfessionalRole;
   /**
    * Device-local mirror of the web `legacySidebarEnabled` setting. Mobile has
    * no client-settings sync, so the legacy grouped thread list is opted into
@@ -40,7 +41,7 @@ export interface Preferences {
    * default flat list — see `resolveThreadListV2Enabled`.
    */
   readonly legacyThreadListEnabled?: boolean;
-  /** Device-local counterpart of desktop's `planModeEnabled` legacy flag. */
+  /** @deprecated Plan Mode is now a main feature. Kept for older OTA bundles. */
   readonly planModeEnabled?: boolean;
 }
 
@@ -98,6 +99,7 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     projectGroupingEnabled?: boolean;
     projectGroupingMode?: SidebarProjectGroupingMode;
     autoSettleOnMerge?: boolean;
+    professionalRole?: ProfessionalRole;
     legacyThreadListEnabled?: boolean;
     planModeEnabled?: boolean;
   } = {};
@@ -163,6 +165,15 @@ function sanitizePreferences(parsed: Preferences): Preferences {
   }
   if (typeof parsed.autoSettleOnMerge === "boolean") {
     preferences.autoSettleOnMerge = parsed.autoSettleOnMerge;
+  }
+  if (
+    parsed.professionalRole === "student" ||
+    parsed.professionalRole === "founder" ||
+    parsed.professionalRole === "freelancer" ||
+    parsed.professionalRole === "content-creator" ||
+    parsed.professionalRole === "other"
+  ) {
+    preferences.professionalRole = parsed.professionalRole;
   }
   if (typeof parsed.legacyThreadListEnabled === "boolean") {
     preferences.legacyThreadListEnabled = parsed.legacyThreadListEnabled;

@@ -1,6 +1,5 @@
 import { ClerkFailed, ClerkLoaded, ClerkLoading, useAuth, useClerk } from "@clerk/react";
 import { type ProviderInstanceId, type ServerProvider } from "@kairo/contracts";
-import * as Schema from "effect/Schema";
 import {
   AppWindowIcon,
   ArrowRightIcon,
@@ -17,7 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 
 import { hasCloudIdentityConfig } from "../../cloud/publicConfig";
 import { isElectron } from "../../env";
-import { useLocalStorage } from "../../hooks/useLocalStorage";
+import { useClientSettings, useUpdateClientSettings } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
 import { useServerProviders } from "../../rpc/serverState";
 import { usePrimaryServerApi } from "../../state/primaryServerApi";
@@ -37,14 +36,7 @@ import {
   resolveOnboardingAgentInstallOutcome,
   resolveOnboardingAgentReadiness,
 } from "./OnboardingGate.logic";
-import {
-  isProfessionalRoleComplete,
-  PROFESSIONAL_ROLE_OTHER_STORAGE_KEY,
-  PROFESSIONAL_ROLE_STORAGE_KEY,
-  ProfessionalRoleOtherSchema,
-  ProfessionalRoleSchema,
-  type ProfessionalRole,
-} from "./professionalRole";
+import { isProfessionalRoleComplete, type ProfessionalRole } from "./professionalRole";
 
 export type OnboardingStep = "sign-in" | "profession" | "setup";
 type BusyAction = "refresh" | "install-agent" | "login-agent" | null;
@@ -664,15 +656,16 @@ function ProviderSetupGate({
 }
 
 function useProfessionSelection() {
-  const [role, setRole] = useLocalStorage<ProfessionalRole | null, ProfessionalRole | null>(
-    PROFESSIONAL_ROLE_STORAGE_KEY,
-    null,
-    ProfessionalRoleSchema.pipe(Schema.NullOr),
+  const role = useClientSettings((settings) => settings.professionalRole);
+  const otherRole = useClientSettings((settings) => settings.professionalRoleOther);
+  const updateSettings = useUpdateClientSettings();
+  const setRole = useCallback(
+    (nextRole: ProfessionalRole) => updateSettings({ professionalRole: nextRole }),
+    [updateSettings],
   );
-  const [otherRole, setOtherRole] = useLocalStorage(
-    PROFESSIONAL_ROLE_OTHER_STORAGE_KEY,
-    "",
-    ProfessionalRoleOtherSchema,
+  const setOtherRole = useCallback(
+    (nextOtherRole: string) => updateSettings({ professionalRoleOther: nextOtherRole }),
+    [updateSettings],
   );
 
   return { role, setRole, otherRole, setOtherRole };

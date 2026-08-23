@@ -3,24 +3,24 @@ import * as Schema from "effect/Schema";
 
 import { ProviderDriverKind, ProviderInstanceId } from "./providerInstance.ts";
 
-export const ComposioCloudAuthStatus = Schema.Literals(["not_configured", "configured", "error"]);
-export type ComposioCloudAuthStatus = typeof ComposioCloudAuthStatus.Type;
+export const ComposioServiceStatus = Schema.Literals(["available", "unavailable", "error"]);
+export type ComposioServiceStatus = typeof ComposioServiceStatus.Type;
 
 export const ComposioAgentSupportState = Schema.Literals([
   "ready",
-  "needs_key",
+  "needs_action",
   "not_selected",
   "unsupported",
 ]);
 export type ComposioAgentSupportState = typeof ComposioAgentSupportState.Type;
 
-export const ComposioCloudAuthState = Schema.Struct({
-  status: ComposioCloudAuthStatus,
-  hasApiKey: Schema.Boolean,
+export const ComposioServiceState = Schema.Struct({
+  status: ComposioServiceStatus,
+  available: Schema.Boolean,
   lastTestedAt: Schema.optionalKey(Schema.String),
   lastError: Schema.optionalKey(Schema.String),
 });
-export type ComposioCloudAuthState = typeof ComposioCloudAuthState.Type;
+export type ComposioServiceState = typeof ComposioServiceState.Type;
 
 export const ComposioAgentSupportStatus = Schema.Struct({
   providerInstanceId: ProviderInstanceId,
@@ -35,23 +35,19 @@ export type ComposioAgentSupportStatus = typeof ComposioAgentSupportStatus.Type;
 
 export const ComposioStatus = Schema.Struct({
   enabled: Schema.Boolean,
-  endpoint: Schema.String,
-  auth: ComposioCloudAuthState,
+  service: ComposioServiceState,
   agentSupport: Schema.Array(ComposioAgentSupportStatus),
 });
 export type ComposioStatus = typeof ComposioStatus.Type;
 
 export const ConfigureComposioInput = Schema.Struct({
-  apiKey: Schema.optionalKey(Schema.String),
   providerInstanceIds: Schema.Array(ProviderInstanceId).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
 });
 export type ConfigureComposioInput = typeof ConfigureComposioInput.Type;
 
-export const TestComposioConnectionInput = Schema.Struct({
-  apiKey: Schema.optionalKey(Schema.String),
-});
+export const TestComposioConnectionInput = Schema.Struct({});
 export type TestComposioConnectionInput = typeof TestComposioConnectionInput.Type;
 
 export class ComposioError extends Schema.TaggedErrorClass<ComposioError>()("ComposioError", {

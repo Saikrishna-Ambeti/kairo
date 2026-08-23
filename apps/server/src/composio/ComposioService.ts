@@ -12,13 +12,19 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
-import { HttpClient, HttpClientRequest } from "effect/unstable/http";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
+import { KairoCloudClient } from "../cloud/KairoCloudClient.ts";
+import * as KairoCloudClientLive from "../cloud/KairoCloudClient.ts";
+import { getKairoCloudAccessToken } from "../memory/SupermemorySecrets.ts";
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
-import { COMPOSIO_MCP_URL, isComposioDriverSupported } from "./ComposioProviderBindings.ts";
-import { getComposioApiKey, removeComposioApiKey, setComposioApiKey } from "./ComposioSecrets.ts";
+import {
+  getComposioAccessToken,
+  removeComposioAccessToken,
+  setComposioAccessToken,
+} from "./ComposioSecrets.ts";
+import { isComposioDriverSupported } from "./ComposioProviderBindings.ts";
 
 type ComposioServiceError = ComposioError | ServerSettingsError;
 
@@ -59,45 +65,11 @@ function displayNameForDriver(driver: ProviderDriverKind): string {
   }
 }
 
-const probeComposio = Effect.fn("ComposioService.probe")(function* (apiKey: string) {
-  const httpClient = yield* HttpClient.HttpClient;
-  const response = yield* HttpClientRequest.post(COMPOSIO_MCP_URL).pipe(
-    HttpClientRequest.setHeaders({
-      accept: "application/json, text/event-stream",
-      "content-type": "application/json",
-      "x-consumer-api-key": apiKey,
-    }),
-    HttpClientRequest.bodyJson({
-      jsonrpc: "2.0",
-      id: "kairo-composio-probe",
-      method: "initialize",
-      params: {
-        protocolVersion: "2025-03-26",
-        capabilities: {},
-        clientInfo: { name: "kairo", version: "1" },
-      },
-    }),
-    Effect.flatMap(httpClient.execute),
-    Effect.timeout("10 seconds"),
-    Effect.mapError(
-      (cause) => new ComposioError({ message: "Failed to reach Composio Connect.", cause }),
-    ),
-  );
-  if (response.status === 401 || response.status === 403) {
-    return yield* new ComposioError({ message: "Composio rejected the API key." });
-  }
-  if (response.status < 200 || response.status >= 300) {
-    return yield* new ComposioError({
-      message: `Composio Connect returned HTTP ${response.status}.`,
-    });
-  }
-});
-
 export const makeComposioService = Effect.gen(function* () {
   const serverSettings = yield* ServerSettingsService;
   const providerRegistry = yield* ProviderRegistry;
   const secretStore = yield* ServerSecretStore.ServerSecretStore;
-  const httpClient = yield* HttpClient.HttpClient;
+  const cloud = yield* KairoCloudClient;
   const connectionStateRef = yield* Ref.make<ConnectionState>({
     lastTestedAt: undefined,
     lastError: undefined,
@@ -106,13 +78,52 @@ export const makeComposioService = Effect.gen(function* () {
   const withSecrets = <A, E, R>(
     effect: Effect.Effect<A, E, R | ServerSecretStore.ServerSecretStore>,
   ) => effect.pipe(Effect.provideService(ServerSecretStore.ServerSecretStore, secretStore));
-  const withHttp = <A, E, R>(effect: Effect.Effect<A, E, R | HttpClient.HttpClient>) =>
-    effect.pipe(Effect.provideService(HttpClient.HttpClient, httpClient));
+
+  const readInstallationGrant = getKairoCloudAccessToken().pipe(
+    Effect.provideService(ServerSecretStore.ServerSecretStore, secretStore),
+    Effect.mapError(
+      (cause) => new ComposioError({ message: "Failed to read Kairo Cloud access.", cause }),
+    ),
+  );
+
+  const provisionProviderAccess = Effect.fn("ComposioService.provisionProviderAccess")(
+    function* () {
+      const installationGrant = yield* readInstallationGrant;
+      if (!installationGrant) {
+        return yield* new ComposioError({
+          message: "Sign in to Kairo before enabling app integrations.",
+        });
+      }
+      const capabilities = yield* cloud
+        .getCapabilities(installationGrant)
+        .pipe(
+          Effect.mapError(
+            (cause) => new ComposioError({ message: "Kairo Cloud is unavailable.", cause }),
+          ),
+        );
+      if (!capabilities.composio) {
+        return yield* new ComposioError({ message: "Composio is unavailable in Kairo Cloud." });
+      }
+      const access = yield* cloud.issueComposioAccess(installationGrant);
+      yield* withSecrets(setComposioAccessToken(access.accessToken));
+    },
+  );
 
   const buildStatus = Effect.gen(function* () {
     const settings = yield* serverSettings.getSettings;
     const composio = settings.integrations.composio;
-    const apiKey = yield* withSecrets(getComposioApiKey()).pipe(Effect.orElseSucceed(() => null));
+    const installationGrant = yield* readInstallationGrant.pipe(Effect.orElseSucceed(() => null));
+    const providerGrant = yield* withSecrets(getComposioAccessToken()).pipe(
+      Effect.orElseSucceed(() => null),
+    );
+    const capabilities = installationGrant
+      ? yield* cloud.getCapabilities(installationGrant).pipe(
+          Effect.map((value) => value.composio),
+          Effect.orElseSucceed(() => false),
+        )
+      : false;
+    const available = capabilities;
+    const providerReady = available && providerGrant !== null;
     const connectionState = yield* Ref.get(connectionStateRef);
     const selectedIds = new Set<ProviderInstanceId>(composio.providerInstanceIds);
     const providers = yield* providerRegistry.getProviders;
@@ -129,29 +140,28 @@ export const makeComposioService = Effect.gen(function* () {
           ? ("unsupported" as const)
           : !selected
             ? ("not_selected" as const)
-            : !apiKey
-              ? ("needs_key" as const)
+            : !providerReady
+              ? ("needs_action" as const)
               : ("ready" as const),
         message: !supported
-          ? "This provider does not support a remote Composio MCP server yet."
+          ? "This provider does not support remote Composio tools yet."
           : !selected
             ? "Enable Composio for this provider."
-            : !apiKey
-              ? "Add a Composio Connect API key."
-              : "Composio Connect will be available in new sessions.",
+            : !providerReady
+              ? "Kairo Cloud app integrations are unavailable."
+              : "Composio tools will be available in new sessions.",
       };
     });
 
     return {
       enabled: composio.enabled,
-      endpoint: COMPOSIO_MCP_URL,
-      auth: {
+      service: {
         status: connectionState.lastError
           ? ("error" as const)
-          : apiKey
-            ? ("configured" as const)
-            : ("not_configured" as const),
-        hasApiKey: Boolean(apiKey),
+          : available
+            ? ("available" as const)
+            : ("unavailable" as const),
+        available,
         ...(connectionState.lastTestedAt ? { lastTestedAt: connectionState.lastTestedAt } : {}),
         ...(connectionState.lastError ? { lastError: connectionState.lastError } : {}),
       },
@@ -161,8 +171,7 @@ export const makeComposioService = Effect.gen(function* () {
 
   const configure: ComposioServiceShape["configure"] = (input) =>
     Effect.gen(function* () {
-      const apiKey = input.apiKey?.trim();
-      if (apiKey) yield* withSecrets(setComposioApiKey(apiKey));
+      yield* provisionProviderAccess();
       yield* serverSettings.updateSettings({
         integrations: {
           composio: {
@@ -175,18 +184,10 @@ export const makeComposioService = Effect.gen(function* () {
       return yield* buildStatus;
     });
 
-  const testConnection: ComposioServiceShape["testConnection"] = (input) =>
+  const testConnection: ComposioServiceShape["testConnection"] = () =>
     Effect.gen(function* () {
-      const apiKey = input?.apiKey?.trim() || (yield* withSecrets(getComposioApiKey()));
       const lastTestedAt = DateTime.formatIso(yield* DateTime.now);
-      if (!apiKey) {
-        yield* Ref.set(connectionStateRef, {
-          lastTestedAt,
-          lastError: "Missing Composio Connect API key.",
-        });
-        return yield* buildStatus;
-      }
-      const result = yield* withHttp(probeComposio(apiKey)).pipe(Effect.result);
+      const result = yield* provisionProviderAccess().pipe(Effect.result);
       yield* Ref.set(connectionStateRef, {
         lastTestedAt,
         lastError: result._tag === "Failure" ? result.failure.message : undefined,
@@ -195,7 +196,7 @@ export const makeComposioService = Effect.gen(function* () {
     });
 
   const disable = Effect.gen(function* () {
-    yield* withSecrets(removeComposioApiKey());
+    yield* withSecrets(removeComposioAccessToken());
     yield* serverSettings.updateSettings({
       integrations: { composio: { enabled: false, providerInstanceIds: [] } },
     });
@@ -212,5 +213,6 @@ export const makeComposioService = Effect.gen(function* () {
 });
 
 export const ComposioServiceLive = Layer.effect(ComposioService, makeComposioService).pipe(
-  Layer.provide(ServerSecretStore.layer),
+  Layer.provideMerge(ServerSecretStore.layer),
+  Layer.provideMerge(KairoCloudClientLive.layer),
 );

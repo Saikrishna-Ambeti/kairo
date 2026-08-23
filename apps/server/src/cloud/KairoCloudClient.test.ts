@@ -37,7 +37,9 @@ describe("KairoCloudClient", () => {
               Response.json(
                 request.url.endsWith("/v1/installations/exchange")
                   ? { accessToken: "installation_grant", expiresAtEpochSeconds: 2_000_000_000 }
-                  : { id: "memory_1", status: "queued" },
+                  : request.url.endsWith("/v1/composio/access")
+                    ? { accessToken: "composio_grant", expiresAtEpochSeconds: 2_000_000_000 }
+                    : { id: "memory_1", status: "queued" },
               ),
             );
           }),
@@ -59,6 +61,8 @@ describe("KairoCloudClient", () => {
           environmentId: EnvironmentId.make("environment_test"),
         });
         expect(grant.accessToken).toBe("installation_grant");
+        const composio = yield* client.issueComposioAccess(Redacted.make("installation_grant"));
+        expect(composio.accessToken).toBe("composio_grant");
         return yield* client.saveMemory(Redacted.make("installation_grant"), {
           content: "Prefers compact answers",
         });
@@ -70,6 +74,11 @@ describe("KairoCloudClient", () => {
           url: "https://memory-gateway.test/v1/installations/exchange",
           authorization: "Bearer clerk_session",
           body: { environmentId: "environment_test" },
+        },
+        {
+          url: "https://memory-gateway.test/v1/composio/access",
+          authorization: "Bearer installation_grant",
+          body: undefined,
         },
         {
           url: "https://memory-gateway.test/v1/memory/save",

@@ -8,6 +8,7 @@ import * as Stream from "effect/Stream";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import { KairoCloudClient } from "../cloud/KairoCloudClient.ts";
+import { COMPOSIO_ACCESS_TOKEN_SECRET } from "../composio/ComposioSecrets.ts";
 import { ServerEnvironment } from "../environment/ServerEnvironment.ts";
 import { makeManualOnlyProviderMaintenanceCapabilities } from "../provider/providerMaintenance.ts";
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
@@ -69,17 +70,16 @@ function makeDependencies(cloud: KairoCloudClient["Service"]) {
 describe("SupermemoryService", () => {
   it.effect("exchanges the Clerk session and stores the installation grant", () =>
     Effect.gen(function* () {
-      let storedGrant: string | null = null;
+      const storedGrants = new Map<string, string>();
       const provisioningSecretStore = ServerSecretStore.ServerSecretStore.of({
         get: () => Effect.succeed(Option.none()),
         set: (name, value) =>
           Effect.sync(() => {
-            expect(name).toBe(KAIRO_CLOUD_ACCESS_TOKEN_SECRET);
-            storedGrant = new TextDecoder().decode(value);
+            storedGrants.set(name, new TextDecoder().decode(value));
           }),
         create: () => Effect.die("unused"),
         getOrCreateRandom: () => Effect.die("unused"),
-        remove: () => Effect.die("unused"),
+        remove: () => Effect.void,
       });
       const cloud = KairoCloudClient.of({
         exchangeInstallationGrant: (clerkToken, input) =>
@@ -89,6 +89,11 @@ describe("SupermemoryService", () => {
             return { accessToken: "installation_grant_new", expiresAtEpochSeconds: 2_000_000_000 };
           }),
         getCapabilities: () => Effect.die("unused"),
+        issueComposioAccess: (accessToken) =>
+          Effect.sync(() => {
+            expect(Redacted.value(accessToken)).toBe("installation_grant_new");
+            return { accessToken: "composio_grant_new", expiresAtEpochSeconds: 2_000_000_000 };
+          }),
         saveMemory: () => Effect.die("unused"),
         recallMemory: () => Effect.die("unused"),
         getMemoryContext: () => Effect.die("unused"),
@@ -109,7 +114,12 @@ describe("SupermemoryService", () => {
         yield* memory.provisionAccess("clerk_session");
       }).pipe(Effect.provide(serviceLayer));
 
-      expect(storedGrant).toBe("installation_grant_new");
+      expect(storedGrants).toEqual(
+        new Map([
+          [KAIRO_CLOUD_ACCESS_TOKEN_SECRET, "installation_grant_new"],
+          [COMPOSIO_ACCESS_TOKEN_SECRET, "composio_grant_new"],
+        ]),
+      );
     }),
   );
 
@@ -118,7 +128,9 @@ describe("SupermemoryService", () => {
       const calls: Array<{ readonly operation: string; readonly input: unknown }> = [];
       const cloud = KairoCloudClient.of({
         exchangeInstallationGrant: () => Effect.die("unused"),
-        getCapabilities: () => Effect.succeed({ memory: true, principal: "installation" }),
+        getCapabilities: () =>
+          Effect.succeed({ memory: true, composio: true, principal: "installation" }),
+        issueComposioAccess: () => Effect.die("unused"),
         saveMemory: (_token, input) =>
           Effect.sync(() => {
             calls.push({ operation: "save", input });
@@ -167,6 +179,7 @@ describe("SupermemoryService", () => {
       const cloud = KairoCloudClient.of({
         exchangeInstallationGrant: () => Effect.die("unused"),
         getCapabilities: () => Effect.fail(new SupermemoryError({ message: "grant expired" })),
+        issueComposioAccess: () => Effect.die("unused"),
         saveMemory: () => Effect.die("unused"),
         recallMemory: () => Effect.die("unused"),
         getMemoryContext: () => Effect.die("unused"),

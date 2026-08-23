@@ -1,4 +1,5 @@
 import type { ProviderInteractionMode } from "@kairo/contracts";
+import { studyModeTeachingInstructions } from "./StudyModeInstructions.ts";
 
 const KAIRO_CODE_BROWSER_TOOL_INSTRUCTIONS = `
 
@@ -170,6 +171,16 @@ In Default mode, strongly prefer making reasonable assumptions and executing the
 ${browserToolInstructions(browserToolsAvailable)}
 </collaboration_mode>`;
 
+export const codexStudyModeDeveloperInstructions = (
+  browserToolsAvailable: boolean,
+): string => `<collaboration_mode># Collaboration Mode: Study
+
+You are in Study Mode.
+
+${studyModeTeachingInstructions}
+${browserToolInstructions(browserToolsAvailable)}
+</collaboration_mode>`;
+
 export interface CodexRuntimeInfo {
   readonly model: string;
   readonly reasoningEffort: string;
@@ -193,7 +204,9 @@ export function buildCodexDeveloperInstructions(
   const base =
     interactionMode === "plan"
       ? codexPlanModeDeveloperInstructions(browserToolsAvailable)
-      : codexDefaultModeDeveloperInstructions(browserToolsAvailable);
+      : interactionMode === "study"
+        ? codexStudyModeDeveloperInstructions(browserToolsAvailable)
+        : codexDefaultModeDeveloperInstructions(browserToolsAvailable);
   return `${base}
 
 <runtime_info>In case you're asked: you are running in Kairo through the Codex harness, as ${toSingleLine(runtime.model)} with ${toSingleLine(runtime.reasoningEffort)} reasoning effort. No need to mention this otherwise.</runtime_info>`;
