@@ -16,6 +16,8 @@ import {
   serializeComposerFileLink,
   type ComposerTrigger,
 } from "@kairo/shared/composerTrigger";
+import { activateDeepResearchPrompt } from "@kairo/shared/deepResearch";
+import type { MenuAction } from "@react-native-menu/menu";
 import { StackActions, useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { ReactNode } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
@@ -56,7 +58,7 @@ import {
   ComposerToolbarRow,
   ComposerToolbarScroller,
 } from "../../components/ComposerToolbar";
-import { ControlPill } from "../../components/ControlPill";
+import { ControlPill, ControlPillMenu } from "../../components/ControlPill";
 import { ProviderIcon } from "../../components/ProviderIcon";
 import type { DraftComposerImageAttachment } from "../../lib/composerImages";
 import { buildModelOptions, groupByProvider } from "../../lib/modelOptions";
@@ -92,6 +94,15 @@ export const COMPOSER_COLLAPSED_CHROME = 60;
  * Used by the parent to compute the larger feed bottom inset when the composer is focused.
  */
 export const COMPOSER_EXPANDED_CHROME = 156;
+
+const COMPOSER_FEATURE_ACTIONS: MenuAction[] = [
+  {
+    id: "deep-research",
+    title: "Deep Research",
+    subtitle: "Research in the background",
+    image: "magnifyingglass",
+  },
+];
 
 export interface ThreadComposerProps {
   readonly draftMessage: string;
@@ -421,6 +432,13 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
           label: "/model",
           description: "Switch model",
         },
+        {
+          id: "cmd:research",
+          type: "slash-command" as const,
+          command: "research",
+          label: "/research",
+          description: "Research in the background",
+        },
         ...(interactionModes.includes("plan")
           ? [
               {
@@ -585,6 +603,17 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
   // ── Handle command selection ──────────────────────────────
   const { onChangeDraftMessage, onUpdateInteractionMode, draftMessage, onSendMessage } = props;
 
+  const activateDeepResearch = useCallback(() => {
+    const nextText = activateDeepResearchPrompt(draftMessage);
+    const cursor = nextText.length;
+    onChangeDraftMessage(nextText);
+    setComposerSelection({ start: cursor, end: cursor });
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelection({ start: cursor, end: cursor });
+    });
+  }, [draftMessage, inputRef, onChangeDraftMessage]);
+
   const handleSend = useCallback(async () => {
     const threadKey = scopedThreadKey(props.environmentId, props.selectedThread.id);
     if (inFlightThreadIdsRef.current.has(threadKey)) return;
@@ -610,6 +639,16 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     props.selectedThread.id,
     props.selectedThread.title,
   ]);
+  const handleFeatureAction = useCallback(
+    ({ nativeEvent }: { readonly nativeEvent: { readonly event: string } }) => {
+      if (nativeEvent.event !== "deep-research") return;
+      activateDeepResearch();
+      if (hasContent) {
+        requestAnimationFrame(() => void handleSend());
+      }
+    },
+    [activateDeepResearch, handleSend, hasContent],
+  );
   const handleCommandSelect = useCallback(
     (item: ComposerCommandItem) => {
       if (!composerTrigger) return;
@@ -905,6 +944,17 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
                 fadeTransparent={toolbarFadeTransparent}
                 contentPaddingRight={8}
               >
+                <ControlPillMenu
+                  actions={COMPOSER_FEATURE_ACTIONS}
+                  onPressAction={handleFeatureAction}
+                  title="Features"
+                >
+                  <ComposerToolbarButton
+                    accessibilityLabel="Composer features"
+                    icon="ellipsis.circle"
+                    showChevron={false}
+                  />
+                </ControlPillMenu>
                 <ComposerToolbarButton
                   accessibilityLabel="Add attachment"
                   icon="plus"

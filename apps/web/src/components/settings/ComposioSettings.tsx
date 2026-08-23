@@ -1,26 +1,23 @@
 import type { ComposioStatus, ProviderInstanceId } from "@kairo/contracts";
+import { Link } from "@tanstack/react-router";
 import {
   CheckCircle2Icon,
   CloudIcon,
-  ExternalLinkIcon,
-  KeyRoundIcon,
   LoaderCircleIcon,
   RefreshCwIcon,
   UnplugIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { cn } from "../../lib/utils";
 import { ensureLocalApi } from "../../localApi";
 import { usePrimaryServerApi } from "../../state/primaryServerApi";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
-import { Input } from "../ui/input";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
-
-const COMPOSIO_DASHBOARD_URL = "https://dashboard.composio.dev";
 
 function showError(title: string, error: unknown) {
   toastManager.add(
@@ -32,11 +29,36 @@ function showError(title: string, error: unknown) {
   );
 }
 
-function authBadge(status: ComposioStatus["auth"]["status"]) {
-  if (status === "configured") return { label: "Connected", variant: "success" as const };
-  if (status === "error") return { label: "Connection failed", variant: "destructive" as const };
-  return { label: "Not configured", variant: "outline" as const };
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
+
+function serviceBadge(status: ComposioStatus["service"]["status"]) {
+  if (status === "available") return { label: "Managed by Kairo", variant: "success" as const };
+  if (status === "error") return { label: "Connection failed", variant: "destructive" as const };
+  return { label: "Service unavailable", variant: "outline" as const };
+}
+
+function providerBadgeVariant(status: ComposioStatus["agentSupport"][number]["status"]) {
+  switch (status) {
+    case "ready":
+      return "success";
+    case "needs_action":
+      return "warning";
+    case "unsupported":
+      return "error";
+    default:
+      return "outline";
+  }
+}
+
+function selectedProviders(status: ComposioStatus) {
+  return status.agentSupport
+    .filter((provider) => provider.selected)
+    .map((provider) => provider.providerInstanceId);
+}
+
+type BusyAction = "save" | "disable" | null;
 
 export function ComposioSettingsPanel() {
   const serverApi = usePrimaryServerApi();
@@ -44,19 +66,25 @@ export function ComposioSettingsPanel() {
   serverApiRef.current = serverApi;
   const [status, setStatus] = useState<ComposioStatus | null>(null);
   const [selectedProviderIds, setSelectedProviderIds] = useState<ProviderInstanceId[]>([]);
-  const [apiKey, setApiKey] = useState("");
+  const [statusError, setStatusError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [busy, setBusy] = useState<BusyAction>(null);
 
   const refresh = useCallback(async () => {
-    const next = await serverApiRef.current.getComposioStatus();
-    setStatus(next);
-    setSelectedProviderIds(
-      next.agentSupport
-        .filter((provider) => provider.selected)
-        .map((provider) => provider.providerInstanceId),
-    );
-    return next;
+    setRefreshing(true);
+    setStatusError(null);
+    try {
+      const next = await serverApiRef.current.getComposioStatus();
+      setStatus(next);
+      setSelectedProviderIds(selectedProviders(next));
+      return next;
+    } catch (error) {
+      setStatusError(errorMessage(error));
+      throw error;
+    } finally {
+      setRefreshing(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -81,52 +109,40 @@ export function ComposioSettingsPanel() {
   };
 
   const save = async () => {
-    setBusy(true);
+    setBusy("save");
     try {
-      const trimmedApiKey = apiKey.trim();
-      await serverApi.configureComposio({
-        ...(trimmedApiKey ? { apiKey: trimmedApiKey } : {}),
+      const next = await serverApi.configureComposio({
         providerInstanceIds: selectedProviderIds,
       });
-      const tested = await serverApi.testComposioConnection(
-        trimmedApiKey ? { apiKey: trimmedApiKey } : undefined,
-      );
-      setStatus(tested);
-      setApiKey("");
+      setStatus(next);
+      setSelectedProviderIds(selectedProviders(next));
       toastManager.add(
-        stackedThreadToast(
-          tested.auth.status === "error"
-            ? {
-                type: "error",
-                title: "Composio connection failed",
-                description: tested.auth.lastError,
-              }
-            : { type: "success", title: "Composio Connect enabled" },
-        ),
+        stackedThreadToast({
+          type: "success",
+          title: status?.enabled ? "Composio providers saved" : "Composio enabled",
+          description: "New provider sessions will get managed app tools.",
+        }),
       );
     } catch (error) {
-      showError("Could not configure Composio", error);
+      showError("Could not enable Composio", error);
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
   const disable = async () => {
-    const confirmed = await ensureLocalApi().dialogs.confirm(
-      "Disable Composio Connect and remove its saved API key?",
-    );
+    const confirmed = await ensureLocalApi().dialogs.confirm("Disable Composio app tools?");
     if (!confirmed) return;
-    setBusy(true);
+    setBusy("disable");
     try {
       const next = await serverApi.disableComposio();
       setStatus(next);
       setSelectedProviderIds([]);
-      setApiKey("");
       toastManager.add(stackedThreadToast({ type: "success", title: "Composio disabled" }));
     } catch (error) {
       showError("Could not disable Composio", error);
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
@@ -136,133 +152,147 @@ export function ComposioSettingsPanel() {
         <SettingsSection icon={<CloudIcon className="size-3.5" />} title="Integrations">
           <div className="flex items-center gap-2 p-5 text-sm text-muted-foreground">
             <LoaderCircleIcon className="size-4 animate-spin" />
-            Loading Composio Connect...
+            Loading Composio
           </div>
         </SettingsSection>
       </SettingsPageContainer>
     );
   }
 
-  const badge = authBadge(status?.auth.status ?? "not_configured");
+  const badge = serviceBadge(status?.service.status ?? "unavailable");
+  const providersChanged = (status?.agentSupport ?? []).some(
+    (provider) => provider.selected !== selectedProviderIds.includes(provider.providerInstanceId),
+  );
   const canSave =
-    !busy &&
+    busy === null &&
+    !refreshing &&
     selectedProviderIds.length > 0 &&
-    (status?.auth.hasApiKey === true || apiKey.trim().length > 0);
+    status?.service.available === true &&
+    (status.enabled === false || providersChanged);
 
   return (
     <SettingsPageContainer>
-      <SettingsSection icon={<CloudIcon className="size-3.5" />} title="Composio Connect">
-        <div className="space-y-5 p-5">
+      <SettingsSection icon={<CloudIcon className="size-3.5" />} title="Composio">
+        <div className="space-y-4 p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="max-w-2xl space-y-2">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold">Hosted app tools</span>
-                <Badge size="sm" variant={badge.variant}>
+                <span className="text-sm font-semibold">Managed app tools</span>
+                <Badge aria-live="polite" size="sm" variant={badge.variant}>
                   {badge.label}
                 </Badge>
               </div>
               <p className="text-xs leading-relaxed text-muted-foreground">
-                Agents connect to Composio's hosted MCP server. No local Composio runtime is
-                installed. Account authorization and tool execution stay in Composio Connect.
+                Kairo Cloud connects agents to Composio. When a tool needs an app, the agent gives
+                you a secure sign-in link. No API key or local runtime needed.
               </p>
             </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={() => void ensureLocalApi().shell.openExternal(COMPOSIO_DASHBOARD_URL)}
+            <Button
+              size="icon-sm"
+              variant="outline"
+              aria-label="Refresh Composio status"
+              disabled={busy !== null || refreshing}
+              onClick={() => void refresh().catch((error) => showError("Refresh failed", error))}
+            >
+              <RefreshCwIcon className={refreshing ? "size-4 animate-spin" : "size-4"} />
+            </Button>
+          </div>
+
+          {statusError ? (
+            <Alert variant="error">
+              <AlertDescription>
+                Composio status could not be loaded. {statusError} Use refresh to try again.
+              </AlertDescription>
+            </Alert>
+          ) : status?.service.lastError ? (
+            <Alert variant="error">
+              <AlertDescription>{status.service.lastError}</AlertDescription>
+            </Alert>
+          ) : status && !status.service.available ? (
+            <Alert>
+              <AlertDescription>
+                Sign in to Kairo and check that this host can reach Kairo Cloud.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+        </div>
+      </SettingsSection>
+
+      {status ? (
+        <SettingsSection title="Agent access">
+          <div className="divide-y divide-border/60">
+            {status?.agentSupport.length === 0 ? (
+              <div className="flex flex-col items-start gap-3 px-4 py-5 sm:px-5">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">No providers available</p>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    Add a provider before enabling Composio app tools.
+                  </p>
+                </div>
+                <Button size="sm" variant="outline" render={<Link to="/settings/providers" />}>
+                  Add provider
+                </Button>
+              </div>
+            ) : null}
+            {status.agentSupport.map((provider) => (
+              <label
+                key={provider.providerInstanceId}
+                className={cn(
+                  "grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 px-4 py-3.5 sm:px-5",
+                  provider.supported ? "cursor-pointer hover:bg-muted/35" : "opacity-60",
+                )}
               >
-                <ExternalLinkIcon className="size-4" />
-                Manage apps
-              </Button>
-              <Button
-                size="icon-sm"
-                variant="outline"
-                aria-label="Refresh Composio status"
-                onClick={() => void refresh().catch((error) => showError("Refresh failed", error))}
-              >
-                <RefreshCwIcon className="size-4" />
+                <Checkbox
+                  className="mt-0.5"
+                  checked={selectedProviderIds.includes(provider.providerInstanceId)}
+                  disabled={!provider.supported || busy !== null || refreshing}
+                  onCheckedChange={(checked) =>
+                    toggleProvider(provider.providerInstanceId, Boolean(checked))
+                  }
+                />
+                <span className="min-w-0">
+                  <span className="block break-words text-sm font-medium">
+                    {provider.displayName}
+                  </span>
+                  <span className="block break-words text-xs leading-relaxed text-muted-foreground">
+                    {provider.message}
+                  </span>
+                </span>
+                <Badge className="mt-0.5" size="sm" variant={providerBadgeVariant(provider.status)}>
+                  {provider.status.replaceAll("_", " ")}
+                </Badge>
+              </label>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 px-4 py-4 sm:px-5">
+            <p className="text-xs text-muted-foreground">New provider sessions pick up changes.</p>
+            <div className="flex flex-wrap justify-end gap-2">
+              {status.enabled ? (
+                <Button
+                  variant="outline"
+                  disabled={busy !== null || refreshing}
+                  onClick={() => void disable()}
+                >
+                  {busy === "disable" ? (
+                    <LoaderCircleIcon className="size-4 animate-spin" />
+                  ) : (
+                    <UnplugIcon className="size-4" />
+                  )}
+                  Disable
+                </Button>
+              ) : null}
+              <Button disabled={!canSave} onClick={() => void save()}>
+                {busy === "save" ? (
+                  <LoaderCircleIcon className="size-4 animate-spin" />
+                ) : (
+                  <CheckCircle2Icon className="size-4" />
+                )}
+                {status.enabled ? "Save providers" : "Enable Composio"}
               </Button>
             </div>
           </div>
-
-          {status?.auth.lastError ? (
-            <Alert variant="error">
-              <AlertDescription>{status.auth.lastError}</AlertDescription>
-            </Alert>
-          ) : null}
-
-          <div className="rounded-lg border border-border/70 bg-muted/20 p-4">
-            <label className="space-y-2">
-              <span className="flex items-center gap-2 text-xs font-medium">
-                <KeyRoundIcon className="size-3.5 text-muted-foreground" />
-                Composio Connect API key
-              </span>
-              <Input
-                type="password"
-                autoComplete="off"
-                value={apiKey}
-                onChange={(event) => setApiKey(event.currentTarget.value)}
-                placeholder={
-                  status?.auth.hasApiKey
-                    ? "Saved. Enter a new key to replace it."
-                    : "Paste your x-consumer-api-key"
-                }
-              />
-            </label>
-            <p className="mt-2 text-[11px] text-muted-foreground">
-              Get this key from Composio Dashboard under AI Clients. Kairo stores it in environment
-              secret store and passes it only to selected providers.
-            </p>
-          </div>
-        </div>
-      </SettingsSection>
-
-      <SettingsSection title="Agent access">
-        <div className="divide-y divide-border/60">
-          {(status?.agentSupport ?? []).map((provider) => (
-            <label
-              key={provider.providerInstanceId}
-              className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3.5 hover:bg-muted/35 sm:px-5"
-            >
-              <Checkbox
-                checked={selectedProviderIds.includes(provider.providerInstanceId)}
-                disabled={!provider.supported || busy}
-                onCheckedChange={(checked) =>
-                  toggleProvider(provider.providerInstanceId, Boolean(checked))
-                }
-              />
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-medium">{provider.displayName}</span>
-                <span className="block truncate text-xs text-muted-foreground">
-                  {provider.message}
-                </span>
-              </span>
-              <Badge size="sm" variant={provider.status === "ready" ? "success" : "outline"}>
-                {provider.status.replaceAll("_", " ")}
-              </Badge>
-            </label>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 px-4 py-4 sm:px-5">
-          <p className="text-xs text-muted-foreground">New provider sessions pick up changes.</p>
-          <div className="flex gap-2">
-            {status?.enabled ? (
-              <Button variant="outline" disabled={busy} onClick={() => void disable()}>
-                <UnplugIcon className="size-4" />
-                Disable
-              </Button>
-            ) : null}
-            <Button disabled={!canSave} onClick={() => void save()}>
-              {busy ? (
-                <LoaderCircleIcon className="size-4 animate-spin" />
-              ) : (
-                <CheckCircle2Icon className="size-4" />
-              )}
-              Save and test
-            </Button>
-          </div>
-        </div>
-      </SettingsSection>
+        </SettingsSection>
+      ) : null}
     </SettingsPageContainer>
   );
 }

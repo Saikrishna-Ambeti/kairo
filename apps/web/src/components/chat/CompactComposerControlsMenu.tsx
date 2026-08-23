@@ -10,6 +10,7 @@ import {
   MenuSeparator as MenuDivider,
   MenuTrigger,
 } from "../ui/menu";
+import { ComposerFeaturesMenuContent } from "./ComposerFeaturesMenu";
 
 export const CompactComposerControlsMenu = memo(function CompactComposerControlsMenu(props: {
   interactionMode: ProviderInteractionMode;
@@ -17,6 +18,7 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
   runtimeMode: RuntimeMode;
   traitsMenuContent?: ReactNode;
   onInteractionModeChange: (mode: ProviderInteractionMode) => void;
+  onDeepResearchSelect: () => void;
   onRuntimeModeChange: (mode: RuntimeMode) => void;
 }) {
   return (
@@ -34,6 +36,8 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
         <EllipsisIcon aria-hidden="true" className="size-4" />
       </MenuTrigger>
       <MenuPopup align="start">
+        <ComposerFeaturesMenuContent onDeepResearchSelect={props.onDeepResearchSelect} />
+        <MenuDivider />
         {props.traitsMenuContent ? (
           <>
             {props.traitsMenuContent}

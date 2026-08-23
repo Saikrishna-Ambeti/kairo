@@ -55,4 +55,15 @@ describe("assetResponseHeaders", () => {
       "text/html; charset=utf-8",
     );
   });
+
+  it("sets safe content disposition for document artifacts", () => {
+    expect(assetResponseHeaders("/workspace/My Study Guide.docx", "attachment")).toHaveProperty(
+      "Content-Disposition",
+      "attachment; filename*=UTF-8''My%20Study%20Guide.docx",
+    );
+    expect(assetResponseHeaders("/workspace/guide.pdf", "inline")).toHaveProperty(
+      "Content-Disposition",
+      "inline; filename*=UTF-8''guide.pdf",
+    );
+  });
 });

@@ -18,25 +18,33 @@ const keyPair = NodeCrypto.generateKeyPairSync("ed25519", {
 
 const configuration: CloudApiConfigurationShape = {
   clerkSecretKey: Redacted.make("sk_test_clerk"),
+  clerkDevelopmentSecretKey: null,
   clerkJwtAudience: "kairo-test",
   supermemoryApiKey: Redacted.make("sm_service_owned"),
   supermemoryApiUrl: new URL("https://api.supermemory.test"),
+  composioApiKey: Redacted.make("ak_service_owned"),
+  composioApiUrl: new URL("https://backend.composio.dev"),
   tokenPrivateKey: Redacted.make(keyPair.privateKey),
   tokenPublicKey: keyPair.publicKey,
   tokenIssuer: "kairo-cloud-test",
   namespaceHmacKey: Redacted.make("test-namespace-hmac-key-with-32-bytes"),
 };
 
-const issueTestGrant = issueInstallationGrant({
-  privateKey: keyPair.privateKey,
-  issuer: configuration.tokenIssuer,
-  subjectId: "installation_test",
-  tokenId: "grant_test",
-  memoryNamespace: "namespace_test",
-  scopes: ["memory:read", "memory:write"],
-  issuedAtEpochSeconds: 1_900_000_000,
-  expiresAtEpochSeconds: 2_000_000_000,
-});
+const issueTestGrant = (
+  scopes: ReadonlyArray<
+    "memory:read" | "memory:write" | "composio:provision" | "composio:connect"
+  > = ["memory:read", "memory:write"],
+) =>
+  issueInstallationGrant({
+    privateKey: keyPair.privateKey,
+    issuer: configuration.tokenIssuer,
+    subjectId: "installation_test",
+    tokenId: "grant_test",
+    memoryNamespace: "namespace_test",
+    scopes,
+    issuedAtEpochSeconds: 1_900_000_000,
+    expiresAtEpochSeconds: 2_000_000_000,
+  });
 
 const encodeSaveRequest = Schema.encodeSync(Schema.fromJsonString(KairoCloudMemorySaveRequest));
 const encodeUnknownJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
@@ -145,7 +153,7 @@ describe("Kairo Cloud API", () => {
         Effect.sync(() => makeCloudApiHandler(configuration, fetchImplementation)),
         (value) => Effect.promise(() => value.dispose()),
       );
-      const token = yield* issueTestGrant;
+      const token = yield* issueTestGrant();
       const response = yield* Effect.promise(() =>
         app.handler(
           new Request("https://cloud.test/v1/memory/save", {
@@ -217,7 +225,7 @@ describe("Kairo Cloud API", () => {
         Effect.sync(() => makeCloudApiHandler(configuration, globalThis.fetch)),
         (value) => Effect.promise(() => value.dispose()),
       );
-      const token = yield* issueTestGrant;
+      const token = yield* issueTestGrant();
       const response = yield* Effect.promise(() =>
         app.handler(
           new Request("https://cloud.test/api/v1?__kairo_path=capabilities", {
@@ -229,7 +237,199 @@ describe("Kairo Cloud API", () => {
       expect(response.status).toBe(200);
       expect(yield* Effect.promise(() => response.json())).toEqual({
         memory: true,
+        composio: true,
         principal: "installation",
+      });
+    }),
+  );
+
+  it.effect("mints a Composio-only provider grant", () =>
+    Effect.gen(function* () {
+      const app = yield* Effect.acquireRelease(
+        Effect.sync(() => makeCloudApiHandler(configuration, globalThis.fetch)),
+        (value) => Effect.promise(() => value.dispose()),
+      );
+      const installationGrant = yield* issueTestGrant(["composio:provision"]);
+      const response = yield* Effect.promise(() =>
+        app.handler(
+          new Request("https://cloud.test/v1/composio/access", {
+            method: "POST",
+            headers: { authorization: `Bearer ${installationGrant}` },
+          }),
+        ),
+      );
+      expect(response.status).toBe(200);
+      const body = (yield* Effect.promise(() => response.json())) as { accessToken: string };
+      const publicKey = yield* Effect.promise(() => importSPKI(keyPair.publicKey, "EdDSA"));
+      const verified = yield* Effect.promise(() => jwtVerify(body.accessToken, publicKey));
+      expect(verified.payload.scope).toEqual(["composio:connect"]);
+
+      const memoryResponse = yield* Effect.promise(() =>
+        app.handler(
+          new Request("https://cloud.test/v1/memory/save", {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${body.accessToken}`,
+              "content-type": "application/json",
+            },
+            body: encodeSaveRequest({ content: "must not be saved" }),
+          }),
+        ),
+      );
+      expect(memoryResponse.status).toBe(403);
+    }),
+  );
+
+  it.effect("keeps memory available when Composio is not configured", () =>
+    Effect.gen(function* () {
+      const app = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          makeCloudApiHandler({ ...configuration, composioApiKey: null }, async () =>
+            Response.json({ id: "memory_1", status: "queued" }),
+          ),
+        ),
+        (value) => Effect.promise(() => value.dispose()),
+      );
+      const token = yield* issueTestGrant();
+      const capabilities = yield* Effect.promise(() =>
+        app.handler(
+          new Request("https://cloud.test/v1/capabilities", {
+            headers: { authorization: `Bearer ${token}` },
+          }),
+        ),
+      );
+      expect(yield* Effect.promise(() => capabilities.json())).toEqual({
+        memory: true,
+        composio: false,
+        principal: "installation",
+      });
+
+      const memory = yield* Effect.promise(() =>
+        app.handler(
+          new Request("https://cloud.test/v1/memory/save", {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${token}`,
+              "content-type": "application/json",
+            },
+            body: encodeSaveRequest({ content: "Memory stays independent" }),
+          }),
+        ),
+      );
+      expect(memory.status).toBe(200);
+    }),
+  );
+
+  it.effect("proxies a per-user Composio MCP session without exposing project key", () =>
+    Effect.gen(function* () {
+      const upstreamRequests: Array<{
+        readonly url: string;
+        readonly apiKey: string | null;
+        readonly sessionId: string | null;
+        readonly body: unknown;
+      }> = [];
+      const fetchImplementation: typeof globalThis.fetch = async (input, init) => {
+        const request = new Request(input, init);
+        const body = request.method === "POST" ? await request.json() : null;
+        upstreamRequests.push({
+          url: request.url,
+          apiKey: request.headers.get("x-api-key"),
+          sessionId: request.headers.get("mcp-session-id"),
+          body,
+        });
+        if (request.url.includes("/tool_router/session")) {
+          return Response.json({
+            session_id: "trs_test",
+            mcp: {
+              type: "http",
+              url: "https://mcp.composio.dev/tool_router/v3/trs_test/mcp",
+            },
+          });
+        }
+        return Response.json(
+          { jsonrpc: "2.0", id: 1, result: { protocolVersion: "2025-03-26" } },
+          { headers: { "mcp-session-id": "upstream-session" } },
+        );
+      };
+      const app = yield* Effect.acquireRelease(
+        Effect.sync(() => makeCloudApiHandler(configuration, fetchImplementation)),
+        (value) => Effect.promise(() => value.dispose()),
+      );
+      const accessToken = yield* issueTestGrant(["composio:connect"]);
+      const first = yield* Effect.promise(() =>
+        app.handler(
+          new Request("https://cloud.test/v1/composio/mcp", {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${accessToken}`,
+              accept: "application/json, text/event-stream",
+              "content-type": "application/json",
+            },
+            body: encodeUnknownJson({
+              jsonrpc: "2.0",
+              id: 1,
+              method: "initialize",
+              params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: {} },
+            }),
+          }),
+        ),
+      );
+      expect(first.status).toBe(200);
+      const cloudSessionId = first.headers.get("mcp-session-id");
+      expect(cloudSessionId).toMatch(/^v1\./u);
+      expect(cloudSessionId).not.toContain("upstream-session");
+      expect(first.headers.get("x-api-key")).toBeNull();
+      yield* Effect.promise(() => first.text());
+
+      const tokenParts = cloudSessionId!.split(".");
+      const encryptedState = tokenParts[2]!;
+      const tamperedState = `${encryptedState[0] === "A" ? "B" : "A"}${encryptedState.slice(1)}`;
+      const tampered = yield* Effect.promise(() =>
+        app.handler(
+          new Request("https://cloud.test/v1/composio/mcp", {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${accessToken}`,
+              "content-type": "application/json",
+              "mcp-session-id": `${tokenParts[0]}.${tokenParts[1]}.${tamperedState}`,
+            },
+            body: encodeUnknownJson({ jsonrpc: "2.0", method: "notifications/initialized" }),
+          }),
+        ),
+      );
+      expect(tampered.status).toBe(400);
+
+      const second = yield* Effect.promise(() =>
+        app.handler(
+          new Request("https://cloud.test/v1/composio/mcp", {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${accessToken}`,
+              "content-type": "application/json",
+              "mcp-session-id": cloudSessionId!,
+            },
+            body: encodeUnknownJson({ jsonrpc: "2.0", method: "notifications/initialized" }),
+          }),
+        ),
+      );
+      expect(second.status).toBe(200);
+      yield* Effect.promise(() => second.text());
+
+      expect(upstreamRequests).toHaveLength(3);
+      expect(upstreamRequests[0]).toMatchObject({
+        url: "https://backend.composio.dev/api/v3.1/tool_router/session",
+        apiKey: "ak_service_owned",
+        body: { user_id: "kairo_namespace_test" },
+      });
+      expect(upstreamRequests[1]).toMatchObject({
+        url: "https://mcp.composio.dev/tool_router/v3/trs_test/mcp",
+        apiKey: "ak_service_owned",
+        sessionId: null,
+      });
+      expect(upstreamRequests[2]).toMatchObject({
+        url: "https://mcp.composio.dev/tool_router/v3/trs_test/mcp",
+        apiKey: "ak_service_owned",
+        sessionId: "upstream-session",
       });
     }),
   );

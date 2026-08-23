@@ -175,6 +175,10 @@
       "types": "./src/composerInlineTokens.ts",
       "import": "./src/composerInlineTokens.ts"
     },
+    "./deepResearch": {
+      "types": "./src/deepResearch.ts",
+      "import": "./src/deepResearch.ts"
+    },
     "./terminalLabels": {
       "types": "./src/terminalLabels.ts",
       "import": "./src/terminalLabels.ts"

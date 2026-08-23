@@ -106,7 +106,7 @@ Endpoint identifiers are synthesized in `apps/desktop/src/backend/tailscaleEndpo
 A hosted pairing request is a bootstrap URL for the static web app, not a transport:
 
 ```text
-https://app.kairo.codes/pair?host=https://backend.example.com:3773#token=PAIRCODE
+https://kairo-web-ebon-three.vercel.app/pair?host=https://backend.example.com:3773#token=PAIRCODE
 ```
 
 The hosted app reads `host`, takes the token from the URL hash, exchanges it directly with that

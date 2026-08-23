@@ -1,11 +1,8 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowLeftIcon, CloudIcon, ExternalLinkIcon } from "lucide-react";
+import { ArrowLeftIcon, CloudIcon } from "lucide-react";
 
-import { ensureLocalApi } from "../../localApi";
 import { Button } from "../ui/button";
 import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
-
-const COMPOSIO_DASHBOARD_URL = "https://dashboard.composio.dev";
 
 export function ComposioAppsSettings() {
   return (
@@ -17,16 +14,12 @@ export function ComposioAppsSettings() {
             Integrations
           </Button>
           <div className="max-w-2xl space-y-2">
-            <h2 className="text-sm font-semibold">Apps now live in Composio Connect</h2>
+            <h2 className="text-sm font-semibold">Apps connect when needed</h2>
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Connect, remove, or reauthorize apps in Composio Dashboard. Agents can also create a
-              secure connection link when a task needs an app that is not connected yet.
+              Ask an agent to use an app. Composio returns a secure sign-in link when that app is
+              not connected. Each Kairo account keeps its own connections.
             </p>
           </div>
-          <Button onClick={() => void ensureLocalApi().shell.openExternal(COMPOSIO_DASHBOARD_URL)}>
-            <ExternalLinkIcon className="size-4" />
-            Open Composio Dashboard
-          </Button>
         </div>
       </SettingsSection>
     </SettingsPageContainer>

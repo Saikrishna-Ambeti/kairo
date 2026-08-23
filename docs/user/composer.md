@@ -24,3 +24,12 @@ Use the interaction mode control to choose how the agent works in the current th
   Use `/study` to enter it.
 
 The selected mode belongs to the thread. Study Mode does not change the thread's permission mode.
+
+## Deep Research
+
+Open the three-dot menu in the composer and select **Deep Research**, or start a message with
+`/research`. If the composer already has a request, selecting **Deep Research** starts it. From an
+empty composer, the selection inserts `/research`; add the question or topic and send. Kairo asks
+the agent to research in the background, check material claims against independent sources,
+prefer primary sources, and include source links. New desktop threads start without taking over
+the current view, so you can continue working while the research runs.
