@@ -3,6 +3,9 @@
 ## Using Kairo
 
 - [Install and first run](./user/install.md)
+- [Build, Plan, and Study modes](./user/composer.md#interaction-modes)
+- [Persistent memory](./user/memory.md)
+- [Scheduled tasks for students](./user/scheduled-tasks.md)
 - [Permission modes](./user/permission-modes.md)
 - [Keyboard shortcuts](./user/keybindings.md)
 - [Organizing threads](./user/thread-sidebar.md)
@@ -16,6 +19,10 @@
 - Providers: [Codex](./user/providers-codex.md) · [Claude](./user/providers-claude.md)
 
 Mobile app: [apps/mobile/README.md](../apps/mobile/README.md)
+
+## Product record
+
+- [Development timeline](./documentation/development-timeline.md)
 
 ---
 
