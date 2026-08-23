@@ -46,6 +46,7 @@ import {
   resolvePromptInjectedEffort,
 } from "@kairo/shared/model";
 import { CHAT_LIST_ANCHOR_OFFSET } from "@kairo/shared/chatList";
+import { parseDeepResearchRequest } from "@kairo/shared/deepResearch";
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@kairo/shared/projectScripts";
 import { truncate } from "@kairo/shared/String";
 import {
@@ -5133,6 +5134,7 @@ function ChatViewContent(props: ChatViewProps) {
           ]
         : sendContextPreviewAnnotations;
     const promptForSend = promptRef.current;
+    const deepResearchRequest = parseDeepResearchRequest(promptForSend);
     const {
       trimmedPrompt: trimmed,
       sendableTerminalContexts: sendableComposerTerminalContexts,
@@ -5294,7 +5296,10 @@ function ChatViewContent(props: ChatViewProps) {
     const composerPreviewAnnotationsSnapshot = [...composerPreviewAnnotations];
     const composerReviewCommentsSnapshot: ReviewCommentContext[] = [...composerReviewComments];
     const messageTextWithContexts = appendElementContextsToPrompt(
-      appendTerminalContextsToPrompt(promptForSend, composerTerminalContextsSnapshot),
+      appendTerminalContextsToPrompt(
+        deepResearchRequest?.query ?? promptForSend,
+        composerTerminalContextsSnapshot,
+      ),
       composerElementContextsSnapshot,
     );
     const messageTextWithPreviewAnnotations = composerPreviewAnnotationsSnapshot.reduce(
@@ -5305,19 +5310,24 @@ function ChatViewContent(props: ChatViewProps) {
       messageTextWithPreviewAnnotations,
       composerReviewCommentsSnapshot,
     );
-    const outgoingMessageText = formatOutgoingPrompt({
+    const formattedMessageText = formatOutgoingPrompt({
       provider: ctxSelectedProvider,
       model: ctxSelectedModel,
       models: ctxSelectedProviderModels,
       effort: ctxSelectedPromptEffort,
       text: messageTextForSend || IMAGE_ONLY_BOOTSTRAP_PROMPT,
     });
+    const outgoingMessageText = deepResearchRequest
+      ? `/research ${formattedMessageText}`
+      : formattedMessageText;
     if (composerRef.current?.validateProviderInput(outgoingMessageText) === false) {
       return;
     }
 
     const resolvedSubmissionIntent =
-      submissionIntent === "background" && isLocalDraftThread ? "background" : "foreground";
+      isLocalDraftThread && (submissionIntent === "background" || deepResearchRequest !== null)
+        ? "background"
+        : "foreground";
     sendInFlightRef.current = true;
     if (
       shouldDockDraftHeroForSubmission({
@@ -5418,7 +5428,7 @@ function ChatViewContent(props: ChatViewProps) {
         firstComposerImageName = firstComposerImage.name;
       }
     }
-    let titleSeed = trimmed;
+    let titleSeed = deepResearchRequest?.query.trim() ?? trimmed;
     if (!titleSeed) {
       if (firstComposerImageName) {
         titleSeed = `Image: ${firstComposerImageName}`;

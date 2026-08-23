@@ -61,6 +61,7 @@ import type { McpCapability } from "../../mcp/McpInvocationContext.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import * as McpSessionRegistry from "../../mcp/McpSessionRegistry.ts";
 import * as ServerSettings from "../../serverSettings.ts";
+import { resolveDeepResearchProviderInput } from "../deepResearchPrompt.ts";
 const isModelSelection = Schema.is(ModelSelection);
 
 /**
@@ -758,10 +759,11 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         ? []
         : [`[Attached ${attachment.type} "${attachment.name}" is saved at: ${attachmentPath}]`];
     });
+    const deepResearchInput = resolveDeepResearchProviderInput(parsed.input);
     const inputTextWithAttachmentPaths =
       attachmentPathLines.length === 0
-        ? parsed.input
-        : [parsed.input, attachmentPathLines.join("\n")]
+        ? deepResearchInput.input
+        : [deepResearchInput.input, attachmentPathLines.join("\n")]
             .filter((part): part is string => typeof part === "string" && part.length > 0)
             .join("\n\n");
 
@@ -777,6 +779,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       "provider.thread_id": input.threadId,
       "provider.interaction_mode": input.interactionMode,
       "provider.attachment_count": input.attachments.length,
+      "provider.deep_research": deepResearchInput.deepResearch,
     });
     let metricProvider = "unknown";
     let metricModel = input.modelSelection?.model;
@@ -816,6 +819,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         provider: routed.adapter.provider,
         model: input.modelSelection?.model,
         interactionMode: input.interactionMode,
+        deepResearch: deepResearchInput.deepResearch,
         // Session-start events alone skew runtime mode toward users who toggle
         // often, since every toggle restarts the session. Recording it per turn
         // gives a usage-weighted view and lets it cross with interactionMode.
