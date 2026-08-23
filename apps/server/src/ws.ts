@@ -43,6 +43,7 @@ import {
   ProjectSearchEntriesError,
   ProjectWriteFileError,
   RelayClientInstallFailedError,
+  ScheduledTaskError,
   type RelayClientInstallProgressEvent,
   type ServerSelfUpdateError,
   type ServerSelfUpdateProgressEvent,
@@ -115,6 +116,7 @@ import * as ProcessResourceMonitor from "./diagnostics/ProcessResourceMonitor.ts
 import * as ResourceTelemetry from "./resourceTelemetry/ResourceTelemetry.ts";
 import * as AnalyticsService from "./telemetry/AnalyticsService.ts";
 import * as UsageService from "./usage/UsageService.ts";
+import * as ScheduledTaskService from "./scheduledTasks/ScheduledTaskService.ts";
 import { ArtifactMetadataRepository } from "./persistence/Services/ArtifactMetadata.ts";
 import * as TraceDiagnostics from "./diagnostics/TraceDiagnostics.ts";
 import * as PullRequestService from "./pullRequest/PullRequestService.ts";
@@ -516,6 +518,37 @@ const makeWsRpcLayer = (
       const processResourceMonitor = yield* ProcessResourceMonitor.ProcessResourceMonitor;
       const resourceTelemetry = yield* ResourceTelemetry.ResourceTelemetry;
       const usage = yield* UsageService.UsageService;
+      const scheduledTasks = yield* Effect.serviceOption(
+        ScheduledTaskService.ScheduledTaskService,
+      ).pipe(
+        Effect.map(
+          Option.getOrElse(
+            (): ScheduledTaskService.ScheduledTaskServiceShape => ({
+              getSnapshot: Effect.fail(
+                new ScheduledTaskError({
+                  code: "INTERNAL",
+                  message: "Scheduled tasks are unavailable in this server runtime.",
+                }),
+              ),
+              dispatch: () =>
+                Effect.fail(
+                  new ScheduledTaskError({
+                    code: "INTERNAL",
+                    message: "Scheduled tasks are unavailable in this server runtime.",
+                  }),
+                ),
+              fireExternal: () =>
+                Effect.fail(
+                  new ScheduledTaskError({
+                    code: "INTERNAL",
+                    message: "Scheduled tasks are unavailable in this server runtime.",
+                  }),
+                ),
+              tick: Effect.void,
+            }),
+          ),
+        ),
+      );
       const artifactMetadata = yield* ArtifactMetadataRepository;
       const supermemory = yield* SupermemoryService;
       const composio = yield* ComposioService;
@@ -1200,6 +1233,20 @@ const makeWsRpcLayer = (
           .pipe(Effect.ignoreCause({ log: true }), Effect.forkDetach, Effect.asVoid);
 
       return WsRpcGroup.of({
+        [WS_METHODS.scheduledTasksGetSnapshot]: () =>
+          observeRpcEffect(WS_METHODS.scheduledTasksGetSnapshot, scheduledTasks.getSnapshot, {
+            "rpc.aggregate": "scheduledTasks",
+          }),
+        [WS_METHODS.scheduledTasksDispatch]: (command) =>
+          observeRpcEffect(WS_METHODS.scheduledTasksDispatch, scheduledTasks.dispatch(command), {
+            "rpc.aggregate": "scheduledTasks",
+          }),
+        [WS_METHODS.scheduledTasksFireExternal]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.scheduledTasksFireExternal,
+            scheduledTasks.fireExternal(input),
+            { "rpc.aggregate": "scheduledTasks" },
+          ),
         [ORCHESTRATION_WS_METHODS.dispatchCommand]: (command) =>
           observeRpcEffect(
             ORCHESTRATION_WS_METHODS.dispatchCommand,
