@@ -652,6 +652,7 @@ function RoutineForm({
 }) {
   const change = <K extends keyof RoutineDraft>(key: K, value: RoutineDraft[K]) =>
     onChange({ ...draft, [key]: value });
+  const selectedProject = projects.find((project) => project.id === draft.projectId);
   const needsTime = ["hourly", "daily", "weekdays", "weekly"].includes(draft.triggerKind);
   const needsFilter = ["webhook", "calendar", "email", "github"].includes(draft.triggerKind);
   return (
@@ -688,7 +689,7 @@ function RoutineForm({
             onValueChange={(value) => value !== null && change("projectId", value)}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Choose project" />
+              <SelectValue placeholder="Choose project">{selectedProject?.title}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {projects.map((project) => (
