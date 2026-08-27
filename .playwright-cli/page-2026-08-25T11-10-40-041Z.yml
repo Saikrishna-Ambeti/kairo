@@ -1,0 +1,183 @@
+- generic [ref=e1]:
+    - generic [ref=e187]:
+        - generic [ref=e190]:
+            - link "Go to threads" [ref=e248] [cursor=pointer]:
+                - /url: /
+                - generic [ref=e250]: airo
+            - generic [ref=e253]:
+                - generic [ref=e254]:
+                    - combobox "Search settings" [ref=e259]
+                    - generic: /
+                - list [ref=e260]:
+                    - listitem [ref=e261]:
+                        - button "General" [ref=e262] [cursor=pointer]
+                    - listitem [ref=e267]:
+                        - button "Appearance" [ref=e268] [cursor=pointer]
+                    - listitem [ref=e276]:
+                        - button "Keybindings" [ref=e277] [cursor=pointer]
+                    - listitem [ref=e281]:
+                        - button "Providers" [ref=e282] [cursor=pointer]
+                    - listitem [ref=e287]:
+                        - button "Memory" [ref=e288] [cursor=pointer]
+                    - listitem [ref=e302]:
+                        - button "Integrations" [ref=e303] [cursor=pointer]
+                    - listitem [ref=e308]:
+                        - button "Connections" [ref=e309] [cursor=pointer]
+                    - listitem [ref=e314]:
+                        - button "Archive" [ref=e315] [cursor=pointer]
+            - list [ref=e323]:
+                - listitem [ref=e324]:
+                    - button "Back" [ref=e325] [cursor=pointer]
+            - button "Resize Sidebar" [ref=e235]
+        - main [ref=e329]:
+            - generic [ref=e330]:
+                - navigation "Settings breadcrumb" [ref=e333]:
+                    - list [ref=e334]:
+                        - listitem [ref=e335]: Settings
+                        - listitem [ref=e336]: /
+                        - listitem [ref=e337]: Appearance
+                - generic [ref=e536]:
+                    - generic [ref=e537]:
+                        - heading "Appearance" [level=2] [ref=e539]
+                        - generic [ref=e541]:
+                            - generic [ref=e543]:
+                                - paragraph [ref=e544]: Choose how Kairo looks. Use a built-in theme or make your own.
+                                - heading "Color scheme" [level=3] [ref=e545]
+                                - group "Appearance mode" [ref=e546]:
+                                    - button "Follow the system appearance" [active] [pressed] [ref=e547] [cursor=pointer]:
+                                        - generic [ref=e595]: System
+                                    - button "Use light mode" [ref=e596] [cursor=pointer]:
+                                        - generic [ref=e621]: Light
+                                    - button "Use dark mode" [ref=e622] [cursor=pointer]:
+                                        - generic [ref=e647]: Dark
+                                - generic [ref=e648]:
+                                    - heading "Themes" [level=3] [ref=e649]
+                                    - generic [ref=e650]:
+                                        - button "Create theme" [ref=e651] [cursor=pointer]
+                                        - button "Add theme" [ref=e652] [cursor=pointer]
+                                - generic [ref=e653]:
+                                    - generic [ref=e654] [cursor=pointer]:
+                                        - generic [ref=e656]:
+                                            - button "Use Kairo light mode" [pressed] [ref=e657]
+                                            - button "Use Kairo dark mode" [pressed] [ref=e660]
+                                        - generic [ref=e663]:
+                                            - button "Use Kairo theme" [ref=e666]: Kairo
+                                            - button "Duplicate Kairo" [ref=e668]
+                                    - generic [ref=e669] [cursor=pointer]:
+                                        - generic [ref=e671]:
+                                            - button "Use T3 Chat light mode" [ref=e672]
+                                            - button "Use T3 Chat dark mode" [ref=e675]
+                                        - generic [ref=e678]:
+                                            - button "Use T3 Chat theme" [ref=e681]: T3 Chat
+                                            - button "Duplicate T3 Chat" [ref=e683]
+                                    - generic [ref=e684] [cursor=pointer]:
+                                        - generic [ref=e686]:
+                                            - button "Use Grove light mode" [ref=e687]
+                                            - button "Use Grove dark mode" [ref=e690]
+                                        - generic [ref=e693]:
+                                            - button "Use Grove theme" [ref=e696]: Grove
+                                            - button "Duplicate Grove" [ref=e698]
+                                    - generic [ref=e699] [cursor=pointer]:
+                                        - generic [ref=e701]:
+                                            - button "Use Ocean light mode" [ref=e702]
+                                            - button "Use Ocean dark mode" [ref=e705]
+                                        - generic [ref=e708]:
+                                            - button "Use Ocean theme" [ref=e711]: Ocean
+                                            - button "Duplicate Ocean" [ref=e713]
+                                    - generic [ref=e714] [cursor=pointer]:
+                                        - generic [ref=e716]:
+                                            - button "Use Ember light mode" [ref=e717]
+                                            - button "Use Ember dark mode" [ref=e720]
+                                        - generic [ref=e723]:
+                                            - button "Use Ember theme" [ref=e726]: Ember
+                                            - button "Duplicate Ember" [ref=e728]
+                                    - generic [ref=e729] [cursor=pointer]:
+                                        - generic [ref=e731]:
+                                            - button "Use Iris light mode" [ref=e732]
+                                            - button "Use Iris dark mode" [ref=e735]
+                                        - generic [ref=e738]:
+                                            - button "Use Iris theme" [ref=e741]: Iris
+                                            - button "Duplicate Iris" [ref=e743]
+                            - generic [ref=e745]:
+                                - generic [ref=e746]:
+                                    - heading "Glass opacity" [level=3] [ref=e748]
+                                    - paragraph [ref=e750]: Control how transparent glass surfaces are. Higher values make menus, dialogs, and the composer more solid.
+                                - generic [ref=e752]:
+                                    - status [ref=e753]: 80%
+                                    - slider "Glass opacity" [ref=e754] [cursor=pointer]: "80"
+                    - generic [ref=e755]:
+                        - generic [ref=e756]:
+                            - heading "Typography" [level=2] [ref=e757]
+                            - generic [ref=e759] [cursor=pointer]:
+                                - text: Advanced
+                                - switch "Advanced Show advanced typography settings" [ref=e760]
+                                - checkbox [ref=e761]
+                        - generic [ref=e762]:
+                            - generic [ref=e763]:
+                                - generic [ref=e764]:
+                                    - generic [ref=e765]:
+                                        - heading "Interface font" [level=3] [ref=e767]
+                                        - paragraph [ref=e769]: Everything outside code blocks and the terminal.
+                                    - generic [ref=e771]:
+                                        - textbox "Interface font family" [ref=e774]:
+                                            - /placeholder: SF Pro
+                                        - combobox "Interface font size" [ref=e775] [cursor=pointer]:
+                                            - generic [ref=e776]: 16 px
+                                        - textbox [ref=e778]: "16"
+                                - textbox [ref=e781]:
+                                    - paragraph [ref=e782]:
+                                        - text: Use
+                                        - generic [ref=e783]: Frontend Design
+                                        - text: to fix the flaky test in
+                                        - generic [ref=e790]: surface.test.ts
+                                        - text: and align the header with
+                                        - generic [ref=e795]: SettingsPanels.tsx
+                                        - text: before shipping.
+                            - generic [ref=e800]:
+                                - generic [ref=e801]:
+                                    - generic [ref=e802]:
+                                        - heading "Monospace font" [level=3] [ref=e804]
+                                        - paragraph [ref=e806]: Code blocks, diffs, file previews, and the terminal.
+                                    - generic [ref=e808]:
+                                        - textbox "Monospace font family" [ref=e811]:
+                                            - /placeholder: Menlo
+                                        - combobox "Code font size" [ref=e812] [cursor=pointer]:
+                                            - generic [ref=e813]: 13 px
+                                        - textbox [ref=e815]: "13"
+                                - generic [ref=e885]:
+                                    - generic [ref=e886]:
+                                        - generic [ref=e887]: src/formatUser.ts
+                                        - generic [ref=e891]:
+                                            - generic [ref=e892]: "-1"
+                                            - generic [ref=e893]: "+1"
+                                    - code [ref=e895]:
+                                        - generic [ref=e896]:
+                                            - generic [ref=e897]: "1"
+                                            - generic [ref=e899]: "2"
+                                            - generic [ref=e901]: "2"
+                                            - generic [ref=e903]: "3"
+                                        - generic [ref=e905]:
+                                            - generic [ref=e906]: "export function formatUser(user: User) {"
+                                            - generic [ref=e907]:
+                                                - text: return user.name.
+                                                - generic [ref=e908]: toUpperCase();
+                                            - generic [ref=e909]:
+                                                - text: return
+                                                - generic [ref=e910]: "`${"
+                                                - text: user.name
+                                                - generic [ref=e911]: "} <${user.email}>`;"
+                                                - generic [ref=e912]: // 0O 1lI
+                                            - generic [ref=e913]: "}"
+                            - generic [ref=e847]:
+                                - generic [ref=e848]:
+                                    - heading "Word wrap" [level=3] [ref=e850]
+                                    - paragraph [ref=e852]: Wrap long lines in code blocks, tables, diffs, and file previews by default.
+                                - generic [ref=e853]:
+                                    - switch "Wrap code, tables, diffs, and file previews by default" [checked] [ref=e854] [cursor=pointer]
+                                    - checkbox [checked] [ref=e855]
+        - button "Toggle main sidebar" [pressed] [ref=e245] [cursor=pointer]:
+            - generic [ref=e246]: Toggle Sidebar
+    - generic:
+        - region "Notifications"
+    - generic:
+        - region "Notifications"

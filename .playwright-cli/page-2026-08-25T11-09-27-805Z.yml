@@ -1,0 +1,41 @@
+- generic [ref=e1]:
+    - generic [ref=e7]:
+        - banner [ref=e8]:
+            - generic [ref=e9]:
+                - heading "Set up Kairo" [level=1] [ref=e10]
+                - paragraph [ref=e11]: Sign in, tell us how you work, then connect a coding agent.
+            - navigation "Onboarding progress" [ref=e12]:
+                - generic [ref=e13]: Sign in
+                - generic [ref=e19]: Profession
+                - generic [ref=e25]: Setup
+        - main [ref=e30]:
+            - generic [ref=e42]:
+                - generic [ref=e43]:
+                    - heading "What best describes your work?" [level=2] [ref=e44]
+                    - paragraph [ref=e45]: Choose one so Kairo can tailor setup guidance to the way you build.
+                - group "Professional role" [ref=e46]:
+                    - generic [ref=e48] [cursor=pointer]:
+                        - radio "Student Learning, researching, or building coursework" [checked] [active] [ref=e49]
+                        - generic [ref=e54]: Student
+                        - generic [ref=e55]: Learning, researching, or building coursework
+                    - generic [ref=e59] [cursor=pointer]:
+                        - radio "Founder Building and shipping a company" [ref=e60]
+                        - generic [ref=e67]: Founder
+                        - generic [ref=e68]: Building and shipping a company
+                    - generic [ref=e72] [cursor=pointer]:
+                        - radio "Freelancer Working across client projects" [ref=e73]
+                        - generic [ref=e79]: Freelancer
+                        - generic [ref=e80]: Working across client projects
+                    - generic [ref=e84] [cursor=pointer]:
+                        - radio "Content creator Creating content and growing an audience" [ref=e85]
+                        - generic [ref=e90]: Content creator
+                        - generic [ref=e91]: Creating content and growing an audience
+                    - generic [ref=e95] [cursor=pointer]:
+                        - radio "Other Tell us what kind of work you do" [ref=e96]
+                        - generic [ref=e102]: Other
+                        - generic [ref=e103]: Tell us what kind of work you do
+                - button "Continue" [ref=e108] [cursor=pointer]
+    - generic:
+        - region "Notifications"
+    - generic:
+        - region "Notifications"

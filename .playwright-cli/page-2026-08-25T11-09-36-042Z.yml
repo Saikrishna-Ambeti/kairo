@@ -1,0 +1,56 @@
+- generic [active] [ref=e1]:
+    - generic [ref=e110]:
+        - banner [ref=e111]:
+            - generic [ref=e112]:
+                - heading "Set up Kairo" [level=1] [ref=e113]
+                - paragraph [ref=e114]: Sign in, tell us how you work, then connect a coding agent.
+            - navigation "Onboarding progress" [ref=e115]:
+                - generic [ref=e116]: Sign in
+                - button "Profession" [ref=e122] [cursor=pointer]
+                - generic [ref=e128]: Setup
+        - main [ref=e133]:
+            - generic [ref=e134]:
+                - generic [ref=e135]:
+                    - generic [ref=e136]:
+                        - heading "Connect a coding agent" [level=2] [ref=e137]
+                        - paragraph [ref=e138]: Install or sign in to one supported provider. Memory and app integrations stay in Settings.
+                    - generic [ref=e139]:
+                        - generic [ref=e140]:
+                            - generic [ref=e144]:
+                                - generic [ref=e145]:
+                                    - generic [ref=e146]: Codex
+                                    - generic [ref=e147]: Ready
+                                - paragraph [ref=e148]: brew upgrade codex
+                            - generic [ref=e149]:
+                                - button "Detected" [disabled]
+                        - generic [ref=e150]:
+                            - generic [ref=e154]:
+                                - generic [ref=e155]:
+                                    - generic [ref=e156]: Claude
+                                    - generic [ref=e157]: Ready
+                                - paragraph [ref=e158]: brew upgrade claude-code
+                            - generic [ref=e159]:
+                                - button "Detected" [disabled]
+                        - generic [ref=e160]:
+                            - generic [ref=e166]:
+                                - generic [ref=e167]:
+                                    - generic [ref=e168]: OpenCode
+                                    - generic [ref=e169]: Disabled
+                                - paragraph [ref=e170]: brew upgrade anomalyco/tap/opencode
+                            - button "Install" [ref=e172] [cursor=pointer]
+                - complementary [ref=e173]:
+                    - generic [ref=e174]: Provider status
+                    - generic [ref=e177]:
+                        - generic [ref=e178]:
+                            - generic [ref=e179]: Claude
+                            - generic [ref=e180]: Ready
+                        - generic [ref=e181]:
+                            - generic [ref=e182]: Codex
+                            - generic [ref=e183]: Ready
+                    - generic [ref=e184]:
+                        - button "Refresh" [ref=e185] [cursor=pointer]
+                        - button "Finish setup" [ref=e186] [cursor=pointer]
+    - generic:
+        - region "Notifications"
+    - generic:
+        - region "Notifications"

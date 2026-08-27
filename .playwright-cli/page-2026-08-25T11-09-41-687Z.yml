@@ -1,0 +1,38 @@
+- generic [active] [ref=e1]:
+    - generic [ref=e187]:
+        - generic [ref=e190]:
+            - link "Go to threads" [ref=e192] [cursor=pointer]:
+                - /url: /
+                - generic [ref=e194]: airo
+            - generic [ref=e196]:
+                - list [ref=e197]:
+                    - listitem [ref=e198]:
+                        - button "Scheduled tasks" [ref=e199] [cursor=pointer]
+                - generic [ref=e205]:
+                    - combobox "Search threads" [ref=e211]
+                    - generic [ref=e212]:
+                        - button "New thread" [disabled]
+            - generic [ref=e215]:
+                - list
+                - generic [ref=e216]:
+                    - generic [ref=e217]: No projects yet
+                    - button "Add project" [ref=e218] [cursor=pointer]
+            - list [ref=e221]:
+                - listitem [ref=e222]:
+                    - button "Settings" [ref=e223] [cursor=pointer]
+                - listitem [ref=e227]:
+                    - button "Usage" [ref=e228] [cursor=pointer]
+                - listitem [ref=e230]:
+                    - button "Library" [ref=e231] [cursor=pointer]
+            - button "Resize Sidebar" [ref=e235]
+        - main [ref=e236]:
+            - generic [ref=e240]:
+                - generic [ref=e241]: What should we work on?
+                - generic [ref=e242]: Add a project to start your first thread.
+                - button "Add project" [ref=e244] [cursor=pointer]
+        - button "Toggle main sidebar" [pressed] [ref=e245] [cursor=pointer]:
+            - generic [ref=e246]: Toggle Sidebar
+    - generic:
+        - region "Notifications"
+    - generic:
+        - region "Notifications"
