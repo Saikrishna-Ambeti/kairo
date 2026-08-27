@@ -716,7 +716,7 @@ function RoutineForm({
             onValueChange={(value) => change("triggerKind", value as TriggerKind)}
           >
             <SelectTrigger>
-              <SelectValue />
+              <SelectValue>{TRIGGER_LABELS[draft.triggerKind]}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {Object.entries(TRIGGER_LABELS).map(([value, label]) => (
@@ -752,7 +752,7 @@ function RoutineForm({
               onValueChange={(value) => value !== null && change("dayOfWeek", value)}
             >
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue>{WEEKDAYS[Number(draft.dayOfWeek)]}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {WEEKDAYS.map((day, index) => (
@@ -807,7 +807,13 @@ function RoutineForm({
             onValueChange={(value) => change("missedRuns", value as RoutineDraft["missedRuns"])}
           >
             <SelectTrigger>
-              <SelectValue />
+              <SelectValue>
+                {draft.missedRuns === "skip"
+                  ? "Skip"
+                  : draft.missedRuns === "catch-up-once"
+                    ? "Catch up once"
+                    : "Catch up all"}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="skip">Skip</SelectItem>
@@ -823,7 +829,9 @@ function RoutineForm({
             onValueChange={(value) => change("overlap", value as RoutineDraft["overlap"])}
           >
             <SelectTrigger>
-              <SelectValue />
+              <SelectValue>
+                {draft.overlap === "skip" ? "Skip new run" : "Queue new run"}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="skip">Skip new run</SelectItem>
