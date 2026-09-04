@@ -29,6 +29,9 @@ public class KairoComposerEditorModule: Module {
       Prop("editable") { (view: KairoComposerEditorView, editable: Bool) in
         view.setEditable(editable)
       }
+      Prop("readOnly") { (view: KairoComposerEditorView, readOnly: Bool) in
+        view.setReadOnly(readOnly)
+      }
       Prop("scrollEnabled") { (view: KairoComposerEditorView, scrollEnabled: Bool) in
         view.setScrollEnabled(scrollEnabled)
       }

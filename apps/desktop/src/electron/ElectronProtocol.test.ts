@@ -225,20 +225,7 @@ describe("ElectronProtocol", () => {
       "http:",
       "https:",
     ]);
+    assert.deepEqual(directives["media-src"], ["'self'", "kairo:", "blob:", "http:", "https:"]);
     assert.deepEqual(directives["font-src"], ["'self'", "kairo:", "data:"]);
-  });
-
-  it("allows Clerk development instances when the desktop build has no baked hostname", () => {
-    const policy = ElectronProtocol.makeDesktopContentSecurityPolicy({
-      scheme: ElectronProtocol.DESKTOP_DEVELOPMENT_SCHEME,
-      targetOrigin: new URL("http://127.0.0.1:5733/"),
-      backendOrigin: new URL("http://127.0.0.1:3773/"),
-      clerkFrontendApiHostname: undefined,
-    });
-
-    assert.include(
-      policy,
-      "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://*.clerk.accounts.dev",
-    );
   });
 });

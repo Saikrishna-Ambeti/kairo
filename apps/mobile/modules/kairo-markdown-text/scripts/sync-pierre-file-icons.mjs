@@ -66,6 +66,7 @@ const colors = {
   terraform: "#693acf",
   text: "#84848a",
   typescript: "#1a85d4",
+  video: "#a631be",
   vite: "#a631be",
   vscode: "#1a85d4",
   vue: "#199f43",
@@ -83,6 +84,7 @@ const customIcons = {
   pnpm: "kairo-file-icon-pnpm",
   readme: "kairo-file-icon-readme",
   tsconfig: "kairo-file-icon-tsconfig",
+  video: "kairo-file-icon-video",
 };
 
 function symbolFromSprite(sprite, id) {

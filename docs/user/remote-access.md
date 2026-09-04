@@ -46,6 +46,11 @@ If you are already running the desktop app and want to make it reachable from ot
 3. The settings panel will show the default reachable endpoint, with a `+N` control when more endpoints are available. Expand it to inspect alternatives such as loopback, LAN, private-network, or HTTPS endpoints.
 4. Use **Create Link** to generate a pairing link you can share with another device.
 
+Pairing codes and share links are available only in the client that created them,
+while its Connections page remains open. After you leave the page or reload it,
+create a new link to share. Other clients can see the active link's name, scopes,
+and expiry, and can revoke it if they have access management permission.
+
 The default endpoint controls the QR code and primary copy action for pairing links. You can change it from the expanded endpoint list. The preference is stored by endpoint type, so choosing the local LAN endpoint survives normal IP address changes when you move between networks.
 
 When no user default is saved, the app uses the built-in LAN endpoint for pairing links when
@@ -167,12 +172,29 @@ With mise, asdf, fnm, or nodenv, make sure the tool's shim directory is installe
 
 If reconnecting after an app update fails, retry the SSH launch once. The launcher now compares its generated runner script, stops stale launcher-managed remote servers, clears the SSH launch PID/port state, and starts a fresh remote server. You should not normally need to delete `~/.kairo/ssh-launch` or kill `kairo` processes manually.
 
+## Antigravity Google sign-in
+
+Antigravity runs and saves its Google credentials on the selected environment. You can install
+it and sign in from a remote web, desktop, or mobile client without an SSH login.
+
+Start in **Settings** > **Providers** on web or desktop. On mobile, open **Settings** >
+**Environments**, expand the environment, then choose **Set up Antigravity**.
+
+After Google sign-in, a remote browser usually reaches a `127.0.0.1` page that cannot load.
+Copy that full address into the return URL field in the same Kairo client. Choose
+**Continue** on web or desktop, or **Complete sign-in** on mobile. Keep the address unchanged.
+Do not paste the return URL into a thread or bug report.
+
+See [Antigravity setup](./providers-antigravity.md) for installation, expiry, and account changes.
+
 ## Updating a Remote Server
 
 When the Kairo web or desktop app and a remote server use different versions, a warning appears in
 the conversation and in **Settings** → **Connections**. Follow the action shown there: Kairo may
 be able to update and reconnect the server for you, or it may ask you to update the desktop app or
 run a copied command on the server machine.
+
+If Kairo Connect cannot connect, check the date and time on both devices, then try again.
 
 Finish active work before updating because the server restarts briefly. For step-by-step guidance,
 see [Keeping Kairo in Sync](./updating.md).

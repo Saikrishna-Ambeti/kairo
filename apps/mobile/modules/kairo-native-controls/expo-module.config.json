@@ -4,6 +4,9 @@
     "modules": ["KairoNativeControlsModule", "KairoKeyboardCommandsModule"]
   },
   "android": {
-    "modules": ["expo.modules.kaironativecontrols.KairoNativeControlsModule"]
+    "modules": [
+      "expo.modules.kaironativecontrols.KairoNativeControlsModule",
+      "expo.modules.kaironativecontrols.KairoKeyboardCommandsModule"
+    ]
   }
 }

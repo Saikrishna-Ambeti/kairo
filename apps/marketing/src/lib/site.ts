@@ -6,6 +6,6 @@ export const IOS_APP_STORE_URL =
 export const ANDROID_PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.kairo.app";
 
 export const MARKETING_STATS = {
-  githubStars: "14k+",
-  users: "100,000",
+  githubStars: "21k+",
+  users: "200,000",
 } as const;

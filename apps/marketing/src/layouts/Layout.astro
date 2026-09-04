@@ -8,8 +8,8 @@ interface Props {
 }
 
 const {
-  title = "Kairo · Open-source control plane for coding agents",
-  description = "Run Claude Code, Codex, Cursor, Grok, and OpenCode from one fast, local-first workspace on web, desktop, and mobile.",
+  title = "Kairo",
+  description = "Kairo. The open-source control plane for coding agents.",
   pageClass,
 } = Astro.props;
 ---
@@ -627,26 +627,30 @@ const {
     opacity: 0.28;
   }
 
-  .orb-1 {
-    width: 600px;
-    height: 600px;
-    background: radial-gradient(circle, #3186FF 0%, transparent 70%);
-    top: -150px;
-    left: 15%;
+  /* Page-load sequence: [data-rise] plays once with delay --d. */
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: none; }
+  }
+  [data-rise] {
+    animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: var(--d, 0ms);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    [data-rise] { animation: none; }
+  }
+</style>
+
+<style>
+  .page {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow-x: clip;
   }
 
-  .orb-2 {
-    width: 500px;
-    height: 500px;
-    background: radial-gradient(circle, #FC413D 0%, transparent 70%);
-    top: 25%;
-    right: 5%;
-    opacity: 0.18;
-  }
-
-  /* Header */
-  .ag-header {
-    position: fixed;
+  .nav {
+    position: sticky;
     top: 0;
     left: 0;
     right: 0;

@@ -2,27 +2,7 @@
 
 Kairo is a calm, local-first AI assistant for getting through everyday work faster. It keeps useful context in optional persistent memory and can connect agents to information from tools and platforms you authorize.
 
-Kairo works with local provider CLIs for Claude, Codex, Cursor, Grok Build, and OpenCode. Coding-agent workflows remain available alongside the everyday assistant experience.
-
-Kairo is built on the MIT-licensed [T3 Code](https://github.com/pingdotgg/t3code) project. See [LICENSE](./LICENSE) for attribution.
-
-## What Kairo can do
-
-- Run Codex, Claude, Cursor, Grok Build, and OpenCode from one web, desktop, or mobile client.
-- Switch each thread between **Build**, **Plan**, and **Study**. Study Mode is available to users
-  who select the Student role and can continue a learning plan across threads when memory is on.
-- Keep optional, user-scoped memory through Kairo Cloud without exposing the hosted Supermemory
-  credential to the local server or provider process.
-- Connect agents to approved apps and services through the integrations settings.
-- Work with Git branches, worktrees, checkpoints, diffs, terminals, and pull requests without
-  leaving the conversation.
-- Control a local or remote Kairo environment from another browser, desktop, phone, or tablet.
-- Save student routine drafts for assignment check-ins, revision planning, lecture-note cleanup,
-  and weekly resets. These drafts stay in the browser and do not run automatically yet.
-
-Kairo keeps the agent runtime on the environment machine. Remote clients control that environment
-through Kairo's typed WebSocket protocol, so the same project and thread history remain available
-across supported clients.
+Works with your subscriptions on Claude Code, Codex, Cursor, Grok Build, OpenCode, and Google Antigravity. If they're set up on your computer, Kairo can control them.
 
 ## "Wait, what are you selling me?"
 
@@ -33,13 +13,14 @@ We wanted something performant, remote-ready, and truly open. If we ever go the 
 ## Installation
 
 > [!WARNING]
-> Kairo currently supports Codex, Claude, Cursor, Grok Build and OpenCode. Install and authenticate at least one provider before use:
+> Kairo currently supports Codex, Claude, Cursor, Grok Build, OpenCode, and Antigravity. Install and authenticate at least one provider before use:
 >
 > - Codex: install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`
 > - Claude: install [Claude Code](https://claude.com/product/claude-code) and run `claude auth login`
 > - Cursor: install [Cursor CLI](https://cursor.com/cli) and run `agent login`
 > - Grok Build: install [Grok Build CLI](https://x.ai/cli) and run `grok login`
 > - OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
+> - Antigravity: enable it in Settings, then use **Install Antigravity** and **Sign in with Google**. No CLI is required.
 
 ### Try it out (install-free)
 

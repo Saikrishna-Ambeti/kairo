@@ -3,6 +3,10 @@ import type { SelectableMarkdownTextProps } from "@kairo/mobile-markdown-text/re
 type MobileSelectableMarkdownTextProps = Omit<SelectableMarkdownTextProps, "highlightCode">;
 
 export type {
+  MarkdownFileContextMenu,
+  MarkdownFileContextMenuAction,
+  MarkdownImageRenderer,
+  MarkdownImageRequest,
   NativeMarkdownTextStyle,
   SelectableMarkdownSkill,
 } from "@kairo/mobile-markdown-text/types";

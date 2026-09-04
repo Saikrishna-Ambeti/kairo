@@ -2,6 +2,22 @@ import { EnvironmentId, ThreadId } from "@kairo/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vite-plus/test";
 
+const mocks = vi.hoisted(() => ({
+  servers: [] as Array<{
+    host: string;
+    port: number;
+    url: string;
+    requestedUrl: string;
+    processName: string | null;
+    pid: number | null;
+    terminal: null;
+    source: "scanner";
+  }>,
+}));
+
+vi.mock("./useDiscoveredLocalServers", () => ({
+  useDiscoveredLocalServers: () => mocks.servers,
+}));
 vi.mock("./PreviewFaviconIcon", () => ({
   PreviewFaviconIcon: () => <span data-favicon-icon />,
 }));
@@ -11,10 +27,24 @@ import { PreviewEmptyState } from "./PreviewEmptyState";
 const environmentId = EnvironmentId.make("env-1");
 const threadRef = { environmentId, threadId: ThreadId.make("thread-1") };
 
+function server(port: number) {
+  return {
+    host: "localhost",
+    port,
+    url: `http://localhost:${port}`,
+    requestedUrl: `http://localhost:${port}`,
+    processName: "node",
+    pid: 1,
+    terminal: null,
+    source: "scanner" as const,
+  };
+}
+
 function render(recentEntries: Array<{ url: string; lastVisitedAt: number; title?: string }>) {
   return renderToStaticMarkup(
     <PreviewEmptyState
       threadRef={threadRef}
+      environmentId={environmentId}
       recentEntries={recentEntries}
       onRemoveRecent={() => undefined}
       onOpenUrl={() => undefined}
@@ -23,7 +53,8 @@ function render(recentEntries: Array<{ url: string; lastVisitedAt: number; title
 }
 
 describe("PreviewEmptyState", () => {
-  it("renders recent browser history", () => {
+  it("renders a history entry in both groups when its host:port matches a live server", () => {
+    mocks.servers = [server(5173)];
     const html = render([
       { url: "https://myapp.test/admin#users", lastVisitedAt: Date.now(), title: "Admin" },
       { url: "http://localhost:5173/", lastVisitedAt: Date.now(), title: "Recent Local" },
@@ -32,16 +63,18 @@ describe("PreviewEmptyState", () => {
     expect(html).toContain("myapp.test/admin#users");
     expect(html).toContain("Admin");
     expect(html).toContain("Recent Local");
-    expect(html).not.toContain("Local servers");
+    expect(html).toContain("Local servers");
+    expect(html).toContain("node");
   });
 
-  it("shows URL guidance when history is empty", () => {
+  it("keeps the original empty state when both groups are empty", () => {
+    mocks.servers = [];
     const html = render([]);
     expect(html).toContain("No preview yet");
-    expect(html).toContain("Type a URL above to open a page.");
   });
 
   it("renders an out-of-range lastVisitedAt entry without throwing", () => {
+    mocks.servers = [];
     let html = "";
     expect(() => {
       html = render([{ url: "https://myapp.test/", lastVisitedAt: 1e20 }]);

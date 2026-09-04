@@ -3,6 +3,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 
 import { make, provisionMemoryAccess } from "./driver.ts";
 import { BearerConnectionTarget, PrimaryConnectionTarget } from "./model.ts";
@@ -51,6 +52,7 @@ describe("ConnectionDriver memory provisioning", () => {
             }),
         } as unknown as RpcSession["client"],
         initialConfig: Effect.die("unused"),
+        subscribeServerConfig: () => Stream.never,
         ready: Effect.void,
         probe: Effect.void,
         closed: Effect.never,

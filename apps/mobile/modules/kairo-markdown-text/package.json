@@ -26,6 +26,8 @@
     "./types": "./src/SelectableMarkdownText.types.ts"
   },
   "peerDependencies": {
+    "@kairo/client-runtime": "*",
+    "@kairo/shared": "*",
     "expo-asset": "*",
     "expo-clipboard": "*",
     "expo-haptics": "*",

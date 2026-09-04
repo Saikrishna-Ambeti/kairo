@@ -2,8 +2,6 @@ import { EnvironmentId } from "@kairo/contracts";
 import { stripPairingTokenFromUrl } from "@kairo/shared/remote";
 import { type EnvironmentConnectionPhase } from "@kairo/client-runtime/connection";
 
-export { authClientMetadata } from "./authClientMetadata";
-
 export interface SavedRemoteConnection {
   readonly environmentId: EnvironmentId;
   readonly environmentLabel: string;

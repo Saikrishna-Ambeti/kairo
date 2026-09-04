@@ -75,6 +75,8 @@ export function hasCloudIdentityConfig(
   return Boolean(config.clerkPublishableKey && config.clerkJwtTemplate);
 }
 
+export const hasCloudPublicConfig = hasCloudIdentityConfig;
+
 export function hasManagedRelayConfig(
   config: CloudPublicConfig = resolveCloudPublicConfig(),
 ): boolean {

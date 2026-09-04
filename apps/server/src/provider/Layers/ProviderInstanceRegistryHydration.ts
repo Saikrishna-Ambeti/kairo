@@ -31,7 +31,7 @@
  *   1. Read the current `ServerSettings` once and use it to seed the
  *      registry's initial state via `ProviderInstanceRegistryMutableLayer`.
  *   2. Fork a daemon fiber (lifetime tied to the layer's scope) that
- *      subscribes to `ServerSettingsService.streamChanges` and calls
+ *      acquires `ServerSettingsService.subscribeChanges` and calls
  *      `ProviderInstanceRegistryMutator.reconcile` on every emission.
  *
  * Failures inside the watcher are logged and swallowed so a single bad
@@ -132,8 +132,8 @@ const deriveEffectiveProviderInstanceConfigMap = (
  *   - `ProviderInstanceRegistryMutableLayer` produces the registry +
  *     mutator from the initial config map. Its scope owns every
  *     per-instance child scope created during reconcile.
- *   - `SettingsWatcherLive` consumes the mutator and runs a daemon fiber
- *     in the same scope.
+ *   - `SettingsWatcherLive` consumes the mutator, acquires its settings
+ *     subscription before forking, and runs a daemon fiber in the same scope.
  *
  * Composing via `Layer.provideMerge` makes the watcher's deps available
  * from the mutable layer while still surfacing the registry as an output.
@@ -161,7 +161,8 @@ export const ProviderInstanceRegistryHydrationLive: Layer.Layer<
       configMap: initialConfigMap,
     });
 
-    yield* serverSettings.streamChanges.pipe(
+    const settingsChanges = yield* serverSettings.subscribeChanges;
+    yield* settingsChanges.pipe(
       Stream.runForEach((next) =>
         deriveEffectiveProviderInstanceConfigMap(next).pipe(
           Effect.flatMap((configMap) => built.mutator.reconcile(configMap)),

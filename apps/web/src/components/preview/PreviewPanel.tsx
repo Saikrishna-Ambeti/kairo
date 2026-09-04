@@ -12,6 +12,7 @@ interface Props {
   mode: PreviewPanelMode;
   threadRef: ScopedThreadRef;
   tabId?: string | null;
+  configuredUrls?: ReadonlyArray<string> | undefined;
   visible: boolean;
   onSendAnnotation?: (
     annotation: PreviewAnnotationPayload,
@@ -19,7 +20,14 @@ interface Props {
   ) => void;
 }
 
-export function PreviewPanel({ mode, threadRef, tabId, visible, onSendAnnotation }: Props) {
+export function PreviewPanel({
+  mode,
+  threadRef,
+  tabId,
+  configuredUrls,
+  visible,
+  onSendAnnotation,
+}: Props) {
   if (!isPreviewSupportedInRuntime()) {
     return (
       <PreviewPanelShell mode={mode}>
@@ -37,6 +45,7 @@ export function PreviewPanel({ mode, threadRef, tabId, visible, onSendAnnotation
       <PreviewView
         threadRef={threadRef}
         {...(tabId !== undefined ? { tabId } : {})}
+        configuredUrls={configuredUrls}
         visible={visible}
         {...(onSendAnnotation ? { onSendAnnotation } : {})}
       />

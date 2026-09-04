@@ -28,6 +28,12 @@ vi.mock("../../connection/catalog", () => ({
   },
 }));
 
+vi.mock("./cloud-drafts", () => ({ removeCloudEnvironments: {} }));
+vi.mock("../../state/use-composer-drafts", () => ({
+  getComposerCloudAccountId: vi.fn(async () => null),
+  restoreCloudComposerDrafts: vi.fn(async () => undefined),
+}));
+
 vi.mock("./publicConfig", () => ({
   hasCloudIdentityConfig: vi.fn(() => false),
   hasManagedRelayConfig: vi.fn(() => false),

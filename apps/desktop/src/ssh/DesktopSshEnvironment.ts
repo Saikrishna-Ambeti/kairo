@@ -5,6 +5,7 @@ import type {
 } from "@kairo/contracts";
 import * as NetService from "@kairo/shared/Net";
 import * as SshAuth from "@kairo/ssh/auth";
+import { resolveSshTarget } from "@kairo/ssh/command";
 import { discoverSshHosts } from "@kairo/ssh/config";
 import {
   SshCommandError,
@@ -54,6 +55,9 @@ export class DesktopSshEnvironment extends Context.Service<
     readonly discoverHosts: (input?: {
       readonly homeDir?: string;
     }) => Effect.Effect<readonly DesktopDiscoveredSshHost[], DesktopSshEnvironmentDiscoverError>;
+    readonly resolveHost: (
+      alias: string,
+    ) => Effect.Effect<DesktopSshEnvironmentTarget, SshCommandError | SshInvalidTargetError>;
     readonly ensureEnvironment: (
       target: DesktopSshEnvironmentTarget,
       options?: { readonly issuePairingToken?: boolean },
@@ -135,6 +139,11 @@ export const make = Effect.gen(function* () {
       discoverDesktopSshHostsEffect(input).pipe(
         Effect.provide(runtimeContext),
         Effect.withSpan("desktop.ssh.discoverHosts"),
+      ),
+    resolveHost: (alias) =>
+      resolveSshTarget(alias.trim()).pipe(
+        Effect.provide(runtimeContext),
+        Effect.withSpan("desktop.ssh.resolveHost"),
       ),
     ensureEnvironment: (target, ensureOptions) =>
       manager
