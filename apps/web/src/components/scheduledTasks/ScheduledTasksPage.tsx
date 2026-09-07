@@ -1,3 +1,4 @@
+import { Tabs } from "@base-ui/react/tabs";
 import { useAtomValue } from "@effect/atom-react";
 import {
   CommandId,
@@ -19,8 +20,6 @@ import {
   CircleAlertIcon,
   Clock3Icon,
   CopyIcon,
-  GraduationCapIcon,
-  InboxIcon,
   PauseIcon,
   PencilIcon,
   PlayIcon,
@@ -29,7 +28,7 @@ import {
   ShieldCheckIcon,
   Trash2Icon,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { isElectron } from "../../env";
 import { randomUUID } from "../../lib/utils";
@@ -41,13 +40,21 @@ import { primaryServerProvidersAtom } from "../../state/server";
 import { environmentShell } from "../../state/shell";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
+import {
+  Dialog,
+  DialogPopup,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogPanel,
+  DialogFooter,
+} from "../ui/dialog";
 import { Input } from "../ui/input";
 import { ScrollArea } from "../ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { SidebarInset } from "../ui/sidebar";
 import { Textarea } from "../ui/textarea";
 import { WorkspaceBreadcrumb, WorkspaceBreadcrumbItem } from "../WorkspaceBreadcrumb";
-import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 
 type TriggerKind = ScheduledTaskTrigger["kind"];
@@ -234,6 +241,7 @@ export function ScheduledTasksPage() {
   const [draft, setDraft] = useState<RoutineDraft>(EMPTY_DRAFT);
   const [editing, setEditing] = useState<ScheduledTaskRoutine | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const [section, setSection] = useState("starters");
   const [status, setStatus] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -277,6 +285,7 @@ export function ScheduledTasksPage() {
     nextDraft: RoutineDraft = { ...EMPTY_DRAFT, projectId: projects[0]?.id ?? "" },
   ) => {
     setEditing(null);
+    setStatus("");
     setDraft(nextDraft);
     setFormOpen(true);
   };
@@ -343,6 +352,7 @@ export function ScheduledTasksPage() {
     if (saved) {
       setFormOpen(false);
       setEditing(null);
+      setSection("routines");
     }
   };
 
@@ -385,250 +395,263 @@ export function ScheduledTasksPage() {
           </div>
         </WorkspacePageHeader>
 
-        <ScrollArea className="min-h-0 flex-1">
-          <WorkspacePageContainer width="wide" className="gap-8 py-8">
-            <section className="grid gap-5 border-b border-border/60 pb-7 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-              <div className="max-w-2xl">
-                <div className="mb-4 flex size-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-700 dark:text-blue-300">
-                  <GraduationCapIcon className="size-5" aria-hidden />
-                </div>
-                <h2 className="text-balance text-3xl font-semibold tracking-[-0.03em] sm:text-4xl">
-                  Schoolwork that starts on time.
-                </h2>
-                <p className="mt-3 max-w-[68ch] text-sm leading-6 text-muted-foreground sm:text-base">
-                  Every run opens a normal Kairo chat. Review work, answer permission requests in
-                  the composer, and continue the session from any device.
-                </p>
-              </div>
-              <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                <InboxIcon className="size-4" aria-hidden />
-                <span>
-                  <strong className="font-medium text-foreground">{pendingReviewCount}</strong>{" "}
-                  awaiting review
-                </span>
-              </div>
-            </section>
-
-            {status ? (
-              <div
-                role="status"
-                className="rounded-lg border border-border bg-muted/45 px-4 py-3 text-sm"
+        <Tabs.Root
+          value={section}
+          onValueChange={setSection}
+          className="flex min-h-0 min-w-0 flex-1 flex-col"
+        >
+          <Tabs.List
+            aria-label="Scheduled task sections"
+            className="flex shrink-0 flex-wrap gap-1 border-b border-border/60 px-4 py-2 sm:px-6"
+          >
+            {[
+              ["starters", "Student starters"],
+              ["routines", "Your routines"],
+              ["review", "Review inbox"],
+            ].map(([value, label]) => (
+              <Tabs.Tab
+                key={value}
+                value={value}
+                className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/55 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring data-[active]:bg-muted data-[active]:text-foreground"
               >
-                {status}
-              </div>
-            ) : null}
-
-            {formOpen ? (
-              <RoutineForm
-                draft={draft}
-                editing={editing !== null}
-                projects={projects}
-                saving={saving}
-                onChange={setDraft}
-                onCancel={() => {
-                  setFormOpen(false);
-                  setEditing(null);
-                }}
-                onSave={() => void saveDraft()}
-              />
-            ) : (
-              <section aria-labelledby="student-starters-heading">
-                <div className="mb-3">
-                  <h2 id="student-starters-heading" className="text-base font-semibold">
-                    Student starters
-                  </h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Start ready, then adjust timing and permissions.
-                  </p>
-                </div>
-                <div className="grid overflow-hidden rounded-xl border border-border/70 sm:grid-cols-2 lg:grid-cols-4">
-                  {STUDENT_TASK_TEMPLATES.map((template, index) => (
-                    <button
-                      key={template.id}
-                      type="button"
-                      onClick={() => openCreate(templateDraft(template, projects[0]?.id ?? ""))}
-                      className={`min-h-40 cursor-pointer p-4 text-left outline-none transition-colors hover:bg-muted/55 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${index > 0 ? "border-t border-border/70 sm:border-t-0" : ""} ${index % 2 === 1 ? "sm:border-l sm:border-border/70" : ""}`}
-                    >
-                      <span className="text-sm font-medium">{template.title}</span>
-                      <span className="mt-2 block text-xs leading-5 text-muted-foreground">
-                        {template.description}
-                      </span>
-                      <span className="mt-6 flex items-center gap-1.5 text-xs font-medium">
-                        <PlusIcon className="size-3" /> Schedule
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            <section aria-labelledby="routines-heading">
-              <div className="mb-3 flex items-end justify-between gap-4">
-                <div>
-                  <h2 id="routines-heading" className="text-base font-semibold">
-                    Your routines
-                  </h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Server-backed. Revision conflicts reload instead of overwriting newer changes.
-                  </p>
-                </div>
-                <Button
-                  variant="ghost-muted"
-                  size="xs"
-                  onClick={snapshotQuery.refresh}
-                  disabled={snapshotQuery.isPending}
+                {label}
+                {value === "review" && pendingReviewCount > 0 ? (
+                  <span className="ms-2 tabular-nums">{pendingReviewCount}</span>
+                ) : null}
+              </Tabs.Tab>
+            ))}
+          </Tabs.List>
+          <ScrollArea className="min-h-0 flex-1">
+            <div className="flex min-w-0 flex-col gap-6 px-4 py-6 sm:px-6">
+              {status ? (
+                <div
+                  role="status"
+                  className="rounded-lg border border-border bg-muted/45 px-4 py-3 text-sm"
                 >
-                  <RefreshCwIcon
-                    className={
-                      snapshotQuery.isPending ? "animate-spin motion-reduce:animate-none" : ""
-                    }
-                  />{" "}
-                  Refresh
-                </Button>
-              </div>
-              {snapshotQuery.error ? (
-                <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-                  {snapshotQuery.error}
+                  {status}
                 </div>
-              ) : tasks.length === 0 ? (
-                <div className="flex min-h-44 flex-col items-center justify-center rounded-xl border border-dashed border-border px-6 text-center">
-                  <CalendarClockIcon className="size-6 text-muted-foreground" aria-hidden />
-                  <h3 className="mt-3 text-sm font-medium">No routines yet</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Choose a starter or build your own.
-                  </p>
-                </div>
-              ) : (
-                <div className="overflow-hidden rounded-xl border border-border/70">
-                  {tasks.map((task, index) => (
-                    <RoutineRow
-                      key={task.id}
-                      task={task}
-                      separated={index > 0}
-                      onEdit={() => {
-                        setEditing(task);
-                        setDraft(draftFromTask(task));
-                        setFormOpen(true);
-                      }}
-                      onCommand={(command) => {
-                        if (
-                          command === "delete" &&
-                          !window.confirm(
-                            `Delete “${task.title}”? Its run receipts stay in history.`,
-                          )
-                        ) {
-                          return;
-                        }
-                        void taskCommand(task, command);
-                      }}
-                      onDuplicate={() =>
-                        void mutate(
-                          {
-                            type: "scheduled-task.duplicate",
-                            ...commandMetadata(),
-                            taskId: task.id,
-                            expectedRevision: task.revision,
-                            duplicateId: ScheduledTaskId.make(randomUUID()),
-                          },
-                          "Routine duplicated and paused.",
-                        )
-                      }
-                      onRevoke={(permission) =>
-                        void mutate(
-                          {
-                            type: "scheduled-task.permission.revoke",
-                            ...commandMetadata(),
-                            taskId: task.id,
-                            expectedRevision: task.revision,
-                            permissionId: permission.id,
-                          },
-                          "Permission revoked.",
-                        )
-                      }
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
+              ) : null}
 
-            <section
-              aria-labelledby="review-inbox-heading"
-              className="border-t border-border/60 pt-7"
-            >
-              <div className="mb-3">
-                <h2 id="review-inbox-heading" className="text-base font-semibold">
-                  Review inbox
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Recent runs and skipped work. Open chat to inspect results or answer blocked
-                  permissions.
-                </p>
-              </div>
-              {runs.length === 0 ? (
-                <p className="rounded-xl bg-muted/45 px-4 py-6 text-center text-sm text-muted-foreground">
-                  Completed runs appear here.
-                </p>
-              ) : (
-                <div className="divide-y divide-border/70 rounded-xl border border-border/70">
-                  {runs.slice(0, 20).map((run) => (
-                    <div
-                      key={run.id}
-                      className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm"
+              <Tabs.Panel value="starters">
+                <section aria-labelledby="student-starters-heading">
+                  <div className="mb-3">
+                    <h2 id="student-starters-heading" className="text-base font-semibold">
+                      Student starters
+                    </h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Start ready, then adjust timing and permissions.
+                    </p>
+                  </div>
+                  <div className="grid overflow-hidden rounded-xl border border-border/70 sm:grid-cols-2 lg:grid-cols-4">
+                    {STUDENT_TASK_TEMPLATES.map((template, index) => (
+                      <button
+                        key={template.id}
+                        type="button"
+                        onClick={() => openCreate(templateDraft(template, projects[0]?.id ?? ""))}
+                        className={`min-h-40 cursor-pointer p-4 text-left outline-none transition-colors hover:bg-muted/55 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${index > 0 ? "border-t border-border/70 sm:border-t-0" : ""} ${index % 2 === 1 ? "sm:border-l sm:border-border/70" : ""}`}
+                      >
+                        <span className="text-sm font-medium">{template.title}</span>
+                        <span className="mt-2 block text-xs leading-5 text-muted-foreground">
+                          {template.description}
+                        </span>
+                        <span className="mt-6 flex items-center gap-1.5 text-xs font-medium">
+                          <PlusIcon className="size-3" /> Schedule
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              </Tabs.Panel>
+
+              <Tabs.Panel value="routines">
+                <section aria-labelledby="routines-heading">
+                  <div className="mb-3 flex items-end justify-between gap-4">
+                    <div>
+                      <h2 id="routines-heading" className="text-base font-semibold">
+                        Your routines
+                      </h2>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Server-backed. Revision conflicts reload instead of overwriting newer
+                        changes.
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost-muted"
+                      size="xs"
+                      onClick={snapshotQuery.refresh}
+                      disabled={snapshotQuery.isPending}
                     >
-                      {run.status === "succeeded" ? (
-                        <CheckCircle2Icon className="size-4 text-emerald-600" />
-                      ) : run.status === "failed" || run.status === "skipped" ? (
-                        <CircleAlertIcon className="size-4 text-amber-600" />
-                      ) : (
-                        <Clock3Icon className="size-4 text-blue-600" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{run.taskTitle}</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {run.status} · {new Date(run.scheduledFor).toLocaleString()}
-                          {run.reason ? ` · ${run.reason}` : ""}
-                        </p>
-                      </div>
-                      {run.threadId && environmentId ? (
-                        <Button
-                          variant="outline"
-                          size="xs"
-                          render={
-                            <Link
-                              to="/$environmentId/$threadId"
-                              params={{ environmentId, threadId: run.threadId }}
-                            />
-                          }
-                        >
-                          Open chat
-                        </Button>
-                      ) : null}
-                      {run.completedAt && !run.reviewedAt ? (
-                        <Button
-                          variant="ghost-muted"
-                          size="xs"
-                          onClick={() =>
+                      <RefreshCwIcon
+                        className={
+                          snapshotQuery.isPending ? "animate-spin motion-reduce:animate-none" : ""
+                        }
+                      />{" "}
+                      Refresh
+                    </Button>
+                  </div>
+                  {snapshotQuery.error ? (
+                    <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                      {snapshotQuery.error}
+                    </div>
+                  ) : tasks.length === 0 ? (
+                    <div className="flex min-h-44 flex-col items-center justify-center rounded-xl border border-dashed border-border px-6 text-center">
+                      <CalendarClockIcon className="size-6 text-muted-foreground" aria-hidden />
+                      <h3 className="mt-3 text-sm font-medium">No routines yet</h3>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Choose a starter or build your own.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="overflow-hidden rounded-xl border border-border/70">
+                      {tasks.map((task, index) => (
+                        <RoutineRow
+                          key={task.id}
+                          task={task}
+                          separated={index > 0}
+                          onEdit={() => {
+                            setStatus("");
+                            setEditing(task);
+                            setDraft(draftFromTask(task));
+                            setFormOpen(true);
+                          }}
+                          onCommand={(command) => {
+                            if (
+                              command === "delete" &&
+                              !window.confirm(
+                                `Delete “${task.title}”? Its run receipts stay in history.`,
+                              )
+                            ) {
+                              return;
+                            }
+                            void taskCommand(task, command);
+                          }}
+                          onDuplicate={() =>
                             void mutate(
                               {
-                                type: "scheduled-task.run.review",
+                                type: "scheduled-task.duplicate",
                                 ...commandMetadata(),
-                                runId: run.id,
+                                taskId: task.id,
+                                expectedRevision: task.revision,
+                                duplicateId: ScheduledTaskId.make(randomUUID()),
                               },
-                              "Run marked reviewed.",
+                              "Routine duplicated and paused.",
                             )
                           }
-                        >
-                          Mark reviewed
-                        </Button>
-                      ) : null}
+                          onRevoke={(permission) =>
+                            void mutate(
+                              {
+                                type: "scheduled-task.permission.revoke",
+                                ...commandMetadata(),
+                                taskId: task.id,
+                                expectedRevision: task.revision,
+                                permissionId: permission.id,
+                              },
+                              "Permission revoked.",
+                            )
+                          }
+                        />
+                      ))}
                     </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          </WorkspacePageContainer>
-        </ScrollArea>
+                  )}
+                </section>
+              </Tabs.Panel>
+              <Tabs.Panel value="review">
+                <section aria-labelledby="review-inbox-heading">
+                  <div className="mb-3">
+                    <h2 id="review-inbox-heading" className="text-base font-semibold">
+                      Review inbox
+                    </h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Recent runs and skipped work. Open chat to inspect results or answer blocked
+                      permissions.
+                    </p>
+                  </div>
+                  {runs.length === 0 ? (
+                    <p className="rounded-xl bg-muted/45 px-4 py-6 text-center text-sm text-muted-foreground">
+                      Completed runs appear here.
+                    </p>
+                  ) : (
+                    <div className="divide-y divide-border/70 rounded-xl border border-border/70">
+                      {runs.slice(0, 20).map((run) => (
+                        <div
+                          key={run.id}
+                          className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm"
+                        >
+                          {run.status === "succeeded" ? (
+                            <CheckCircle2Icon className="size-4 text-emerald-600" />
+                          ) : run.status === "failed" || run.status === "skipped" ? (
+                            <CircleAlertIcon className="size-4 text-amber-600" />
+                          ) : (
+                            <Clock3Icon className="size-4 text-blue-600" />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-medium">{run.taskTitle}</p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {run.status} · {new Date(run.scheduledFor).toLocaleString()}
+                              {run.reason ? ` · ${run.reason}` : ""}
+                            </p>
+                          </div>
+                          {run.threadId && environmentId ? (
+                            <Button
+                              variant="outline"
+                              size="xs"
+                              render={
+                                <Link
+                                  to="/$environmentId/$threadId"
+                                  params={{ environmentId, threadId: run.threadId }}
+                                />
+                              }
+                            >
+                              Open chat
+                            </Button>
+                          ) : null}
+                          {run.completedAt && !run.reviewedAt ? (
+                            <Button
+                              variant="ghost-muted"
+                              size="xs"
+                              onClick={() =>
+                                void mutate(
+                                  {
+                                    type: "scheduled-task.run.review",
+                                    ...commandMetadata(),
+                                    runId: run.id,
+                                  },
+                                  "Run marked reviewed.",
+                                )
+                              }
+                            >
+                              Mark reviewed
+                            </Button>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              </Tabs.Panel>
+            </div>
+          </ScrollArea>
+        </Tabs.Root>
       </div>
+      <Dialog
+        open={formOpen}
+        onOpenChange={(open) => {
+          if (!saving) setFormOpen(open);
+        }}
+      >
+        {formOpen ? (
+          <RoutineForm
+            draft={draft}
+            editing={editing !== null}
+            projects={projects}
+            saving={saving}
+            status={status}
+            onChange={setDraft}
+            onCancel={() => setFormOpen(false)}
+            onSave={() => void saveDraft()}
+          />
+        ) : null}
+      </Dialog>
     </SidebarInset>
   );
 }
@@ -638,6 +661,7 @@ function RoutineForm({
   editing,
   projects,
   saving,
+  status,
   onChange,
   onCancel,
   onSave,
@@ -646,6 +670,7 @@ function RoutineForm({
   readonly editing: boolean;
   readonly projects: ReadonlyArray<OrchestrationProjectShell>;
   readonly saving: boolean;
+  readonly status: string;
   readonly onChange: (draft: RoutineDraft) => void;
   readonly onCancel: () => void;
   readonly onSave: () => void;
@@ -655,203 +680,347 @@ function RoutineForm({
   const selectedProject = projects.find((project) => project.id === draft.projectId);
   const needsTime = ["hourly", "daily", "weekdays", "weekly"].includes(draft.triggerKind);
   const needsFilter = ["webhook", "calendar", "email", "github"].includes(draft.triggerKind);
+  const [step, setStep] = useState(0);
+  const steps: (keyof RoutineDraft | "review")[] = [
+    "title",
+    "projectId",
+    "prompt",
+    "triggerKind",
+    ...(needsTime ? ["time" as const] : []),
+    ...(draft.triggerKind === "weekly" ? ["dayOfWeek" as const] : []),
+    ...(draft.triggerKind === "one-time" ? ["oneTimeAt" as const] : []),
+    ...(draft.triggerKind === "cron" ? ["cron" as const] : []),
+    ...(needsFilter ? ["externalFilter" as const] : []),
+    "timezone",
+    "missedRuns",
+    "overlap",
+    "review",
+  ];
+  const field = steps[step] ?? "review";
+  const [error, setError] = useState("");
+  const fieldRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const control = fieldRef.current?.querySelector<HTMLElement>(
+      "input:not(:disabled), textarea, button:not(:disabled), [tabindex='0']",
+    );
+    (control ?? fieldRef.current)?.focus();
+  }, [field]);
+  const advance = () => {
+    if (field !== "review" && !["externalFilter"].includes(field) && !draft[field].trim()) {
+      setError("Fill in this field to continue.");
+      return;
+    }
+    if (field === "oneTimeAt" && !Number.isFinite(Date.parse(draft.oneTimeAt))) {
+      setError("Choose a valid date and time.");
+      return;
+    }
+    if (field === "timezone") {
+      try {
+        new Intl.DateTimeFormat("en", { timeZone: draft.timezone }).resolvedOptions();
+      } catch {
+        setError("Enter a valid timezone, such as Asia/Kolkata or UTC.");
+        return;
+      }
+    }
+    setError("");
+    setStep(step + 1);
+  };
   return (
-    <section
-      aria-labelledby="routine-form-heading"
-      className="rounded-xl border border-border/70 bg-muted/20 p-4 sm:p-5"
-    >
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h2 id="routine-form-heading" className="text-base font-semibold">
-            {editing ? "Edit routine" : "New routine"}
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Runs use approval-required mode. Extra tool access stays visible in chat composer.
-          </p>
+    <DialogPopup showCloseButton={!saving}>
+      <DialogHeader>
+        <DialogTitle>{editing ? "Edit routine" : "New routine"}</DialogTitle>
+        <DialogDescription>
+          {field === "review"
+            ? "Review your routine before saving."
+            : "Set up your routine one detail at a time."}
+        </DialogDescription>
+        <p className="text-xs text-muted-foreground" aria-live="polite">
+          Step {step + 1} of {steps.length}
+        </p>
+      </DialogHeader>
+      <DialogPanel>
+        <div key={field} ref={fieldRef} tabIndex={-1} className="grid min-h-36 gap-4">
+          {field === "title" ? (
+            <label className="grid gap-2 text-sm font-medium">
+              Name
+              <Input
+                value={draft.title}
+                onChange={(event) => change("title", event.target.value)}
+                placeholder="Evening assignment check"
+              />
+            </label>
+          ) : null}
+          {field === "projectId" ? (
+            <label className="grid gap-2 text-sm font-medium">
+              Project
+              <Select
+                disabled={editing}
+                value={draft.projectId}
+                onValueChange={(value) => value !== null && change("projectId", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose project">{selectedProject?.title}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+          ) : null}
+          {field === "prompt" ? (
+            <label className="grid gap-2 text-sm font-medium">
+              Instructions
+              <Textarea
+                value={draft.prompt}
+                onChange={(event) => change("prompt", event.target.value)}
+                className="min-h-28"
+                placeholder="Review my assignments and prepare the next three actions."
+              />
+            </label>
+          ) : null}
+          {field === "triggerKind" ? (
+            <label className="grid gap-2 text-sm font-medium">
+              Trigger
+              <Select
+                value={draft.triggerKind}
+                onValueChange={(value) => change("triggerKind", value as TriggerKind)}
+              >
+                <SelectTrigger>
+                  <SelectValue>{TRIGGER_LABELS[draft.triggerKind]}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(TRIGGER_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+          ) : null}
+          {field === "timezone" ? (
+            <label className="grid gap-2 text-sm font-medium">
+              Timezone
+              <Input
+                value={draft.timezone}
+                onChange={(event) => change("timezone", event.target.value)}
+              />
+            </label>
+          ) : null}
+          {field === "time" ? (
+            <label className="grid gap-2 text-sm font-medium">
+              Time
+              <Input
+                type="time"
+                value={draft.time}
+                onChange={(event) => change("time", event.target.value)}
+              />
+            </label>
+          ) : null}
+          {field === "dayOfWeek" ? (
+            <label className="grid gap-2 text-sm font-medium">
+              Day
+              <Select
+                value={draft.dayOfWeek}
+                onValueChange={(value) => value !== null && change("dayOfWeek", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue>{WEEKDAYS[Number(draft.dayOfWeek)]}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {WEEKDAYS.map((day, index) => (
+                    <SelectItem key={day} value={String(index)}>
+                      {day}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+          ) : null}
+          {field === "oneTimeAt" ? (
+            <label className="grid gap-2 text-sm font-medium">
+              Run at
+              <Input
+                type="datetime-local"
+                value={draft.oneTimeAt}
+                onChange={(event) => change("oneTimeAt", event.target.value)}
+              />
+            </label>
+          ) : null}
+          {field === "cron" ? (
+            <label className="grid gap-2 text-sm font-medium">
+              Cron expression
+              <Input
+                value={draft.cron}
+                onChange={(event) => change("cron", event.target.value)}
+                placeholder="0 19 * * 1-5"
+              />
+            </label>
+          ) : null}
+          {field === "externalFilter" ? (
+            <label className="grid gap-2 text-sm font-medium">
+              {draft.triggerKind === "github"
+                ? "Repository"
+                : draft.triggerKind === "email"
+                  ? "Email query"
+                  : draft.triggerKind === "calendar"
+                    ? "Calendar ID"
+                    : "Webhook ID"}
+              <Input
+                value={draft.externalFilter}
+                onChange={(event) => change("externalFilter", event.target.value)}
+                placeholder={draft.triggerKind === "github" ? "owner/repository" : undefined}
+              />
+            </label>
+          ) : null}
+          {field === "missedRuns" ? (
+            <label className="grid gap-2 text-sm font-medium">
+              Missed runs
+              <Select
+                value={draft.missedRuns}
+                onValueChange={(value) => change("missedRuns", value as RoutineDraft["missedRuns"])}
+              >
+                <SelectTrigger>
+                  <SelectValue>
+                    {draft.missedRuns === "skip"
+                      ? "Skip"
+                      : draft.missedRuns === "catch-up-once"
+                        ? "Catch up once"
+                        : "Catch up all"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="skip">Skip</SelectItem>
+                  <SelectItem value="catch-up-once">Catch up once</SelectItem>
+                  <SelectItem value="catch-up-all">Catch up all</SelectItem>
+                </SelectContent>
+              </Select>
+            </label>
+          ) : null}
+          {field === "overlap" ? (
+            <label className="grid gap-2 text-sm font-medium">
+              When already running
+              <Select
+                value={draft.overlap}
+                onValueChange={(value) => change("overlap", value as RoutineDraft["overlap"])}
+              >
+                <SelectTrigger>
+                  <SelectValue>
+                    {draft.overlap === "skip" ? "Skip new run" : "Queue new run"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="skip">Skip new run</SelectItem>
+                  <SelectItem value="queue">Queue new run</SelectItem>
+                </SelectContent>
+              </Select>
+            </label>
+          ) : null}
+
+          {field === "review" ? (
+            <div className="space-y-4 text-sm">
+              <h3 className="font-semibold break-words">{draft.title}</h3>
+              <p className="whitespace-pre-wrap break-words text-muted-foreground">
+                {draft.prompt}
+              </p>
+              <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2">
+                <dt className="text-muted-foreground">Project</dt>
+                <dd className="break-words">
+                  {projects.find((project) => project.id === draft.projectId)?.title}
+                </dd>
+                <dt className="text-muted-foreground">Trigger</dt>
+                <dd>{TRIGGER_LABELS[draft.triggerKind]}</dd>
+                {needsTime ? (
+                  <>
+                    <dt className="text-muted-foreground">Time</dt>
+                    <dd>{draft.time}</dd>
+                  </>
+                ) : null}
+                {draft.triggerKind === "weekly" ? (
+                  <>
+                    <dt className="text-muted-foreground">Day</dt>
+                    <dd>{WEEKDAYS[Number(draft.dayOfWeek)]}</dd>
+                  </>
+                ) : null}
+                {draft.triggerKind === "one-time" ? (
+                  <>
+                    <dt className="text-muted-foreground">Run at</dt>
+                    <dd>{draft.oneTimeAt.replace("T", " ")}</dd>
+                  </>
+                ) : null}
+                {draft.triggerKind === "cron" ? (
+                  <>
+                    <dt className="text-muted-foreground">Cron</dt>
+                    <dd className="break-words">{draft.cron}</dd>
+                  </>
+                ) : null}
+                {needsFilter ? (
+                  <>
+                    <dt className="text-muted-foreground">Event filter</dt>
+                    <dd className="break-words">{draft.externalFilter || "Default"}</dd>
+                  </>
+                ) : null}
+                <dt className="text-muted-foreground">Timezone</dt>
+                <dd className="break-words">{draft.timezone}</dd>
+                <dt className="text-muted-foreground">Missed runs</dt>
+                <dd>
+                  {
+                    {
+                      skip: "Skip",
+                      "catch-up-once": "Catch up once",
+                      "catch-up-all": "Catch up all",
+                    }[draft.missedRuns]
+                  }
+                </dd>
+                <dt className="text-muted-foreground">Already running</dt>
+                <dd>{draft.overlap === "skip" ? "Skip new run" : "Queue new run"}</dd>
+              </dl>
+              <p className="text-muted-foreground">
+                Protected actions ask for permission in the run chat.
+              </p>
+            </div>
+          ) : null}
         </div>
-        <Button variant="ghost-muted" size="xs" onClick={onCancel}>
+        {field === "projectId" && projects.length === 0 ? (
+          <p className="mt-3 text-sm text-muted-foreground">
+            Add a project before scheduling a routine.
+          </p>
+        ) : null}
+        {error || status ? (
+          <p role="alert" className="mt-3 text-sm text-destructive">
+            {error || status}
+          </p>
+        ) : null}
+      </DialogPanel>
+      <DialogFooter>
+        <Button variant="ghost-muted" onClick={onCancel} disabled={saving}>
           Cancel
         </Button>
-      </div>
-      <div className="mt-5 grid gap-4 lg:grid-cols-2">
-        <label className="grid gap-1.5 text-sm font-medium">
-          Name
-          <Input
-            value={draft.title}
-            onChange={(event) => change("title", event.target.value)}
-            placeholder="Evening assignment check"
-          />
-        </label>
-        <label className="grid gap-1.5 text-sm font-medium">
-          Project
-          <Select
-            value={draft.projectId}
-            onValueChange={(value) => value !== null && change("projectId", value)}
+        {step > 0 ? (
+          <Button
+            variant="outline"
+            disabled={saving}
+            onClick={() => {
+              setError("");
+              setStep(step - 1);
+            }}
           >
-            <SelectTrigger>
-              <SelectValue placeholder="Choose project">{selectedProject?.title}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {projects.map((project) => (
-                <SelectItem key={project.id} value={project.id}>
-                  {project.title}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </label>
-        <label className="grid gap-1.5 text-sm font-medium lg:col-span-2">
-          Instructions
-          <Textarea
-            value={draft.prompt}
-            onChange={(event) => change("prompt", event.target.value)}
-            className="min-h-28"
-            placeholder="Review my assignments and prepare the next three actions."
-          />
-        </label>
-        <label className="grid gap-1.5 text-sm font-medium">
-          Trigger
-          <Select
-            value={draft.triggerKind}
-            onValueChange={(value) => change("triggerKind", value as TriggerKind)}
-          >
-            <SelectTrigger>
-              <SelectValue>{TRIGGER_LABELS[draft.triggerKind]}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(TRIGGER_LABELS).map(([value, label]) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </label>
-        <label className="grid gap-1.5 text-sm font-medium">
-          Timezone
-          <Input
-            value={draft.timezone}
-            onChange={(event) => change("timezone", event.target.value)}
-          />
-        </label>
-        {needsTime ? (
-          <label className="grid gap-1.5 text-sm font-medium">
-            Time
-            <Input
-              type="time"
-              value={draft.time}
-              onChange={(event) => change("time", event.target.value)}
-            />
-          </label>
+            Back
+          </Button>
         ) : null}
-        {draft.triggerKind === "weekly" ? (
-          <label className="grid gap-1.5 text-sm font-medium">
-            Day
-            <Select
-              value={draft.dayOfWeek}
-              onValueChange={(value) => value !== null && change("dayOfWeek", value)}
-            >
-              <SelectTrigger>
-                <SelectValue>{WEEKDAYS[Number(draft.dayOfWeek)]}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {WEEKDAYS.map((day, index) => (
-                  <SelectItem key={day} value={String(index)}>
-                    {day}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </label>
-        ) : null}
-        {draft.triggerKind === "one-time" ? (
-          <label className="grid gap-1.5 text-sm font-medium">
-            Run at
-            <Input
-              type="datetime-local"
-              value={draft.oneTimeAt}
-              onChange={(event) => change("oneTimeAt", event.target.value)}
-            />
-          </label>
-        ) : null}
-        {draft.triggerKind === "cron" ? (
-          <label className="grid gap-1.5 text-sm font-medium lg:col-span-2">
-            Cron expression
-            <Input
-              value={draft.cron}
-              onChange={(event) => change("cron", event.target.value)}
-              placeholder="0 19 * * 1-5"
-            />
-          </label>
-        ) : null}
-        {needsFilter ? (
-          <label className="grid gap-1.5 text-sm font-medium lg:col-span-2">
-            {draft.triggerKind === "github"
-              ? "Repository"
-              : draft.triggerKind === "email"
-                ? "Email query"
-                : draft.triggerKind === "calendar"
-                  ? "Calendar ID"
-                  : "Webhook ID"}
-            <Input
-              value={draft.externalFilter}
-              onChange={(event) => change("externalFilter", event.target.value)}
-              placeholder={draft.triggerKind === "github" ? "owner/repository" : undefined}
-            />
-          </label>
-        ) : null}
-        <label className="grid gap-1.5 text-sm font-medium">
-          Missed runs
-          <Select
-            value={draft.missedRuns}
-            onValueChange={(value) => change("missedRuns", value as RoutineDraft["missedRuns"])}
-          >
-            <SelectTrigger>
-              <SelectValue>
-                {draft.missedRuns === "skip"
-                  ? "Skip"
-                  : draft.missedRuns === "catch-up-once"
-                    ? "Catch up once"
-                    : "Catch up all"}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="skip">Skip</SelectItem>
-              <SelectItem value="catch-up-once">Catch up once</SelectItem>
-              <SelectItem value="catch-up-all">Catch up all</SelectItem>
-            </SelectContent>
-          </Select>
-        </label>
-        <label className="grid gap-1.5 text-sm font-medium">
-          When already running
-          <Select
-            value={draft.overlap}
-            onValueChange={(value) => change("overlap", value as RoutineDraft["overlap"])}
-          >
-            <SelectTrigger>
-              <SelectValue>
-                {draft.overlap === "skip" ? "Skip new run" : "Queue new run"}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="skip">Skip new run</SelectItem>
-              <SelectItem value="queue">Queue new run</SelectItem>
-            </SelectContent>
-          </Select>
-        </label>
-      </div>
-      <div className="mt-5 flex justify-end gap-2">
-        <Button variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button
-          onClick={onSave}
-          disabled={saving || !draft.title.trim() || !draft.prompt.trim() || !draft.projectId}
-        >
-          {saving ? "Saving..." : editing ? "Save changes" : "Schedule routine"}
-        </Button>
-      </div>
-    </section>
+        {field === "review" ? (
+          <Button onClick={onSave} disabled={saving}>
+            {saving ? "Saving..." : editing ? "Save changes" : "Schedule routine"}
+          </Button>
+        ) : (
+          <Button onClick={advance}>Next</Button>
+        )}
+      </DialogFooter>
+    </DialogPopup>
   );
 }
 
