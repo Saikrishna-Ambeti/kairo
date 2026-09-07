@@ -37,6 +37,7 @@ import {
   type ProviderInstallState,
   ProviderSetupError,
   ResolvedKeybindingRule,
+  ScheduledTaskId,
   type SupermemoryStatus,
   ThreadId,
   TurnId,
@@ -1194,6 +1195,7 @@ const buildAppUnderTest = (options?: {
           ),
         };
       }),
+      Layer.provide(SqlitePersistenceMemory),
       Layer.provideMerge(makeAuthTestLayer()),
       Layer.provideMerge(ServerSecretStore.layer),
       Layer.provide(workspaceAndProjectServicesLayer),
@@ -1655,6 +1657,43 @@ const NodeHttpServerTestWithWsDeflate = HttpServer.layerTestClient.pipe(
 );
 
 it.layer(NodeServices.layer)("server router seam", (it) => {
+  it.effect("creates and reloads scheduled tasks through server routes", () =>
+    Effect.gen(function* () {
+      yield* buildAppUnderTest();
+      const wsUrl = yield* getWsServerUrl("/ws");
+      yield* withWsRpcClient(wsUrl, (client) =>
+        Effect.gen(function* () {
+          const initial = yield* client[WS_METHODS.scheduledTasksGetSnapshot]({});
+          assert.deepEqual(initial, { revision: 0, tasks: [], runs: [] });
+          const created = yield* client[WS_METHODS.scheduledTasksDispatch]({
+            type: "scheduled-task.create",
+            commandId: CommandId.make("schedule-create"),
+            createdAt: "2026-09-07T08:00:00.000Z",
+            task: {
+              id: ScheduledTaskId.make("weekday-routine"),
+              projectId: defaultProjectId,
+              title: "Weekday review",
+              prompt: "Review recent changes",
+              enabled: true,
+              trigger: { kind: "weekdays", time: "18:00" },
+              timezone: "Asia/Calcutta",
+              executionPolicy: { missedRuns: "skip", overlap: "skip", isolatedWorktree: false },
+              permissions: [],
+              modelSelection: defaultModelSelection,
+              runtimeMode: "full-access",
+              interactionMode: "default",
+            },
+          });
+          assert.isDefined(created.task);
+          assert.equal(created.task.nextRunAt, "2026-09-07T12:30:00.000Z");
+          const snapshot = yield* client[WS_METHODS.scheduledTasksGetSnapshot]({});
+          assert.deepEqual(snapshot.tasks, [created.task]);
+          assert.equal(snapshot.revision, created.revision);
+        }),
+      );
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
   it.effect("parks HTTP ingress until command readiness", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;

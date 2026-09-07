@@ -763,7 +763,7 @@ const makeScheduledTaskService = Effect.gen(function* () {
   yield* tick.pipe(
     Effect.catch((error) => Effect.logWarning("Scheduled-task tick failed", { error })),
     Effect.repeat(Schedule.spaced(Duration.minutes(1))),
-    Effect.forkDetach,
+    Effect.forkScoped,
   );
 
   return { getSnapshot, dispatch, fireExternal, tick } satisfies ScheduledTaskServiceShape;

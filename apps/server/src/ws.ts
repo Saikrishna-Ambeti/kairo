@@ -50,7 +50,6 @@ import {
   ProviderUploadFeedbackError,
   ProviderSetupError,
   RelayClientInstallFailedError,
-  ScheduledTaskError,
   type RelayClientInstallProgressEvent,
   ServerSelfUpdateError,
   type ServerSelfUpdateProgressEvent,
@@ -639,35 +638,7 @@ const makeWsRpcLayer = (
       const processResourceMonitor = yield* ProcessResourceMonitor.ProcessResourceMonitor;
       const resourceTelemetry = yield* ResourceTelemetry.ResourceTelemetry;
       const usage = yield* UsageService.UsageService;
-      const scheduledTasks = yield* Effect.serviceOption(
-        ScheduledTaskService.ScheduledTaskService,
-      ).pipe(
-        Effect.map(
-          Option.getOrElse((): ScheduledTaskService.ScheduledTaskServiceShape => ({
-            getSnapshot: Effect.fail(
-              new ScheduledTaskError({
-                code: "INTERNAL",
-                message: "Scheduled tasks are unavailable in this server runtime.",
-              }),
-            ),
-            dispatch: () =>
-              Effect.fail(
-                new ScheduledTaskError({
-                  code: "INTERNAL",
-                  message: "Scheduled tasks are unavailable in this server runtime.",
-                }),
-              ),
-            fireExternal: () =>
-              Effect.fail(
-                new ScheduledTaskError({
-                  code: "INTERNAL",
-                  message: "Scheduled tasks are unavailable in this server runtime.",
-                }),
-              ),
-            tick: Effect.void,
-          })),
-        ),
-      );
+      const scheduledTasks = yield* ScheduledTaskService.ScheduledTaskService;
       const artifactMetadata = yield* ArtifactMetadataRepository;
       const supermemory = yield* SupermemoryService;
       const composio = yield* ComposioService;
@@ -3063,6 +3034,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
           ),
         ),
     });
+    const scheduledTasks = yield* ScheduledTaskService.ScheduledTaskService;
     const pullRequests = yield* PullRequestService.PullRequestService;
     return HttpRouter.add(
       "GET",
@@ -3103,6 +3075,9 @@ export const websocketRpcRouteLayer = Layer.unwrap(
               // One server-lifetime service means clients share the same PR caches, and a WS
               // mutation invalidates the HTTP diff cache that every client reads from.
               Layer.provide(Layer.succeed(PullRequestService.PullRequestService, pullRequests)),
+              Layer.provide(
+                Layer.succeed(ScheduledTaskService.ScheduledTaskService, scheduledTasks),
+              ),
               Layer.provide(
                 SourceControlDiscovery.layer.pipe(
                   Layer.provide(
