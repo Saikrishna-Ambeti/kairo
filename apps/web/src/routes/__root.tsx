@@ -104,9 +104,9 @@ function RootRouteView() {
   const { authGateState } = Route.useRouteContext();
   const primaryEnvironmentAuthenticated = authGateState.status === "authenticated";
   const clientSettingsHydrated = useClientSettingsHydrated();
-  const onboardingCompleted = useClientSettings((settings) => settings.onboardingCompleted);
+  const [onboardingCompletedThisLaunch, setOnboardingCompletedThisLaunch] = useState(false);
   const updateSettings = useUpdateClientSettings();
-  const onboardingRequired = !onboardingCompleted;
+  const onboardingRequired = !onboardingCompletedThisLaunch;
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -149,6 +149,7 @@ function RootRouteView() {
       <OnboardingGate
         onComplete={() => {
           updateSettings({ onboardingCompleted: true });
+          setOnboardingCompletedThisLaunch(true);
           void navigate({ to: "/" });
         }}
       />
