@@ -32,6 +32,8 @@ const projectionLayer = Layer.succeed(ProjectionSnapshotQuery, {
   searchThreads: () => Effect.die("unused"),
   getSnapshotSequence: () => Effect.die("unused"),
   getCounts: () => Effect.die("unused"),
+  getUserInputActivity: () => Effect.die("unused"),
+  getEventReplayStats: () => Effect.die("unused"),
   getActiveProjectByWorkspaceRoot: () => Effect.die("unused"),
   getProjectShellById: () => Effect.die("unused"),
   getFirstActiveThreadIdByProjectId: () => Effect.die("unused"),
@@ -51,6 +53,7 @@ describe("ScheduledTaskService", () => {
           Ref.update(commands, (current) => [...current, command]).pipe(Effect.as({ sequence: 1 })),
         readEvents: () => Stream.empty,
         streamDomainEvents: Stream.empty,
+        subscribeDomainEvents: Effect.succeed(Stream.empty),
         latestSequence: Effect.succeed(0),
       });
       const testLayer = layer.pipe(

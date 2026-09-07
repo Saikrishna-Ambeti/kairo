@@ -332,8 +332,8 @@ it.layer(layer)("AntigravityAdapter", (it) => {
                 cwd: input.cwd,
                 env: {
                   ...process.env,
-                  Kairo_ACP_ANTIGRAVITY: "1",
-                  Kairo_ACP_REQUEST_LOG_PATH: requestLog,
+                  KAIRO_ACP_ANTIGRAVITY: "1",
+                  KAIRO_ACP_REQUEST_LOG_PATH: requestLog,
                 },
                 extendEnv: false,
               },
@@ -1214,7 +1214,9 @@ it.layer(layer)("AntigravityAdapter", (it) => {
       const path = yield* Path.Path;
       const h = yield* makeHarness();
       const { attachmentsDir } = yield* ServerConfig;
-      const cwd = yield* fs.makeTempDirectoryScoped({ prefix: "kairo-agy-fs-" });
+      const cwd = yield* fs
+        .makeTempDirectoryScoped({ prefix: "kairo-agy-fs-" })
+        .pipe(Effect.flatMap((directory) => fs.realPath(directory)));
       const outside = yield* fs.makeTempDirectoryScoped({ prefix: "kairo-agy-outside-" });
       yield* fs.writeFileString(path.join(cwd, "notes.txt"), "one\ntwo\nthree\n");
       yield* h.adapter.startSession({ threadId, cwd, runtimeMode: "approval-required" });

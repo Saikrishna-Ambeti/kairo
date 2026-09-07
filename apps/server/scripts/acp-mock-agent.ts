@@ -12,32 +12,32 @@ import * as EffectAcpAgent from "effect-acp/agent";
 import * as AcpError from "effect-acp/errors";
 import type * as AcpSchema from "effect-acp/schema";
 
-const requestLogPath = process.env.Kairo_ACP_REQUEST_LOG_PATH;
-const exitLogPath = process.env.Kairo_ACP_EXIT_LOG_PATH;
-const antigravityProfile = process.env.Kairo_ACP_ANTIGRAVITY === "1";
-const emitToolCalls = process.env.Kairo_ACP_EMIT_TOOL_CALLS === "1";
+const requestLogPath = process.env.KAIRO_ACP_REQUEST_LOG_PATH;
+const exitLogPath = process.env.KAIRO_ACP_EXIT_LOG_PATH;
+const antigravityProfile = process.env.KAIRO_ACP_ANTIGRAVITY === "1";
+const emitToolCalls = process.env.KAIRO_ACP_EMIT_TOOL_CALLS === "1";
 const emitInterleavedAssistantToolCalls =
-  process.env.Kairo_ACP_EMIT_INTERLEAVED_ASSISTANT_TOOL_CALLS === "1";
-const emitGenericToolPlaceholders = process.env.Kairo_ACP_EMIT_GENERIC_TOOL_PLACEHOLDERS === "1";
-const emitAskQuestion = process.env.Kairo_ACP_EMIT_ASK_QUESTION === "1";
-const emitXAiAskUserQuestion = process.env.Kairo_ACP_EMIT_XAI_ASK_USER_QUESTION === "1";
-const emitXAiExitPlanMode = process.env.Kairo_ACP_EMIT_XAI_EXIT_PLAN_MODE === "1";
-const emitXAiPlanMdWrite = process.env.Kairo_ACP_EMIT_XAI_PLAN_MD_WRITE === "1";
+  process.env.KAIRO_ACP_EMIT_INTERLEAVED_ASSISTANT_TOOL_CALLS === "1";
+const emitGenericToolPlaceholders = process.env.KAIRO_ACP_EMIT_GENERIC_TOOL_PLACEHOLDERS === "1";
+const emitAskQuestion = process.env.KAIRO_ACP_EMIT_ASK_QUESTION === "1";
+const emitXAiAskUserQuestion = process.env.KAIRO_ACP_EMIT_XAI_ASK_USER_QUESTION === "1";
+const emitXAiExitPlanMode = process.env.KAIRO_ACP_EMIT_XAI_EXIT_PLAN_MODE === "1";
+const emitXAiPlanMdWrite = process.env.KAIRO_ACP_EMIT_XAI_PLAN_MD_WRITE === "1";
 const emitXAiPromptCompleteThenHang =
-  process.env.Kairo_ACP_EMIT_XAI_PROMPT_COMPLETE_THEN_HANG === "1";
-const emitXAiRateLimitThenHang = process.env.Kairo_ACP_EMIT_XAI_RATE_LIMIT_THEN_HANG === "1";
+  process.env.KAIRO_ACP_EMIT_XAI_PROMPT_COMPLETE_THEN_HANG === "1";
+const emitXAiRateLimitThenHang = process.env.KAIRO_ACP_EMIT_XAI_RATE_LIMIT_THEN_HANG === "1";
 const emitXAiAskUserQuestionThenHang =
-  process.env.Kairo_ACP_EMIT_XAI_ASK_USER_QUESTION_THEN_HANG === "1";
-const emitContentThenHang = process.env.Kairo_ACP_EMIT_CONTENT_THEN_HANG === "1";
-const emitPlanThenHang = process.env.Kairo_ACP_EMIT_PLAN_THEN_HANG === "1";
-const emitActiveToolThenHang = process.env.Kairo_ACP_EMIT_ACTIVE_TOOL_THEN_HANG === "1";
-const emitForeignSessionUpdates = process.env.Kairo_ACP_EMIT_FOREIGN_SESSION_UPDATES === "1";
-const waitForResumeRelease = process.env.Kairo_ACP_WAIT_FOR_RESUME_RELEASE === "1";
-const completeFirstPromptOnCancel = process.env.Kairo_ACP_COMPLETE_FIRST_PROMPT_ON_CANCEL === "1";
-const floodStderr = process.env.Kairo_ACP_FLOOD_STDERR === "1";
-const hangPromptForever = process.env.Kairo_ACP_HANG_PROMPT_FOREVER === "1";
-const hangFirstPromptForever = process.env.Kairo_ACP_HANG_FIRST_PROMPT_FOREVER === "1";
-const emitLateUpdateAfterCancel = process.env.Kairo_ACP_EMIT_LATE_UPDATE_AFTER_CANCEL === "1";
+  process.env.KAIRO_ACP_EMIT_XAI_ASK_USER_QUESTION_THEN_HANG === "1";
+const emitContentThenHang = process.env.KAIRO_ACP_EMIT_CONTENT_THEN_HANG === "1";
+const emitPlanThenHang = process.env.KAIRO_ACP_EMIT_PLAN_THEN_HANG === "1";
+const emitActiveToolThenHang = process.env.KAIRO_ACP_EMIT_ACTIVE_TOOL_THEN_HANG === "1";
+const emitForeignSessionUpdates = process.env.KAIRO_ACP_EMIT_FOREIGN_SESSION_UPDATES === "1";
+const waitForResumeRelease = process.env.KAIRO_ACP_WAIT_FOR_RESUME_RELEASE === "1";
+const completeFirstPromptOnCancel = process.env.KAIRO_ACP_COMPLETE_FIRST_PROMPT_ON_CANCEL === "1";
+const floodStderr = process.env.KAIRO_ACP_FLOOD_STDERR === "1";
+const hangPromptForever = process.env.KAIRO_ACP_HANG_PROMPT_FOREVER === "1";
+const hangFirstPromptForever = process.env.KAIRO_ACP_HANG_FIRST_PROMPT_FOREVER === "1";
+const emitLateUpdateAfterCancel = process.env.KAIRO_ACP_EMIT_LATE_UPDATE_AFTER_CANCEL === "1";
 const omitXAiPromptCompleteStopReason =
   process.env.KAIRO_ACP_OMIT_XAI_PROMPT_COMPLETE_STOP_REASON === "1";
 const failLoadSession = process.env.KAIRO_ACP_FAIL_LOAD_SESSION === "1";
@@ -48,23 +48,23 @@ const loadSessionDelayMs = Number(process.env.KAIRO_ACP_LOAD_SESSION_DELAY_MS ??
 const emitStaleXAiPromptCompleteBeforeSecondHang =
   process.env.KAIRO_ACP_EMIT_STALE_XAI_PROMPT_COMPLETE_BEFORE_SECOND_HANG === "1";
 const emitOverlappingXAiPromptCompleteOutOfOrder =
-  process.env.Kairo_ACP_EMIT_OVERLAPPING_XAI_PROMPT_COMPLETE_OUT_OF_ORDER === "1";
-const failPrompt = process.env.Kairo_ACP_FAIL_PROMPT === "1";
-const failSetConfigOption = process.env.Kairo_ACP_FAIL_SET_CONFIG_OPTION === "1";
-const exitOnSetConfigOption = process.env.Kairo_ACP_EXIT_ON_SET_CONFIG_OPTION === "1";
-const promptResponseText = process.env.Kairo_ACP_PROMPT_RESPONSE_TEXT;
+  process.env.KAIRO_ACP_EMIT_OVERLAPPING_XAI_PROMPT_COMPLETE_OUT_OF_ORDER === "1";
+const failPrompt = process.env.KAIRO_ACP_FAIL_PROMPT === "1";
+const failSetConfigOption = process.env.KAIRO_ACP_FAIL_SET_CONFIG_OPTION === "1";
+const exitOnSetConfigOption = process.env.KAIRO_ACP_EXIT_ON_SET_CONFIG_OPTION === "1";
+const promptResponseText = process.env.KAIRO_ACP_PROMPT_RESPONSE_TEXT;
 const initialGrokReasoningEffort =
-  process.env.Kairo_ACP_INITIAL_GROK_REASONING_EFFORT?.trim() || undefined;
-const promptDelayMs = Number(process.env.Kairo_ACP_PROMPT_DELAY_MS ?? "0");
+  process.env.KAIRO_ACP_INITIAL_GROK_REASONING_EFFORT?.trim() || undefined;
+const promptDelayMs = Number(process.env.KAIRO_ACP_PROMPT_DELAY_MS ?? "0");
 const permissionOptionIds = {
   allowOnce: process.env.KAIRO_ACP_ALLOW_ONCE_OPTION_ID ?? "allow-once",
   allowAlways: process.env.KAIRO_ACP_ALLOW_ALWAYS_OPTION_ID ?? "allow-always",
   rejectOnce: process.env.KAIRO_ACP_REJECT_ONCE_OPTION_ID ?? "reject-once",
 };
-const omitAllowAlways = process.env.Kairo_ACP_OMIT_ALLOW_ALWAYS === "1";
+const omitAllowAlways = process.env.KAIRO_ACP_OMIT_ALLOW_ALWAYS === "1";
 const permissionRequestCount = Math.max(
   1,
-  Number(process.env.Kairo_ACP_PERMISSION_REQUEST_COUNT ?? "1") || 1,
+  Number(process.env.KAIRO_ACP_PERMISSION_REQUEST_COUNT ?? "1") || 1,
 );
 const sessionId = "mock-session-1";
 
@@ -930,13 +930,13 @@ const program = Effect.gen(function* () {
         for (let index = 0; index < permissionRequestCount; index++) {
           const command =
             index > 0
-              ? (process.env.Kairo_ACP_SECOND_PERMISSION_COMMAND ?? "cat server/package.json")
+              ? (process.env.KAIRO_ACP_SECOND_PERMISSION_COMMAND ?? "cat server/package.json")
               : "cat server/package.json";
           const permission = yield* agent.client.requestPermission({
             sessionId: requestedSessionId,
             toolCall: {
               toolCallId: index === 0 ? toolCallId : `${toolCallId}-${index + 1}`,
-              title: process.env.Kairo_ACP_PERMISSION_TITLE ?? `\`${command}\``,
+              title: process.env.KAIRO_ACP_PERMISSION_TITLE ?? `\`${command}\``,
               kind: "execute",
               status: "pending",
               rawInput: {
@@ -1093,7 +1093,7 @@ const program = Effect.gen(function* () {
 
       if (emitXAiPlanMdWrite) {
         // Match Grok's real session layout so isGrokPlanMarkdownPath accepts it.
-        const planRoot = process.env.Kairo_ACP_PLAN_ROOT ?? "/tmp/mock-home/.grok";
+        const planRoot = process.env.KAIRO_ACP_PLAN_ROOT ?? "/tmp/mock-home/.grok";
         const planPath = `${planRoot}/sessions/${requestedSessionId}/plan.md`;
         const planBody = "# Mock plan\n\n- Write the feature\n- Add a test\n- Ship it\n";
         // enter_plan_mode first so the adapter arms planModeActive.
@@ -1235,8 +1235,8 @@ const program = Effect.gen(function* () {
   yield* agent.handleUnknownExtRequest((method, params) => {
     if (method === "_test/environment") {
       return Effect.succeed({
-        inherited: process.env.Kairo_ACP_RUNTIME_AMBIENT === "sentinel",
-        explicit: process.env.Kairo_ACP_RUNTIME_EXPLICIT === "kept",
+        inherited: process.env.KAIRO_ACP_RUNTIME_AMBIENT === "sentinel",
+        explicit: process.env.KAIRO_ACP_RUNTIME_EXPLICIT === "kept",
       });
     }
     if (method === "_test/release-resume") {

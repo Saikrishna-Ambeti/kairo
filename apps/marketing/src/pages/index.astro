@@ -1,6 +1,23 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import { GITHUB_REPOSITORY_URL } from "../lib/site";
+import {
+  ANDROID_PLAY_STORE_URL,
+  GITHUB_REPOSITORY_URL,
+  IOS_APP_STORE_URL,
+  MARKETING_STATS,
+} from "../lib/site";
+import { tweets } from "../lib/tweets";
+
+const desktopEndorsementRows = [
+  tweets.filter((_, index) => index % 2 === 0),
+  tweets.filter((_, index) => index % 2 === 1),
+];
+
+const mobileEndorsementRows = [
+  tweets.filter((_, index) => index % 3 === 0),
+  tweets.filter((_, index) => index % 3 === 1),
+  tweets.filter((_, index) => index % 3 === 2),
+];
 
 const providers = [
   {
