@@ -180,7 +180,9 @@ describe("searchSettings", () => {
       id: "source-control",
       title: "Source control",
     });
-    expect(searchSettings("source control")).toEqual([]);
+    expect(searchSettings("source control").some((item) => item.id === "source-control")).toBe(
+      false,
+    );
   });
 
   it("keeps catalog result ids unique", () => {

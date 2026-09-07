@@ -26,6 +26,11 @@ export const RESERVED_THEME_IDS: ReadonlySet<string> = new Set([
   "t3-ocean",
   "t3-ember",
   "t3-iris",
+  "kairo-chat-dark",
+  "kairo-grove",
+  "kairo-ocean",
+  "kairo-ember",
+  "kairo-iris",
 ]);
 
 /**

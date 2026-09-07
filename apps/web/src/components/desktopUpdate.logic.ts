@@ -2,7 +2,7 @@ import type { DesktopUpdateActionResult, DesktopUpdateState } from "@kairo/contr
 
 export type DesktopUpdateButtonAction = "download" | "install" | "none";
 
-const DESKTOP_RELEASE_HISTORY_URL = "https://github.com/pingdotgg/kairo/releases";
+const DESKTOP_RELEASE_HISTORY_URL = "https://github.com/Saikrishna-Ambeti/kairo/releases";
 const DESKTOP_RELEASE_TAG_URL = `${DESKTOP_RELEASE_HISTORY_URL}/tag`;
 
 /**
