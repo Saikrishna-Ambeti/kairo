@@ -388,7 +388,8 @@ const makeScheduledTaskService = Effect.gen(function* () {
           const startedAt = yield* nowIso;
           const threadId = ThreadId.make(yield* uuid);
           const messageId = MessageId.make(yield* uuid);
-          const commandId = CommandId.make(yield* uuid);
+          const createCommandId = CommandId.make(yield* uuid);
+          const turnCommandId = CommandId.make(yield* uuid);
           const permissions =
             task.permissions.length === 0
               ? "No pre-approved capabilities. Ask in the chat composer before protected actions."
@@ -408,38 +409,39 @@ const makeScheduledTaskService = Effect.gen(function* () {
             occurredAt: startedAt,
             payload: running,
           });
-          yield* orchestration
-            .dispatch({
+          yield* Effect.gen(function* () {
+            yield* orchestration.dispatch({
+              type: "thread.create",
+              commandId: createCommandId,
+              threadId,
+              projectId: task.projectId,
+              title: task.title,
+              modelSelection: task.modelSelection,
+              runtimeMode: task.runtimeMode,
+              interactionMode: task.interactionMode,
+              branch: null,
+              worktreePath: null,
+              createdAt: startedAt,
+            });
+            yield* orchestration.dispatch({
               type: "thread.turn.start",
-              commandId,
+              commandId: turnCommandId,
               threadId,
               message: { messageId, role: "user", text: prompt, attachments: [] },
               modelSelection: task.modelSelection,
               titleSeed: task.title,
               runtimeMode: task.runtimeMode,
               interactionMode: task.interactionMode,
-              bootstrap: {
-                createThread: {
-                  projectId: task.projectId,
-                  title: task.title,
-                  modelSelection: task.modelSelection,
-                  runtimeMode: task.runtimeMode,
-                  interactionMode: task.interactionMode,
-                  branch: null,
-                  worktreePath: null,
-                  createdAt: startedAt,
-                },
-              },
               createdAt: startedAt,
-            })
-            .pipe(
-              Effect.catch((error) =>
-                completeRun(running, {
-                  status: "failed",
-                  reason: error.message || "Agent session could not start.",
-                }),
-              ),
-            );
+            });
+          }).pipe(
+            Effect.catch((error) =>
+              completeRun(running, {
+                status: "failed",
+                reason: error.message || "Agent session could not start.",
+              }),
+            ),
+          );
         }),
       { concurrency: 1, discard: true },
     );

@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import { getProviderOptionCurrentValue } from "@kairo/shared/model";
 import {
   CommandId,
   EnvironmentId,
@@ -29,10 +30,11 @@ import {
   ShieldCheckIcon,
   Trash2Icon,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { isElectron } from "../../env";
 import { randomUUID } from "../../lib/utils";
+import { deriveProviderInstanceEntries } from "../../providerInstances";
 import { STUDENT_TASK_TEMPLATES, type StudentTaskTemplate } from "../../scheduledTasks";
 import { usePrimaryEnvironmentId } from "../../state/environments";
 import { useEnvironmentQuery } from "../../state/query";
@@ -44,11 +46,27 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { ScrollArea } from "../ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import {
+  Sheet,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetPanel,
+  SheetPopup,
+  SheetTitle,
+} from "../ui/sheet";
 import { SidebarInset } from "../ui/sidebar";
 import { Textarea } from "../ui/textarea";
 import { WorkspaceBreadcrumb, WorkspaceBreadcrumbItem } from "../WorkspaceBreadcrumb";
 import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
+import {
+  isScheduledTaskProviderAvailable,
+  modelSelectionForProject,
+  modelSelectionForProvider,
+  reasoningDescriptorForSelection,
+  withReasoningSelection,
+} from "./modelSelection";
 
 type TriggerKind = ScheduledTaskTrigger["kind"];
 
@@ -56,6 +74,7 @@ interface RoutineDraft {
   readonly title: string;
   readonly prompt: string;
   readonly projectId: string;
+  readonly modelSelection: ModelSelection | null;
   readonly triggerKind: TriggerKind;
   readonly time: string;
   readonly dayOfWeek: string;
@@ -72,6 +91,7 @@ const EMPTY_DRAFT: RoutineDraft = {
   title: "",
   prompt: "",
   projectId: "",
+  modelSelection: null,
   triggerKind: "daily",
   time: "19:00",
   dayOfWeek: "0",
@@ -101,16 +121,6 @@ const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Frida
 
 function commandMetadata() {
   return { commandId: CommandId.make(randomUUID()), createdAt: new Date().toISOString() };
-}
-
-function modelSelectionForProject(
-  project: OrchestrationProjectShell | undefined,
-  providers: ReadonlyArray<ServerProvider>,
-): ModelSelection | null {
-  if (project?.defaultModelSelection) return project.defaultModelSelection;
-  const provider = providers.find((candidate) => candidate.enabled && candidate.installed);
-  const model = provider?.models.find((candidate) => candidate.isDefault) ?? provider?.models[0];
-  return provider && model ? { instanceId: provider.instanceId, model: model.slug } : null;
 }
 
 function triggerFromDraft(draft: RoutineDraft): ScheduledTaskTrigger | null {
@@ -149,6 +159,7 @@ function draftFromTask(task: ScheduledTaskRoutine): RoutineDraft {
     title: task.title,
     prompt: task.prompt,
     projectId: task.projectId,
+    modelSelection: task.modelSelection,
     triggerKind: trigger.kind,
     time:
       trigger.kind === "daily" || trigger.kind === "weekdays" || trigger.kind === "weekly"
@@ -239,9 +250,24 @@ export function ScheduledTasksPage() {
 
   useEffect(() => {
     if (draft.projectId === "" && projects[0]) {
-      setDraft((current) => ({ ...current, projectId: projects[0]?.id ?? "" }));
+      setDraft((current) => ({
+        ...current,
+        projectId: projects[0]?.id ?? "",
+        modelSelection: modelSelectionForProject(projects[0], providers),
+      }));
     }
-  }, [draft.projectId, projects]);
+  }, [draft.projectId, projects, providers]);
+
+  useEffect(() => {
+    if (draft.projectId === "" || draft.modelSelection !== null) return;
+    const project = projects.find((candidate) => candidate.id === draft.projectId);
+    const modelSelection = modelSelectionForProject(project, providers);
+    if (modelSelection) {
+      setDraft((current) =>
+        current.modelSelection === null ? { ...current, modelSelection } : current,
+      );
+    }
+  }, [draft.modelSelection, draft.projectId, projects, providers]);
 
   useEffect(() => {
     const refresh = () => snapshotQuery.refresh();
@@ -273,20 +299,33 @@ export function ScheduledTasksPage() {
     return true;
   };
 
-  const openCreate = (
-    nextDraft: RoutineDraft = { ...EMPTY_DRAFT, projectId: projects[0]?.id ?? "" },
-  ) => {
+  const openCreate = (nextDraft: RoutineDraft = EMPTY_DRAFT) => {
+    const project =
+      projects.find((candidate) => candidate.id === nextDraft.projectId) ?? projects[0];
     setEditing(null);
-    setDraft(nextDraft);
+    setDraft({
+      ...nextDraft,
+      projectId: project?.id ?? "",
+      modelSelection: nextDraft.modelSelection ?? modelSelectionForProject(project, providers),
+    });
     setFormOpen(true);
   };
 
   const saveDraft = async () => {
     if (environmentId === null || draft.title.trim() === "" || draft.prompt.trim() === "") return;
     const project = projects.find((candidate) => candidate.id === draft.projectId);
-    const modelSelection = modelSelectionForProject(project, providers);
-    if (!project || modelSelection === null) {
-      setStatus("Choose a project with an available provider before saving.");
+    const modelSelection = draft.modelSelection;
+    const selectedProvider = providers.find(
+      (provider) => provider.instanceId === modelSelection?.instanceId,
+    );
+    if (
+      !project ||
+      modelSelection === null ||
+      !selectedProvider ||
+      !isScheduledTaskProviderAvailable(selectedProvider) ||
+      !selectedProvider.models.some((model) => model.slug === modelSelection.model)
+    ) {
+      setStatus("Choose an available project, provider, and model before saving.");
       return;
     }
     setSaving(true);
@@ -418,49 +457,34 @@ export function ScheduledTasksPage() {
               </div>
             ) : null}
 
-            {formOpen ? (
-              <RoutineForm
-                draft={draft}
-                editing={editing !== null}
-                projects={projects}
-                saving={saving}
-                onChange={setDraft}
-                onCancel={() => {
-                  setFormOpen(false);
-                  setEditing(null);
-                }}
-                onSave={() => void saveDraft()}
-              />
-            ) : (
-              <section aria-labelledby="student-starters-heading">
-                <div className="mb-3">
-                  <h2 id="student-starters-heading" className="text-base font-semibold">
-                    Student starters
-                  </h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Start ready, then adjust timing and permissions.
-                  </p>
-                </div>
-                <div className="grid overflow-hidden rounded-xl border border-border/70 sm:grid-cols-2 lg:grid-cols-4">
-                  {STUDENT_TASK_TEMPLATES.map((template, index) => (
-                    <button
-                      key={template.id}
-                      type="button"
-                      onClick={() => openCreate(templateDraft(template, projects[0]?.id ?? ""))}
-                      className={`min-h-40 cursor-pointer p-4 text-left outline-none transition-colors hover:bg-muted/55 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${index > 0 ? "border-t border-border/70 sm:border-t-0" : ""} ${index % 2 === 1 ? "sm:border-l sm:border-border/70" : ""}`}
-                    >
-                      <span className="text-sm font-medium">{template.title}</span>
-                      <span className="mt-2 block text-xs leading-5 text-muted-foreground">
-                        {template.description}
-                      </span>
-                      <span className="mt-6 flex items-center gap-1.5 text-xs font-medium">
-                        <PlusIcon className="size-3" /> Schedule
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            )}
+            <section aria-labelledby="student-starters-heading">
+              <div className="mb-3">
+                <h2 id="student-starters-heading" className="text-base font-semibold">
+                  Student starters
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Start ready, then adjust timing and permissions.
+                </p>
+              </div>
+              <div className="grid overflow-hidden rounded-xl border border-border/70 sm:grid-cols-2 lg:grid-cols-4">
+                {STUDENT_TASK_TEMPLATES.map((template, index) => (
+                  <button
+                    key={template.id}
+                    type="button"
+                    onClick={() => openCreate(templateDraft(template, projects[0]?.id ?? ""))}
+                    className={`min-h-40 cursor-pointer p-4 text-left outline-none transition-colors hover:bg-muted/55 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${index > 0 ? "border-t border-border/70 sm:border-t-0" : ""} ${index % 2 === 1 ? "sm:border-l sm:border-border/70" : ""}`}
+                  >
+                    <span className="text-sm font-medium">{template.title}</span>
+                    <span className="mt-2 block text-xs leading-5 text-muted-foreground">
+                      {template.description}
+                    </span>
+                    <span className="mt-6 flex items-center gap-1.5 text-xs font-medium">
+                      <PlusIcon className="size-3" /> Schedule
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
 
             <section aria-labelledby="routines-heading">
               <div className="mb-3 flex items-end justify-between gap-4">
@@ -628,6 +652,27 @@ export function ScheduledTasksPage() {
             </section>
           </WorkspacePageContainer>
         </ScrollArea>
+        <Sheet
+          open={formOpen}
+          onOpenChange={(open) => {
+            setFormOpen(open);
+            if (!open) setEditing(null);
+          }}
+        >
+          <RoutineForm
+            draft={draft}
+            editing={editing !== null}
+            projects={projects}
+            providers={providers}
+            saving={saving}
+            onChange={setDraft}
+            onCancel={() => {
+              setFormOpen(false);
+              setEditing(null);
+            }}
+            onSave={() => void saveDraft()}
+          />
+        </Sheet>
       </div>
     </SidebarInset>
   );
@@ -637,6 +682,7 @@ function RoutineForm({
   draft,
   editing,
   projects,
+  providers,
   saving,
   onChange,
   onCancel,
@@ -645,6 +691,7 @@ function RoutineForm({
   readonly draft: RoutineDraft;
   readonly editing: boolean;
   readonly projects: ReadonlyArray<OrchestrationProjectShell>;
+  readonly providers: ReadonlyArray<ServerProvider>;
   readonly saving: boolean;
   readonly onChange: (draft: RoutineDraft) => void;
   readonly onCancel: () => void;
@@ -653,205 +700,350 @@ function RoutineForm({
   const change = <K extends keyof RoutineDraft>(key: K, value: RoutineDraft[K]) =>
     onChange({ ...draft, [key]: value });
   const selectedProject = projects.find((project) => project.id === draft.projectId);
+  const providerEntries = deriveProviderInstanceEntries(providers).filter((entry) =>
+    isScheduledTaskProviderAvailable(entry.snapshot),
+  );
+  const selectedProvider = providers.find(
+    (provider) => provider.instanceId === draft.modelSelection?.instanceId,
+  );
+  const selectedProviderEntry = providerEntries.find(
+    (entry) => entry.instanceId === selectedProvider?.instanceId,
+  );
+  const selectedModel = selectedProvider?.models.find(
+    (model) => model.slug === draft.modelSelection?.model,
+  );
+  const reasoningDescriptor = reasoningDescriptorForSelection(
+    selectedProvider,
+    draft.modelSelection,
+  );
+  const reasoningValue = getProviderOptionCurrentValue(reasoningDescriptor);
+  const selectedReasoning =
+    reasoningDescriptor?.options.find((option) => option.id === reasoningValue) ?? null;
   const needsTime = ["hourly", "daily", "weekdays", "weekly"].includes(draft.triggerKind);
   const needsFilter = ["webhook", "calendar", "email", "github"].includes(draft.triggerKind);
+
+  const changeProject = (projectId: string) => {
+    const project = projects.find((candidate) => candidate.id === projectId);
+    onChange({
+      ...draft,
+      projectId,
+      modelSelection: modelSelectionForProject(project, providers),
+    });
+  };
+
+  const changeProvider = (instanceId: string) => {
+    const provider = providers.find((candidate) => candidate.instanceId === instanceId);
+    if (!provider) return;
+    onChange({
+      ...draft,
+      modelSelection: modelSelectionForProvider(provider),
+    });
+  };
+
+  const changeModel = (model: string) => {
+    if (!selectedProvider) return;
+    onChange({
+      ...draft,
+      modelSelection: modelSelectionForProvider(selectedProvider, model),
+    });
+  };
+
+  const changeReasoning = (value: string) => {
+    if (!draft.modelSelection || !reasoningDescriptor) return;
+    onChange({
+      ...draft,
+      modelSelection: withReasoningSelection(draft.modelSelection, reasoningDescriptor.id, value),
+    });
+  };
+
+  const settingTriggerClassName =
+    "w-auto min-w-0 max-w-[68%] justify-end px-2 text-right shadow-none sm:min-h-8";
+
   return (
-    <section
-      aria-labelledby="routine-form-heading"
-      className="rounded-xl border border-border/70 bg-muted/20 p-4 sm:p-5"
-    >
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h2 id="routine-form-heading" className="text-base font-semibold">
-            {editing ? "Edit routine" : "New routine"}
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Runs use approval-required mode. Extra tool access stays visible in chat composer.
-          </p>
-        </div>
-        <Button variant="ghost-muted" size="xs" onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
-      <div className="mt-5 grid gap-4 lg:grid-cols-2">
+    <SheetPopup className="max-w-[min(48rem,calc(100vw-3rem))] max-sm:w-full max-sm:max-w-none">
+      <SheetHeader className="border-b border-border/70 px-6 py-5 sm:px-7">
+        <SheetTitle>{editing ? "Edit routine" : "New routine"}</SheetTitle>
+        <SheetDescription>
+          Runs open a normal Kairo chat with selected project and agent settings.
+        </SheetDescription>
+      </SheetHeader>
+      <SheetPanel className="grid gap-6 px-6 py-6 sm:px-7">
         <label className="grid gap-1.5 text-sm font-medium">
           Name
           <Input
             value={draft.title}
             onChange={(event) => change("title", event.target.value)}
-            placeholder="Evening assignment check"
+            placeholder="Routine name"
           />
         </label>
         <label className="grid gap-1.5 text-sm font-medium">
-          Project
-          <Select
-            value={draft.projectId}
-            onValueChange={(value) => value !== null && change("projectId", value)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Choose project">{selectedProject?.title}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {projects.map((project) => (
-                <SelectItem key={project.id} value={project.id}>
-                  {project.title}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </label>
-        <label className="grid gap-1.5 text-sm font-medium lg:col-span-2">
           Instructions
           <Textarea
             value={draft.prompt}
             onChange={(event) => change("prompt", event.target.value)}
-            className="min-h-28"
-            placeholder="Review my assignments and prepare the next three actions."
+            className="min-h-32"
+            placeholder="Describe what Kairo should do"
           />
         </label>
-        <label className="grid gap-1.5 text-sm font-medium">
-          Trigger
-          <Select
-            value={draft.triggerKind}
-            onValueChange={(value) => change("triggerKind", value as TriggerKind)}
-          >
-            <SelectTrigger>
-              <SelectValue>{TRIGGER_LABELS[draft.triggerKind]}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(TRIGGER_LABELS).map(([value, label]) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </label>
-        <label className="grid gap-1.5 text-sm font-medium">
-          Timezone
-          <Input
-            value={draft.timezone}
-            onChange={(event) => change("timezone", event.target.value)}
-          />
-        </label>
-        {needsTime ? (
-          <label className="grid gap-1.5 text-sm font-medium">
-            Time
-            <Input
-              type="time"
-              value={draft.time}
-              onChange={(event) => change("time", event.target.value)}
-            />
-          </label>
-        ) : null}
-        {draft.triggerKind === "weekly" ? (
-          <label className="grid gap-1.5 text-sm font-medium">
-            Day
+
+        <RoutineSettingsGroup title="Run details">
+          <RoutineSettingsRow label="Project">
             <Select
-              value={draft.dayOfWeek}
-              onValueChange={(value) => value !== null && change("dayOfWeek", value)}
+              value={draft.projectId}
+              onValueChange={(value) => value !== null && changeProject(value)}
             >
-              <SelectTrigger>
-                <SelectValue>{WEEKDAYS[Number(draft.dayOfWeek)]}</SelectValue>
+              <SelectTrigger variant="ghost" className={settingTriggerClassName}>
+                <SelectValue placeholder="Choose project">{selectedProject?.title}</SelectValue>
               </SelectTrigger>
-              <SelectContent>
-                {WEEKDAYS.map((day, index) => (
-                  <SelectItem key={day} value={String(index)}>
-                    {day}
+              <SelectContent align="end" alignItemWithTrigger={false}>
+                {projects.map((project) => (
+                  <SelectItem key={project.id} value={project.id}>
+                    {project.title}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          </label>
-        ) : null}
-        {draft.triggerKind === "one-time" ? (
-          <label className="grid gap-1.5 text-sm font-medium">
-            Run at
+          </RoutineSettingsRow>
+          <RoutineSettingsRow label="Provider">
+            <Select
+              value={draft.modelSelection?.instanceId ?? ""}
+              onValueChange={(value) => value !== null && changeProvider(value)}
+            >
+              <SelectTrigger variant="ghost" className={settingTriggerClassName}>
+                <SelectValue placeholder="Choose provider">
+                  {selectedProviderEntry?.displayName}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent align="end" alignItemWithTrigger={false}>
+                {providerEntries.map((entry) => (
+                  <SelectItem key={entry.instanceId} value={entry.instanceId}>
+                    {entry.displayName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </RoutineSettingsRow>
+          <RoutineSettingsRow label="Model">
+            <Select
+              value={draft.modelSelection?.model ?? ""}
+              onValueChange={(value) => value !== null && changeModel(value)}
+              disabled={!selectedProvider}
+            >
+              <SelectTrigger variant="ghost" className={settingTriggerClassName}>
+                <SelectValue placeholder="Choose model">
+                  {selectedModel?.name ?? draft.modelSelection?.model}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent align="end" alignItemWithTrigger={false}>
+                {selectedProvider?.models.map((model) => (
+                  <SelectItem key={model.slug} value={model.slug}>
+                    {model.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </RoutineSettingsRow>
+          <RoutineSettingsRow label="Reasoning">
+            {reasoningDescriptor ? (
+              <Select
+                value={typeof reasoningValue === "string" ? reasoningValue : ""}
+                onValueChange={(value) => value !== null && changeReasoning(value)}
+              >
+                <SelectTrigger variant="ghost" className={settingTriggerClassName}>
+                  <SelectValue placeholder="Choose reasoning">
+                    {selectedReasoning?.label}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent align="end" alignItemWithTrigger={false}>
+                  {reasoningDescriptor.options.map((option) => (
+                    <SelectItem key={option.id} value={option.id}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <span className="text-right text-xs text-muted-foreground">
+                Not available for this model
+              </span>
+            )}
+          </RoutineSettingsRow>
+        </RoutineSettingsGroup>
+
+        <RoutineSettingsGroup title="Schedule">
+          <RoutineSettingsRow label="Repeat">
+            <Select
+              value={draft.triggerKind}
+              onValueChange={(value) => change("triggerKind", value as TriggerKind)}
+            >
+              <SelectTrigger variant="ghost" className={settingTriggerClassName}>
+                <SelectValue>{TRIGGER_LABELS[draft.triggerKind]}</SelectValue>
+              </SelectTrigger>
+              <SelectContent align="end" alignItemWithTrigger={false}>
+                {Object.entries(TRIGGER_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </RoutineSettingsRow>
+          {draft.triggerKind === "weekly" ? (
+            <RoutineSettingsRow label="Day">
+              <Select
+                value={draft.dayOfWeek}
+                onValueChange={(value) => value !== null && change("dayOfWeek", value)}
+              >
+                <SelectTrigger variant="ghost" className={settingTriggerClassName}>
+                  <SelectValue>{WEEKDAYS[Number(draft.dayOfWeek)]}</SelectValue>
+                </SelectTrigger>
+                <SelectContent align="end" alignItemWithTrigger={false}>
+                  {WEEKDAYS.map((day, index) => (
+                    <SelectItem key={day} value={String(index)}>
+                      {day}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </RoutineSettingsRow>
+          ) : null}
+          {needsTime ? (
+            <RoutineSettingsRow label="At">
+              <Input
+                type="time"
+                value={draft.time}
+                onChange={(event) => change("time", event.target.value)}
+                className="w-36 shadow-none"
+              />
+            </RoutineSettingsRow>
+          ) : null}
+          {draft.triggerKind === "one-time" ? (
+            <RoutineSettingsRow label="Run at">
+              <Input
+                type="datetime-local"
+                value={draft.oneTimeAt}
+                onChange={(event) => change("oneTimeAt", event.target.value)}
+                className="w-52 shadow-none"
+              />
+            </RoutineSettingsRow>
+          ) : null}
+          {draft.triggerKind === "cron" ? (
+            <RoutineSettingsRow label="Cron">
+              <Input
+                value={draft.cron}
+                onChange={(event) => change("cron", event.target.value)}
+                placeholder="0 19 * * 1-5"
+                className="w-52 shadow-none"
+              />
+            </RoutineSettingsRow>
+          ) : null}
+          {needsFilter ? (
+            <RoutineSettingsRow
+              label={
+                draft.triggerKind === "github"
+                  ? "Repository"
+                  : draft.triggerKind === "email"
+                    ? "Email query"
+                    : draft.triggerKind === "calendar"
+                      ? "Calendar ID"
+                      : "Webhook ID"
+              }
+            >
+              <Input
+                value={draft.externalFilter}
+                onChange={(event) => change("externalFilter", event.target.value)}
+                placeholder={draft.triggerKind === "github" ? "owner/repository" : undefined}
+                className="w-64 shadow-none"
+              />
+            </RoutineSettingsRow>
+          ) : null}
+          <RoutineSettingsRow label="Timezone">
             <Input
-              type="datetime-local"
-              value={draft.oneTimeAt}
-              onChange={(event) => change("oneTimeAt", event.target.value)}
+              value={draft.timezone}
+              onChange={(event) => change("timezone", event.target.value)}
+              className="w-52 shadow-none"
             />
-          </label>
-        ) : null}
-        {draft.triggerKind === "cron" ? (
-          <label className="grid gap-1.5 text-sm font-medium lg:col-span-2">
-            Cron expression
-            <Input
-              value={draft.cron}
-              onChange={(event) => change("cron", event.target.value)}
-              placeholder="0 19 * * 1-5"
-            />
-          </label>
-        ) : null}
-        {needsFilter ? (
-          <label className="grid gap-1.5 text-sm font-medium lg:col-span-2">
-            {draft.triggerKind === "github"
-              ? "Repository"
-              : draft.triggerKind === "email"
-                ? "Email query"
-                : draft.triggerKind === "calendar"
-                  ? "Calendar ID"
-                  : "Webhook ID"}
-            <Input
-              value={draft.externalFilter}
-              onChange={(event) => change("externalFilter", event.target.value)}
-              placeholder={draft.triggerKind === "github" ? "owner/repository" : undefined}
-            />
-          </label>
-        ) : null}
-        <label className="grid gap-1.5 text-sm font-medium">
-          Missed runs
-          <Select
-            value={draft.missedRuns}
-            onValueChange={(value) => change("missedRuns", value as RoutineDraft["missedRuns"])}
-          >
-            <SelectTrigger>
-              <SelectValue>
-                {draft.missedRuns === "skip"
-                  ? "Skip"
-                  : draft.missedRuns === "catch-up-once"
-                    ? "Catch up once"
-                    : "Catch up all"}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="skip">Skip</SelectItem>
-              <SelectItem value="catch-up-once">Catch up once</SelectItem>
-              <SelectItem value="catch-up-all">Catch up all</SelectItem>
-            </SelectContent>
-          </Select>
-        </label>
-        <label className="grid gap-1.5 text-sm font-medium">
-          When already running
-          <Select
-            value={draft.overlap}
-            onValueChange={(value) => change("overlap", value as RoutineDraft["overlap"])}
-          >
-            <SelectTrigger>
-              <SelectValue>
-                {draft.overlap === "skip" ? "Skip new run" : "Queue new run"}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="skip">Skip new run</SelectItem>
-              <SelectItem value="queue">Queue new run</SelectItem>
-            </SelectContent>
-          </Select>
-        </label>
-      </div>
-      <div className="mt-5 flex justify-end gap-2">
+          </RoutineSettingsRow>
+        </RoutineSettingsGroup>
+
+        <RoutineSettingsGroup title="Run behavior">
+          <RoutineSettingsRow label="Missed runs">
+            <Select
+              value={draft.missedRuns}
+              onValueChange={(value) => change("missedRuns", value as RoutineDraft["missedRuns"])}
+            >
+              <SelectTrigger variant="ghost" className={settingTriggerClassName}>
+                <SelectValue>
+                  {draft.missedRuns === "skip"
+                    ? "Skip"
+                    : draft.missedRuns === "catch-up-once"
+                      ? "Catch up once"
+                      : "Catch up all"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent align="end" alignItemWithTrigger={false}>
+                <SelectItem value="skip">Skip</SelectItem>
+                <SelectItem value="catch-up-once">Catch up once</SelectItem>
+                <SelectItem value="catch-up-all">Catch up all</SelectItem>
+              </SelectContent>
+            </Select>
+          </RoutineSettingsRow>
+          <RoutineSettingsRow label="Already running">
+            <Select
+              value={draft.overlap}
+              onValueChange={(value) => change("overlap", value as RoutineDraft["overlap"])}
+            >
+              <SelectTrigger variant="ghost" className={settingTriggerClassName}>
+                <SelectValue>
+                  {draft.overlap === "skip" ? "Skip new run" : "Queue new run"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent align="end" alignItemWithTrigger={false}>
+                <SelectItem value="skip">Skip new run</SelectItem>
+                <SelectItem value="queue">Queue new run</SelectItem>
+              </SelectContent>
+            </Select>
+          </RoutineSettingsRow>
+        </RoutineSettingsGroup>
+      </SheetPanel>
+      <SheetFooter className="px-6 sm:px-7">
         <Button variant="outline" onClick={onCancel}>
           Cancel
         </Button>
         <Button
           onClick={onSave}
-          disabled={saving || !draft.title.trim() || !draft.prompt.trim() || !draft.projectId}
+          disabled={
+            saving ||
+            !draft.title.trim() ||
+            !draft.prompt.trim() ||
+            !draft.projectId ||
+            !draft.modelSelection
+          }
         >
           {saving ? "Saving..." : editing ? "Save changes" : "Schedule routine"}
         </Button>
+      </SheetFooter>
+    </SheetPopup>
+  );
+}
+
+function RoutineSettingsGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="grid gap-2" aria-label={title}>
+      <h3 className="px-1 text-sm font-medium text-muted-foreground">{title}</h3>
+      <div className="divide-y divide-border/70 overflow-hidden rounded-xl border border-border/70 bg-muted/20">
+        {children}
       </div>
     </section>
+  );
+}
+
+function RoutineSettingsRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex min-h-12 items-center justify-between gap-4 px-3.5 py-2 text-sm">
+      <span className="shrink-0 font-medium text-foreground">{label}</span>
+      <div className="flex min-w-0 flex-1 justify-end">{children}</div>
+    </div>
   );
 }
 
