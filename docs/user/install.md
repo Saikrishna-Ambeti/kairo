@@ -83,6 +83,12 @@ successful launch, Kairo keeps the current runtime and one previous runtime for 
 removes older caches automatically. If a cached runtime stops working, Kairo launches from the
 application files under `/mnt/c` instead and reinstalls the runtime on the next launch.
 
+## First run
+
+The first app launch starts with three setup steps: sign in, choose your profession, and connect one
+coding-agent provider. After you finish setup, reopening the app skips these steps.
+Memory and app integrations remain available in **Settings** after setup.
+
 ## Providers
 
 Kairo uses provider runtimes but does not bundle them. Install and authenticate each
