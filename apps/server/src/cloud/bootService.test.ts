@@ -54,7 +54,7 @@ const macPlan = {
   launcherPath: "/Users/theo/.kairo/runtime/service-launcher.mjs",
   baseDir: "/Users/theo/.kairo",
   logPath: "/Users/theo/.kairo/userdata/logs/boot-service.log",
-  unitPath: "/Users/theo/Library/LaunchAgents/com.kairo.app.service.plist",
+  unitPath: "/Users/theo/Library/LaunchAgents/com.kairotools.kairo.service.plist",
 };
 const macInstallerPath =
   "/opt/homebrew/bin:/Users/theo/.npm-global/bin:/Users/theo/.nvm/versions/node/v22.16.0/bin:/usr/bin:/bin";
@@ -424,7 +424,7 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
       expect(commands.some((command) => command.startsWith("systemctl "))).toBe(false);
       // A bootout can block up to the plist's 90s ExitTimeOut; the runner's
       // 60s default would cancel it and let bootstrap race a loaded job.
-      expect(timeouts.get("launchctl bootout --wait gui/501/com.kairo.app.service")).toEqual(
+      expect(timeouts.get("launchctl bootout --wait gui/501/com.kairotools.kairo.service")).toEqual(
         Duration.seconds(120),
       );
     }),
@@ -441,8 +441,8 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
       const error = yield* service.install().pipe(Effect.flip);
       expect(error._tag).toBe("BootServiceCommandError");
       expect(commands.filter((command) => command.startsWith("launchctl "))).toEqual([
-        "launchctl bootout --wait gui/501/com.kairo.app.service",
-        "launchctl enable gui/501/com.kairo.app.service",
+        "launchctl bootout --wait gui/501/com.kairotools.kairo.service",
+        "launchctl enable gui/501/com.kairotools.kairo.service",
         `launchctl bootstrap gui/501 ${plistPath}`,
         `launchctl bootstrap gui/501 ${plistPath}`,
       ]);

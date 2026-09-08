@@ -329,7 +329,7 @@ describe("Cursor skills", () => {
           prefix: "cursor-skills-home-",
         });
         const workspace = yield* fileSystem.makeTempDirectory({
-          directory: NodeOS.tmpdir(),
+          directory: yield* fileSystem.realPath(NodeOS.tmpdir()),
           prefix: "cursor-skills-workspace-",
         });
         const writeSkill = Effect.fn("writeCursorSkill")(function* (

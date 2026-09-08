@@ -22,6 +22,7 @@ export interface SettingsSearchItem {
   // Its row only renders in the desktop app, so a browser result would land on
   // an anchor that isn't there.
   readonly desktopOnly?: boolean;
+  readonly hideFromSearch?: boolean;
   readonly macOnly?: boolean;
   // Its row only renders on Windows desktop, so other desktop platforms must
   // not expose a result that points to a missing anchor.
@@ -394,6 +395,7 @@ export const SETTINGS_SEARCH_ITEMS = [
   {
     id: "source-control",
     title: "Source control",
+    hideFromSearch: true,
     to: "/settings/source-control",
     searchTerms: [
       "version control git github gitlab bitbucket azure devops hosting integrations credentials scan server environment",
@@ -552,6 +554,7 @@ export function searchSettings(
 
   return items
     .flatMap((item, index) => {
+      if (item.hideFromSearch) return [];
       if (!isElectron && item.desktopOnly === true) return [];
       if (item.macOnly && !isMacPlatform(platform)) return [];
       if (item.windowsOnly && !isWindowsPlatform(platform)) return [];

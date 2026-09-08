@@ -23,7 +23,7 @@ and pushes to `main`:
   release breakage surfaces on PRs rather than at tag time.
 
 [`.github/workflows/windows-tests.yml`](../../.github/workflows/windows-tests.yml) is a manual
-Windows lane (`workflow_dispatch` only) on a Blacksmith Windows 2025 runner. The suite does not
+Windows lane (`workflow_dispatch` only) on a GitHub-hosted Windows 2025 runner. The suite does not
 pass on Windows yet, so it is not a required check; it exists so the work to get there can be
 iterated against a real Windows box without one on hand. Dispatch it with `gh workflow run
 windows-tests.yml --ref <branch>`, optionally with `-f package=<dir>` to run one workspace package

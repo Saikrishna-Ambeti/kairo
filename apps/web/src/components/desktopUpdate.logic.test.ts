@@ -205,7 +205,9 @@ describe("desktop update UI helpers", () => {
   });
 
   it("builds the release history URL", () => {
-    expect(getDesktopUpdateReleaseHistoryUrl()).toBe("https://github.com/pingdotgg/kairo/releases");
+    expect(getDesktopUpdateReleaseHistoryUrl()).toBe(
+      "https://github.com/Saikrishna-Ambeti/kairo/releases",
+    );
   });
 
   it("toasts only for actionable updater errors", () => {

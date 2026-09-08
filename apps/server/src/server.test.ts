@@ -4076,7 +4076,10 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       assert.equal(reader.body.scope, "access:read");
       const createdResponse = yield* HttpClient.post("/api/auth/pairing-token", {
         headers: { cookie: yield* getAuthenticatedSessionCookieHeader() },
-        body: yield* HttpBody.json({ label: "Synthetic phone" }),
+        body: yield* HttpBody.json({
+          label: "Synthetic phone",
+          scopes: [...AuthStandardClientScopes],
+        }),
       });
       const created = (yield* createdResponse.json) as { id: string; credential: string };
       assert.equal(createdResponse.status, 200);

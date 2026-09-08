@@ -197,7 +197,7 @@ describe("CodexSessionRuntime collab integration", () => {
         binaryPath: peerPath,
         cwd: "/tmp",
         runtimeMode: "full-access",
-        environment: { ...process.env, Kairo_CODEX_COLLAB_SCRIPT: scriptPath },
+        environment: { ...process.env, KAIRO_CODEX_COLLAB_SCRIPT: scriptPath },
       });
       const metadataFiber = yield* runtime.events.pipe(
         Stream.filter(
@@ -289,7 +289,7 @@ describe("CodexSessionRuntime collab integration", () => {
         binaryPath: peerPath,
         cwd: "/tmp",
         runtimeMode: "full-access",
-        environment: { ...process.env, Kairo_CODEX_COLLAB_SCRIPT: scriptPath },
+        environment: { ...process.env, KAIRO_CODEX_COLLAB_SCRIPT: scriptPath },
       });
       const eventsFiber = yield* runtime.events.pipe(
         Stream.takeUntil(
@@ -368,7 +368,7 @@ describe("CodexSessionRuntime collab integration", () => {
             binaryPath: peerPath,
             cwd: "/tmp",
             runtimeMode: "full-access",
-            environment: { ...process.env, Kairo_CODEX_COLLAB_SCRIPT: scriptPath },
+            environment: { ...process.env, KAIRO_CODEX_COLLAB_SCRIPT: scriptPath },
           });
           const eventsFiber = yield* runtime.events.pipe(
             Stream.takeUntil(
@@ -724,7 +724,7 @@ describe("CodexSessionRuntime collab integration", () => {
           binaryPath: peerPath,
           cwd: "/tmp",
           runtimeMode: "auto",
-          environment: { ...process.env, Kairo_CODEX_COLLAB_SCRIPT: scriptPath },
+          environment: { ...process.env, KAIRO_CODEX_COLLAB_SCRIPT: scriptPath },
         });
         const approvalRequested = yield* Deferred.make<ProviderEvent>();
         const turnCompleted = yield* Deferred.make<void>();

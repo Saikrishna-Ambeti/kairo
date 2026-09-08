@@ -100,7 +100,7 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
       }
       // Enrichment derives from the snapshot it was handed; a runtime usage
       // update that landed since must not be reverted by it.
-      const merged = withUsageLimits(nextSnapshot, state.snapshot.usageLimits);
+      const merged = withUsageLimits(snapshotWithMaintenanceAdvisory, state.snapshot.usageLimits);
       if (Equal.equals(state.snapshot, merged)) {
         return [null, state] as const;
       }
@@ -164,7 +164,7 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
       return state.snapshot;
     }
 
-    const probedSnapshot = yield* input.checkProvider;
+    const probedSnapshot = attachMaintenanceAdvisory(yield* input.checkProvider);
     const { snapshot: nextSnapshot, generation: nextGeneration } = yield* Ref.modify(
       snapshotStateRef,
       (state) => {

@@ -23,7 +23,10 @@ class KairoReviewDiffModule : Module() {
       Prop("selectedRowIdsJson") { view: KairoReviewDiffView, selectedRowIdsJson: String ->
         view.setSelectedRowIdsJson(selectedRowIdsJson)
       }
-      Prop("collapsedCommentIdsJson") { view: KairoReviewDiffView, collapsedCommentIdsJson: String ->
+      Prop("collapsedCommentIdsJson") {
+          view: KairoReviewDiffView,
+          collapsedCommentIdsJson: String
+        ->
         view.setCollapsedCommentIdsJson(collapsedCommentIdsJson)
       }
       Prop("appearanceScheme") { view: KairoReviewDiffView, appearanceScheme: String ->
@@ -54,7 +57,11 @@ class KairoReviewDiffModule : Module() {
         "onToggleComment",
       )
 
-      AsyncFunction("scrollToFile") { view: KairoReviewDiffView, fileId: String, animated: Boolean ->
+      AsyncFunction("scrollToFile") {
+          view: KairoReviewDiffView,
+          fileId: String,
+          animated: Boolean
+        ->
         view.scrollToFile(fileId, animated)
       }
       AsyncFunction("scrollToTop") { view: KairoReviewDiffView, animated: Boolean ->

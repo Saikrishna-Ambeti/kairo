@@ -178,8 +178,8 @@ const makeHarness = Effect.fn("makeAntigravityDriverHarness")(function* (
     config: { ...AntigravityDriver.defaultConfig(), ...options.config },
     environment: [
       { name: "PATH", value: instancePath },
-      { name: "Kairo_ACP_ANTIGRAVITY", value: "1" },
-      { name: "Kairo_ACP_REQUEST_LOG_PATH", value: requestLog },
+      { name: "KAIRO_ACP_ANTIGRAVITY", value: "1" },
+      { name: "KAIRO_ACP_REQUEST_LOG_PATH", value: requestLog },
       { name: "GEMINI_API_KEY", value: "must-not-be-used" },
       { name: "google_api_key", value: "must-not-be-used" },
       { name: "GOOGLE_APPLICATION_CREDENTIALS", value: "/must-not-be-used.json" },
