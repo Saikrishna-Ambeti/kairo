@@ -108,7 +108,7 @@ describe("AcpSessionRuntime", () => {
         ...mockRuntimeOptions,
         spawn: {
           ...mockRuntimeOptions.spawn,
-          env: { Kairo_ACP_WAIT_FOR_RESUME_RELEASE: "1" },
+          env: { KAIRO_ACP_WAIT_FOR_RESUME_RELEASE: "1" },
         },
         resumeSessionId: "mock-session-1",
         resumeMethod: "resume",
@@ -146,7 +146,7 @@ describe("AcpSessionRuntime", () => {
         ...mockRuntimeOptions,
         spawn: {
           ...mockRuntimeOptions.spawn,
-          env: { Kairo_ACP_COMPLETE_FIRST_PROMPT_ON_CANCEL: "1" },
+          env: { KAIRO_ACP_COMPLETE_FIRST_PROMPT_ON_CANCEL: "1" },
         },
         cancelBehavior: "wait-for-prompt",
         requestLogger: (event) =>
@@ -229,7 +229,7 @@ describe("AcpSessionRuntime", () => {
         ...mockRuntimeOptions,
         spawn: {
           ...mockRuntimeOptions.spawn,
-          env: { Kairo_ACP_COMPLETE_FIRST_PROMPT_ON_CANCEL: "1" },
+          env: { KAIRO_ACP_COMPLETE_FIRST_PROMPT_ON_CANCEL: "1" },
         },
         cancelBehavior: "wait-for-prompt",
         cancelTimeout: "1 second",
@@ -313,7 +313,7 @@ describe("AcpSessionRuntime", () => {
         ...mockRuntimeOptions,
         spawn: {
           ...mockRuntimeOptions.spawn,
-          env: { Kairo_ACP_COMPLETE_FIRST_PROMPT_ON_CANCEL: "1" },
+          env: { KAIRO_ACP_COMPLETE_FIRST_PROMPT_ON_CANCEL: "1" },
         },
         cancelBehavior: "wait-for-prompt",
       });
@@ -354,7 +354,7 @@ describe("AcpSessionRuntime", () => {
       });
       const runtime = yield* AcpSessionRuntime.make({
         ...mockRuntimeOptions,
-        spawn: { ...mockRuntimeOptions.spawn, env: { Kairo_ACP_FLOOD_STDERR: "1" } },
+        spawn: { ...mockRuntimeOptions.spawn, env: { KAIRO_ACP_FLOOD_STDERR: "1" } },
         onStderr: () => Effect.fail(failure),
       });
       expect(yield* runtime.start().pipe(Effect.flip)).toBe(failure);
@@ -375,7 +375,7 @@ describe("AcpSessionRuntime", () => {
         yield* Effect.gen(function* () {
           const runtime = yield* AcpSessionRuntime.make({
             ...mockRuntimeOptions,
-            spawn: { ...mockRuntimeOptions.spawn, env: { Kairo_ACP_FLOOD_STDERR: "1" } },
+            spawn: { ...mockRuntimeOptions.spawn, env: { KAIRO_ACP_FLOOD_STDERR: "1" } },
             ...(logStderr
               ? {
                   onStderr: (text: string) =>
@@ -432,7 +432,7 @@ describe("AcpSessionRuntime", () => {
         ...mockRuntimeOptions,
         spawn: {
           ...mockRuntimeOptions.spawn,
-          env: { Kairo_ACP_COMPLETE_FIRST_PROMPT_ON_CANCEL: "1" },
+          env: { KAIRO_ACP_COMPLETE_FIRST_PROMPT_ON_CANCEL: "1" },
         },
         cancelBehavior: "wait-for-prompt",
         cancelTimeout: "1 second",
@@ -469,14 +469,14 @@ describe("AcpSessionRuntime", () => {
     Effect.gen(function* () {
       yield* Effect.acquireRelease(
         Effect.sync(() => {
-          const previous = process.env.Kairo_ACP_RUNTIME_AMBIENT;
-          process.env.Kairo_ACP_RUNTIME_AMBIENT = "sentinel";
+          const previous = process.env.KAIRO_ACP_RUNTIME_AMBIENT;
+          process.env.KAIRO_ACP_RUNTIME_AMBIENT = "sentinel";
           return previous;
         }),
         (previous) =>
           Effect.sync(() => {
-            if (previous === undefined) delete process.env.Kairo_ACP_RUNTIME_AMBIENT;
-            else process.env.Kairo_ACP_RUNTIME_AMBIENT = previous;
+            if (previous === undefined) delete process.env.KAIRO_ACP_RUNTIME_AMBIENT;
+            else process.env.KAIRO_ACP_RUNTIME_AMBIENT = previous;
           }),
       );
       const runtime = yield* AcpSessionRuntime.make({
@@ -485,7 +485,7 @@ describe("AcpSessionRuntime", () => {
           command: process.execPath,
           args: mockAgentArgs,
           extendEnv: false,
-          env: { Kairo_ACP_RUNTIME_EXPLICIT: "kept" },
+          env: { KAIRO_ACP_RUNTIME_EXPLICIT: "kept" },
         },
       });
       yield* runtime.initialize();

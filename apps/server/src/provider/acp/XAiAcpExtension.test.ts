@@ -309,7 +309,7 @@ describe("XAiAcpExtension", () => {
   it.effect("fails a hung standard prompt from an xAI rate-limit completion", () =>
     Effect.gen(function* () {
       const runtime = yield* makePromptCompletionRuntime({
-        Kairo_ACP_EMIT_XAI_RATE_LIMIT_THEN_HANG: "1",
+        KAIRO_ACP_EMIT_XAI_RATE_LIMIT_THEN_HANG: "1",
       });
       yield* runtime.start();
 

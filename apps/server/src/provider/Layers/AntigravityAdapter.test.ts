@@ -332,8 +332,8 @@ it.layer(layer)("AntigravityAdapter", (it) => {
                 cwd: input.cwd,
                 env: {
                   ...process.env,
-                  Kairo_ACP_ANTIGRAVITY: "1",
-                  Kairo_ACP_REQUEST_LOG_PATH: requestLog,
+                  KAIRO_ACP_ANTIGRAVITY: "1",
+                  KAIRO_ACP_REQUEST_LOG_PATH: requestLog,
                 },
                 extendEnv: false,
               },

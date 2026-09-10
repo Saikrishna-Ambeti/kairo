@@ -98,7 +98,7 @@ const Kairo_MCP_TOOL_LABELS: Record<
 function resolveKairoMcpToolPresentation(value: string | undefined, status: string | undefined) {
   if (!value) return null;
   const name = normalizeCompactToolLabel(value).replace(
-    /^(?:mcp__(?:kairo|kairo_code|kairo)__|(?:kairo|kairo_code|kairo)(?:[.:/]|\s*·\s*))/i,
+    /^(?:mcp__kairo(?:[-_]code)?__|kairo(?:[-_]code)?(?:[.:/]|\s*·\s*))/i,
     "",
   );
   if (!Object.hasOwn(Kairo_MCP_TOOL_LABELS, name)) return null;
