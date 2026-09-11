@@ -1,3 +1,4 @@
+import { threadPullRequestSearchTerms } from "@kairo/shared/threadPullRequests";
 import {
   buildProjectGroups,
   derivePhysicalProjectKey,
@@ -21,7 +22,7 @@ import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
 
-import { scopedProjectKey } from "../../lib/scopedEntities";
+import { scopedProjectKey, scopedThreadKey } from "../../lib/scopedEntities";
 import type { PendingNewTask } from "../../state/use-pending-new-tasks";
 
 export type HomeProjectSortOrder = Exclude<SidebarProjectSortOrder, "manual">;
@@ -102,10 +103,8 @@ export function sortHomeProjectScopes(input: {
   }
   for (const pendingTask of input.pendingTasks) {
     recordActivity(
-      scopeKeyByProjectRef.get(
-        scopedProjectKey(pendingTask.message.environmentId, pendingTask.creation.projectId),
-      ),
-      Date.parse(pendingTask.message.createdAt),
+      scopeKeyByProjectRef.get(scopedProjectKey(pendingTask.environmentId, pendingTask.projectId)),
+      Date.parse(pendingTask.createdAt),
     );
   }
 
@@ -174,7 +173,7 @@ function groupSortTimestamp(group: HomeThreadGroup, sortOrder: HomeProjectSortOr
     Number.NEGATIVE_INFINITY,
   );
   return group.pendingTasks.reduce((latest, pendingTask) => {
-    const timestamp = Date.parse(pendingTask.message.createdAt);
+    const timestamp = Date.parse(pendingTask.createdAt);
     return Number.isNaN(timestamp) ? latest : Math.max(latest, timestamp);
   }, latestThread);
 }
@@ -189,10 +188,15 @@ function selectRecentThreads(
   sortedThreads: ReadonlyArray<EnvironmentThreadShell>,
   threadSortOrder: SidebarThreadSortOrder,
   now: number,
+  queuedThreadKeys: ReadonlySet<string> | undefined,
 ): ReadonlyArray<EnvironmentThreadShell> {
   const cutoff = now - RECENT_THREAD_WINDOW_MS;
+  // A thread with a message waiting in the outbox has work the user is
+  // waiting on, however old its last activity; it never trims away.
   const recent = sortedThreads.filter(
-    (thread) => getThreadSortTimestamp(thread, threadSortOrder) >= cutoff,
+    (thread) =>
+      getThreadSortTimestamp(thread, threadSortOrder) >= cutoff ||
+      queuedThreadKeys?.has(scopedThreadKey(thread.environmentId, thread.id)) === true,
   );
   return recent.length > 0 ? recent : sortedThreads.slice(0, RECENT_THREAD_FALLBACK_COUNT);
 }
@@ -201,6 +205,8 @@ export function buildHomeThreadGroups(input: {
   readonly projects: ReadonlyArray<EnvironmentProject>;
   readonly threads: ReadonlyArray<EnvironmentThreadShell>;
   readonly pendingTasks?: ReadonlyArray<PendingNewTask>;
+  /** Thread keys with a message waiting in the outbox; kept in the default view. */
+  readonly queuedThreadKeys?: ReadonlySet<string>;
   readonly environmentId: EnvironmentId | null;
   readonly searchQuery: string;
   readonly matchedThreadKeys?: ReadonlySet<string>;
@@ -232,14 +238,11 @@ export function buildHomeThreadGroups(input: {
   }
 
   for (const pendingTask of input.pendingTasks ?? []) {
-    if (input.environmentId !== null && pendingTask.message.environmentId !== input.environmentId) {
+    if (input.environmentId !== null && pendingTask.environmentId !== input.environmentId) {
       continue;
     }
 
-    const physicalKey = scopedProjectKey(
-      pendingTask.message.environmentId,
-      pendingTask.creation.projectId,
-    );
+    const physicalKey = scopedProjectKey(pendingTask.environmentId, pendingTask.projectId);
     let groupKey = groupKeyByProjectKey.get(physicalKey);
     if (!groupKey) {
       // The project shell is not loaded (environment offline / project gone).
@@ -251,16 +254,15 @@ export function buildHomeThreadGroups(input: {
         key: groupKey,
         projects: [
           {
-            environmentId: pendingTask.message.environmentId,
-            id: pendingTask.creation.projectId,
-            title: pendingTask.creation.projectTitle ?? "Unknown project",
-            workspaceRoot:
-              pendingTask.creation.projectCwd ?? String(pendingTask.creation.projectId),
+            environmentId: pendingTask.environmentId,
+            id: pendingTask.projectId,
+            title: pendingTask.projectTitle ?? "Unknown project",
+            workspaceRoot: pendingTask.projectCwd ?? String(pendingTask.projectId),
             repositoryIdentity: null,
             defaultModelSelection: null,
             scripts: [],
-            createdAt: pendingTask.message.createdAt,
-            updatedAt: pendingTask.message.createdAt,
+            createdAt: pendingTask.createdAt,
+            updatedAt: pendingTask.createdAt,
           },
         ],
         pendingTasks: [],
@@ -307,6 +309,9 @@ export function buildHomeThreadGroups(input: {
       : group.threads.filter(
           (thread) =>
             thread.title.toLocaleLowerCase().includes(query) ||
+            threadPullRequestSearchTerms(thread).some((term) =>
+              term.toLocaleLowerCase().includes(query),
+            ) ||
             input.matchedThreadKeys?.has(
               threadSearchMatchKey({
                 environmentId: thread.environmentId,
@@ -329,7 +334,7 @@ export function buildHomeThreadGroups(input: {
     // only trims the default (no-query) view.
     const recentThreads =
       query.length === 0
-        ? selectRecentThreads(sortedThreads, input.threadSortOrder, now)
+        ? selectRecentThreads(sortedThreads, input.threadSortOrder, now, input.queuedThreadKeys)
         : sortedThreads;
 
     // A stale project id still resolves to the canonical member with the same

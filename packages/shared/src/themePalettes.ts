@@ -21,11 +21,11 @@ export const RESERVED_THEME_IDS: ReadonlySet<string> = new Set([
   "light",
   "dark",
   ...BUILT_IN_THEME_IDS,
-  "t3-chat-dark",
-  "t3-grove",
-  "t3-ocean",
-  "t3-ember",
-  "t3-iris",
+  "kairo-chat-dark",
+  "kairo-grove",
+  "kairo-ocean",
+  "kairo-ember",
+  "kairo-iris",
   "kairo-chat-dark",
   "kairo-grove",
   "kairo-ocean",
@@ -128,7 +128,7 @@ export type ThemeDefinition = Readonly<{
 
 export const KAIRO_CHAT_THEME: ThemeDefinition = {
   id: "kairo-chat",
-  label: "T3 Chat",
+  label: "Kairo Chat",
   appearance: "light",
   colors: {
     canvas: "oklch(0.982446 0.010114 325.653)",

@@ -19,10 +19,6 @@ export const SupermemorySettings = Schema.Struct({
 });
 export type SupermemorySettings = typeof SupermemorySettings.Type;
 
-export const DEFAULT_SUPERMEMORY_SETTINGS: SupermemorySettings = Schema.decodeSync(
-  SupermemorySettings,
-)({});
-
 export const MemorySettings = Schema.Struct({
   supermemory: SupermemorySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 }).pipe(Schema.withDecodingDefault(Effect.succeed({})));
@@ -78,10 +74,7 @@ export const SupermemoryStatus = Schema.Struct({
 });
 export type SupermemoryStatus = typeof SupermemoryStatus.Type;
 
-export class SupermemoryError extends Schema.TaggedErrorClass<SupermemoryError>()(
-  "SupermemoryError",
-  {
-    message: Schema.String,
-    cause: Schema.optional(Schema.Defect()),
-  },
-) {}
+export class SupermemoryError extends Schema.TaggedError<SupermemoryError>()("SupermemoryError", {
+  message: Schema.String,
+  cause: Schema.optional(Schema.Defect()),
+}) {}

@@ -19,6 +19,7 @@ import * as Connectivity from "../connection/connectivity.ts";
 import { ConnectionBlockedError, type NetworkStatus } from "../connection/model.ts";
 import * as ConnectionWakeups from "../connection/wakeups.ts";
 import * as RelayEnvironmentDiscovery from "./discovery.ts";
+import { NETWORK_BLOCKING_HINT } from "../errors/network.ts";
 
 const environments = [
   {
@@ -64,6 +65,7 @@ const makeHarness = Effect.fn("RelayDiscoveryTest.makeHarness")(function* (
   const secondListCall = yield* Deferred.make<void>();
   const clerkToken = yield* Ref.make<string | null>("clerk-token");
   const clerkTokenReads = yield* Ref.make(0);
+  const sessionIdentity = { accountId: "account-1" };
   const wakeups = yield* SubscriptionRef.make<{
     readonly sequence: number;
     readonly reason: "application-active" | "credentials-changed";
@@ -129,6 +131,11 @@ const makeHarness = Effect.fn("RelayDiscoveryTest.makeHarness")(function* (
         Layer.succeed(
           ClientCapabilities.CloudSession,
           ClientCapabilities.CloudSession.of({
+            identity: Ref.get(clerkToken).pipe(
+              Effect.map((token) =>
+                token === null ? Option.none() : Option.some(sessionIdentity),
+              ),
+            ),
             clerkToken: Ref.update(clerkTokenReads, (current) => current + 1).pipe(
               Effect.andThen(Ref.get(clerkToken)),
               Effect.flatMap((token) =>
@@ -305,6 +312,7 @@ describe("RelayEnvironmentDiscovery", () => {
           Layer.mergeAll(
             Layer.succeed(ManagedRelay.ManagedRelayClient, client),
             Layer.succeed(ClientCapabilities.CloudSession, {
+              identity: Effect.succeed(Option.some({ accountId: "account-1" })),
               clerkToken: Effect.succeed("clerk-token"),
             }),
             Layer.succeed(Connectivity.Connectivity, {
@@ -328,7 +336,7 @@ describe("RelayEnvironmentDiscovery", () => {
         expect(Option.getOrThrow(state.error)).toMatchObject({
           _tag: "ConnectionTransientError",
           reason: "timeout",
-          message: "Relay environment listing timed out.",
+          message: `Relay environment listing timed out. ${NETWORK_BLOCKING_HINT}`,
         });
       }).pipe(Effect.provide(layer));
     }),

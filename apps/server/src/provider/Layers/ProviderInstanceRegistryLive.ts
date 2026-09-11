@@ -33,7 +33,6 @@
  * @module provider/Layers/ProviderInstanceRegistryLive
  */
 import {
-  defaultInstanceIdForDriver,
   providerInstanceConfigEnabledFlag,
   ProviderInstanceId,
   type ProviderInstanceConfig,
@@ -41,11 +40,9 @@ import {
   type ProviderDriverKind,
   type ServerProvider,
 } from "@kairo/contracts";
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Exit from "effect/Exit";
-import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
@@ -53,14 +50,8 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 
 import { buildUnavailableProviderSnapshot } from "../unavailableProviderSnapshot.ts";
-import {
-  ProviderInstanceRegistry,
-  type ProviderInstanceRegistryShape,
-} from "../Services/ProviderInstanceRegistry.ts";
-import {
-  ProviderInstanceRegistryMutator,
-  type ProviderInstanceRegistryMutatorShape,
-} from "../Services/ProviderInstanceRegistryMutator.ts";
+import { type ProviderInstanceRegistryShape } from "../Services/ProviderInstanceRegistry.ts";
+import { type ProviderInstanceRegistryMutatorShape } from "../Services/ProviderInstanceRegistryMutator.ts";
 import type { AnyProviderDriver, ProviderInstance } from "../ProviderDriver.ts";
 
 /**
@@ -410,25 +401,3 @@ export const makeProviderInstanceRegistry = <R>(input: {
 
     return { registry, mutator };
   });
-
-/**
- * Layer variant that also exposes the mutator tag. Consumed by
- * `ProviderInstanceRegistryHydrationLive` to reconcile on settings
- * changes. Tests that exercise the mutator directly can pair this Layer
- * with a test-local `ServerSettingsService`.
- */
-export const ProviderInstanceRegistryMutableLayer = <R>(input: {
-  readonly drivers: ReadonlyArray<AnyProviderDriver<R>>;
-  readonly configMap: ProviderInstanceConfigMap;
-}): Layer.Layer<ProviderInstanceRegistry | ProviderInstanceRegistryMutator, never, R> =>
-  Layer.effectContext(
-    makeProviderInstanceRegistry(input).pipe(
-      Effect.map(({ registry, mutator }) =>
-        Context.make(ProviderInstanceRegistry, registry).pipe(
-          Context.add(ProviderInstanceRegistryMutator, mutator),
-        ),
-      ),
-    ),
-  ) as Layer.Layer<ProviderInstanceRegistry | ProviderInstanceRegistryMutator, never, R>;
-
-export { defaultInstanceIdForDriver };

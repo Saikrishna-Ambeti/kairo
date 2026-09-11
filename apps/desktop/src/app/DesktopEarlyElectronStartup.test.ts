@@ -81,7 +81,9 @@ describe("DesktopEarlyElectronStartup", () => {
     });
 
     assert.deepEqual(options, {
+      isDevelopment: true,
       linuxWmClass: "kairo-dev",
+      linuxDesktopEntryName: "com.kairo.Kairo.Development.desktop",
       passwordStore: "gnome-libsecret",
     });
   });

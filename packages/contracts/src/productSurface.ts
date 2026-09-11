@@ -42,15 +42,13 @@ export const NON_TECHNICAL_AI_SURFACES = {
   developerKeybindings: "hidden",
 } as const satisfies ProductSurfaceConfig;
 
-export const DEFAULT_PRODUCT_SURFACE_PROFILE =
-  "nonTechnicalAi" as const satisfies ProductSurfaceProfile;
 export const DEFAULT_PRODUCT_SURFACE_CONFIG = NON_TECHNICAL_AI_SURFACES;
 
 export const ProductSurfaceConfigWithDefault = ProductSurfaceConfig.pipe(
   Schema.withDecodingDefault(Effect.succeed(DEFAULT_PRODUCT_SURFACE_CONFIG)),
 );
 
-export class SurfaceUnavailableError extends Schema.TaggedErrorClass<SurfaceUnavailableError>()(
+export class SurfaceUnavailableError extends Schema.TaggedError<SurfaceUnavailableError>()(
   "SurfaceUnavailableError",
   {
     code: Schema.Literal("SURFACE_DISABLED"),

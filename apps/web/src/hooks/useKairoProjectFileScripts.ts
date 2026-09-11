@@ -56,15 +56,3 @@ export function useKairoProjectFileState(
     return { status: "valid", file, scripts: file.scripts ?? NO_SCRIPTS } as const;
   }, [contents, isPending]);
 }
-
-/**
- * Scripts declared in the project's checked-in `kairo.json`, offered in the
- * scripts menu for import. Missing, truncated, or invalid files resolve to
- * an empty list.
- */
-export function useKairoProjectFileScripts(
-  environmentId: EnvironmentId,
-  cwd: string | null,
-): ReadonlyArray<KairoProjectFileScript> {
-  return useKairoProjectFileState(environmentId, cwd).scripts;
-}

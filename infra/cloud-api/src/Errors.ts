@@ -1,7 +1,7 @@
 import { type KairoCloudErrorCode } from "@kairo/contracts/cloud";
 import * as Schema from "effect/Schema";
 
-export class CloudApiRequestFailure extends Schema.TaggedErrorClass<CloudApiRequestFailure>()(
+export class CloudApiRequestFailure extends Schema.TaggedError<CloudApiRequestFailure>()(
   "CloudApiRequestFailure",
   {
     requestId: Schema.String,

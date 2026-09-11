@@ -7,6 +7,7 @@ import {
   isTemporaryWorktreeBranch,
   normalizeGitRemoteUrl,
   parseGitHubRepositoryNameWithOwnerFromRemoteUrl,
+  parseOriginUrlFromGitConfig,
   WORKTREE_BRANCH_PREFIX,
 } from "./git.ts";
 
@@ -49,14 +50,88 @@ describe("normalizeGitRemoteUrl", () => {
   });
 });
 
+describe("parseOriginUrlFromGitConfig", () => {
+  it("reads the origin url and ignores other remotes", () => {
+    const config = [
+      "[core]",
+      "\trepositoryformatversion = 0",
+      '[remote "upstream"]',
+      "\turl = https://github.com/other/repo.git",
+      '[remote "origin"]',
+      "\turl = git@github.com:pingdotgg/kairo.git",
+      "\tfetch = +refs/heads/*:refs/remotes/origin/*",
+      '[branch "main"]',
+      "\tremote = origin",
+    ].join("\n");
+    expect(parseOriginUrlFromGitConfig(config)).toBe("git@github.com:pingdotgg/kairo.git");
+  });
+
+  it("strips inline comments and quotes from the url value", () => {
+    expect(
+      parseOriginUrlFromGitConfig(
+        '[remote "origin"]\n\turl = https://github.com/acme/repo.git # mirror\n',
+      ),
+    ).toBe("https://github.com/acme/repo.git");
+    expect(
+      parseOriginUrlFromGitConfig('[remote "origin"]\n\turl = "git@github.com:acme/repo.git"\n'),
+    ).toBe("git@github.com:acme/repo.git");
+  });
+
+  it("accepts legacy dotted headers, header comments, and line continuations", () => {
+    expect(parseOriginUrlFromGitConfig("[remote.origin]\n\turl = git@github.com:a/b.git\n")).toBe(
+      "git@github.com:a/b.git",
+    );
+    // Git folds the dotted form to lowercase but keeps quoted names as written.
+    expect(parseOriginUrlFromGitConfig("[remote.Origin]\n\turl = git@github.com:a/b.git\n")).toBe(
+      "git@github.com:a/b.git",
+    );
+    expect(
+      parseOriginUrlFromGitConfig(
+        '[remote "Origin"]\n\turl = git@github.com:x/y.git\n[remote "origin"]\n\turl = git@github.com:a/b.git\n',
+      ),
+    ).toBe("git@github.com:a/b.git");
+    expect(
+      parseOriginUrlFromGitConfig('[remote "origin"] # primary\n\turl = git@github.com:a/b.git\n'),
+    ).toBe("git@github.com:a/b.git");
+    expect(
+      parseOriginUrlFromGitConfig(
+        '[remote "origin"]\n\turl = https://github.com/acme/\\\n\t\trepo.git\n',
+      ),
+    ).toBe("https://github.com/acme/repo.git");
+  });
+
+  it("falls back to the first remote when there is no origin", () => {
+    const config = [
+      '[remote "upstream"]',
+      "\turl = https://github.com/acme/repo.git",
+      '[remote "fork"]',
+      "\turl = https://github.com/me/repo.git",
+    ].join("\n");
+    expect(parseOriginUrlFromGitConfig(config)).toBe("https://github.com/acme/repo.git");
+  });
+
+  it("returns null when there is no remote section", () => {
+    expect(parseOriginUrlFromGitConfig("[core]\n\tbare = false\n")).toBeNull();
+    expect(parseOriginUrlFromGitConfig("")).toBeNull();
+  });
+});
+
 describe("parseGitHubRepositoryNameWithOwnerFromRemoteUrl", () => {
   it("extracts the owner and repository from common GitHub remote shapes", () => {
     expect(parseGitHubRepositoryNameWithOwnerFromRemoteUrl("git@github.com:Kairo/Kairo.git")).toBe(
       "Kairo/Kairo",
     );
     expect(
-      parseGitHubRepositoryNameWithOwnerFromRemoteUrl("https://github.com/Kairo/Kairo.git"),
-    ).toBe("Kairo/Kairo");
+      parseGitHubRepositoryNameWithOwnerFromRemoteUrl("git@github.com:KairoTools/KairoCode.git"),
+    ).toBe("KairoTools/KairoCode");
+    expect(
+      parseGitHubRepositoryNameWithOwnerFromRemoteUrl(
+        "https://github.com/KairoTools/KairoCode.git",
+      ),
+    ).toBe("KairoTools/KairoCode");
+    expect(
+      parseGitHubRepositoryNameWithOwnerFromRemoteUrl("ssh://github.com/KairoTools/KairoCode.git"),
+    ).toBe("KairoTools/KairoCode");
   });
 });
 

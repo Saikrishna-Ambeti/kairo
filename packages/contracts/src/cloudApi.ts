@@ -7,7 +7,7 @@ import { EnvironmentId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 export const DEFAULT_KAIRO_CLOUD_API_URL = "https://kairo-cloud-api.vercel.app";
 
 export const KAIRO_CLOUD_MEMORY_CONTENT_MAX_CHARS = 65_536;
-export const KAIRO_CLOUD_MEMORY_QUERY_MAX_CHARS = 4_096;
+const KAIRO_CLOUD_MEMORY_QUERY_MAX_CHARS = 4_096;
 export const KAIRO_CLOUD_REQUEST_BODY_MAX_BYTES = 98_304;
 export const KAIRO_CLOUD_COMPOSIO_REQUEST_BODY_MAX_BYTES = 1_048_576;
 

@@ -45,6 +45,7 @@ export function provisionMemoryAccess<E, E2>(
   return clerkToken.pipe(Effect.flatMap(provision), Effect.ignore);
 }
 
+/** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {
   const resolver = yield* ConnectionResolver.ConnectionResolver;
   const sessions = yield* RpcSession.RpcSessionFactory;

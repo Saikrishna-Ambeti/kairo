@@ -27,10 +27,12 @@ function provider(input: Partial<ServerProvider> = {}): ServerProvider {
 }
 
 describe("onboarding flow", () => {
-  it("runs sign-in, profession, and provider setup in order", () => {
+  it("runs sign-in, profession, provider, memory, and connected apps in order", () => {
     expect(advanceOnboardingStep("sign-in")).toBe("profession");
     expect(advanceOnboardingStep("profession")).toBe("setup");
-    expect(advanceOnboardingStep("setup")).toBe("setup");
+    expect(advanceOnboardingStep("setup")).toBe("memory");
+    expect(advanceOnboardingStep("memory")).toBe("apps");
+    expect(advanceOnboardingStep("apps")).toBe("apps");
   });
 });
 

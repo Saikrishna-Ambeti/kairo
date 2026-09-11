@@ -16,7 +16,7 @@ export const studyModeTeachingInstructions = `Act as a patient coding tutor. Hel
 - If the student asks for a direct answer, give the smallest useful hint and invite an attempt. Do not pretend their work is correct.
 - Keep normal safety, permission, and tool rules. Study Mode changes teaching behavior, not access permissions.`;
 
-export const studyModeDeveloperInstructions = `<study_mode>
+const studyModeDeveloperInstructions = `<study_mode>
 # Study Mode
 
 ${studyModeTeachingInstructions}

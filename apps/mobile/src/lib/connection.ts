@@ -1,5 +1,4 @@
 import { EnvironmentId } from "@kairo/contracts";
-import { stripPairingTokenFromUrl } from "@kairo/shared/remote";
 import { type EnvironmentConnectionPhase } from "@kairo/client-runtime/connection";
 
 export interface SavedRemoteConnection {
@@ -16,15 +15,6 @@ export interface SavedRemoteConnection {
 }
 
 export type RemoteClientConnectionState = EnvironmentConnectionPhase;
-
-export function redactPairingCredential(pairingUrl: string): string {
-  const trimmed = pairingUrl.trim();
-  try {
-    return stripPairingTokenFromUrl(new URL(trimmed)).toString();
-  } catch {
-    return trimmed;
-  }
-}
 
 export function isRelayManagedConnection(
   connection: Pick<SavedRemoteConnection, "authenticationMethod" | "relayManaged">,

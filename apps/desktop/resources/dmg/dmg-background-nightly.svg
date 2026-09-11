@@ -1,23 +1,20 @@
-<svg width="1080" height="760" viewBox="0 0 540 380" fill="none" xmlns="http://www.w3.org/2000/svg">
+<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="864" viewBox="0 0 640 432">
   <defs>
-    <linearGradient id="night-sky" x1="28" y1="0" x2="510" y2="112" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#07152F"/>
-      <stop offset="0.52" stop-color="#151443"/>
-      <stop offset="1" stop-color="#32155B"/>
-    </linearGradient>
-    <radialGradient id="night-glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(420 18) rotate(157) scale(260 126)">
-      <stop stop-color="#5165D8" stop-opacity="0.42"/>
-      <stop offset="0.55" stop-color="#283075" stop-opacity="0.15"/>
-      <stop offset="1" stop-color="#111635" stop-opacity="0"/>
+    <radialGradient id="glow">
+      <stop stop-color="#6F73BB" stop-opacity=".28"/>
+      <stop offset="1" stop-color="#5B6BA2" stop-opacity="0"/>
     </radialGradient>
-    <linearGradient id="night-cloud" x1="18" y1="62" x2="260" y2="112" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#4EA4FF" stop-opacity="0.5"/>
-      <stop offset="0.52" stop-color="#696FEA" stop-opacity="0.62"/>
-      <stop offset="1" stop-color="#A85BEA" stop-opacity="0.5"/>
+    <linearGradient id="veil" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#817BE0" stop-opacity="0"/>
+      <stop offset=".55" stop-color="#6679C3" stop-opacity=".24"/>
+      <stop offset="1" stop-color="#C2B8E7" stop-opacity=".4"/>
     </linearGradient>
-    <filter id="night-soft" x="-24" y="35" width="588" height="101" filterUnits="userSpaceOnUse">
-      <feGaussianBlur stdDeviation="4"/>
-    </filter>
+    <linearGradient id="silk" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#AED7D9"/>
+      <stop offset=".5" stop-color="#BACAE9"/>
+      <stop offset="1" stop-color="#B8A7DE"/>
+    </linearGradient>
   </defs>
 
   <rect width="540" height="380" fill="#F7F7F5"/>

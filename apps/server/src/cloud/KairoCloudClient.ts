@@ -67,7 +67,7 @@ function requestError(operation: string, message: string, cause?: unknown): Supe
   });
 }
 
-export const makeKairoCloudClient = Effect.gen(function* () {
+const makeKairoCloudClient = Effect.gen(function* () {
   const configuredApiUrl = yield* apiUrlConfig;
   const baseUrl = yield* Effect.try({
     try: () => new URL(configuredApiUrl),

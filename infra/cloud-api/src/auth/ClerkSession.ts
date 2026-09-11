@@ -11,7 +11,7 @@ export interface ClerkSessionPrincipal {
   readonly subjectId: string;
 }
 
-export class ClerkSessionVerificationError extends Schema.TaggedErrorClass<ClerkSessionVerificationError>()(
+export class ClerkSessionVerificationError extends Schema.TaggedError<ClerkSessionVerificationError>()(
   "ClerkSessionVerificationError",
   { cause: Schema.Defect() },
 ) {}

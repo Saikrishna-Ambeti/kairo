@@ -42,7 +42,7 @@ export const ArtifactListResult = Schema.Struct({
 });
 export type ArtifactListResult = typeof ArtifactListResult.Type;
 
-export class ArtifactLibraryReadError extends Schema.TaggedErrorClass<ArtifactLibraryReadError>()(
+export class ArtifactLibraryReadError extends Schema.TaggedError<ArtifactLibraryReadError>()(
   "ArtifactLibraryReadError",
   {
     detail: TrimmedNonEmptyString,

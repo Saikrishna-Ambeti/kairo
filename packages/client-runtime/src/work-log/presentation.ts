@@ -1,17 +1,21 @@
 import {
   isToolLifecycleItemType,
   type AssetResource,
+  type RuntimeItemStatus,
   type ThreadId,
   type ToolActivitySource,
   type ToolLifecycleItemType,
 } from "@kairo/contracts";
 import { classifyMarkdownImageSource } from "@kairo/client-runtime/markdown-images";
 import { resolveMediaSource } from "@kairo/client-runtime/media-source";
+import { parseChangeRequestUrl } from "@kairo/shared/changeRequestUrl";
 import { isWorkspaceImagePreviewPath } from "@kairo/shared/filePreview";
 
 export function isWorktreeSetupActivity(kind: string): boolean {
   return kind === "setup-script.requested" || kind === "setup-script.started";
 }
+
+export type WorkLogToolLifecycleStatus = RuntimeItemStatus | "stopped";
 
 export interface WorkLogPresentationEntry {
   readonly label: string;
@@ -33,6 +37,9 @@ export interface WorkLogPresentationEntry {
 }
 
 export type ToolGroupAction =
+  | "link-pr"
+  | "unlink-pr"
+  | "list-prs"
   | "read"
   | "edit"
   | "command"
@@ -43,6 +50,7 @@ export type ToolGroupAction =
   | "update";
 
 export type ToolGroupSummaryKind =
+  | "pull-request"
   | ToolGroupAction
   | "dynamic-tool"
   | "agent-tool"
@@ -53,10 +61,13 @@ export function normalizeCompactToolLabel(value: string): string {
   return value.replace(/\s+(?:complete|completed)\s*$/i, "").trim();
 }
 
-const Kairo_MCP_TOOL_LABELS: Record<
+const KAIRO_MCP_TOOL_LABELS: Record<
   string,
   readonly [action: string, running: string, completed: string, detail: string]
 > = {
+  link_pull_request: ["Link", "Linking", "Linked", "a pull request"],
+  unlink_pull_request: ["Unlink", "Unlinking", "Unlinked", "a pull request"],
+  list_thread_pull_requests: ["Check", "Checking", "Checked", "linked pull requests"],
   orchestrator_capabilities: ["Get", "Getting", "Got", "orchestration capabilities"],
   delegate_task: ["Delegate", "Delegating", "Delegated", "a child task"],
   task_status: ["Get", "Getting", "Got", "delegated task status"],
@@ -95,15 +106,25 @@ const Kairo_MCP_TOOL_LABELS: Record<
   preview_recording_stop: ["Stop", "Stopping", "Stopped", "recording the preview browser"],
 };
 
-function resolveKairoMcpToolPresentation(value: string | undefined, status: string | undefined) {
+const PR_TOOL_ACTIONS: Readonly<Record<string, ToolGroupAction>> = {
+  link_pull_request: "link-pr",
+  unlink_pull_request: "unlink-pr",
+  list_thread_pull_requests: "list-prs",
+};
+
+function resolveKairoMcpToolPresentation(
+  value: string | undefined,
+  status: string | undefined,
+  data?: unknown,
+) {
   if (!value) return null;
   const name = normalizeCompactToolLabel(value).replace(
-    /^(?:mcp__(?:kairo|kairo_code|kairo-code)__|(?:kairo|kairo_code|kairo-code)(?:[.:/]|\s*·\s*))/i,
+    /^(?:mcp__(?:kairo|kairo_code|kairo-code|t3|t3_code|t3-code)__|(?:kairo|kairo_code|kairo-code|t3|t3_code|t3-code)(?:[.:/]|\s*·\s*))/i,
     "",
   );
-  if (!Object.hasOwn(Kairo_MCP_TOOL_LABELS, name)) return null;
+  if (!Object.hasOwn(KAIRO_MCP_TOOL_LABELS, name)) return null;
 
-  const [action, running, completed, detail] = Kairo_MCP_TOOL_LABELS[name]!;
+  const [action, running, completed, detail] = KAIRO_MCP_TOOL_LABELS[name]!;
   const verb =
     status === "inProgress"
       ? running
@@ -117,9 +138,29 @@ function resolveKairoMcpToolPresentation(value: string | undefined, status: stri
               ? `Stopped ${running.toLowerCase()}`
               : running;
 
+  const actionKind = Object.hasOwn(PR_TOOL_ACTIONS, name) ? PR_TOOL_ACTIONS[name] : undefined;
+  const payload = asRecord(data);
+  const input =
+    asRecord(payload?.arguments) ?? asRecord(payload?.input) ?? asRecord(payload?.rawInput);
+  const urlTarget = typeof input?.url === "string" ? parseChangeRequestUrl(input.url) : null;
+  const number = urlTarget?.number ?? input?.number;
+  const target =
+    actionKind !== undefined &&
+    actionKind !== "list-prs" &&
+    typeof number === "number" &&
+    Number.isSafeInteger(number) &&
+    number > 0
+      ? `PR #${number}`
+      : detail;
   return {
-    displayName: `${verb} ${detail}`,
-    icon: name.startsWith("preview_") ? ("browser" as const) : ("kairo" as const),
+    displayName: `${verb} ${target}`,
+    icon:
+      actionKind !== undefined
+        ? ("pull-request" as const)
+        : name.startsWith("preview_")
+          ? ("browser" as const)
+          : ("kairo" as const),
+    ...(actionKind === undefined ? {} : { action: actionKind }),
   };
 }
 
@@ -144,16 +185,16 @@ export function resolveWorkEntryToolPresentation(
       "tool" in data &&
       typeof data.tool === "string"
     ) {
-      return resolveKairoMcpToolPresentation(`${data.server}.${data.tool}`, status);
+      return resolveKairoMcpToolPresentation(`${data.server}.${data.tool}`, status, data);
     }
     if ("toolName" in data && typeof data.toolName === "string") {
-      return resolveKairoMcpToolPresentation(data.toolName, status);
+      return resolveKairoMcpToolPresentation(data.toolName, status, data);
     }
   }
 
   return (
-    resolveKairoMcpToolPresentation(entry.toolTitle, status) ??
-    resolveKairoMcpToolPresentation(entry.label, status)
+    resolveKairoMcpToolPresentation(entry.toolTitle, status, data) ??
+    resolveKairoMcpToolPresentation(entry.label, status, data)
   );
 }
 
@@ -298,14 +339,101 @@ export function commandDetailRepeatsCommand(input: {
   );
 }
 
-function workLogEntryIsToolLike(entry: WorkLogPresentationEntry): boolean {
+export function workLogEntryIsToolLike(entry: WorkLogPresentationEntry): boolean {
   if (entry.tone === "tool" || entry.tone === "thinking" || entry.tone === "error") return true;
   if (entry.command !== undefined && entry.command.trim().length > 0) return true;
   if (entry.requestKind !== undefined) return true;
   return entry.itemType !== undefined && isToolLifecycleItemType(entry.itemType);
 }
 
-export function workLogEntryIsLocalCodeSearch(entry: WorkLogPresentationEntry): boolean {
+/** Maps item and task status to the status shown on a work-log row. */
+export function extractWorkLogToolLifecycleStatus(
+  payloadValue: unknown,
+): WorkLogToolLifecycleStatus | undefined {
+  const payload = asRecord(payloadValue);
+  switch (payload?.status) {
+    case "pending":
+    case "running":
+    case "waiting":
+      return "inProgress";
+    case "cancelled":
+    case "interrupted":
+      return "stopped";
+    case "idle":
+      // A batch becomes idle when its parent turn ends. Other idle tasks can resume.
+      return payload.taskType === "subagent_batch" ? "stopped" : undefined;
+    case "inProgress":
+    case "completed":
+    case "failed":
+    case "declined":
+    case "stopped":
+      return payload.status;
+    default:
+      return undefined;
+  }
+}
+
+// Some providers report completion even when the output describes a failure.
+function toolDetailTextLooksLikeFailure(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return (
+    normalized.includes("file not found") ||
+    normalized.includes("no files found") ||
+    normalized.includes("enoent") ||
+    normalized.includes("no such file or directory") ||
+    normalized.includes("no such file") ||
+    normalized.includes("commandnotfoundexception") ||
+    normalized.includes("command not found") ||
+    (normalized.includes("cannot find path") && normalized.includes("because it does not exist")) ||
+    (normalized.includes("is not recognized") && normalized.includes("the term '")) ||
+    normalized.includes("is not recognized as the name of a cmdlet") ||
+    normalized.includes("a parameter cannot be found that matches parameter name") ||
+    /<exited with exit code\s+[1-9]\d*\s*>/i.test(text) ||
+    /exit(?:ed)? with exit code\s+[1-9]\d*/i.test(text) ||
+    /exit code\s*[:\s]\s*[1-9]\d*\b/i.test(text)
+  );
+}
+
+function workEntryIndicatesToolFailureFromOutput(
+  entry: WorkLogPresentationEntry,
+  includeCommand: boolean,
+): boolean {
+  if (
+    entry.tone === "error" ||
+    entry.toolLifecycleStatus === "failed" ||
+    entry.toolLifecycleStatus === "declined"
+  ) {
+    return true;
+  }
+  if (!workLogEntryIsToolLike(entry)) return false;
+  const output = includeCommand
+    ? [entry.detail, entry.command].filter(Boolean).join("\n")
+    : (entry.detail ?? "");
+  return output.length > 0 && toolDetailTextLooksLikeFailure(output);
+}
+
+/** Includes legacy activities that stored error output in the command field. */
+export function workEntryIndicatesToolFailure(entry: WorkLogPresentationEntry): boolean {
+  return workEntryIndicatesToolFailureFromOutput(entry, true);
+}
+
+/** Checks rendered output without treating the user's command as an error. */
+export function workEntryDisplayIndicatesToolFailure(entry: WorkLogPresentationEntry): boolean {
+  return workEntryIndicatesToolFailureFromOutput(entry, false);
+}
+
+/** Decides whether the row can show a success marker. */
+export function workEntryIndicatesToolSuccess(entry: WorkLogPresentationEntry): boolean {
+  return (
+    workLogEntryIsToolLike(entry) &&
+    !workEntryIndicatesToolFailure(entry) &&
+    entry.tone !== "thinking" &&
+    entry.toolLifecycleStatus !== "inProgress" &&
+    entry.toolLifecycleStatus !== "stopped"
+  );
+}
+
+function workLogEntryIsLocalCodeSearch(entry: WorkLogPresentationEntry): boolean {
   return (
     entry.itemType === "web_search" &&
     /\bgrep\b/i.test(normalizeCompactToolLabel(entry.toolTitle ?? entry.label))
@@ -313,7 +441,16 @@ export function workLogEntryIsLocalCodeSearch(entry: WorkLogPresentationEntry): 
 }
 
 export function toolGroupAction(entry: WorkLogPresentationEntry): ToolGroupAction {
-  if (resolveWorkEntryToolPresentation(entry)?.icon === "browser") return "browser";
+  if (
+    entry.sourceActivityKind === "approval.requested" ||
+    entry.sourceActivityKind === "approval.resolved" ||
+    entry.sourceActivityKind === "provider.approval.respond.failed"
+  ) {
+    return "update";
+  }
+  const presentation = resolveWorkEntryToolPresentation(entry);
+  if (presentation?.action !== undefined) return presentation.action;
+  if (presentation?.icon === "browser") return "browser";
   if (
     entry.requestKind === "file-read" ||
     entry.itemType === "image_view" ||
@@ -407,6 +544,14 @@ function toolGroupActionCount(
 
 function toolGroupActionLabel(action: ToolGroupAction, count: number): string {
   switch (action) {
+    case "link-pr":
+      return `Linked ${count} ${count === 1 ? "pull request" : "pull requests"}`;
+    case "unlink-pr":
+      return `Unlinked ${count} ${count === 1 ? "pull request" : "pull requests"}`;
+    case "list-prs":
+      return count === 1
+        ? "Checked linked pull requests"
+        : `Checked linked pull requests ${count} times`;
     case "read":
       return `Read ${count} ${count === 1 ? "file" : "files"}`;
     case "edit":
@@ -431,7 +576,7 @@ export function summarizeToolGroup(entries: ReadonlyArray<WorkLogPresentationEnt
   const sources = new Map<string, ToolActivitySource>();
   const groupedEntries = new Map<ToolGroupAction, WorkLogPresentationEntry[]>();
   for (const entry of summaryEntries) {
-    if (entry.toolSource) {
+    if (entry.toolSource && resolveWorkEntryToolPresentation(entry)?.icon !== "pull-request") {
       sources.set(entry.toolSource.key, entry.toolSource);
       continue;
     }
@@ -504,6 +649,11 @@ export function omitSupersededLifecycleMarkers<T>(
 export function toolGroupSummaryKind(
   entries: ReadonlyArray<WorkLogPresentationEntry>,
 ): ToolGroupSummaryKind {
+  if (
+    entries.length > 0 &&
+    entries.every((entry) => resolveWorkEntryToolPresentation(entry)?.icon === "pull-request")
+  )
+    return "pull-request";
   const actions = new Set(entries.map(toolGroupAction));
   if (actions.size !== 1) return "mixed";
 

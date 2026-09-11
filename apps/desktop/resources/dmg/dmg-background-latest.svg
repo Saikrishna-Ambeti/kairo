@@ -1,13 +1,16 @@
-<svg width="1080" height="760" viewBox="0 0 540 380" fill="none" xmlns="http://www.w3.org/2000/svg">
+<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="864" viewBox="0 0 640 432">
   <defs>
-    <linearGradient id="latest-surface" x1="0" y1="0" x2="540" y2="380" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FAFAF9"/>
-      <stop offset="1" stop-color="#F5F5F4"/>
+    <linearGradient id="veil" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#B7B7B7" stop-opacity="0"/>
+      <stop offset=".55" stop-color="#A5A5A5" stop-opacity=".24"/>
+      <stop offset="1" stop-color="#D1D1D1" stop-opacity=".4"/>
     </linearGradient>
-    <radialGradient id="latest-light" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(430 0) rotate(152) scale(320 150)">
-      <stop stop-color="#FFFFFF"/>
-      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
-    </radialGradient>
+    <linearGradient id="silk" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#C8C8C8"/>
+      <stop offset=".5" stop-color="#DBDBDB"/>
+      <stop offset="1" stop-color="#B5B5B5"/>
+    </linearGradient>
   </defs>
 
   <rect width="540" height="380" fill="url(#latest-surface)"/>

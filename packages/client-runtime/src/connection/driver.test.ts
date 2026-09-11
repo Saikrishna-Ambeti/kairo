@@ -65,7 +65,10 @@ describe("ConnectionDriver memory provisioning", () => {
         ),
         Effect.provideService(
           CloudSession,
-          CloudSession.of({ clerkToken: Effect.succeed("clerk-session") }),
+          CloudSession.of({
+            identity: Effect.succeed(Option.none()),
+            clerkToken: Effect.succeed("clerk-session"),
+          }),
         ),
       );
 

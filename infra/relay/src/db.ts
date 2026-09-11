@@ -50,8 +50,7 @@ export const NeonDatabase = Effect.gen(function* () {
           name: "kairorelay",
           region: "aws-us-west-2",
           databaseName: "kairorelay",
-          migrationsDir: schema.out,
-          migrationsTable: "relay_migrations",
+          migrations: { dir: schema.out, table: "relay_migrations" },
         }).pipe(RemovalPolicy.retain())
       : yield* Neon.Project.ref("RelayNeonProject", {
           stage: "prod",
@@ -60,8 +59,7 @@ export const NeonDatabase = Effect.gen(function* () {
     mode === "stage-branch"
       ? yield* Neon.Branch("RelayNeonBranch", {
           project,
-          migrationsDir: schema.out,
-          migrationsTable: "relay_migrations",
+          migrations: { dir: schema.out, table: "relay_migrations" },
         })
       : undefined;
 

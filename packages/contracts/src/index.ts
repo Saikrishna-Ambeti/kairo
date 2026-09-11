@@ -33,6 +33,7 @@ export * from "./kairoProjectFile.ts";
 export * from "./editor.ts";
 export * from "./project.ts";
 export * from "./filesystem.ts";
+export * from "./agentSessions.ts";
 export * from "./assets.ts";
 export * from "./artifacts.ts";
 export * from "./review.ts";
