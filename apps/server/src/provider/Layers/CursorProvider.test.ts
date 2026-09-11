@@ -434,7 +434,7 @@ describe("Cursor skills", () => {
           {
             name: "review",
             description: "shared",
-            path: path.join(root, "review", "SKILL.md"),
+            path: path.join(yield* fileSystem.realPath(root), "review", "SKILL.md"),
             scope: "project",
             enabled: true,
           },
@@ -641,7 +641,7 @@ describe("discoverCursorModelsViaAcp", () => {
         };
         const discover = yield* makeCursorModelDiscovery(settings, {
           ...process.env,
-          T3_ACP_REQUEST_LOG_PATH: requestLogPath,
+          KAIRO_ACP_REQUEST_LOG_PATH: requestLogPath,
         });
         const about = {
           version: "2026.08.11",

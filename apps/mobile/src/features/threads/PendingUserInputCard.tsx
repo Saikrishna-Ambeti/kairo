@@ -236,7 +236,9 @@ export function PendingUserInputCard(props: PendingUserInputCardProps) {
           <Text className="font-kairo-bold text-2xs uppercase tracking-[1.1px] text-foreground-secondary">
             User input needed
           </Text>
-          <Text className="font-kairo-bold text-lg text-foreground">Fill in the pending answers</Text>
+          <Text className="font-kairo-bold text-lg text-foreground">
+            Fill in the pending answers
+          </Text>
         </View>
         <View className="h-8 w-8 items-center justify-center rounded-full bg-subtle-strong">
           <SymbolView

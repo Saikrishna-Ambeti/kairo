@@ -1031,7 +1031,7 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("kairo-projection-p
           payload: {
             threadId,
             host: "GitHub.COM",
-            repository: "PingDotGG/KairoCode",
+            repository: "PingDotGG/Kairo",
             number: 42,
             updatedAt: "2026-01-01T00:00:05.000Z",
           },
@@ -1074,15 +1074,15 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("kairo-projection-p
   },
 );
 
-it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("kairo-projection-attachments-safe-")))(
-  "OrchestrationProjectionPipeline",
-  (it) => {
-    it.effect("preserves mixed image attachment metadata as-is", () =>
-      Effect.gen(function* () {
-        const projectionPipeline = yield* OrchestrationProjectionPipeline;
-        const eventStore = yield* OrchestrationEventStore;
-        const sql = yield* SqlClient.SqlClient;
-        const now = "2026-01-01T00:00:00.000Z";
+it.layer(
+  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("kairo-projection-attachments-safe-")),
+)("OrchestrationProjectionPipeline", (it) => {
+  it.effect("preserves mixed image attachment metadata as-is", () =>
+    Effect.gen(function* () {
+      const projectionPipeline = yield* OrchestrationProjectionPipeline;
+      const eventStore = yield* OrchestrationEventStore;
+      const sql = yield* SqlClient.SqlClient;
+      const now = "2026-01-01T00:00:00.000Z";
 
       yield* eventStore.append({
         type: "thread.message-sent",
@@ -1551,18 +1551,21 @@ it.layer(
 
       yield* projectionPipeline.bootstrap;
       yield* projectionPipeline.bootstrap;
-      assert.deepEqual(yield* projectionState.listAll(), [
-        {
-          projector: "projection.attachment-cleanup",
-          lastAppliedSequence: pendingEvent.sequence,
-          updatedAt: pendingEvent.occurredAt,
-        },
-        ...cursorsBeforeFailure.map((cursor) => ({
-          ...cursor,
-          lastAppliedSequence: pendingEvent.sequence,
-          updatedAt: pendingEvent.occurredAt,
-        })),
-      ]);
+      assert.deepEqual(
+        yield* projectionState.listAll(),
+        [
+          {
+            projector: "projection.attachment-cleanup",
+            lastAppliedSequence: pendingEvent.sequence,
+            updatedAt: pendingEvent.occurredAt,
+          },
+          ...cursorsBeforeFailure.map((cursor) => ({
+            ...cursor,
+            lastAppliedSequence: pendingEvent.sequence,
+            updatedAt: pendingEvent.occurredAt,
+          })),
+        ].sort((a, b) => a.projector.localeCompare(b.projector)),
+      );
       const replayedMessages = yield* sql<{ readonly text: string }>`
         SELECT text FROM projection_thread_messages WHERE message_id = 'message-rollback'
       `;

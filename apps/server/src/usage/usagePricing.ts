@@ -7,11 +7,7 @@
  *
  * @module usagePricing
  */
-import type {
-  UsageCostSource,
-  UsageModelPriceOverride,
-  UsageTokenTotals,
-} from "@kairo/contracts";
+import type { UsageCostSource, UsageModelPriceOverride, UsageTokenTotals } from "@kairo/contracts";
 
 /**
  * The subset of a LiteLLM entry we price against. All values are USD per token.

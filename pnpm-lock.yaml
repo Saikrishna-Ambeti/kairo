@@ -113,9 +113,6 @@ importers:
       '@effect/tsgo':
         specifier: 'catalog:'
         version: 0.41.0
-      '@oxlint/plugins':
-        specifier: ^1.69.0
-        version: 1.79.0
       '@types/node':
         specifier: 24.12.4
         version: 24.12.4
@@ -745,9 +742,6 @@ importers:
       '@clerk/backend':
         specifier: 3.14.0
         version: 3.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      '@effect/platform-node':
-        specifier: 4.0.0-rc.112
-        version: 4.0.0-rc.112(bufferutil@4.1.0)(effect@4.0.0-rc.112(patch_hash=8bef799f35729cf3465eb428196f617b434a7c9f658d56acb2874d74b21b98b2))(redis@6.2.1)(utf-8-validate@6.0.6)
       '@kairo/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

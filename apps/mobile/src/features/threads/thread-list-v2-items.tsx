@@ -2,10 +2,7 @@ import { useAppearancePreferences } from "../settings/appearance/AppearancePrefe
 import { appAtomRegistry } from "../../state/atom-registry";
 import { threadArrangementOpenAtom } from "../../state/thread-order";
 import type { ThreadMoveDestination } from "./threadOrder";
-import type {
-  EnvironmentProject,
-  EnvironmentThreadShell,
-} from "@kairo/client-runtime/state/shell";
+import type { EnvironmentProject, EnvironmentThreadShell } from "@kairo/client-runtime/state/shell";
 import type { EnvironmentThreadSearchMatch } from "@kairo/client-runtime/state/thread-search";
 import type { EnvironmentMachineKind } from "@kairo/contracts";
 import { canSnooze, resolveSnoozePresets } from "@kairo/client-runtime/state/thread-settled";

@@ -38,16 +38,16 @@ Rename product from **Kairo** to **Kairo** and hosted service from **Kairo Conne
 
 ### Required identifier mapping
 
-| Previous upstream form                                          | Kairo form                                                               |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `Kairo`                                                       | `Kairo`                                                                  |
-| `Kairo Connect`                                                    | `Kairo Connect`                                                          |
-| `kairo`                                                        | `kairo`                                                                  |
-| `@kairo/*`                                                    | `@kairo/*`                                                               |
-| `KAIRO_*`                                                      | `KAIRO_*`                                                                |
-| `.kairo`                                                       | `.kairo`                                                                 |
-| `com.kairo.app`                                            | `com.kairo.app`                                                          |
-| `kairo://`                                                     | `kairo://`                                                               |
+| Previous upstream form                                                   | Kairo form                                                               |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| `Kairo`                                                                  | `Kairo`                                                                  |
+| `Kairo Connect`                                                          | `Kairo Connect`                                                          |
+| `kairo`                                                                  | `kairo`                                                                  |
+| `@kairo/*`                                                               | `@kairo/*`                                                               |
+| `KAIRO_*`                                                                | `KAIRO_*`                                                                |
+| `.kairo`                                                                 | `.kairo`                                                                 |
+| `com.kairo.app`                                                          | `com.kairo.app`                                                          |
+| `kairo://`                                                               | `kairo://`                                                               |
 | `app.kairo.codes` / `latest.app.kairo.codes` / `nightly.app.kairo.codes` | `app.kairo.codes` / `latest.app.kairo.codes` / `nightly.app.kairo.codes` |
 
 Apply mapping throughout application code, tests, docs, `.env.example`, shell scripts, GitHub workflows, release metadata, mobile configuration, generated schema names, and asset paths. Do not rename vendor API fields or third-party identifiers containing `kairo` unless they are Kairo-owned.

@@ -1,9 +1,6 @@
 import type { EnvironmentProject } from "@kairo/client-runtime/state/shell";
 import type { VcsRef } from "@kairo/client-runtime/state/vcs";
-import {
-  type AtomCommandResult,
-  mapAtomCommandResult,
-} from "@kairo/client-runtime/state/runtime";
+import { type AtomCommandResult, mapAtomCommandResult } from "@kairo/client-runtime/state/runtime";
 import type { VcsSwitchRefInput, VcsSwitchRefResult } from "@kairo/contracts";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/unstable/reactivity";

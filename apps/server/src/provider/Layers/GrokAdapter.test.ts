@@ -220,7 +220,7 @@ it.layer(grokAdapterTestLayer)("GrokAdapterLive", (it) => {
       );
       const requestLogPath = NodePath.join(tempDir, "requests.ndjson");
       const wrapperPath = yield* Effect.promise(() =>
-        makeMockGrokWrapper({ T3_ACP_REQUEST_LOG_PATH: requestLogPath }),
+        makeMockGrokWrapper({ KAIRO_ACP_REQUEST_LOG_PATH: requestLogPath }),
       );
       const adapter = yield* makeTestAdapter(wrapperPath);
       yield* adapter.startSession({

@@ -1,7 +1,4 @@
-import {
-  BearerConnectionTarget,
-  PrimaryConnectionTarget,
-} from "@kairo/client-runtime/connection";
+import { BearerConnectionTarget, PrimaryConnectionTarget } from "@kairo/client-runtime/connection";
 import type { EnvironmentCatalogState } from "@kairo/client-runtime/state/connections";
 import type { EnvironmentShellState } from "@kairo/client-runtime/state/shell";
 import { EnvironmentId } from "@kairo/contracts";

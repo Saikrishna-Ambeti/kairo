@@ -540,46 +540,52 @@ function ConfiguredSettingsRouteScreen({
             value={`${environmentCount}`}
             target="SettingsEnvironments"
           />
-          {managedRelayEnabled ? <>
-          <SettingsSwitchRow
-            icon="bell.badge"
-            label="Device Notifications"
-            disabled={
-              !agentAwarenessPlatform.supported ||
-              !agentAwarenessPushAvailable ||
-              notificationStatus === "checking" ||
-              notificationStatus === "unsupported"
-            }
-            subtitle={agentAwarenessSubtitle}
-            // Only reads as on when this device is actually registered with the
-            // relay; otherwise notifications cannot be delivered regardless of
-            // the local iOS permission.
-            value={
-              agentAwarenessPushAvailable && notificationStatus === "enabled" && deviceRegistered
-            }
-            onValueChange={handleDeviceNotificationsChange}
-          />
-          <SettingsSwitchRow
-            disabled={
-              !agentAwarenessPlatform.supported ||
-              !agentAwarenessPushAvailable ||
-              !isLoaded ||
-              liveActivityStatus === "checking" ||
-              liveActivityStatus === "linking"
-            }
-            icon="bolt.circle"
-            label={Platform.OS === "android" ? "Ongoing Agent Activity" : "Live Activity Updates"}
-            subtitle={agentAwarenessSubtitle}
-            // Same gate: a saved preference is meaningless until the device
-            // registration the relay needs to push updates has succeeded.
-            value={
-              agentAwarenessPushAvailable &&
-              (liveActivityStatus === "enabled" || liveActivityStatus === "linking") &&
-              deviceRegistered
-            }
-            onValueChange={handleLiveActivitiesChange}
-          />
-          </> : null}
+          {managedRelayEnabled ? (
+            <>
+              <SettingsSwitchRow
+                icon="bell.badge"
+                label="Device Notifications"
+                disabled={
+                  !agentAwarenessPlatform.supported ||
+                  !agentAwarenessPushAvailable ||
+                  notificationStatus === "checking" ||
+                  notificationStatus === "unsupported"
+                }
+                subtitle={agentAwarenessSubtitle}
+                // Only reads as on when this device is actually registered with the
+                // relay; otherwise notifications cannot be delivered regardless of
+                // the local iOS permission.
+                value={
+                  agentAwarenessPushAvailable &&
+                  notificationStatus === "enabled" &&
+                  deviceRegistered
+                }
+                onValueChange={handleDeviceNotificationsChange}
+              />
+              <SettingsSwitchRow
+                disabled={
+                  !agentAwarenessPlatform.supported ||
+                  !agentAwarenessPushAvailable ||
+                  !isLoaded ||
+                  liveActivityStatus === "checking" ||
+                  liveActivityStatus === "linking"
+                }
+                icon="bolt.circle"
+                label={
+                  Platform.OS === "android" ? "Ongoing Agent Activity" : "Live Activity Updates"
+                }
+                subtitle={agentAwarenessSubtitle}
+                // Same gate: a saved preference is meaningless until the device
+                // registration the relay needs to push updates has succeeded.
+                value={
+                  agentAwarenessPushAvailable &&
+                  (liveActivityStatus === "enabled" || liveActivityStatus === "linking") &&
+                  deviceRegistered
+                }
+                onValueChange={handleLiveActivitiesChange}
+              />
+            </>
+          ) : null}
         </SettingsSection>
 
         <GeneralSettingsSection />

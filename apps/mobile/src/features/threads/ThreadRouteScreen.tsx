@@ -13,10 +13,7 @@ import {
   ThreadId,
   type ProjectScript,
 } from "@kairo/contracts";
-import {
-  requestOlderThreadTurns,
-  threadHasOlderTurns,
-} from "@kairo/client-runtime/state/threads";
+import { requestOlderThreadTurns, threadHasOlderTurns } from "@kairo/client-runtime/state/threads";
 import {
   projectScriptCwd,
   projectScriptRuntimeEnv,

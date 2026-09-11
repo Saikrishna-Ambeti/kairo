@@ -14,7 +14,7 @@
     },
     "scripts": {
       // Knip loads its preprocessor through a CLI option, not a source import.
-      "entry": ["knip-schemas.ts"],
+      "entry": ["knip-schemas.ts", "dmgbuild-hdiutil-shim.mjs"],
     },
     "apps/server": {
       // Vite+ pack entries and the launcher used by installed background services.
@@ -66,6 +66,9 @@
     "apps/mobile/modules/kairo-markdown-text": {
       // React Native codegen discovers component specifications by filename.
       "entry": ["src/*NativeComponent.ts!"],
+    },
+    "infra/cloud-api": {
+      "entry": ["api/**/*.ts!"],
     },
     "infra/relay": {
       "entry": ["alchemy.run.ts!", "src/persistence/schema.ts!"],

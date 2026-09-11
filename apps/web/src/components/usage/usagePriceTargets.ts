@@ -1,8 +1,4 @@
-import type {
-  EnvironmentId,
-  ServerSettingsPatch,
-  UsageModelPriceOverride,
-} from "@kairo/contracts";
+import type { EnvironmentId, ServerSettingsPatch, UsageModelPriceOverride } from "@kairo/contracts";
 
 export interface UsagePriceTarget {
   readonly environmentId: EnvironmentId;

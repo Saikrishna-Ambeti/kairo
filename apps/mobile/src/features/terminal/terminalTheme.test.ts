@@ -3,7 +3,11 @@ import { BUILT_IN_THEMES, getThemeColorsForAppearance } from "@kairo/shared/them
 
 import { themeColorToNativeColor } from "../../lib/mobileTheme";
 
-import { buildGhosttyThemeConfig, getMobileTerminalTheme, getPierreTerminalTheme } from "./terminalTheme";
+import {
+  buildGhosttyThemeConfig,
+  getMobileTerminalTheme,
+  getPierreTerminalTheme,
+} from "./terminalTheme";
 
 describe("getMobileTerminalTheme", () => {
   it("preserves the default light terminal palette", () => {

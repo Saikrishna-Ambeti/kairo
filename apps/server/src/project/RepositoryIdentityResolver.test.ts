@@ -70,7 +70,7 @@ it.layer(NodeServices.layer)("RepositoryIdentityResolverLive", (it) => {
       rootPath = "/repo/packages/web";
       const second = yield* resolver.resolve("/repo/packages/web");
 
-      expect(first?.canonicalKey).toBe("github.com/kairotools/kairo");
+      expect(first?.canonicalKey).toBe("github.com/kairo/kairo");
       expect(second).toEqual(first);
       expect(calls).toEqual([
         ["-C", "/repo/packages/web", "rev-parse", "--show-toplevel"],

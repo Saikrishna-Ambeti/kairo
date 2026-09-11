@@ -189,5 +189,7 @@ it("surfaces desktop rejection and disconnect as actionable failures", async () 
 it("does not offer host extension installation in another desktop or sandbox", () => {
   expect(isGnomeCaptureSession({ XDG_CURRENT_DESKTOP: "ubuntu:GNOME" })).toBe(true);
   expect(isGnomeCaptureSession({ XDG_CURRENT_DESKTOP: "niri", GDMSESSION: "gnome" })).toBe(false);
-  expect(isGnomeCaptureSession({ XDG_CURRENT_DESKTOP: "GNOME", FLATPAK_ID: "com.kairo" })).toBe(false);
+  expect(isGnomeCaptureSession({ XDG_CURRENT_DESKTOP: "GNOME", FLATPAK_ID: "com.kairo" })).toBe(
+    false,
+  );
 });

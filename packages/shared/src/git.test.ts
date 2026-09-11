@@ -125,7 +125,9 @@ describe("parseGitHubRepositoryNameWithOwnerFromRemoteUrl", () => {
       parseGitHubRepositoryNameWithOwnerFromRemoteUrl("git@github.com:KairoTools/KairoCode.git"),
     ).toBe("KairoTools/KairoCode");
     expect(
-      parseGitHubRepositoryNameWithOwnerFromRemoteUrl("https://github.com/KairoTools/KairoCode.git"),
+      parseGitHubRepositoryNameWithOwnerFromRemoteUrl(
+        "https://github.com/KairoTools/KairoCode.git",
+      ),
     ).toBe("KairoTools/KairoCode");
     expect(
       parseGitHubRepositoryNameWithOwnerFromRemoteUrl("ssh://github.com/KairoTools/KairoCode.git"),

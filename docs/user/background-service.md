@@ -7,8 +7,8 @@ to keep a terminal open.
 
 Run these commands on the machine that will host Kairo:
 
-| Task                            | Command                           |
-| ------------------------------- | --------------------------------- |
+| Task                            | Command                              |
+| ------------------------------- | ------------------------------------ |
 | Install and start               | `npx kairo@latest service install`   |
 | Inspect status and log location | `npx kairo@latest service status`    |
 | Update or repair                | `npx kairo@latest service update`    |
@@ -69,7 +69,7 @@ that session open.
 | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | `linger-unavailable`                    | Run `loginctl show-user "$(id -un)" --property=Linger` and check that systemd-logind is available.                             |
 | `user-manager-unavailable`              | Run `systemctl --user status` in a login session for the service user; check your distribution's systemd user-session support. |
-| `service-disabled` or `service-stopped` | Read the log and `systemctl --user status kairo.service`, then use the repair command printed by Kairo.                     |
+| `service-disabled` or `service-stopped` | Read the log and `systemctl --user status kairo.service`, then use the repair command printed by Kairo.                        |
 
 On macOS, check **System Settings → General → Login Items** if the service no
 longer starts at login. If agent work cannot access Desktop, Documents, or

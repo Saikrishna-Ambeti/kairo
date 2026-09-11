@@ -4,8 +4,9 @@ interface KairoMarkdownTextSelectionNativeModule {
   readonly installCopySanitizer: (reactTag: number) => void;
 }
 
-const nativeModule =
-  requireOptionalNativeModule<KairoMarkdownTextSelectionNativeModule>("KairoMarkdownTextSelection");
+const nativeModule = requireOptionalNativeModule<KairoMarkdownTextSelectionNativeModule>(
+  "KairoMarkdownTextSelection",
+);
 
 export function installMarkdownCopySanitizer(reactTag: number): void {
   nativeModule?.installCopySanitizer(reactTag);

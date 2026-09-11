@@ -193,7 +193,9 @@ it.layer(testLayer)("CodexDriver", (it) => {
     it.effect.skipIf(windowsHost)(`leaves a mise ${layout} installation manual-only`, () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        const tempDir = yield* fs.makeTempDirectoryScoped({ prefix: `kairo-codex-mise-${layout}-` });
+        const tempDir = yield* fs.makeTempDirectoryScoped({
+          prefix: `kairo-codex-mise-${layout}-`,
+        });
         const binaryPath =
           layout === "direct"
             ? NodePath.join(tempDir, "mise", "installs", "codex", "0.110.0", "codex")

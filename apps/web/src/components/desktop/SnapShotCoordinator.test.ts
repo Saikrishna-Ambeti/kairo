@@ -1,10 +1,5 @@
 import { scopeProjectRef, scopeThreadRef } from "@kairo/client-runtime/environment";
-import {
-  type DesktopPendingSnapShot,
-  EnvironmentId,
-  ProjectId,
-  ThreadId,
-} from "@kairo/contracts";
+import { type DesktopPendingSnapShot, EnvironmentId, ProjectId, ThreadId } from "@kairo/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { DraftId, useComposerDraftStore } from "../../composerDraftStore";
