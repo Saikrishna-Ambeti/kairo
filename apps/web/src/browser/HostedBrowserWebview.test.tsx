@@ -77,6 +77,7 @@ beforeEach(() => {
   });
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("window", globalThis);
+  vi.stubGlobal("localStorage", { getItem: vi.fn(() => null) });
   vi.stubGlobal("navigator", { platform: "Linux" });
   vi.stubGlobal(
     "requestAnimationFrame",

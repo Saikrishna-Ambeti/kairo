@@ -114,7 +114,11 @@ beforeEach(async () => {
   resetPreviewStateForTests();
   appAtomRegistry.set(requestsAtom, AsyncResult.initial(false));
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  vi.stubGlobal("window", { addEventListener: vi.fn(), removeEventListener: vi.fn() });
+  vi.stubGlobal("window", {
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    localStorage: { getItem: vi.fn(() => null) },
+  });
   vi.stubGlobal("document", { hasFocus: () => false, querySelectorAll: () => [] });
   await act(() => {
     renderer = create(
