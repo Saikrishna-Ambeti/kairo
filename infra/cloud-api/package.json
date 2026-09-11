@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "vp test run",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@clerk/backend": "catalog:",
