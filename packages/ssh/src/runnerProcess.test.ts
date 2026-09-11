@@ -11,7 +11,7 @@ import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import * as NodeNet from "node:net";
 
-import { buildRemoteStopScript, buildRemoteT3RunnerScript } from "./tunnel.ts";
+import { buildRemoteStopScript, buildRemoteKairoRunnerScript } from "./tunnel.ts";
 
 const Started = Schema.Struct({
   pid: Schema.Number,
@@ -88,7 +88,7 @@ if (args.includes("--package")) {
                   },
                   detached: false,
                   stdin: Stream.make(
-                    new TextEncoder().encode(buildRemoteT3RunnerScript({ packageSpec })),
+                    new TextEncoder().encode(buildRemoteKairoRunnerScript({ packageSpec })),
                   ),
                 }),
               );
@@ -363,7 +363,7 @@ if (mode === "etarget" || mode === "failed-with-path") {
             },
             stdin: Stream.make(
               new TextEncoder().encode(
-                buildRemoteT3RunnerScript({
+                buildRemoteKairoRunnerScript({
                   packageSpec,
                   ...(mode === "node-override" ? { nodeScriptPath: cliPath } : {}),
                 }),

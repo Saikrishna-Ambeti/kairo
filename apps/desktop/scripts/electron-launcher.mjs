@@ -15,8 +15,8 @@ const repoRoot = NodePath.resolve(desktopDir, "..", "..");
 const devBundleIdSuffix = NodePath.basename(repoRoot)
   .toLowerCase()
   .replaceAll(/[^a-z0-9]+/g, "");
-export const APP_DISPLAY_NAME = isDevelopment ? "Kairo (Beta)" : "Kairo (Alpha)";
-export const APP_BUNDLE_ID = isDevelopment
+const APP_DISPLAY_NAME = isDevelopment ? "Kairo (Beta)" : "Kairo (Alpha)";
+const APP_BUNDLE_ID = isDevelopment
   ? `com.kairo.app.dev.${devBundleIdSuffix || "local"}`
   : "com.kairo.app";
 const APP_PROTOCOL_SCHEMES = isDevelopment ? ["kairo-dev"] : ["kairo"];

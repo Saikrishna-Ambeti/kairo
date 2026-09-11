@@ -19,10 +19,6 @@ export const SupermemorySettings = Schema.Struct({
 });
 export type SupermemorySettings = typeof SupermemorySettings.Type;
 
-export const DEFAULT_SUPERMEMORY_SETTINGS: SupermemorySettings = Schema.decodeSync(
-  SupermemorySettings,
-)({});
-
 export const MemorySettings = Schema.Struct({
   supermemory: SupermemorySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 }).pipe(Schema.withDecodingDefault(Effect.succeed({})));

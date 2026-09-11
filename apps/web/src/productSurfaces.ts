@@ -7,7 +7,7 @@ import { useAtomValue } from "@effect/atom-react";
 
 import { primaryServerConfigAtom } from "./state/server";
 
-export function resolveProductSurfaceConfig(
+function resolveProductSurfaceConfig(
   config: Pick<ServerConfig, "surface"> | null | undefined,
 ): ProductSurfaceConfig {
   return config?.surface ?? DEFAULT_PRODUCT_SURFACE_CONFIG;
@@ -27,10 +27,6 @@ export function areSourceControlProvidersVisible(surface: ProductSurfaceConfig):
 
 export function isDiffViewerVisible(surface: ProductSurfaceConfig): boolean {
   return surface.diffViewer === "enabled";
-}
-
-export function isCheckpointRollbackVisible(surface: ProductSurfaceConfig): boolean {
-  return surface.checkpointRollback === "enabled";
 }
 
 export function isTerminalEnabled(surface: ProductSurfaceConfig): boolean {

@@ -51,7 +51,11 @@
       // UI component modules are copied and adapted as cohesive sets. Keep their
       // named subcomponents even before they have callers; the file audit still
       // reports an entire component module when nothing imports it.
-      "ignoreIssues": { "src/components/ui/*.tsx": ["exports", "nsExports", "duplicates"] },
+      "ignoreIssues": {
+        "src/components/ui/*.tsx": ["exports", "nsExports", "duplicates"],
+        // Compatibility name used by the upstream welcome and settings flows.
+        "src/cloud/publicConfig.ts": ["duplicates"],
+      },
     },
     "apps/mobile": {
       // Expo loads local config plugins by string; Metro handles platform variants.
@@ -76,6 +80,15 @@
     "packages/*": {
       // These workspace packages are private to this monorepo.
       "includeEntryExports": true,
+    },
+    "packages/contracts": {
+      "includeEntryExports": true,
+      // The default intentionally selects the named nontechnical profile.
+      "ignoreIssues": { "src/productSurface.ts": ["duplicates"] },
+    },
+    "packages/shared": {
+      "includeEntryExports": true,
+      "ignoreIssues": { "src/keybindings.ts": ["duplicates"] },
     },
     "packages/effect-acp": {
       "includeEntryExports": true,

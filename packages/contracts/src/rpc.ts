@@ -481,13 +481,13 @@ const WsServerRefreshProvidersRpc = Rpc.make(WS_METHODS.serverRefreshProviders, 
   error: Schema.Union([EnvironmentAuthorizationError, ProviderSetupError]),
 });
 
-export const WsServerLoginProviderRpc = Rpc.make(WS_METHODS.serverLoginProvider, {
+const WsServerLoginProviderRpc = Rpc.make(WS_METHODS.serverLoginProvider, {
   payload: ServerProviderUpdateInput,
   success: ServerProviderUpdatedPayload,
   error: Schema.Union([ServerProviderUpdateError, EnvironmentAuthorizationError]),
 });
 
-export const WsServerUpdateProviderRpc = Rpc.make(WS_METHODS.serverUpdateProvider, {
+const WsServerUpdateProviderRpc = Rpc.make(WS_METHODS.serverUpdateProvider, {
   payload: ServerProviderUpdateInput,
   success: ServerProviderUpdatedPayload,
   error: Schema.Union([ServerProviderUpdateError, EnvironmentAuthorizationError]),
@@ -639,7 +639,7 @@ const WsServerGetUsageSummaryRpc = Rpc.make(WS_METHODS.serverGetUsageSummary, {
   error: Schema.Union([EnvironmentAuthorizationError, UsageReadError]),
 });
 
-export const WsServerListArtifactsRpc = Rpc.make(WS_METHODS.serverListArtifacts, {
+const WsServerListArtifactsRpc = Rpc.make(WS_METHODS.serverListArtifacts, {
   payload: ArtifactListInput,
   success: ArtifactListResult,
   error: Schema.Union([EnvironmentAuthorizationError, ArtifactLibraryReadError]),
@@ -667,7 +667,7 @@ const SupermemoryRpcError = Schema.Union([
   EnvironmentAuthorizationError,
 ]);
 
-export const WsServerProvisionMemoryAccessRpc = Rpc.make(WS_METHODS.serverProvisionMemoryAccess, {
+const WsServerProvisionMemoryAccessRpc = Rpc.make(WS_METHODS.serverProvisionMemoryAccess, {
   payload: Schema.Struct({
     clerkToken: Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(16_384)),
   }),
@@ -675,19 +675,19 @@ export const WsServerProvisionMemoryAccessRpc = Rpc.make(WS_METHODS.serverProvis
   error: SupermemoryRpcError,
 });
 
-export const WsServerGetMemoryStatusRpc = Rpc.make(WS_METHODS.serverGetMemoryStatus, {
+const WsServerGetMemoryStatusRpc = Rpc.make(WS_METHODS.serverGetMemoryStatus, {
   payload: Schema.Struct({}),
   success: SupermemoryStatus,
   error: SupermemoryRpcError,
 });
 
-export const WsServerConfigureMemoryRpc = Rpc.make(WS_METHODS.serverConfigureMemory, {
+const WsServerConfigureMemoryRpc = Rpc.make(WS_METHODS.serverConfigureMemory, {
   payload: ConfigureMemoryInput,
   success: SupermemoryStatus,
   error: SupermemoryRpcError,
 });
 
-export const WsServerDisableMemoryRpc = Rpc.make(WS_METHODS.serverDisableMemory, {
+const WsServerDisableMemoryRpc = Rpc.make(WS_METHODS.serverDisableMemory, {
   payload: Schema.Struct({}),
   success: SupermemoryStatus,
   error: SupermemoryRpcError,
@@ -699,31 +699,31 @@ const ComposioRpcError = Schema.Union([
   EnvironmentAuthorizationError,
 ]);
 
-export const WsServerGetComposioStatusRpc = Rpc.make(WS_METHODS.serverGetComposioStatus, {
+const WsServerGetComposioStatusRpc = Rpc.make(WS_METHODS.serverGetComposioStatus, {
   payload: Schema.Struct({}),
   success: ComposioStatus,
   error: ComposioRpcError,
 });
 
-export const WsServerConfigureComposioRpc = Rpc.make(WS_METHODS.serverConfigureComposio, {
+const WsServerConfigureComposioRpc = Rpc.make(WS_METHODS.serverConfigureComposio, {
   payload: ConfigureComposioInput,
   success: ComposioStatus,
   error: ComposioRpcError,
 });
 
-export const WsServerTestComposioConnectionRpc = Rpc.make(WS_METHODS.serverTestComposioConnection, {
+const WsServerTestComposioConnectionRpc = Rpc.make(WS_METHODS.serverTestComposioConnection, {
   payload: TestComposioConnectionInput,
   success: ComposioStatus,
   error: ComposioRpcError,
 });
 
-export const WsServerDisableComposioRpc = Rpc.make(WS_METHODS.serverDisableComposio, {
+const WsServerDisableComposioRpc = Rpc.make(WS_METHODS.serverDisableComposio, {
   payload: Schema.Struct({}),
   success: ComposioStatus,
   error: ComposioRpcError,
 });
 
-export const WsCloudGetRelayClientStatusRpc = Rpc.make(WS_METHODS.cloudGetRelayClientStatus, {
+const WsCloudGetRelayClientStatusRpc = Rpc.make(WS_METHODS.cloudGetRelayClientStatus, {
   payload: Schema.Struct({}),
   success: RelayClientStatusSchema,
   error: EnvironmentAuthorizationError,
@@ -908,14 +908,11 @@ const WsPullRequestsSetLabelsRpc = Rpc.make(WS_METHODS.pullRequestsSetLabels, {
   error: PullRequestRpcError,
 });
 
-export const WsSourceControlLookupRepositoryRpc = Rpc.make(
-  WS_METHODS.sourceControlLookupRepository,
-  {
-    payload: SourceControlRepositoryLookupInput,
-    success: SourceControlRepositoryInfo,
-    error: SourceControlRepositoryRpcError,
-  },
-);
+const WsSourceControlLookupRepositoryRpc = Rpc.make(WS_METHODS.sourceControlLookupRepository, {
+  payload: SourceControlRepositoryLookupInput,
+  success: SourceControlRepositoryInfo,
+  error: SourceControlRepositoryRpcError,
+});
 
 const WsSourceControlCloneRepositoryRpc = Rpc.make(WS_METHODS.sourceControlCloneRepository, {
   payload: SourceControlCloneRepositoryInput,
@@ -923,14 +920,11 @@ const WsSourceControlCloneRepositoryRpc = Rpc.make(WS_METHODS.sourceControlClone
   error: SourceControlRepositoryRpcError,
 });
 
-export const WsSourceControlPublishRepositoryRpc = Rpc.make(
-  WS_METHODS.sourceControlPublishRepository,
-  {
-    payload: SourceControlPublishRepositoryInput,
-    success: SourceControlPublishRepositoryResult,
-    error: SourceControlRepositoryRpcError,
-  },
-);
+const WsSourceControlPublishRepositoryRpc = Rpc.make(WS_METHODS.sourceControlPublishRepository, {
+  payload: SourceControlPublishRepositoryInput,
+  success: SourceControlPublishRepositoryResult,
+  error: SourceControlRepositoryRpcError,
+});
 
 const WsProjectsSearchEntriesRpc = Rpc.make(WS_METHODS.projectsSearchEntries, {
   payload: ProjectSearchEntriesInput,
@@ -1239,18 +1233,15 @@ const WsOrchestrationGetTurnDiffRpc = Rpc.make(ORCHESTRATION_WS_METHODS.getTurnD
   ]),
 });
 
-export const WsOrchestrationGetFullThreadDiffRpc = Rpc.make(
-  ORCHESTRATION_WS_METHODS.getFullThreadDiff,
-  {
-    payload: OrchestrationGetFullThreadDiffInput,
-    success: OrchestrationRpcSchemas.getFullThreadDiff.output,
-    error: Schema.Union([
-      OrchestrationGetFullThreadDiffError,
-      EnvironmentAuthorizationError,
-      SurfaceUnavailableError,
-    ]),
-  },
-);
+const WsOrchestrationGetFullThreadDiffRpc = Rpc.make(ORCHESTRATION_WS_METHODS.getFullThreadDiff, {
+  payload: OrchestrationGetFullThreadDiffInput,
+  success: OrchestrationRpcSchemas.getFullThreadDiff.output,
+  error: Schema.Union([
+    OrchestrationGetFullThreadDiffError,
+    EnvironmentAuthorizationError,
+    SurfaceUnavailableError,
+  ]),
+});
 
 const WsOrchestrationSearchThreadsRpc = Rpc.make(ORCHESTRATION_WS_METHODS.searchThreads, {
   payload: OrchestrationSearchThreadsInput,
@@ -1281,25 +1272,25 @@ const WsOrchestrationSubscribeThreadRpc = Rpc.make(ORCHESTRATION_WS_METHODS.subs
   stream: true,
 });
 
-export const WsScheduledTasksGetSnapshotRpc = Rpc.make(WS_METHODS.scheduledTasksGetSnapshot, {
+const WsScheduledTasksGetSnapshotRpc = Rpc.make(WS_METHODS.scheduledTasksGetSnapshot, {
   payload: Schema.Struct({}),
   success: ScheduledTaskSnapshot,
   error: Schema.Union([ScheduledTaskError, EnvironmentAuthorizationError]),
 });
 
-export const WsScheduledTasksDispatchRpc = Rpc.make(WS_METHODS.scheduledTasksDispatch, {
+const WsScheduledTasksDispatchRpc = Rpc.make(WS_METHODS.scheduledTasksDispatch, {
   payload: ScheduledTaskCommand,
   success: ScheduledTaskDispatchResult,
   error: Schema.Union([ScheduledTaskError, EnvironmentAuthorizationError]),
 });
 
-export const WsScheduledTasksFireExternalRpc = Rpc.make(WS_METHODS.scheduledTasksFireExternal, {
+const WsScheduledTasksFireExternalRpc = Rpc.make(WS_METHODS.scheduledTasksFireExternal, {
   payload: ScheduledTaskExternalTriggerInput,
   success: ScheduledTaskDispatchResult,
   error: Schema.Union([ScheduledTaskError, EnvironmentAuthorizationError]),
 });
 
-export const WsSubscribeTerminalEventsRpc = Rpc.make(WS_METHODS.subscribeTerminalEvents, {
+const WsSubscribeTerminalEventsRpc = Rpc.make(WS_METHODS.subscribeTerminalEvents, {
   payload: Schema.Struct({}),
   success: TerminalEvent,
   error: Schema.Union([EnvironmentAuthorizationError, SurfaceUnavailableError]),

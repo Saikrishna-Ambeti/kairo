@@ -11,7 +11,7 @@ import { appAtomRegistry } from "~/rpc/atomRegistry";
 /**
  * Read `defaultThreadEnvMode` from the project's checked-in `kairo.json`.
  *
- * Imperative counterpart to `useKairoProjectFileScripts` for the new-thread
+ * Imperative counterpart to `useKairoProjectFileState` for the new-thread
  * path, which resolves defaults at call time rather than render time. The
  * file query atom caches per (environment, cwd), so repeat calls don't
  * re-fetch. Optimistic in-app writes overlay the query result, matching what
