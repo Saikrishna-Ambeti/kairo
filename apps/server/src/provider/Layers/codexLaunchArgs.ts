@@ -1,14 +1,13 @@
 import { tokenizeCliArgs } from "@kairo/shared/cliArgs";
 
-export const KAIRO_CODEX_LAUNCH_ARGS_ENV = "KAIRO_CODEX_LAUNCH_ARGS";
+const KAIRO_CODEX_LAUNCH_ARGS_ENV = "KAIRO_CODEX_LAUNCH_ARGS";
 
 export const resolveCodexLaunchArgs = (
   launchArgs?: string,
   environment: NodeJS.ProcessEnv = process.env,
 ) => environment[KAIRO_CODEX_LAUNCH_ARGS_ENV]?.trim() || launchArgs?.trim() || "";
 
-export const codexLaunchArgv = (launchArgs?: string): ReadonlyArray<string> =>
-  tokenizeCliArgs(launchArgs);
+const codexLaunchArgv = (launchArgs?: string): ReadonlyArray<string> => tokenizeCliArgs(launchArgs);
 
 export const codexAppServerArgs = (launchArgs?: string) => [
   "app-server",

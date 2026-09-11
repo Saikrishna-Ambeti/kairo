@@ -56,12 +56,20 @@ export const AssetCreateUrlInput = Schema.Struct({
 });
 export type AssetCreateUrlInput = typeof AssetCreateUrlInput.Type;
 
+export const AssetImageDimensions = Schema.Struct({
+  width: NonNegativeInt.check(Schema.isGreaterThanOrEqualTo(1)),
+  height: NonNegativeInt.check(Schema.isGreaterThanOrEqualTo(1)),
+});
+export type AssetImageDimensions = typeof AssetImageDimensions.Type;
+
 export const AssetCreateUrlResult = Schema.Struct({
   relativeUrl: TrimmedNonEmptyString.check(Schema.isMaxLength(4096)),
   expiresAt: Schema.Number,
   sourcePath: Schema.optional(
     TrimmedNonEmptyString.check(Schema.isMaxLength(ASSET_PATH_MAX_LENGTH)),
   ),
+  /** Pixel size read from the image header, so a client can reserve the exact box before the bytes arrive. */
+  imageDimensions: Schema.optional(AssetImageDimensions),
 });
 export type AssetCreateUrlResult = typeof AssetCreateUrlResult.Type;
 
@@ -105,7 +113,7 @@ export const AttachmentDeleteInput = Schema.Struct({
 });
 export type AttachmentDeleteInput = typeof AttachmentDeleteInput.Type;
 
-export class AttachmentUploadSigningKeyError extends Schema.TaggedErrorClass<AttachmentUploadSigningKeyError>()(
+export class AttachmentUploadSigningKeyError extends Schema.TaggedError<AttachmentUploadSigningKeyError>()(
   "AttachmentUploadSigningKeyError",
   {
     cause: Schema.Defect(),
@@ -116,7 +124,7 @@ export class AttachmentUploadSigningKeyError extends Schema.TaggedErrorClass<Att
   }
 }
 
-export class AssetWorkspaceContextNotFoundError extends Schema.TaggedErrorClass<AssetWorkspaceContextNotFoundError>()(
+export class AssetWorkspaceContextNotFoundError extends Schema.TaggedError<AssetWorkspaceContextNotFoundError>()(
   "AssetWorkspaceContextNotFoundError",
   {
     resource: AssetResource,
@@ -127,7 +135,7 @@ export class AssetWorkspaceContextNotFoundError extends Schema.TaggedErrorClass<
   }
 }
 
-export class AssetWorkspaceContextResolutionError extends Schema.TaggedErrorClass<AssetWorkspaceContextResolutionError>()(
+export class AssetWorkspaceContextResolutionError extends Schema.TaggedError<AssetWorkspaceContextResolutionError>()(
   "AssetWorkspaceContextResolutionError",
   {
     resource: AssetResource,
@@ -139,7 +147,7 @@ export class AssetWorkspaceContextResolutionError extends Schema.TaggedErrorClas
   }
 }
 
-export class AssetWorkspaceRootNormalizationError extends Schema.TaggedErrorClass<AssetWorkspaceRootNormalizationError>()(
+export class AssetWorkspaceRootNormalizationError extends Schema.TaggedError<AssetWorkspaceRootNormalizationError>()(
   "AssetWorkspaceRootNormalizationError",
   {
     resource: AssetResource,
@@ -151,7 +159,7 @@ export class AssetWorkspaceRootNormalizationError extends Schema.TaggedErrorClas
   }
 }
 
-export class AssetWorkspacePathValidationError extends Schema.TaggedErrorClass<AssetWorkspacePathValidationError>()(
+export class AssetWorkspacePathValidationError extends Schema.TaggedError<AssetWorkspacePathValidationError>()(
   "AssetWorkspacePathValidationError",
   {
     resource: AssetResource,
@@ -163,7 +171,7 @@ export class AssetWorkspacePathValidationError extends Schema.TaggedErrorClass<A
   }
 }
 
-export class AssetPreviewTypeValidationError extends Schema.TaggedErrorClass<AssetPreviewTypeValidationError>()(
+export class AssetPreviewTypeValidationError extends Schema.TaggedError<AssetPreviewTypeValidationError>()(
   "AssetPreviewTypeValidationError",
   {
     resource: AssetResource,
@@ -176,7 +184,7 @@ export class AssetPreviewTypeValidationError extends Schema.TaggedErrorClass<Ass
   }
 }
 
-export class AssetDocumentTypeValidationError extends Schema.TaggedErrorClass<AssetDocumentTypeValidationError>()(
+export class AssetDocumentTypeValidationError extends Schema.TaggedError<AssetDocumentTypeValidationError>()(
   "AssetDocumentTypeValidationError",
   {
     resource: AssetResource,
@@ -187,7 +195,7 @@ export class AssetDocumentTypeValidationError extends Schema.TaggedErrorClass<As
   }
 }
 
-export class AssetWorkspaceAssetInspectionError extends Schema.TaggedErrorClass<AssetWorkspaceAssetInspectionError>()(
+export class AssetWorkspaceAssetInspectionError extends Schema.TaggedError<AssetWorkspaceAssetInspectionError>()(
   "AssetWorkspaceAssetInspectionError",
   {
     resource: AssetResource,
@@ -201,7 +209,7 @@ export class AssetWorkspaceAssetInspectionError extends Schema.TaggedErrorClass<
   }
 }
 
-export class AssetWorkspaceAssetNotFoundError extends Schema.TaggedErrorClass<AssetWorkspaceAssetNotFoundError>()(
+export class AssetWorkspaceAssetNotFoundError extends Schema.TaggedError<AssetWorkspaceAssetNotFoundError>()(
   "AssetWorkspaceAssetNotFoundError",
   {
     resource: AssetResource,
@@ -214,7 +222,7 @@ export class AssetWorkspaceAssetNotFoundError extends Schema.TaggedErrorClass<As
   }
 }
 
-export class AssetWorkspaceResolutionError extends Schema.TaggedErrorClass<AssetWorkspaceResolutionError>()(
+export class AssetWorkspaceResolutionError extends Schema.TaggedError<AssetWorkspaceResolutionError>()(
   "AssetWorkspaceResolutionError",
   {
     resource: AssetResource,
@@ -226,7 +234,7 @@ export class AssetWorkspaceResolutionError extends Schema.TaggedErrorClass<Asset
   }
 }
 
-export class AssetAttachmentNotFoundError extends Schema.TaggedErrorClass<AssetAttachmentNotFoundError>()(
+export class AssetAttachmentNotFoundError extends Schema.TaggedError<AssetAttachmentNotFoundError>()(
   "AssetAttachmentNotFoundError",
   {
     resource: AssetResource,
@@ -237,7 +245,7 @@ export class AssetAttachmentNotFoundError extends Schema.TaggedErrorClass<AssetA
   }
 }
 
-export class AssetProjectFaviconResolutionError extends Schema.TaggedErrorClass<AssetProjectFaviconResolutionError>()(
+export class AssetProjectFaviconResolutionError extends Schema.TaggedError<AssetProjectFaviconResolutionError>()(
   "AssetProjectFaviconResolutionError",
   {
     resource: AssetResource,
@@ -249,7 +257,7 @@ export class AssetProjectFaviconResolutionError extends Schema.TaggedErrorClass<
   }
 }
 
-export class AssetProjectFaviconInspectionError extends Schema.TaggedErrorClass<AssetProjectFaviconInspectionError>()(
+export class AssetProjectFaviconInspectionError extends Schema.TaggedError<AssetProjectFaviconInspectionError>()(
   "AssetProjectFaviconInspectionError",
   {
     resource: AssetResource,
@@ -261,7 +269,7 @@ export class AssetProjectFaviconInspectionError extends Schema.TaggedErrorClass<
   }
 }
 
-export class AssetProjectFaviconNotFoundError extends Schema.TaggedErrorClass<AssetProjectFaviconNotFoundError>()(
+export class AssetProjectFaviconNotFoundError extends Schema.TaggedError<AssetProjectFaviconNotFoundError>()(
   "AssetProjectFaviconNotFoundError",
   {
     resource: AssetResource,
@@ -272,7 +280,7 @@ export class AssetProjectFaviconNotFoundError extends Schema.TaggedErrorClass<As
   }
 }
 
-export class AssetSigningKeyLoadError extends Schema.TaggedErrorClass<AssetSigningKeyLoadError>()(
+export class AssetSigningKeyLoadError extends Schema.TaggedError<AssetSigningKeyLoadError>()(
   "AssetSigningKeyLoadError",
   {
     resource: AssetResource,

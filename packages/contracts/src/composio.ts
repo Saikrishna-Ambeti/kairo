@@ -50,7 +50,7 @@ export type ConfigureComposioInput = typeof ConfigureComposioInput.Type;
 export const TestComposioConnectionInput = Schema.Struct({});
 export type TestComposioConnectionInput = typeof TestComposioConnectionInput.Type;
 
-export class ComposioError extends Schema.TaggedErrorClass<ComposioError>()("ComposioError", {
+export class ComposioError extends Schema.TaggedError<ComposioError>()("ComposioError", {
   message: Schema.String,
   cause: Schema.optional(Schema.Defect()),
 }) {}

@@ -21,7 +21,9 @@ import { cn } from "../../lib/utils";
 import { useServerProviders } from "../../rpc/serverState";
 import { usePrimaryServerApi } from "../../state/primaryServerApi";
 import { resolveClerkSignInProps } from "../clerk/authRedirect";
-import { PROVIDER_CLIENT_DEFINITIONS } from "../settings/providerDriverMeta";
+import { SupermemorySettingsPanel } from "../settings/SupermemorySettings";
+import { ComposioSettingsPanel } from "../settings/ComposioSettings";
+import { DRIVER_OPTIONS } from "../settings/providerDriverMeta";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { stackedThreadToast, toastManager } from "../ui/toast";
@@ -38,11 +40,11 @@ import {
 } from "./OnboardingGate.logic";
 import { isProfessionalRoleComplete, type ProfessionalRole } from "./professionalRole";
 
-export type OnboardingStep = "sign-in" | "profession" | "setup";
+export type OnboardingStep = "sign-in" | "profession" | "setup" | "memory" | "apps";
 type BusyAction = "refresh" | "install-agent" | "login-agent" | null;
 
 interface AgentOption {
-  readonly definition: (typeof PROVIDER_CLIENT_DEFINITIONS)[number];
+  readonly definition: (typeof DRIVER_OPTIONS)[number];
   readonly provider: ServerProvider | undefined;
 }
 
@@ -53,12 +55,16 @@ const ONBOARDING_STEPS: ReadonlyArray<{
 }> = [
   { key: "sign-in", label: "Sign in", icon: LogInIcon },
   { key: "profession", label: "Profession", icon: UserRoundIcon },
-  { key: "setup", label: "Setup", icon: TerminalIcon },
+  { key: "setup", label: "Provider", icon: TerminalIcon },
+  { key: "memory", label: "Memory", icon: KeyRoundIcon },
+  { key: "apps", label: "Connected apps", icon: AppWindowIcon },
 ];
 
 export function advanceOnboardingStep(step: OnboardingStep): OnboardingStep {
   if (step === "sign-in") return "profession";
-  return "setup";
+  if (step === "profession") return "setup";
+  if (step === "setup") return "memory";
+  return "apps";
 }
 
 function showOnboardingError(title: string, error: unknown) {
@@ -104,7 +110,7 @@ function OnboardingProgress({
   const activeIndex = ONBOARDING_STEPS.findIndex((step) => step.key === activeStep);
 
   return (
-    <nav aria-label="Onboarding progress" className="grid gap-2 sm:grid-cols-3">
+    <nav aria-label="Onboarding progress" className="grid gap-2 sm:grid-cols-5">
       {ONBOARDING_STEPS.map((step, index) => {
         const Icon = step.icon;
         const active = step.key === activeStep;
@@ -342,8 +348,8 @@ function ProviderSetupStep({
         <div className="space-y-1">
           <h2 className="text-2xl font-semibold tracking-[-0.025em]">Connect a coding agent</h2>
           <p className="text-sm leading-6 text-muted-foreground">
-            Install or sign in to one supported provider. Memory and app integrations stay in
-            Settings.
+            Install or sign in to one supported provider. Optional memory and connected apps come
+            next.
           </p>
         </div>
         <div className="grid gap-3">
@@ -467,7 +473,7 @@ function ProviderSetupStep({
           </div>
         ) : (
           <p className="text-sm leading-6 text-muted-foreground">
-            Connect one provider to finish setup.
+            Connect one provider to continue.
           </p>
         )}
         <div className="grid gap-2">
@@ -480,7 +486,7 @@ function ProviderSetupStep({
             Refresh
           </Button>
           <Button size="sm" disabled={!hasUsableAgent || busy !== null} onClick={onComplete}>
-            Finish setup
+            Continue
             <ArrowRightIcon className="size-3.5" />
           </Button>
         </div>
@@ -496,6 +502,7 @@ function ProviderSetupGate({
   readonly onProfessionEdit?: () => void;
   readonly onComplete: () => void;
 }) {
+  const [setupStep, setSetupStep] = useState<"setup" | "memory" | "apps">("setup");
   const serverApi = usePrimaryServerApi();
   const serverProviders = useServerProviders();
   const [providersOverride, setProvidersOverride] = useState<ReadonlyArray<ServerProvider> | null>(
@@ -511,7 +518,7 @@ function ProviderSetupGate({
 
   const agentOptions = useMemo<ReadonlyArray<AgentOption>>(
     () =>
-      PROVIDER_CLIENT_DEFINITIONS.filter((definition) =>
+      DRIVER_OPTIONS.filter((definition) =>
         ONBOARDING_CODING_AGENT_DRIVERS.has(definition.value),
       ).map((definition) => ({
         definition,
@@ -625,6 +632,33 @@ function ProviderSetupGate({
     }
   };
 
+  if (setupStep !== "setup") {
+    return (
+      <OnboardingFrame activeStep={setupStep}>
+        {setupStep === "memory" ? <SupermemorySettingsPanel /> : <ComposioSettingsPanel />}
+        <div className="flex items-center justify-between gap-3">
+          <Button
+            variant="outline"
+            onClick={() => setSetupStep(setupStep === "memory" ? "setup" : "memory")}
+          >
+            Back
+          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => (setupStep === "memory" ? setSetupStep("apps") : onComplete())}
+            >
+              Skip for now
+            </Button>
+            <Button onClick={() => (setupStep === "memory" ? setSetupStep("apps") : onComplete())}>
+              {setupStep === "memory" ? "Continue" : "Finish setup"}
+            </Button>
+          </div>
+        </div>
+      </OnboardingFrame>
+    );
+  }
+
   return (
     <OnboardingFrame activeStep="setup" onProfessionEdit={onProfessionEdit}>
       {loading ? (
@@ -648,7 +682,7 @@ function ProviderSetupGate({
               showOnboardingError("Provider refresh failed", error),
             )
           }
-          onComplete={onComplete}
+          onComplete={() => setSetupStep("memory")}
         />
       )}
     </OnboardingFrame>

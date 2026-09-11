@@ -78,7 +78,7 @@ export const SupermemoryStatus = Schema.Struct({
 });
 export type SupermemoryStatus = typeof SupermemoryStatus.Type;
 
-export class SupermemoryError extends Schema.TaggedErrorClass<SupermemoryError>()(
+export class SupermemoryError extends Schema.TaggedError<SupermemoryError>()(
   "SupermemoryError",
   {
     message: Schema.String,

@@ -3,15 +3,11 @@ import { BUILT_IN_THEMES, getThemeColorsForAppearance } from "@kairo/shared/them
 
 import { themeColorToNativeColor } from "../../lib/mobileTheme";
 
-import {
-  buildGhosttyThemeConfig,
-  getMobileTerminalTheme,
-  getPierreTerminalTheme,
-} from "./terminalTheme";
+import { buildGhosttyThemeConfig, getMobileTerminalTheme, getPierreTerminalTheme } from "./terminalTheme";
 
-describe("getPierreTerminalTheme", () => {
-  it("returns the Pierre light terminal palette", () => {
-    expect(getPierreTerminalTheme("light")).toMatchObject({
+describe("getMobileTerminalTheme", () => {
+  it("preserves the default light terminal palette", () => {
+    expect(getMobileTerminalTheme("kairo-code", "light")).toMatchObject({
       background: "#f2f2f7",
       foreground: "#6C6C71",
       cursorForeground: "#009fff",
@@ -19,8 +15,8 @@ describe("getPierreTerminalTheme", () => {
     });
   });
 
-  it("returns the Pierre dark terminal palette", () => {
-    expect(getPierreTerminalTheme("dark")).toMatchObject({
+  it("preserves the default dark terminal palette", () => {
+    expect(getMobileTerminalTheme("kairo-code", "dark")).toMatchObject({
       background: "#0a0a0a",
       foreground: "#adadb1",
       cursorForeground: "#009fff",
@@ -58,7 +54,7 @@ describe("getMobileTerminalTheme", () => {
 
 describe("buildGhosttyThemeConfig", () => {
   it("serializes theme colors into a ghostty config file", () => {
-    const config = buildGhosttyThemeConfig(getPierreTerminalTheme("dark"));
+    const config = buildGhosttyThemeConfig(getMobileTerminalTheme("kairo-code", "dark"));
 
     expect(config).toContain("background = #0a0a0a");
     expect(config).toContain("foreground = #adadb1");

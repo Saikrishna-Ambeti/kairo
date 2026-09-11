@@ -20,12 +20,32 @@ layer("048_KairoUpstreamSchemaReconciliation", (it) => {
       `;
 
       yield* runMigrations({ toMigrationInclusive: 50 });
+      yield* sql`INSERT INTO scheduled_tasks (task_id, revision, data_json, deleted, updated_at)
+        VALUES ('preserved-task', 7, '{"title":"Keep this task"}', 0, '2026-09-10T00:00:00Z')`;
+      yield* runMigrations({ toMigrationInclusive: 53 });
+      const tasks = yield* sql<{ readonly revision: number; readonly data_json: string }>`
+        SELECT revision, data_json FROM scheduled_tasks WHERE task_id = 'preserved-task'
+      `;
+      assert.deepStrictEqual(tasks, [{ revision: 7, data_json: '{"title":"Keep this task"}' }]);
 
       const columns = yield* sql<{ readonly name: string }>`
         PRAGMA table_info(projection_threads)
       `;
       assert.ok(columns.some((column) => column.name === "linked_pull_request_json"));
       assert.ok(columns.some((column) => column.name === "unsettled_at"));
+      assert.ok(columns.some((column) => column.name === "branch_pull_request_json"));
+      assert.ok(columns.some((column) => column.name === "active_order_key"));
+      const pullRequestTables = yield* sql<{ readonly name: string }>`
+        SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'projection_thread_pull_requests'
+      `;
+      assert.equal(pullRequestTables.length, 1);
+      const preserved = yield* sql<{ readonly migration_id: number; readonly name: string }>`
+        SELECT migration_id, name FROM effect_sql_migrations WHERE migration_id BETWEEN 48 AND 50 ORDER BY migration_id
+      `;
+      assert.deepStrictEqual(
+        preserved.map((row) => row.name),
+        ["KairoUpstreamSchemaReconciliation", "ArtifactMetadata", "ScheduledTasks"],
+      );
 
       const tables = yield* sql<{ readonly name: string }>`
         SELECT name FROM sqlite_master

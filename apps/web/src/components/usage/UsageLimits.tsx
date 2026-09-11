@@ -1,49 +1,29 @@
 import {
-  EnvironmentId,
+  type EnvironmentId,
   type ProviderConsumeResetCreditOutcome,
-  ProviderInstanceId,
+  ProviderConsumeResetCreditInput,
   ServerProvider,
   ServerProviderResetCredits,
   ServerProviderUsageWindow,
-  UsageLimitSourceAccount,
-  UsageLimitSourceSnapshot,
   UsageProviderKind,
 } from "@kairo/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import {
-  collectLimitSources,
-  collectLimitsGroups,
   elapsedShare,
   formatDuration,
   formatResetsIn,
-  limitsNotice,
   type LimitPace,
   paceOf,
-  providerLimitsLabel,
+  remainingPercent,
 } from "@kairo/shared/usageLimits";
-import { GaugeIcon, PlusIcon, TrendingDownIcon, TrendingUpIcon } from "lucide-react";
+import { GaugeIcon, TrendingDownIcon, TrendingUpIcon } from "lucide-react";
 import { Fragment, useState } from "react";
 
-import { isElectron } from "../../env";
-import { usePrimarySessionState } from "../../environments/primary";
-import { usePrimarySettings, useUpdateEnvironmentSettings } from "../../hooks/useSettings";
-import {
-  type EnvironmentPresentation,
-  useEnvironments,
-  usePrimaryEnvironmentId,
-} from "../../state/environments";
-import { useEnvironmentSessionState } from "../../state/session";
+import { usePrimarySettings } from "../../hooks/useSettings";
 import { environmentPresentations } from "../../state/presentation";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { formatUpcomingTimestamp } from "../../timestampFormat";
-import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
-import { getDriverOption } from "../settings/providerDriverMeta";
-import {
-  resolvePrimaryOperateAccess,
-  resolveRemoteOperateAccess,
-} from "../settings/ProviderSettingsPanel.logic";
-import { RedactedSensitiveText } from "../settings/RedactedSensitiveText";
 import {
   AlertDialog,
   AlertDialogClose,
@@ -54,9 +34,8 @@ import {
   AlertDialogTitle,
 } from "../ui/alert-dialog";
 import { Button } from "../ui/button";
-import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { AddUsageLimitSourceDialog } from "./AddUsageLimitSourceDialog";
+import { UsageLimitsPooled } from "./UsageLimitsPooled";
 import { PROVIDER_PRESENTATION } from "./usageProviders";
 
 const PACE: Record<LimitPace, { readonly label: string; readonly icon: typeof GaugeIcon }> = {
@@ -66,14 +45,14 @@ const PACE: Record<LimitPace, { readonly label: string; readonly icon: typeof Ga
 };
 
 /** The series colour the cost chart uses for this driver, so the two views read as one. */
-function barColor(driver: ServerProvider["driver"]): string {
+export function barColor(driver: ServerProvider["driver"]): string {
   const kind: UsageProviderKind | undefined =
     driver === "codex" ? "codex" : driver === "claudeAgent" ? "claude" : undefined;
   return kind ? PROVIDER_PRESENTATION[kind].color : "var(--foreground)";
 }
 
 /** Pace as a glyph with the words on hover. */
-function PaceIcon({ pace }: { readonly pace: LimitPace }) {
+export function PaceIcon({ pace }: { readonly pace: LimitPace }) {
   const Icon = PACE[pace].icon;
   return (
     <Tooltip>
@@ -109,14 +88,16 @@ function WindowBar({
   readonly now: number;
 }) {
   const timestampFormat = usePrimarySettings((settings) => settings.timestampFormat);
-  const used = Math.max(0, Math.min(100, window.usedPercent));
+  const remaining = remainingPercent(window);
   const elapsed = elapsedShare(window, now);
+  // The fill is quota left, so the even-spending mark is the time left.
+  const timeLeft = elapsed === null ? null : Math.round((1 - elapsed) * 100);
   const resetsIn = formatResetsIn(window, now);
   const resetsAt = window.resetsAt
     ? formatUpcomingTimestamp(window.resetsAt, timestampFormat, now)
     : null;
-  const summary = `${window.label}: ${Math.round(used)}% used${
-    elapsed === null ? "" : `, ${Math.round(elapsed * 100)}% of the window elapsed`
+  const summary = `${window.label}: ${remaining}% left${
+    timeLeft === null ? "" : `, ${timeLeft}% of the window left`
   }${resetsIn ? `, ${resetsIn}` : ""}`;
 
   return (
@@ -132,27 +113,26 @@ function WindowBar({
         }
       >
         <div className="absolute inset-x-0 inset-y-1.5 rounded-full bg-muted" />
-        {used > 0 ? (
+        {remaining > 0 ? (
           <div
             className="absolute inset-y-1.5 left-0 rounded-full"
-            style={{ width: `${used}%`, backgroundColor: color }}
+            style={{ width: `${remaining}%`, backgroundColor: color }}
           />
         ) : null}
-        {elapsed !== null ? (
+        {timeLeft !== null ? (
           <span
             aria-hidden
             className="absolute inset-y-0.5 w-px -translate-x-1/2 bg-foreground/60"
-            style={{ left: `${elapsed * 100}%` }}
+            style={{ left: `${timeLeft}%` }}
           />
         ) : null}
       </TooltipTrigger>
       <TooltipPopup side="top" className="max-w-72 text-xs">
         <div className="flex flex-col gap-0.5">
           <span className="text-foreground">
-            {Math.round(used)}% used
-            {elapsed !== null ? ` · ${Math.round(elapsed * 100)}% of the window elapsed` : ""}
+            {remaining}% left{timeLeft !== null ? ` · ${timeLeft}% of the window left` : ""}
           </span>
-          {elapsed !== null ? (
+          {timeLeft !== null ? (
             <span className="text-muted-foreground">The line is where even spending would be.</span>
           ) : null}
           {resetsAt ? (
@@ -167,24 +147,31 @@ function WindowBar({
   );
 }
 
-/** One account's windows as rows: label and percent, bar, pace and countdown. */
-function LimitWindows({
+/**
+ * One account's windows as rows: label and percent, bar, pace and countdown.
+ * Compact rows fit the composer panel with narrower columns.
+ */
+export function LimitWindows({
   driver,
   windows,
   now,
+  compact = false,
 }: {
   readonly driver: ServerProvider["driver"];
   readonly windows: ReadonlyArray<ServerProviderUsageWindow>;
   readonly now: number;
+  readonly compact?: boolean;
 }) {
   const color = barColor(driver);
   return (
-    <div className="grid grid-cols-[11rem_minmax(0,1fr)_7rem] gap-x-4 gap-y-1">
-      {windows.map((window, index) => {
-        // Windows that reset together show the countdown once.
-        const previous = windows[index - 1];
-        const sharesReset =
-          previous?.resetsAt !== undefined && previous.resetsAt === window.resetsAt;
+    <div
+      className={
+        compact
+          ? "grid grid-cols-[minmax(0,9rem)_minmax(3rem,1fr)_auto] gap-x-3 gap-y-0.5"
+          : "grid grid-cols-[11rem_minmax(0,1fr)_7rem] gap-x-4 gap-y-1"
+      }
+    >
+      {windows.map((window) => {
         const pace = paceOf(window, now);
         const resetsIn = formatResetsIn(window, now);
         return (
@@ -192,106 +179,18 @@ function LimitWindows({
             <span className="flex min-w-0 items-center gap-2 text-xs">
               <span className="truncate text-muted-foreground">{window.label}</span>
               <span className="ms-auto shrink-0 font-medium text-foreground tabular-nums">
-                {Math.round(window.usedPercent)}%
+                {remainingPercent(window)}% left
               </span>
             </span>
             <WindowBar color={color} window={window} now={now} />
-            <span className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
+            <span className="flex items-center gap-2 text-xs whitespace-nowrap text-muted-foreground tabular-nums">
               {pace ? <PaceIcon pace={pace} /> : null}
-              <span className="ms-auto shrink-0">{sharesReset ? "" : (resetsIn ?? "")}</span>
+              <span className="ms-auto shrink-0">{resetsIn ?? ""}</span>
             </span>
           </Fragment>
         );
       })}
     </div>
-  );
-}
-
-/**
- * Heading shared by local providers and source accounts: icon, driver, instance, plan,
- * and the signed-in email blurred until clicked, as provider settings do.
- */
-function AccountHeading({
-  driver,
-  label,
-  instanceLabel,
-  plan,
-  email,
-  accentColor,
-}: {
-  readonly driver: ServerProvider["driver"];
-  readonly label: string;
-  readonly instanceLabel: string;
-  readonly plan: string | undefined;
-  readonly email: string | undefined;
-  readonly accentColor?: string | undefined;
-}) {
-  return (
-    <h2 className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-foreground">
-      <ProviderInstanceIcon
-        driverKind={driver}
-        displayName={instanceLabel}
-        accentColor={accentColor}
-        showBadge={Boolean(accentColor)}
-        indicatorBackground="var(--background)"
-        className="size-5"
-        iconClassName="size-4 text-foreground/80"
-      />
-      <span className="truncate">{label}</span>
-      {instanceLabel !== label ? (
-        <span className="min-w-0 truncate text-xs font-normal text-muted-foreground">
-          · {instanceLabel}
-        </span>
-      ) : null}
-      {plan ? <span className="font-normal text-muted-foreground">· {plan}</span> : null}
-      {email ? (
-        <RedactedSensitiveText
-          value={email}
-          ariaLabel="Toggle account email visibility"
-          revealTooltip="Click to reveal email"
-          hideTooltip="Click to hide email"
-        />
-      ) : null}
-    </h2>
-  );
-}
-
-function ProviderLimits({
-  provider,
-  environmentId,
-  now,
-}: {
-  readonly provider: ServerProvider;
-  readonly environmentId: EnvironmentId;
-  readonly now: number;
-}) {
-  const limits = provider.usageLimits;
-  if (!limits) return null;
-  const notice = limitsNotice(limits);
-  return (
-    <section className="flex flex-col gap-3">
-      <AccountHeading
-        driver={provider.driver}
-        label={getDriverOption(provider.driver)?.label ?? String(provider.driver)}
-        instanceLabel={providerLimitsLabel(provider, (driver) => getDriverOption(driver)?.label)}
-        plan={provider.auth.label}
-        email={provider.auth.email}
-        accentColor={provider.accentColor}
-      />
-      {notice ? (
-        <span className="text-xs text-muted-foreground">{notice}</span>
-      ) : (
-        <LimitWindows driver={provider.driver} windows={limits.windows} now={now} />
-      )}
-      {limits.resetCredits ? (
-        <ResetCredits
-          environmentId={environmentId}
-          instanceId={provider.instanceId}
-          credits={limits.resetCredits}
-          now={now}
-        />
-      ) : null}
-    </section>
   );
 }
 
@@ -302,45 +201,24 @@ const OUTCOME_TEXT: Record<ProviderConsumeResetCreditOutcome, string> = {
   alreadyRedeemed: "That credit was already redeemed.",
 };
 
-/**
- * Banked reset credits with a confirmed redeem action. Redeeming spends a
- * credit the provider granted the user, so it never fires on a bare click.
- */
-function ResetCredits({
-  environmentId,
-  instanceId,
-  credits,
-  now,
-}: {
-  readonly environmentId: EnvironmentId;
-  readonly instanceId: ProviderInstanceId;
-  readonly credits: ServerProviderResetCredits;
-  readonly now: number;
-}) {
+/** Everything a redeem needs: where to send it and what to say afterwards. */
+export function useResetCredit(
+  environmentId: EnvironmentId,
+  input: ProviderConsumeResetCreditInput,
+) {
   const consume = useAtomCommand(serverEnvironment.consumeResetCredit, { reportFailure: false });
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
-  if (credits.availableCount === 0 && status === null) return null;
-
-  const expiresIn = credits.nextExpiresAt
-    ? formatDuration(Date.parse(credits.nextExpiresAt) - now)
-    : null;
-  const summary =
-    credits.availableCount === 0
-      ? "No reset credits banked"
-      : `${credits.availableCount} ${credits.availableCount === 1 ? "reset credit" : "reset credits"} banked${
-          expiresIn ? ` · next expires in ${expiresIn}` : ""
-        }`;
 
   const redeem = async () => {
     setConfirming(false);
     setBusy(true);
     setStatus(null);
-    const result = await consume({ environmentId, input: { instanceId } });
+    const result = await consume({ environmentId, input });
     setBusy(false);
     if (result._tag === "Success") {
-      setStatus(OUTCOME_TEXT[result.value.outcome]);
+      setStatus(result.value.warning ?? OUTCOME_TEXT[result.value.outcome]);
       return;
     }
     setStatus(
@@ -350,337 +228,108 @@ function ResetCredits({
     );
   };
 
+  return { confirming, setConfirming, busy, status, redeem };
+}
+
+/**
+ * The confirm for a redeem. Redeeming spends a credit the provider granted the
+ * user, so it never fires on a bare click. Mount it outside any popover that
+ * holds the button: dialogs stack under popovers, and closing the popover
+ * would unmount a dialog rendered inside it.
+ */
+export function ResetCreditDialog({
+  open,
+  onOpenChange,
+  onConfirm,
+}: {
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  readonly onConfirm: () => void;
+}) {
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogPopup>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Use a reset credit?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This redeems one credit on your account and clears the current rate-limit windows. It
+            cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
+          <Button onClick={onConfirm}>Use credit</Button>
+        </AlertDialogFooter>
+      </AlertDialogPopup>
+    </AlertDialog>
+  );
+}
+
+/** `2 reset credits banked · next expires in 27d 23h`, or the short form for a popover. */
+export function resetCreditsSummary(
+  credits: ServerProviderResetCredits,
+  now: number,
+  compact = false,
+): string {
+  const expiresIn = credits.nextExpiresAt
+    ? formatDuration(Date.parse(credits.nextExpiresAt) - now)
+    : null;
+  if (credits.availableCount === 0) return "No reset credits banked";
+  if (compact)
+    return `${credits.availableCount} banked${expiresIn ? ` · expires in ${expiresIn}` : ""}`;
+  return `${credits.availableCount} ${credits.availableCount === 1 ? "reset credit" : "reset credits"} banked${
+    expiresIn ? ` · next expires in ${expiresIn}` : ""
+  }`;
+}
+
+/** Banked reset credits with the redeem button and its confirm, self-contained. */
+export function ResetCredits({
+  environmentId,
+  input,
+  credits,
+  now,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly input: ProviderConsumeResetCreditInput;
+  readonly credits: ServerProviderResetCredits;
+  readonly now: number;
+}) {
+  const { confirming, setConfirming, busy, status, redeem } = useResetCredit(environmentId, input);
+  if (credits.availableCount === 0 && status === null) return null;
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-      <span className="tabular-nums">{summary}</span>
+      <span className="tabular-nums">{resetCreditsSummary(credits, now)}</span>
       {credits.availableCount > 0 ? (
         <Button size="xs" variant="outline" disabled={busy} onClick={() => setConfirming(true)}>
-          {busy ? "Using credit…" : "Use a reset credit"}
+          {busy ? "Using…" : "Use reset"}
         </Button>
       ) : null}
       {status ? <span className="text-foreground">{status}</span> : null}
-      <AlertDialog open={confirming} onOpenChange={setConfirming}>
-        <AlertDialogPopup>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Use a reset credit?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This redeems one credit on your account and clears the current rate-limit windows. It
-              cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
-            <Button onClick={() => void redeem()}>Use credit</Button>
-          </AlertDialogFooter>
-        </AlertDialogPopup>
-      </AlertDialog>
-    </div>
-  );
-}
-
-/** One account pooled by a usage-limit source, drawn like a provider row. */
-function SourceAccountLimits({
-  account,
-  sourceKind,
-  now,
-}: {
-  readonly account: UsageLimitSourceAccount;
-  readonly sourceKind: string;
-  readonly now: number;
-}) {
-  const notice = limitsNotice(account.usageLimits);
-  return (
-    <section className="flex flex-col gap-3">
-      <AccountHeading
-        driver={account.driver}
-        label={getDriverOption(account.driver)?.label ?? String(account.driver)}
-        instanceLabel={sourceKind}
-        plan={account.plan}
-        email={account.email}
+      <ResetCreditDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        onConfirm={() => void redeem()}
       />
-      {notice ? (
-        <span className="text-xs text-muted-foreground">{notice}</span>
-      ) : (
-        <LimitWindows driver={account.driver} windows={account.usageLimits.windows} now={now} />
-      )}
-    </section>
-  );
-}
-
-/**
- * Accounts a configured source (a CLIProxyAPI hub) pools, grouped under the
- * source's name. Unlike provider rows these are read-only: nothing on this
- * environment can run a turn against them.
- */
-const SOURCE_KIND_LABEL: Record<UsageLimitSourceSnapshot["kind"], string> = {
-  cliproxy: "CLI Proxy",
-};
-
-type LimitsSource = ReturnType<typeof collectLimitSources>[number];
-
-/**
- * Removing a hub also deletes its management key from the server, so it
- * asks first and says so. A bare icon that acted on click was too easy to
- * hit while reaching for the row beside it.
- */
-function RemoveSourceButton({
-  source,
-  onConfirm,
-}: {
-  readonly source: UsageLimitSourceSnapshot;
-  readonly onConfirm: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <Button size="xs" variant="ghost" onClick={() => setOpen(true)}>
-        Remove
-      </Button>
-      <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogPopup>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove {source.label}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              The hub's management key is deleted from this server. Its accounts leave the Limits
-              view; the hub itself is untouched. Add it again with the URL and key to bring them
-              back.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                setOpen(false);
-                onConfirm();
-              }}
-            >
-              Remove hub
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogPopup>
-      </AlertDialog>
-    </>
-  );
-}
-
-function SourceLimits({
-  source,
-  now,
-  onRemove,
-}: {
-  readonly source: LimitsSource;
-  readonly now: number;
-  readonly onRemove: (() => void) | null;
-}) {
-  const kind = SOURCE_KIND_LABEL[source.kind];
-  return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-xs tracking-wide text-muted-foreground uppercase">{source.label}</h2>
-        {onRemove ? <RemoveSourceButton source={source} onConfirm={onRemove} /> : null}
-      </div>
-      {source.error ? (
-        <span className="text-xs text-muted-foreground">{source.error}</span>
-      ) : source.accounts.length === 0 ? (
-        <span className="text-xs text-muted-foreground">
-          {source.hiddenAccountCount > 0
-            ? "All accounts are shown by connected providers."
-            : "No accounts reported."}
-        </span>
-      ) : (
-        source.accounts.map((account) => (
-          <SourceAccountLimits key={account.id} account={account} sourceKind={kind} now={now} />
-        ))
-      )}
     </div>
   );
 }
 
 /**
- * Whether this client's credential may write settings on an environment,
- * resolved the way Settings → Providers does: the desktop app owns its
- * primary outright; a browser session checks the scopes it was granted;
- * a remote environment reports scopes over its own session endpoint.
+ * Subscription quota across every connected environment's providers and hubs,
+ * pooled per provider. Countdowns anchor to render time rather than ticking: a
+ * live clock would repaint the page every minute for no decision-changing gain.
  */
-function useCanOperateEnvironment(environment: EnvironmentPresentation | null): boolean {
-  const isPrimary = environment?.entry.target._tag === "PrimaryConnectionTarget";
-  const primarySession = usePrimarySessionState();
-  const remoteSession = useEnvironmentSessionState(
-    environment?.environmentId ?? EnvironmentId.make("none"),
-  );
-  if (environment === null || environment.connection.phase !== "connected") return false;
-  if (isPrimary && isElectron) return true;
-  const access = isPrimary
-    ? resolvePrimaryOperateAccess({
-        isPrimary: true,
-        hasDesktopBridge: false,
-        session: primarySession.data,
-        isPending: primarySession.isPending,
-        hasError: primarySession.error !== null,
-      })
-    : resolveRemoteOperateAccess({
-        session: remoteSession.data,
-        isPending: remoteSession.isPending,
-        hasError: remoteSession.hasError,
-      });
-  return access === "granted";
-}
-
-/** One source with a remove control bound to the environment it lives in. */
-function SourceLimitsRow({ source, now }: { readonly source: LimitsSource; readonly now: number }) {
-  const updateSettings = useUpdateEnvironmentSettings(source.environmentId);
-  const { environments } = useEnvironments();
-  const environment =
-    environments.find((entry) => entry.environmentId === source.environmentId) ?? null;
-  const canOperate = useCanOperateEnvironment(environment);
-  // The patch names only this entry, so two edits in flight cannot clobber
-  // each other's map.
-  const remove = () => updateSettings({ usageLimitSources: { [source.id]: null } });
-  return <SourceLimits source={source} now={now} onRemove={canOperate ? remove : null} />;
-}
-
-/**
- * Subscription quota windows from every connected environment's providers.
- * Countdowns anchor to render time rather than ticking: a live clock would
- * repaint the page every minute for no decision-changing gain.
- */
-export function UsageLimitsSection() {
+export function UsageLimitsSection({
+  selectedEnvironmentIds,
+}: {
+  readonly selectedEnvironmentIds: ReadonlySet<EnvironmentId> | null;
+}) {
   const presentations = useAtomValue(environmentPresentations.presentationsAtom);
-  const groups = collectLimitsGroups(presentations);
-  const sources = collectLimitSources(presentations);
-  const primaryEnvironmentId = usePrimaryEnvironmentId();
-  const { environments } = useEnvironments();
-  const [adding, setAdding] = useState(false);
-  // Anchored once per mount on purpose: countdowns must not tick (see below).
+  // Anchored once per mount on purpose: countdowns must not tick (see above).
   const [now] = useState(() => Date.now());
-
-  // Sources live in one environment's settings. Writing them needs only the
-  // operate scope, like any provider control, so a Kairo Connect client can add
-  // a hub to whichever environment it is connected to: the primary when there
-  // is one, else the first connected environment, with a picker for more.
-  const connected = environments.filter(
-    (environment) => environment.connection.phase === "connected",
-  );
-  const [pickedEnvironmentId, setPickedEnvironmentId] = useState<EnvironmentId | null>(null);
-  const targetEnvironment =
-    (pickedEnvironmentId !== null
-      ? connected.find((environment) => environment.environmentId === pickedEnvironmentId)
-      : undefined) ??
-    (primaryEnvironmentId !== null
-      ? connected.find((environment) => environment.environmentId === primaryEnvironmentId)
-      : undefined) ??
-    connected[0] ??
-    null;
-  const canOperateTarget = useCanOperateEnvironment(targetEnvironment);
-
-  return (
-    <div className="flex flex-col gap-8">
-      {/* Sources first: they are the thing a user configures here, so the
-          control to add one sits at the top rather than after every row. */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <h2 className="text-sm font-medium text-foreground">Usage sources</h2>
-          <p className="text-xs text-muted-foreground">
-            Quota from a CLIProxyAPI hub shows beside the providers signed in on this machine.
-          </p>
-        </div>
-        {/* The picker stays whenever several environments are connected, so
-            a read-only default target does not hide the way to an operable
-            one; only the button follows the picked target's access. */}
-        {targetEnvironment ? (
-          <div className="flex items-center gap-2">
-            {connected.length > 1 ? (
-              <Select
-                value={targetEnvironment.environmentId}
-                onValueChange={(value) => {
-                  if (value !== null) setPickedEnvironmentId(EnvironmentId.make(value));
-                }}
-              >
-                <SelectTrigger
-                  aria-label="Environment to add the hub to"
-                  size="compact"
-                  variant="ghost"
-                  className="w-auto min-w-0"
-                >
-                  <SelectValue>{targetEnvironment.label}</SelectValue>
-                </SelectTrigger>
-                <SelectPopup align="end" alignItemWithTrigger={false}>
-                  {connected.map((environment) => (
-                    <SelectItem key={environment.environmentId} value={environment.environmentId}>
-                      {environment.label}
-                    </SelectItem>
-                  ))}
-                </SelectPopup>
-              </Select>
-            ) : null}
-            {canOperateTarget ? (
-              <Button size="xs" variant="outline" onClick={() => setAdding(true)}>
-                <PlusIcon className="size-3" aria-hidden />
-                Add hub
-              </Button>
-            ) : (
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <span
-                      tabIndex={0}
-                      className="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    />
-                  }
-                >
-                  <span className="inline-flex" inert>
-                    <Button size="xs" variant="outline" disabled>
-                      <PlusIcon className="size-3" aria-hidden />
-                      Add hub
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                <TooltipPopup side="top" className="max-w-72">
-                  Your session cannot change settings on {targetEnvironment.label}.
-                </TooltipPopup>
-              </Tooltip>
-            )}
-          </div>
-        ) : null}
-      </div>
-      {groups.length === 0 && sources.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No provider on a connected environment reports subscription limits.
-        </p>
-      ) : null}
-      {sources.map((source) => (
-        <SourceLimitsRow key={source.key} source={source} now={now} />
-      ))}
-      {groups.map((group) => (
-        <div key={group.environmentId} className="flex flex-col gap-6">
-          {group.environmentLabel ? (
-            <h2 className="text-xs tracking-wide text-muted-foreground uppercase">
-              {group.environmentLabel}
-            </h2>
-          ) : null}
-          {group.providers.map((provider) => (
-            <ProviderLimits
-              key={provider.instanceId}
-              provider={provider}
-              environmentId={group.environmentId}
-              now={now}
-            />
-          ))}
-        </div>
-      ))}
-      {targetEnvironment && canOperateTarget ? (
-        // Keyed on the target: if it disconnects or the primary changes while
-        // the dialog is open, a fresh dialog mounts empty rather than carrying
-        // a typed key over to a different environment.
-        <AddUsageLimitSourceDialog
-          key={targetEnvironment.environmentId}
-          open={adding}
-          onOpenChange={setAdding}
-          environmentId={targetEnvironment.environmentId}
-          environmentLabel={targetEnvironment.label}
-        />
-      ) : null}
-    </div>
-  );
+  const selected =
+    selectedEnvironmentIds === null
+      ? presentations
+      : new Map([...presentations].filter(([id]) => selectedEnvironmentIds.has(id)));
+  return <UsageLimitsPooled presentations={selected} now={now} />;
 }

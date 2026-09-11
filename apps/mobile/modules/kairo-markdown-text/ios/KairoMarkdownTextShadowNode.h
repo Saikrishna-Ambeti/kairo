@@ -26,6 +26,8 @@ struct KairoMarkdownTextAttachmentRange {
   size_t location;
   size_t length;
   std::string imageUri;
+  /// Recolor the loaded image with the run's foreground color, like `sf:` symbols.
+  bool tintWithForeground;
 };
 
 inline Float KairoMarkdownTextAttachmentSize(const KairoMarkdownTextAttachmentRange &) {

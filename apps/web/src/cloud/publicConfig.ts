@@ -2,7 +2,7 @@ import { relayClerkTokenOptions } from "@kairo/shared/relayAuth";
 import { normalizeSecureRelayUrl } from "@kairo/shared/relayUrl";
 import * as Schema from "effect/Schema";
 
-export class CloudPublicConfigMissingError extends Schema.TaggedErrorClass<CloudPublicConfigMissingError>()(
+export class CloudPublicConfigMissingError extends Schema.TaggedError<CloudPublicConfigMissingError>()(
   "CloudPublicConfigMissingError",
   {
     key: Schema.Literal("KAIRO_CLERK_JWT_TEMPLATE"),

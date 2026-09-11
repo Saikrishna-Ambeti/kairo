@@ -15,6 +15,7 @@ import * as CodexErrors from "effect-codex-app-server/errors";
 
 import type {
   CodexSettings,
+  CustomModelSetting,
   ServerProvider,
   ServerProviderState,
   ModelCapabilities,
@@ -24,7 +25,7 @@ import type {
 } from "@kairo/contracts";
 import { PREFERRED_DEFAULT_CODEX_MODELS, ServerSettingsError } from "@kairo/contracts";
 
-import { createModelCapabilities } from "@kairo/shared/model";
+import { createModelCapabilities, readCustomModelEntries } from "@kairo/shared/model";
 import { resolveSpawnCommand } from "@kairo/shared/shell";
 import { codexAppServerArgs, resolveCodexLaunchArgs } from "./codexLaunchArgs.ts";
 import {
@@ -48,6 +49,10 @@ const RATE_LIMITS_PROBE_TIMEOUT_MS = 3_000;
 type CodexRateLimitsProbe =
   | {
       readonly snapshot: CodexRateLimitSnapshot;
+      readonly rateLimitsByLimitId?:
+        | Readonly<Record<string, CodexRateLimitSnapshot>>
+        | null
+        | undefined;
       readonly resetCredits: CodexResetCreditsSummary | null | undefined;
     }
   | { readonly failure: string };
@@ -58,6 +63,7 @@ const CODEX_PRESENTATION = {
   displayName: "Codex",
   showInteractionModeToggle: true,
   supportedInteractionModes: ["default", "plan", "study"],
+  reportsContextWindow: true,
 } as const;
 
 export interface CodexAppServerProviderSnapshot {
@@ -245,9 +251,14 @@ export function applyPreferredCodexDefaultModel(
   });
 }
 
+/**
+ * Codex has no static default capability set, so a bare custom slug borrows
+ * the first built-in's descriptors; an entry with its own capabilities keeps
+ * them.
+ */
 function appendCustomCodexModels(
   models: ReadonlyArray<ServerProviderModel>,
-  customModels: ReadonlyArray<string>,
+  customModels: ReadonlyArray<CustomModelSetting>,
 ): ReadonlyArray<ServerProviderModel> {
   if (customModels.length === 0) {
     return models;
@@ -256,17 +267,16 @@ function appendCustomCodexModels(
   const seen = new Set(models.map((model) => model.slug));
   const fallbackCapabilities = models.find((model) => model.capabilities)?.capabilities ?? null;
   const customEntries: ServerProviderModel[] = [];
-  for (const rawModel of customModels) {
-    const slug = rawModel.trim();
-    if (!slug || seen.has(slug)) {
+  for (const entry of readCustomModelEntries(customModels)) {
+    if (seen.has(entry.slug)) {
       continue;
     }
-    seen.add(slug);
+    seen.add(entry.slug);
     customEntries.push({
-      slug,
-      name: slug,
+      slug: entry.slug,
+      name: entry.name,
       isCustom: true,
-      capabilities: fallbackCapabilities,
+      capabilities: entry.capabilities ?? fallbackCapabilities,
     });
   }
   return customEntries.length === 0 ? models : [...models, ...customEntries];
@@ -400,7 +410,7 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
   readonly homePath?: string;
   readonly launchArgs?: string;
   readonly cwd: string;
-  readonly customModels?: ReadonlyArray<string>;
+  readonly customModels?: ReadonlyArray<CustomModelSetting>;
   readonly environment?: NodeJS.ProcessEnv;
 }) {
   const { client, initialize } = yield* withCodexAppServerClient(input);
@@ -430,6 +440,7 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
       client.request("account/rateLimits/read", undefined).pipe(
         Effect.map((response): CodexRateLimitsProbe => ({
           snapshot: response.rateLimits,
+          rateLimitsByLimitId: response.rateLimitsByLimitId,
           resetCredits: response.rateLimitResetCredits,
         })),
         Effect.timeoutOption(Duration.millis(RATE_LIMITS_PROBE_TIMEOUT_MS)),
@@ -471,21 +482,8 @@ export const probeCodexSkillsForCwd = Effect.fn("probeCodexSkillsForCwd")(functi
   return parseCodexSkillsListResponse(skillsResponse, input.cwd);
 });
 
-const emptyCodexModelsFromSettings = (codexSettings: CodexSettings): ServerProvider["models"] => {
-  const models = new Set<string>();
-  for (const model of codexSettings.customModels) {
-    const trimmed = model.trim();
-    if (trimmed.length > 0) {
-      models.add(trimmed);
-    }
-  }
-  return Array.from(models, (model) => ({
-    slug: model,
-    name: model,
-    isCustom: true,
-    capabilities: null,
-  }));
-};
+const emptyCodexModelsFromSettings = (codexSettings: CodexSettings): ServerProvider["models"] =>
+  appendCustomCodexModels([], codexSettings.customModels);
 
 const makePendingCodexProvider = (
   codexSettings: CodexSettings,
@@ -563,7 +561,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
     readonly homePath?: string;
     readonly launchArgs?: string;
     readonly cwd: string;
-    readonly customModels: ReadonlyArray<string>;
+    readonly customModels: ReadonlyArray<CustomModelSetting>;
     readonly environment?: NodeJS.ProcessEnv;
   }) => Effect.Effect<
     CodexAppServerProviderSnapshot,
@@ -661,6 +659,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
           })
         : codexRateLimitsToLimits({
             snapshot: snapshot.rateLimits.snapshot,
+            rateLimitsByLimitId: snapshot.rateLimits.rateLimitsByLimitId,
             resetCredits: snapshot.rateLimits.resetCredits,
             checkedAt,
           });

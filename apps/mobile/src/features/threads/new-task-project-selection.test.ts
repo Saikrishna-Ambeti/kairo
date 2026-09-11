@@ -4,18 +4,35 @@ import { describe, expect, it } from "vite-plus/test";
 import type { EnvironmentProject } from "@kairo/client-runtime/state/shell";
 import type { HomeProjectScope } from "../home/homeThreadList";
 import {
-  getOnlySelectableProject,
   getProjectScopeSelectionTarget,
   resolveDraftProjectSelection,
+  resolveEnvironmentProjectMatch,
 } from "./new-task-project-selection";
 
-function makeProject(id: string, environmentId = "environment"): EnvironmentProject {
+function makeProject(
+  id: string,
+  environmentId = "environment",
+  options: {
+    readonly title?: string;
+    readonly workspaceRoot?: string;
+    readonly repositoryKey?: string;
+  } = {},
+): EnvironmentProject {
   return {
     environmentId: EnvironmentId.make(environmentId),
     id: ProjectId.make(id),
-    title: id,
-    workspaceRoot: `/work/${id}`,
-    repositoryIdentity: null,
+    title: options.title ?? id,
+    workspaceRoot: options.workspaceRoot ?? `/work/${id}`,
+    repositoryIdentity: options.repositoryKey
+      ? {
+          canonicalKey: options.repositoryKey,
+          locator: {
+            source: "git-remote",
+            remoteName: "origin",
+            remoteUrl: `https://${options.repositoryKey}.git`,
+          },
+        }
+      : null,
     defaultModelSelection: null,
     scripts: [],
     createdAt: "2026-07-01T00:00:00.000Z",
@@ -36,18 +53,6 @@ function makeScope(projects: ReadonlyArray<EnvironmentProject>): HomeProjectScop
   };
 }
 
-describe("getOnlySelectableProject", () => {
-  it("auto-selects when there is exactly one physical project", () => {
-    const project = makeProject("kairo");
-    expect(getOnlySelectableProject([makeScope([project])])).toBe(project);
-  });
-
-  it("selects the representative when one logical project has multiple workspaces", () => {
-    const projects = [makeProject("kairo"), makeProject("kairo-2"), makeProject("kairo-3")];
-    expect(getOnlySelectableProject([makeScope(projects)])).toBe(projects[0]);
-  });
-});
-
 describe("getProjectScopeSelectionTarget", () => {
   it("keeps the current environment when it hosts the selected logical project", () => {
     const projects = [makeProject("kairo-mac", "mac"), makeProject("kairo-server", "server")];
@@ -61,6 +66,55 @@ describe("getProjectScopeSelectionTarget", () => {
     expect(getProjectScopeSelectionTarget(makeScope(projects), EnvironmentId.make("other"))).toBe(
       projects[0],
     );
+  });
+});
+
+describe("resolveEnvironmentProjectMatch", () => {
+  it("follows the same repository onto the target machine", () => {
+    const selected = makeProject("kairo", "mac", { repositoryKey: "github.com/kairo/kairo" });
+    const target = [
+      makeProject("other", "server", { repositoryKey: "github.com/kairo/other" }),
+      makeProject("kairo-clone", "server", { repositoryKey: "github.com/kairo/kairo" }),
+    ];
+    expect(resolveEnvironmentProjectMatch(target, selected)).toBe(target[1]);
+  });
+
+  it("falls back to workspace basename, then title, for unindexed projects", () => {
+    const selected = makeProject("kairo", "mac", { workspaceRoot: "/Users/me/kairo" });
+    const byBasename = [
+      makeProject("other", "server"),
+      makeProject("srv", "server", { workspaceRoot: "/home/me/kairo" }),
+    ];
+    expect(resolveEnvironmentProjectMatch(byBasename, selected)).toBe(byBasename[1]);
+
+    const byTitle = [
+      makeProject("other", "server"),
+      makeProject("srv", "server", { title: "kairo" }),
+    ];
+    expect(resolveEnvironmentProjectMatch(byTitle, selected)).toBe(byTitle[1]);
+  });
+
+  it("does not treat a known different repository as a basename or title match", () => {
+    const selected = makeProject("kairo", "mac", {
+      repositoryKey: "github.com/kairo/kairo",
+      workspaceRoot: "/Users/me/kairo",
+    });
+    const fork = makeProject("fork", "server", {
+      repositoryKey: "github.com/someone/kairo",
+      title: "kairo",
+      workspaceRoot: "/home/me/kairo",
+    });
+    const unindexed = makeProject("unindexed", "server", { workspaceRoot: "/srv/kairo" });
+    expect(resolveEnvironmentProjectMatch([fork, unindexed], selected)).toBe(unindexed);
+    // Without any weaker match the fork is still the first-project fallback.
+    expect(resolveEnvironmentProjectMatch([fork], selected)).toBe(fork);
+  });
+
+  it("falls back to the first project on the target so the draft has a key to carry over to", () => {
+    const selected = makeProject("kairo", "mac", { repositoryKey: "github.com/kairo/kairo" });
+    const target = [makeProject("unrelated", "server"), makeProject("also-unrelated", "server")];
+    expect(resolveEnvironmentProjectMatch(target, selected)).toBe(target[0]);
+    expect(resolveEnvironmentProjectMatch([], selected)).toBeNull();
   });
 });
 

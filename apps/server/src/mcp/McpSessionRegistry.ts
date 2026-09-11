@@ -15,6 +15,11 @@ export interface McpCredentialRequest {
   readonly threadId: ThreadId;
   readonly providerInstanceId: ProviderInstanceId;
   readonly capabilities?: ReadonlySet<McpInvocationContext.McpCapability>;
+  /**
+   * Whether the credential may drive the user's browser. The pull request
+   * toolkit is always granted: it only touches the thread's own links.
+   */
+  readonly preview?: boolean;
 }
 
 export interface McpIssuedCredential {
@@ -129,7 +134,10 @@ const makeWithOptions = Effect.fn("McpSessionRegistry.make")(function* (
         threadId: ThreadId.make(request.threadId),
         providerSessionId,
         providerInstanceId: ProviderInstanceId.make(request.providerInstanceId),
-        capabilities: request.capabilities ?? new Set(["preview"]),
+        capabilities: new Set<McpInvocationContext.McpCapability>([
+          "pull-requests",
+          ...(request.capabilities ?? (request.preview ? ["preview" as const] : [])),
+        ]),
         issuedAt,
       };
       yield* SynchronizedRef.update(state, ({ records }) => {
@@ -145,6 +153,7 @@ const makeWithOptions = Effect.fn("McpSessionRegistry.make")(function* (
           providerInstanceId: scope.providerInstanceId,
           endpoint,
           authorizationHeader: `Bearer ${rawToken}`,
+          preview: request.capabilities?.has("preview") ?? request.preview ?? false,
         },
       };
     },

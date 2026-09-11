@@ -42,6 +42,9 @@ const projectionLayer = Layer.succeed(ProjectionSnapshotQuery, {
   getThreadShellById: () => Effect.succeed(Option.none()),
   getThreadDetailById: () => Effect.die("unused"),
   getThreadDetailSnapshot: () => Effect.die("unused"),
+  getImportedAgentSessionSources: () => Effect.die("unused"),
+  getThreadRuntimeContext: () => Effect.die("unused"),
+  getTurnStartMessage: () => Effect.die("unused"),
 });
 
 describe("ScheduledTaskService", () => {
@@ -52,6 +55,8 @@ describe("ScheduledTaskService", () => {
         dispatch: (command) =>
           Ref.update(commands, (current) => [...current, command]).pipe(Effect.as({ sequence: 1 })),
         readEvents: () => Stream.empty,
+        readThreadEvents: () => Stream.empty,
+        getThreadReplayStats: () => Effect.die("unused"),
         streamDomainEvents: Stream.empty,
         subscribeDomainEvents: Effect.succeed(Stream.empty),
         latestSequence: Effect.succeed(0),

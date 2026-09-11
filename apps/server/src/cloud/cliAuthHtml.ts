@@ -2,7 +2,7 @@ export type LoopbackAuthorizationStage = "dev" | "nightly" | "latest";
 
 declare const __KAIRO_BUILD_CHANNEL__: "nightly" | "latest" | undefined;
 
-export function resolveLoopbackAuthorizationStage(): LoopbackAuthorizationStage {
+function resolveLoopbackAuthorizationStage(): LoopbackAuthorizationStage {
   return typeof __KAIRO_BUILD_CHANNEL__ === "undefined" ? "dev" : __KAIRO_BUILD_CHANNEL__;
 }
 

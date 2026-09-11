@@ -2,14 +2,14 @@
 
 ## Purpose
 
-This document preserves Kairo changes made on top of upstream T3 Code before replacing this branch with a newer upstream revision. It is a replay guide, not a raw Git patch: apply these product decisions to the new upstream architecture, preserving equivalent behavior rather than forcing old file layouts.
+This document preserves Kairo changes made on top of upstream Kairo before replacing this branch with a newer upstream revision. It is a replay guide, not a raw Git patch: apply these product decisions to the new upstream architecture, preserving equivalent behavior rather than forcing old file layouts.
 
 ## Post-capture corrections
 
 These corrections were made after initial capture. They are maintenance fixes, not new product features, and must remain when replaying the patch set.
 
-- Restore `T3 Tools Inc.` copyright beside `Kairo Tools Inc.` in `LICENSE`. Add `ATTRIBUTION.md` and README attribution identifying T3 Code as the MIT-licensed upstream foundation. Confirm external hackathon eligibility separately; source code cannot establish it.
-- Replace incorrect `pingdotgg/kairo` release, package, and marketing links with `Saikrishna-Ambeti/kairo`. Do not change `pingdotgg/t3code` attribution link or test fixtures that model arbitrary repository URLs.
+- Restore `T3 Tools Inc.` copyright beside `Kairo Tools Inc.` in `LICENSE`. Add `ATTRIBUTION.md` and README attribution identifying Kairo as the MIT-licensed upstream foundation. Confirm external hackathon eligibility separately; source code cannot establish it.
+- Replace incorrect `pingdotgg/kairo` release, package, and marketing links with `Saikrishna-Ambeti/kairo`. Do not change `pingdotgg/kairo` attribution link or test fixtures that model arbitrary repository URLs.
 - Make public setup documentation use the project-supported Vite+ commands: `vp install`, `vp run <script>`, and `vp test`. Remove stale Bun/Turbo claims.
 - Keep release stage labels unchanged: `Beta` is development build identity and `Alpha` is packaged stable-channel identity. This is intentional current channel behavior, not a branding replacement.
 
@@ -34,32 +34,32 @@ These corrections were made after initial capture. They are maintenance fixes, n
 
 ## 1. Product, package, and deployment rebrand
 
-Rename product from **T3 Code** to **Kairo** and hosted service from **T3 Connect** to **Kairo Connect**. This is not cosmetic: package names, persisted local paths, environment variables, desktop identity, URI scheme, release artifacts, cloud defaults, and mobile native module names all change.
+Rename product from **Kairo** to **Kairo** and hosted service from **Kairo Connect** to **Kairo Connect**. This is not cosmetic: package names, persisted local paths, environment variables, desktop identity, URI scheme, release artifacts, cloud defaults, and mobile native module names all change.
 
 ### Required identifier mapping
 
 | Previous upstream form                                          | Kairo form                                                               |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `T3 Code`                                                       | `Kairo`                                                                  |
-| `T3 Connect`                                                    | `Kairo Connect`                                                          |
-| `t3code`                                                        | `kairo`                                                                  |
-| `@t3tools/*`                                                    | `@kairo/*`                                                               |
-| `T3CODE_*`                                                      | `KAIRO_*`                                                                |
-| `.t3code`                                                       | `.kairo`                                                                 |
-| `com.t3tools.t3code`                                            | `com.kairo.app`                                                          |
-| `t3code://`                                                     | `kairo://`                                                               |
-| `app.t3.codes` / `latest.app.t3.codes` / `nightly.app.t3.codes` | `app.kairo.codes` / `latest.app.kairo.codes` / `nightly.app.kairo.codes` |
+| `Kairo`                                                       | `Kairo`                                                                  |
+| `Kairo Connect`                                                    | `Kairo Connect`                                                          |
+| `kairo`                                                        | `kairo`                                                                  |
+| `@kairo/*`                                                    | `@kairo/*`                                                               |
+| `KAIRO_*`                                                      | `KAIRO_*`                                                                |
+| `.kairo`                                                       | `.kairo`                                                                 |
+| `com.kairo.app`                                            | `com.kairo.app`                                                          |
+| `kairo://`                                                     | `kairo://`                                                               |
+| `app.kairo.codes` / `latest.app.kairo.codes` / `nightly.app.kairo.codes` | `app.kairo.codes` / `latest.app.kairo.codes` / `nightly.app.kairo.codes` |
 
-Apply mapping throughout application code, tests, docs, `.env.example`, shell scripts, GitHub workflows, release metadata, mobile configuration, generated schema names, and asset paths. Do not rename vendor API fields or third-party identifiers containing `t3` unless they are Kairo-owned.
+Apply mapping throughout application code, tests, docs, `.env.example`, shell scripts, GitHub workflows, release metadata, mobile configuration, generated schema names, and asset paths. Do not rename vendor API fields or third-party identifiers containing `kairo` unless they are Kairo-owned.
 
 ### Workspace and native moves
 
 - Rename root workspace to `@kairo/monorepo`, server CLI package to `kairo`, and all internal workspace dependencies/imports to `@kairo/*`.
-- Rename `oxlint-plugin-t3code` directory/package/rules namespace to `oxlint-plugin-kairo` and use `kairo/no-inline-schema-compile` plus `kairo/no-manual-effect-runtime-in-tests` in root `vite.config.ts`.
-- Rename web Clerk components from `T3Connect...` / `useT3Connect...` to Kairo Connect equivalents.
+- Rename `oxlint-plugin-kairo` directory/package/rules namespace to `oxlint-plugin-kairo` and use `kairo/no-inline-schema-compile` plus `kairo/no-manual-effect-runtime-in-tests` in root `vite.config.ts`.
+- Rename web Clerk components from `KairoConnect...` / `useT3Connect...` to Kairo Connect equivalents.
 - Rename mobile native modules and their registration names:
-  - `t3-review-diff` to `kairo-review-diff`, including podspec, Expo module config, Swift module/view names, and Android package/module names.
-  - `t3-terminal` to `kairo-terminal`, with matching iOS and Android native symbols and Expo configuration.
+  - `kairo-review-diff` to `kairo-review-diff`, including podspec, Expo module config, Swift module/view names, and Android package/module names.
+  - `kairo-terminal` to `kairo-terminal`, with matching iOS and Android native symbols and Expo configuration.
 - Use Kairo mobile icon SVGs, application IDs, display names, permissions, user-agent labels, storage keys, and diagnostics text. Keep compatibility only where upstream requires an existing persisted key migration.
 
 ### Desktop/release identity
@@ -265,7 +265,7 @@ Manually verify:
 - Supermemory key is absent from settings payload/logs, selected provider receives only expected sensitive environment variable, Codex hook/config files are synchronized, and disable removes only matching credentials.
 - Composio missing-CLI, install/login, auth URL, toolkit linking, fallback catalog, selected-provider environment, and disable paths all report predictable states.
 - Desktop build produces Kairo product/package/protocol/artifact identity; old macOS uses shim only under defined conditions.
-- `rg -n 'T3 Code|T3 Connect|@t3tools|T3CODE_|t3code'` over Kairo-owned code/config/docs is empty except intentional historical/reference material.
+- `rg -n 'Kairo|Kairo Connect|@kairo|KAIRO_|kairo'` over Kairo-owned code/config/docs is empty except intentional historical/reference material.
 
 ## Commit map
 

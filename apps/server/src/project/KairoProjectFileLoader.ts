@@ -21,7 +21,7 @@ import { KairoProjectFileFromJson } from "@kairo/shared/kairoProjectFile";
 
 const decodeKairoProjectFileJson = Schema.decodeEffect(KairoProjectFileFromJson);
 
-export class KairoProjectFileLoadError extends Schema.TaggedErrorClass<KairoProjectFileLoadError>()(
+export class KairoProjectFileLoadError extends Schema.TaggedError<KairoProjectFileLoadError>()(
   "KairoProjectFileLoadError",
   {
     operation: Schema.Literals(["read", "decode"]),
@@ -59,6 +59,7 @@ const logKairoProjectFileLoadError = (error: KairoProjectFileLoadError) =>
     }),
   );
 
+/** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;

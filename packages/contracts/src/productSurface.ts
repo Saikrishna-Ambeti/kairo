@@ -50,7 +50,7 @@ export const ProductSurfaceConfigWithDefault = ProductSurfaceConfig.pipe(
   Schema.withDecodingDefault(Effect.succeed(DEFAULT_PRODUCT_SURFACE_CONFIG)),
 );
 
-export class SurfaceUnavailableError extends Schema.TaggedErrorClass<SurfaceUnavailableError>()(
+export class SurfaceUnavailableError extends Schema.TaggedError<SurfaceUnavailableError>()(
   "SurfaceUnavailableError",
   {
     code: Schema.Literal("SURFACE_DISABLED"),

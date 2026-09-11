@@ -1,3 +1,4 @@
+import * as NodePath from "@effect/platform-node/NodePath";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -26,7 +27,11 @@ const makeEnvironmentLayer = (
   DesktopEnvironment.layer({
     ...defaultInput,
     ...overrides,
-  }).pipe(Layer.provide(Layer.mergeAll(NodeServices.layer, DesktopConfig.layerTest(env))));
+  }).pipe(
+    Layer.provide(
+      Layer.mergeAll(NodeServices.layer, NodePath.layerPosix, DesktopConfig.layerTest(env)),
+    ),
+  );
 
 const makeEnvironment = (
   overrides: Partial<DesktopEnvironment.MakeDesktopEnvironmentInput> = {},
@@ -70,6 +75,7 @@ describe("DesktopEnvironment", () => {
       assert.equal(environment.backendCwd, "/repo");
       assert.equal(environment.appUserModelId, "com.kairo.app.dev");
       assert.equal(environment.linuxWmClass, "kairo-dev");
+      assert.equal(environment.linuxDesktopEntryName, "com.kairo.Kairo.Development.desktop");
       assert.deepEqual(
         Option.map(environment.devServerUrl, (url) => url.href),
         Option.some("http://localhost:5173/"),
@@ -117,6 +123,19 @@ describe("DesktopEnvironment", () => {
         environment.backendEntryPath,
         "/install/resources/server.asar/apps/server/dist/bin.mjs",
       );
+    }),
+  );
+
+  it.effect("uses the stable desktop entry as the packaged Linux portal identity", () =>
+    Effect.gen(function* () {
+      const environment = yield* makeEnvironment({
+        platform: "linux",
+        isPackaged: true,
+        appPath: "/tmp/.mount_kairo/resources/app.asar",
+        resourcesPath: "/tmp/.mount_kairo/resources",
+      });
+
+      assert.equal(environment.linuxDesktopEntryName, "com.kairo.Kairo.desktop");
     }),
   );
 

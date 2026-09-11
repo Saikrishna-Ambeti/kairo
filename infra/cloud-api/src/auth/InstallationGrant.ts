@@ -24,7 +24,7 @@ const InstallationGrantClaims = Schema.Struct({
 
 export type InstallationGrantClaims = typeof InstallationGrantClaims.Type;
 
-class InstallationGrantVerificationError extends Schema.TaggedErrorClass<InstallationGrantVerificationError>()(
+class InstallationGrantVerificationError extends Schema.TaggedError<InstallationGrantVerificationError>()(
   "InstallationGrantVerificationError",
   { cause: Schema.Defect() },
 ) {}
