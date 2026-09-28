@@ -97,6 +97,9 @@ const makeArtifactMetadataRepository = Effect.gen(function* () {
         AND (${input.threadId} IS NULL OR artifact.thread_id = ${input.threadId})
         AND (
           (${input.includeDocuments} = 1 AND artifact.kind = 'document')
+          OR (${input.includePresentations} = 1 AND artifact.kind = 'presentation')
+          OR (${input.includeSpreadsheets} = 1 AND artifact.kind = 'spreadsheet')
+          OR (${input.includeCsv} = 1 AND artifact.kind = 'csv')
           OR (${input.includePdfs} = 1 AND artifact.kind = 'pdf')
         )
         AND (

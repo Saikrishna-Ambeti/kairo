@@ -118,11 +118,18 @@ export function HomeRouteScreen() {
         />
         <WorkspaceSidebarToolbar
           afterSidebarButton={
-            <NativeHeaderToolbar.Button
-              accessibilityLabel="New task"
-              icon="square.and.pencil"
-              onPress={() => navigation.navigate("NewTaskSheet", { screen: "NewTask" })}
-            />
+            <>
+              <NativeHeaderToolbar.Button
+                accessibilityLabel="Open library"
+                icon="books.vertical"
+                onPress={() => navigation.navigate("ArtifactLibrary", {})}
+              />
+              <NativeHeaderToolbar.Button
+                accessibilityLabel="New task"
+                icon="square.and.pencil"
+                onPress={() => navigation.navigate("NewTaskSheet", { screen: "NewTask" })}
+              />
+            </>
           }
         />
         <WorkspaceEmptyDetail
@@ -174,6 +181,13 @@ export function HomeRouteScreen() {
             navigation.navigate("SettingsSheet", {
               screen: "SettingsContent",
               params: { screen: "Settings" },
+            })
+          }
+          onOpenLibrary={() =>
+            navigation.navigate("ArtifactLibrary", {
+              ...(selectedEnvironmentId === null
+                ? {}
+                : { environmentId: String(selectedEnvironmentId) }),
             })
           }
           onProjectSortOrderChange={setProjectSortOrder}

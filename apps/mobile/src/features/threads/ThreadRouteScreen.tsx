@@ -458,6 +458,7 @@ function ThreadRouteContent(
           environmentId={selectedThread.environmentId}
           headerInset={inspectorHeaderInset}
           projectName={selectedThreadProject?.title ?? "Files"}
+          threadId={selectedThread.id}
           selectedPath={null}
           onSelectFile={handleSelectInspectorFile}
         />

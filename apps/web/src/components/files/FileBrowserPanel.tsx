@@ -20,6 +20,7 @@ import { useWorkspaceMutationRefresh } from "~/hooks/useWorkspaceMutationRefresh
 import { readLocalApi } from "~/localApi";
 import { KAIRO_PIERRE_ICONS } from "~/pierre-icons";
 import { PIERRE_TREE_UNSAFE_CSS, pierreTreeStyle } from "~/pierre-tree-theme";
+import { isAbsolutePath } from "~/terminal-links";
 
 import { createFileTreeDragMentionController } from "./fileTreeDragMention";
 import { areAllDirectoriesExpanded, setAllDirectoriesExpanded } from "./fileTreeExpansion";
@@ -105,7 +106,31 @@ export default function FileBrowserPanel({
   const { resolvedTheme } = useTheme();
   const composerRef = useComposerHandleContext();
   const entriesQuery = useProjectEntriesQuery(environmentId, cwd);
-  const entries = entriesQuery.data?.entries ?? [];
+  const selectedEntryPath =
+    selectedPath && !isAbsolutePath(selectedPath)
+      ? selectedPath.replaceAll("\\", "/")
+      : selectedPath;
+  // The workspace path index skips binary files. Keep an Office file opened
+  // from chat visible in the explorer, including its parent directories.
+  const entries = useMemo(() => {
+    const indexed = entriesQuery.data?.entries ?? [];
+    if (
+      !selectedEntryPath ||
+      isAbsolutePath(selectedEntryPath) ||
+      !/\.(?:docx|pptx|xlsx|pdf)$/i.test(selectedEntryPath) ||
+      indexed.some((entry) => entry.path === selectedEntryPath)
+    )
+      return indexed;
+    const paths = selectedEntryPath.split("/");
+    const known = new Set(indexed.map((entry) => entry.path));
+    const extra: ProjectEntry[] = [];
+    for (let index = 1; index < paths.length; index++) {
+      const parent = paths.slice(0, index).join("/");
+      if (!known.has(parent)) extra.push({ path: parent, kind: "directory" });
+    }
+    extra.push({ path: selectedEntryPath, kind: "file" });
+    return [...indexed, ...extra].toSorted((left, right) => left.path.localeCompare(right.path));
+  }, [entriesQuery.data?.entries, selectedEntryPath]);
   const entryKinds = useMemo(
     () => new Map(entries.map((entry) => [entry.path, entry.kind] as const)),
     [entries],
@@ -285,11 +310,11 @@ export default function FileBrowserPanel({
   }, [entriesQuery.data, entryKinds, model, treePaths]);
 
   useEffect(() => {
-    if (!selectedPath) {
+    if (!selectedEntryPath) {
       handledRevealRef.current = null;
       return;
     }
-    const revealRequest = { path: selectedPath, revealId: selectedPathRevealId };
+    const revealRequest = { path: selectedEntryPath, revealId: selectedPathRevealId };
     const handledReveal = handledRevealRef.current;
     // Entry refreshes rebuild treePaths while the same preview stays open.
     // Replaying a handled reveal would close an active tree search and steal focus.
@@ -299,8 +324,8 @@ export default function FileBrowserPanel({
     ) {
       return;
     }
-    if (entryKinds.get(selectedPath) !== "file") return;
-    const selectedItem = model.getItem(selectedPath);
+    if (entryKinds.get(selectedEntryPath) !== "file") return;
+    const selectedItem = model.getItem(selectedEntryPath);
     if (!selectedItem) return;
 
     // A selection that originated inside the tree (clicking a row, possibly
@@ -309,8 +334,8 @@ export default function FileBrowserPanel({
     // opens (file picker, content search, chat links).
     const selectedInTree = model
       .getSelectedPaths()
-      .some((path) => path.replace(/\/$/, "") === selectedPath);
-    if (selectedInTree && treeSelectionPathRef.current === selectedPath) {
+      .some((path) => path.replace(/\/$/, "") === selectedEntryPath);
+    if (selectedInTree && treeSelectionPathRef.current === selectedEntryPath) {
       treeSelectionPathRef.current = null;
       handledRevealRef.current = revealRequest;
       return;
@@ -326,7 +351,7 @@ export default function FileBrowserPanel({
 
     // Directory rows are registered with a trailing slash (see treePath), so
     // ancestor lookups must use the same form to expand them.
-    const segments = selectedPath.split("/");
+    const segments = selectedEntryPath.split("/");
     let ancestorPath = "";
     for (const segment of segments.slice(0, -1)) {
       ancestorPath = ancestorPath ? `${ancestorPath}/${segment}` : segment;
@@ -335,11 +360,11 @@ export default function FileBrowserPanel({
     }
 
     selectedItem.select();
-    model.scrollToPath(selectedPath, { focus: true, offset: "center" });
+    model.scrollToPath(selectedEntryPath, { focus: true, offset: "center" });
     queueMicrotask(() => {
       syncingSelectionRef.current = false;
     });
-  }, [entryKinds, model, selectedPath, selectedPathRevealId, treePaths]);
+  }, [entryKinds, model, selectedEntryPath, selectedPathRevealId, treePaths]);
 
   // Tag tree drags with the composer mention payload. The row is read from
   // the composed event path (the tree's shadow root is open), so this does

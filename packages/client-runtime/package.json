@@ -43,6 +43,10 @@
       "types": "./src/codexArtifactTemplates.ts",
       "default": "./src/codexArtifactTemplates.ts"
     },
+    "./artifact-creation": {
+      "types": "./src/artifactCreation.ts",
+      "default": "./src/artifactCreation.ts"
+    },
     "./codex-markdown-directives": {
       "types": "./src/codexMarkdownDirectives.ts",
       "default": "./src/codexMarkdownDirectives.ts"

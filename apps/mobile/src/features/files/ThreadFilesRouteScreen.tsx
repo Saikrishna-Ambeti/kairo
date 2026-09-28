@@ -52,6 +52,7 @@ import { useAppearancePreferences } from "../settings/appearance/AppearancePrefe
 import { ThreadRouteScreen } from "../threads/ThreadRouteScreen";
 import { FileMarkdownPreview } from "./FileMarkdownPreview";
 import { FileTreeBrowser } from "./FileTreeBrowser";
+import { ThreadArtifactsList } from "./ThreadArtifactsList";
 import { preloadWorkspaceFileContents } from "./preload-workspace-file";
 import { SourceFileSurface } from "./SourceFileSurface";
 import { ThreadFileNavigatorPane } from "./thread-file-navigator-pane";
@@ -305,6 +306,7 @@ export function ThreadFilesTreeScreen(props: ThreadFilesRouteScreenProps) {
   const { fileInspector, layout, panes, showAuxiliaryPane, togglePrimarySidebar } =
     useAdaptiveWorkspaceLayout();
   const [searchQuery, setSearchQuery] = useState("");
+  const [artifactRefreshToken, setArtifactRefreshToken] = useState(0);
   const isAndroid = Platform.OS === "android";
   const { themeAppearance: highlightTheme, materialYouStyleLayoutActive } =
     useAppearancePreferences();
@@ -324,6 +326,10 @@ export function ThreadFilesTreeScreen(props: ThreadFilesRouteScreenProps) {
       : null,
   );
   const entriesData = entriesQuery.data as ProjectListEntriesResult | null;
+  const refreshFiles = useCallback(() => {
+    entriesQuery.refresh();
+    setArtifactRefreshToken((value) => value + 1);
+  }, [entriesQuery.refresh]);
   const handleReturnToThread = useCallback(() => {
     if (navigation.canGoBack()) {
       navigation.goBack();
@@ -362,17 +368,18 @@ export function ThreadFilesTreeScreen(props: ThreadFilesRouteScreenProps) {
   );
   const renderInspector = useCallback(
     (headerInset: number) =>
-      environmentId !== null && cwd !== null ? (
+      environmentId !== null && threadId !== null && cwd !== null ? (
         <ThreadFileNavigatorPane
           cwd={cwd}
           environmentId={environmentId}
           headerInset={headerInset}
           projectName={projectName}
+          threadId={threadId}
           selectedPath={null}
           onSelectFile={handleSelectFile}
         />
       ) : null,
-    [cwd, environmentId, handleSelectFile, projectName],
+    [cwd, environmentId, handleSelectFile, projectName, threadId],
   );
   const handlePreviewFile = useCallback(
     (relativePath: string) => {
@@ -475,7 +482,7 @@ export function ThreadFilesTreeScreen(props: ThreadFilesRouteScreenProps) {
               {
                 accessibilityLabel: "Refresh files",
                 icon: "arrow.clockwise",
-                onPress: entriesQuery.refresh,
+                onPress: refreshFiles,
               },
             ]}
           />
@@ -536,8 +543,16 @@ export function ThreadFilesTreeScreen(props: ThreadFilesRouteScreenProps) {
         isPending={entriesQuery.isPending}
         searchQuery={searchQuery}
         selectedPath={null}
+        listHeader={
+          <ThreadArtifactsList
+            environmentId={environmentId}
+            threadId={threadId}
+            searchQuery={searchQuery}
+            refreshToken={artifactRefreshToken}
+          />
+        }
         onPreviewFile={handlePreviewFile}
-        onRefresh={entriesQuery.refresh}
+        onRefresh={refreshFiles}
         onSelectFile={handleSelectFile}
       />
       <FilesToolbarBottomFade />
@@ -666,17 +681,26 @@ export function ThreadFileScreen(props: ThreadFileRouteScreenProps) {
   );
   const renderInspector = useCallback(
     (headerInset: number) =>
-      fileInspector.supported && environmentId !== null && cwd !== null ? (
+      fileInspector.supported && environmentId !== null && threadId !== null && cwd !== null ? (
         <ThreadFileNavigatorPane
           cwd={cwd}
           environmentId={environmentId}
           headerInset={headerInset}
           projectName={projectName}
+          threadId={threadId}
           selectedPath={relativePath}
           onSelectFile={handleSelectFile}
         />
       ) : undefined,
-    [cwd, environmentId, fileInspector.supported, handleSelectFile, projectName, relativePath],
+    [
+      cwd,
+      environmentId,
+      fileInspector.supported,
+      handleSelectFile,
+      projectName,
+      relativePath,
+      threadId,
+    ],
   );
   // The workspace inspector column spans the full window height. On iOS the
   // pane brings its own nested native header; elsewhere it pads itself below

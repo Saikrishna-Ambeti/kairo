@@ -78,7 +78,7 @@ const PREVIEW_ASSET_EXTENSIONS = new Set([
   ".woff",
   ".woff2",
 ]);
-const DOCUMENT_ARTIFACT_EXTENSIONS = new Set([".docx", ".pdf"]);
+const DOCUMENT_ARTIFACT_EXTENSIONS = new Set([".docx", ".pptx", ".xlsx", ".csv", ".pdf"]);
 
 const AssetClaimsSchema = Schema.Union([
   Schema.Struct({

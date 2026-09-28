@@ -191,7 +191,7 @@ export class AssetDocumentTypeValidationError extends Schema.TaggedError<AssetDo
   },
 ) {
   override get message(): string {
-    return "Only PDF and Word document artifacts can be opened.";
+    return "Only PDF, Word, PowerPoint, Excel, and CSV artifacts can be opened.";
   }
 }
 

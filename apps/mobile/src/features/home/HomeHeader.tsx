@@ -51,6 +51,7 @@ export function HomeHeader(props: {
   readonly onThreadSortOrderChange: (sortOrder: SidebarThreadSortOrder) => void;
   readonly onOpenEnvironments: () => void;
   readonly onOpenSettings: () => void;
+  readonly onOpenLibrary: () => void;
   readonly onStartNewTask: () => void;
 }) {
   if (Platform.OS === "android") {
@@ -266,6 +267,19 @@ function AndroidHomeHeader(props: HomeHeaderProps) {
                 match exactly (ControlPill sizes via Tailwind classes and
                 resolves to a different box). */}
             <Pressable
+              accessibilityLabel="Open library"
+              accessibilityRole="button"
+              onPress={props.onOpenLibrary}
+              className="size-11 items-center justify-center rounded-full bg-subtle"
+            >
+              <SymbolView
+                name="books.vertical"
+                size={18}
+                tintColorClassName="accent-icon"
+                type="monochrome"
+              />
+            </Pressable>
+            <Pressable
               accessibilityLabel="Open settings"
               accessibilityRole="button"
               onPress={props.onOpenSettings}
@@ -354,6 +368,14 @@ function IosHomeHeader(props: HomeHeaderProps) {
           unstable_headerRightItems:
             Platform.OS === "ios"
               ? () => [
+                  withNativeGlassHeaderItem({
+                    accessibilityLabel: "Open library",
+                    icon: { name: "books.vertical", type: "sfSymbol" } as const,
+                    identifier: "home-library",
+                    label: "",
+                    onPress: props.onOpenLibrary,
+                    type: "button",
+                  }),
                   withNativeGlassHeaderItem({
                     accessibilityLabel: "Open settings",
                     icon: { name: "ellipsis", type: "sfSymbol" } as const,
@@ -489,6 +511,12 @@ function IosHomeHeader(props: HomeHeaderProps) {
             )}
           </NativeHeaderToolbar.Menu>
           <NativeHeaderToolbar.Spacer flexible />
+          <NativeHeaderToolbar.Button
+            accessibilityLabel="Open library"
+            icon="books.vertical"
+            onPress={props.onOpenLibrary}
+            separateBackground
+          />
           <NativeHeaderToolbar.Button
             accessibilityLabel="New task"
             icon="square.and.pencil"

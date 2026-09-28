@@ -1,5 +1,12 @@
 import { isElectron } from "~/env";
-import { FileSearchIcon, PackageOpenIcon, RefreshCwIcon, SearchIcon } from "lucide-react";
+import { openCommandPalette } from "../../commandPaletteBus";
+import {
+  FilePlus2Icon,
+  FileSearchIcon,
+  PackageOpenIcon,
+  RefreshCwIcon,
+  SearchIcon,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { useArtifacts } from "../../state/artifacts";
@@ -12,14 +19,13 @@ import { Input } from "../ui/input";
 import { ScrollArea } from "../ui/scroll-area";
 import { SidebarInset } from "../ui/sidebar";
 import { ArtifactRow } from "./ArtifactRow";
-
-type LibraryFilter = "all" | "document" | "pdf";
+import { ARTIFACT_FILTERS, type ArtifactFilter } from "./artifactDisplay";
 
 export function LibraryPage() {
   const environmentId = useActiveEnvironmentId();
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<LibraryFilter>("all");
+  const [filter, setFilter] = useState<ArtifactFilter>("all");
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setQuery(search.trim()), 180);
@@ -42,12 +48,14 @@ export function LibraryPage() {
             </WorkspaceBreadcrumbItem>
           </WorkspaceBreadcrumb>
           <Button
-            aria-label="Refresh library"
             className="ms-auto"
-            onClick={refresh}
-            size="icon-sm"
-            variant="ghost"
+            onClick={() => openCommandPalette({ open: "create-file" })}
+            size="sm"
           >
+            <FilePlus2Icon className="size-4" />
+            Create file
+          </Button>
+          <Button aria-label="Refresh library" onClick={refresh} size="icon-sm" variant="ghost">
             <RefreshCwIcon className="size-3.5" />
           </Button>
         </WorkspacePageHeader>
@@ -57,7 +65,7 @@ export function LibraryPage() {
             <section aria-labelledby="library-heading" className="flex flex-col gap-4">
               <div className="max-w-2xl">
                 <h2 id="library-heading" className="text-xl font-semibold tracking-tight">
-                  Documents and PDFs
+                  Files
                 </h2>
                 <p className="mt-1 text-muted-foreground text-sm leading-relaxed">
                   Files created by agents across every project and thread in this environment.
@@ -81,7 +89,7 @@ export function LibraryPage() {
                   />
                 </label>
                 <div className="flex shrink-0 items-center gap-1" aria-label="Artifact type">
-                  {(["all", "document", "pdf"] as const).map((value) => (
+                  {ARTIFACT_FILTERS.map(({ value, label }) => (
                     <button
                       key={value}
                       type="button"
@@ -89,7 +97,7 @@ export function LibraryPage() {
                       className="rounded-md px-2.5 py-1.5 text-muted-foreground text-xs hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-pressed:bg-accent aria-pressed:font-medium aria-pressed:text-foreground"
                       onClick={() => setFilter(value)}
                     >
-                      {value === "all" ? "All" : value === "document" ? "Documents" : "PDFs"}
+                      {label}
                     </button>
                   ))}
                 </div>
@@ -126,7 +134,7 @@ export function LibraryPage() {
                   description={
                     query.length > 0
                       ? "Try another title, filename, project, or thread."
-                      : "Ask an agent to create a Word document or PDF. It will appear here automatically."
+                      : "Ask an agent to create a document, presentation, spreadsheet, CSV, or PDF. It will appear here automatically."
                   }
                 />
               ) : (

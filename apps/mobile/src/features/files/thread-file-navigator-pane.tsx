@@ -1,4 +1,4 @@
-import type { EnvironmentId, ProjectListEntriesResult } from "@kairo/contracts";
+import type { EnvironmentId, ProjectListEntriesResult, ThreadId } from "@kairo/contracts";
 import { SymbolView } from "../../components/AppSymbol";
 import { useCallback, useMemo, useState, type ComponentProps } from "react";
 import { Platform, Pressable, View, type NativeSyntheticEvent } from "react-native";
@@ -17,6 +17,7 @@ import { projectEnvironment } from "../../state/projects";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { FileTreeBrowser } from "./FileTreeBrowser";
+import { ThreadArtifactsList } from "./ThreadArtifactsList";
 import { preloadWorkspaceFileContents } from "./preload-workspace-file";
 
 export function ThreadFileNavigatorPane(props: {
@@ -24,10 +25,12 @@ export function ThreadFileNavigatorPane(props: {
   readonly environmentId: EnvironmentId;
   readonly headerInset: number;
   readonly projectName: string;
+  readonly threadId: ThreadId;
   readonly selectedPath: string | null;
   readonly onSelectFile: (path: string) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [artifactRefreshToken, setArtifactRefreshToken] = useState(0);
   const { themeAppearance: highlightTheme } = useAppearancePreferences();
   const theme = useUniwindTheme();
   const foregroundColor = theme["--color-foreground"];
@@ -40,6 +43,10 @@ export function ThreadFileNavigatorPane(props: {
     }),
   );
   const entriesData = entriesQuery.data as ProjectListEntriesResult | null;
+  const refreshFiles = useCallback(() => {
+    entriesQuery.refresh();
+    setArtifactRefreshToken((value) => value + 1);
+  }, [entriesQuery.refresh]);
   const handlePreviewFile = useCallback(
     (relativePath: string) => {
       preloadWorkspaceFileContents({
@@ -58,14 +65,14 @@ export function ThreadFileNavigatorPane(props: {
           accessibilityLabel: "Refresh files",
           icon: { name: "arrow.clockwise", type: "sfSymbol" as const },
           identifier: "thread-file-navigator-refresh",
-          onPress: entriesQuery.refresh,
+          onPress: refreshFiles,
           sharesBackground: false,
           tintColor: foregroundColor,
           type: "button" as const,
           width: 44,
         },
       ] as ComponentProps<typeof ScreenStackHeaderConfig>["headerRightBarButtonItems"],
-    [entriesQuery.refresh, foregroundColor],
+    [refreshFiles, foregroundColor],
   );
 
   const fileTree = (
@@ -75,8 +82,16 @@ export function ThreadFileNavigatorPane(props: {
       isPending={entriesQuery.isPending}
       searchQuery={searchQuery}
       selectedPath={props.selectedPath}
+      listHeader={
+        <ThreadArtifactsList
+          environmentId={props.environmentId}
+          threadId={props.threadId}
+          searchQuery={searchQuery}
+          refreshToken={artifactRefreshToken}
+        />
+      }
       onPreviewFile={handlePreviewFile}
-      onRefresh={entriesQuery.refresh}
+      onRefresh={refreshFiles}
       onSelectFile={props.onSelectFile}
     />
   );
@@ -150,7 +165,7 @@ export function ThreadFileNavigatorPane(props: {
             accessibilityLabel="Refresh files"
             hitSlop={8}
             className="h-8 w-8 items-center justify-center rounded-full active:bg-subtle"
-            onPress={entriesQuery.refresh}
+            onPress={refreshFiles}
           >
             <SymbolView
               name="arrow.clockwise"

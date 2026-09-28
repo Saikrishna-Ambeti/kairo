@@ -2214,7 +2214,7 @@ const makeWsRpcLayer = (
             "rpc.aggregate": "server",
           }),
         [WS_METHODS.serverListArtifacts]: (input) => {
-          const kinds = input.kinds ?? ["document", "pdf"];
+          const kinds = input.kinds ?? ["document", "presentation", "spreadsheet", "csv", "pdf"];
           const normalizedQuery = input.query?.trim().toLowerCase() ?? "";
           return observeRpcEffect(
             WS_METHODS.serverListArtifacts,
@@ -2223,6 +2223,9 @@ const makeWsRpcLayer = (
                 threadId: input.threadId ?? null,
                 queryLike: normalizedQuery.length === 0 ? null : `%${normalizedQuery}%`,
                 includeDocuments: kinds.includes("document") ? 1 : 0,
+                includePresentations: kinds.includes("presentation") ? 1 : 0,
+                includeSpreadsheets: kinds.includes("spreadsheet") ? 1 : 0,
+                includeCsv: kinds.includes("csv") ? 1 : 0,
                 includePdfs: kinds.includes("pdf") ? 1 : 0,
                 limit: input.limit ?? 200,
               })

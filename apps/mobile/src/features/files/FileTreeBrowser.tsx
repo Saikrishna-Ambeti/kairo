@@ -1,6 +1,6 @@
 import type { ProjectEntry } from "@kairo/contracts";
 import { SymbolView } from "../../components/AppSymbol";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -110,6 +110,7 @@ export function FileTreeBrowser(props: {
   readonly isPending: boolean;
   readonly searchQuery: string;
   readonly selectedPath: string | null;
+  readonly listHeader?: ReactElement;
   readonly onPreviewFile?: (path: string) => void;
   readonly onRefresh: () => void;
   readonly onSelectFile: (path: string) => void;
@@ -255,17 +256,22 @@ export function FileTreeBrowser(props: {
       contentContainerStyle={{ paddingTop: 8, paddingBottom: 8 }}
       refreshControl={<RefreshControl refreshing={props.isPending} onRefresh={props.onRefresh} />}
       renderItem={renderItem}
+      ListHeaderComponent={props.listHeader}
       ListEmptyComponent={
         <View className="px-4 py-5">
           {props.isPending ? (
             <ActivityIndicator size="small" />
           ) : (
             <>
-              <Text className="text-sm font-kairo-bold text-foreground">No files found</Text>
+              <Text className="text-sm font-kairo-bold text-foreground">
+                {props.listHeader ? "No other files found" : "No files found"}
+              </Text>
               <Text className="mt-1 text-xs leading-normal text-foreground-muted">
                 {props.searchQuery.trim().length > 0
                   ? "Try a different search."
-                  : "The workspace file index is empty."}
+                  : props.listHeader
+                    ? "The workspace file index has no other entries."
+                    : "The workspace file index is empty."}
               </Text>
             </>
           )}

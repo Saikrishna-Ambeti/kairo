@@ -577,7 +577,7 @@ describe("AssetAccess", () => {
     }).pipe(Effect.provide(testLayer)),
   );
 
-  it.effect("issues exact capabilities for PDF and Word document artifacts", () =>
+  it.effect("issues exact capabilities for PDF and editable file artifacts", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -586,9 +586,15 @@ describe("AssetAccess", () => {
       });
       const pdfPath = path.join(root, "artifacts", "guide.pdf");
       const documentPath = path.join(root, "artifacts", "guide.docx");
+      const presentationPath = path.join(root, "artifacts", "guide.pptx");
+      const spreadsheetPath = path.join(root, "artifacts", "guide.xlsx");
+      const csvPath = path.join(root, "artifacts", "guide.csv");
       yield* fileSystem.makeDirectory(path.dirname(pdfPath), { recursive: true });
       yield* fileSystem.writeFile(pdfPath, new Uint8Array([37, 80, 68, 70]));
       yield* fileSystem.writeFile(documentPath, new Uint8Array([80, 75, 3, 4]));
+      yield* fileSystem.writeFile(presentationPath, new Uint8Array([80, 75, 3, 4]));
+      yield* fileSystem.writeFile(spreadsheetPath, new Uint8Array([80, 75, 3, 4]));
+      yield* fileSystem.writeFileString(csvPath, "name,value\nA,1\n");
 
       const pdfResult = yield* issueAssetUrl({
         resource: {
@@ -628,6 +634,25 @@ describe("AssetAccess", () => {
         disposition: "attachment",
       });
       expect(documentResult.sourcePath).toBe("artifacts/guide.docx");
+      for (const fileName of ["guide.pptx", "guide.xlsx", "guide.csv"]) {
+        const result = yield* issueAssetUrl({
+          resource: {
+            _tag: "workspace-document",
+            threadId: ThreadId.make("thread-1"),
+            path: `artifacts/${fileName}`,
+          },
+          workspaceRoot: root,
+        });
+        const suffix = result.relativeUrl.slice(`${ASSET_ROUTE_PREFIX}/`.length);
+        const separator = suffix.indexOf("/");
+        expect(
+          yield* resolveAsset(suffix.slice(0, separator), suffix.slice(separator + 1)),
+        ).toEqual({
+          kind: "file",
+          path: yield* fileSystem.realPath(path.join(root, "artifacts", fileName)),
+          disposition: "attachment",
+        });
+      }
     }).pipe(Effect.provide(testLayer)),
   );
 

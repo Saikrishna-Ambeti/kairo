@@ -10,7 +10,17 @@ import {
 import { INLINE_TERMINAL_CONTEXT_PLACEHOLDER } from "./lib/terminalContext";
 
 export type ComposerTriggerKind = "path" | "slash-command" | "skill";
-export type ComposerSlashCommand = "model" | "plan" | "study" | "default" | "research";
+export type ComposerSlashCommand =
+  | "model"
+  | "plan"
+  | "study"
+  | "default"
+  | "research"
+  | "document"
+  | "presentation"
+  | "spreadsheet"
+  | "csv"
+  | "pdf";
 export type ComposerSubmissionIntent = "foreground" | "background";
 
 export interface ComposerTrigger {
@@ -263,7 +273,7 @@ export function detectComposerTrigger(text: string, cursorInput: number): Compos
 
 export function parseStandaloneComposerSlashCommand(
   text: string,
-): Exclude<ComposerSlashCommand, "model" | "research"> | null {
+): "plan" | "study" | "default" | null {
   const match = /^\/(plan|study|default)\s*$/i.exec(text.trim());
   if (!match) {
     return null;

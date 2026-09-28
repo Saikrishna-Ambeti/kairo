@@ -1,4 +1,8 @@
 import { useAtomValue } from "@effect/atom-react";
+import {
+  prependArtifactCreationPrompt,
+  type ArtifactCreationKind,
+} from "@kairo/client-runtime/artifact-creation";
 import { NativeHeaderToolbar, NativeStackScreenOptions } from "../../native/StackHeader";
 import {
   CommonActions,
@@ -77,6 +81,7 @@ import {
   restoreComposerDraftSnapshot,
   updateComposerDraftSettings,
   scheduleUnusedComposerAttachmentCleanup,
+  waitForComposerDraftsLoaded,
   type ComposerDraft,
   waitForComposerDraftsLoaded,
 } from "../../state/use-composer-drafts";
@@ -138,6 +143,7 @@ function NewTaskWorkspaceIcon(props: {
 }
 
 export function NewTaskDraftScreen(props: {
+  readonly artifactKind?: ArtifactCreationKind;
   readonly initialProjectRef?: {
     readonly environmentId?: string;
     readonly projectId?: string;
@@ -166,6 +172,31 @@ export function NewTaskDraftScreen(props: {
   const controlsBottomPadding = Math.max(insets.bottom, 10);
   const keyboardOpenedOffset = Math.max(0, controlsBottomPadding - 8);
   const { projectScopes, selectedProject, selectedProjectKey, setProject } = flow;
+  const appliedArtifactKindsRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (!props.artifactKind || !selectedProjectKey || !flow.draftKey) return;
+    const kind = props.artifactKind;
+    const draftKey = flow.draftKey;
+    const key = `${selectedProjectKey}:${props.artifactKind}`;
+    if (appliedArtifactKindsRef.current.has(key)) return;
+    let cancelled = false;
+    void (async () => {
+      await waitForComposerDraftsLoaded();
+      if (cancelled || appliedArtifactKindsRef.current.has(key)) return;
+      appliedArtifactKindsRef.current.add(key);
+      flow.setInteractionMode("default");
+      flow.setPrompt(prependArtifactCreationPrompt(kind, getComposerDraftSnapshot(draftKey).text));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    flow.draftKey,
+    flow.setInteractionMode,
+    flow.setPrompt,
+    props.artifactKind,
+    selectedProjectKey,
+  ]);
   const { connectedEnvironments } = useRemoteConnectionStatus();
   const selectedEnvironmentServerConfig = useEnvironmentServerConfig(
     selectedProject?.environmentId ?? null,
@@ -1356,6 +1387,10 @@ export function NewTaskDraftScreen(props: {
                     )}
                     onPickMedia={handlePickMedia}
                     onPickFiles={handlePickFiles}
+                    onCreateFile={(kind: ArtifactCreationKind) => {
+                      flow.setInteractionMode("default");
+                      flow.setPrompt(prependArtifactCreationPrompt(kind, flow.prompt));
+                    }}
                   />
                   <View className="min-w-0 flex-1 flex-row items-center justify-end gap-2">
                     <View className="min-w-0 shrink">

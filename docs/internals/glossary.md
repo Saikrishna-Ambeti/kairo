@@ -77,6 +77,11 @@ The logic that applies domain events to the read model or projection tables. See
 
 The current materialized view of orchestration state. In [the contracts][1], it holds projects, threads, messages, activities, checkpoints, and session state. See [ProjectionSnapshotQuery.ts][10] and [OrchestrationEngine.ts][7].
 
+#### Artifact
+
+A document, presentation, spreadsheet, CSV, or PDF created in a thread's workspace.
+File bytes stay in the environment.
+
 #### Reactor
 
 A side-effecting service that handles follow-up work after events or runtime signals. Examples include [CheckpointReactor.ts][6], [ProviderCommandReactor.ts][12], and [ProviderRuntimeIngestion.ts][5].

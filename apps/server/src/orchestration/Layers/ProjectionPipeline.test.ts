@@ -311,12 +311,20 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("kairo-projection-a
           prefix: "kairo-artifacts-workspace-",
         });
         const relativePath = "artifacts/thermodynamics-week-1.docx";
+        const additionalPaths = [
+          "artifacts/thermodynamics-week-1.pptx",
+          "artifacts/thermodynamics-week-1.xlsx",
+          "artifacts/thermodynamics-week-1.csv",
+        ] as const;
         const absolutePath = path.join(workspaceRoot, relativePath);
         const now = "2026-04-01T10:00:00.000Z";
         const threadId = ThreadId.make("thread-artifacts");
 
         yield* fileSystem.makeDirectory(path.dirname(absolutePath), { recursive: true });
         yield* fileSystem.writeFileString(absolutePath, "document bytes");
+        for (const additionalPath of additionalPaths) {
+          yield* fileSystem.writeFileString(path.join(workspaceRoot, additionalPath), "file bytes");
+        }
 
         const appendAndProject = (event: Parameters<typeof eventStore.append>[0]) =>
           eventStore
@@ -384,7 +392,12 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("kairo-projection-a
             checkpointTurnCount: 1,
             checkpointRef: CheckpointRef.make("refs/kairo/checkpoints/thread-artifacts/turn/1"),
             status: "ready",
-            files: [{ path: relativePath, kind: "added", additions: 1, deletions: 0 }],
+            files: [relativePath, ...additionalPaths].map((filePath) => ({
+              path: filePath,
+              kind: "added" as const,
+              additions: 1,
+              deletions: 0,
+            })),
             assistantMessageId: MessageId.make("message-artifacts-1"),
             completedAt: now,
           },
@@ -404,15 +417,15 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("kairo-projection-a
         FROM artifact_metadata
         WHERE thread_id = ${threadId}
       `;
-        assert.deepEqual(indexed, [
-          {
-            kind: "document",
-            title: "Thermodynamics week 1",
-            relativePath,
-            searchText:
-              "thermodynamics week 1 thermodynamics-week-1.docx artifacts/thermodynamics-week-1.docx physics lab thermodynamics assignment document",
-          },
-        ]);
+        assert.deepEqual(
+          indexed.map(({ kind, relativePath: indexedPath }) => [kind, indexedPath]).sort(),
+          [
+            ["document", relativePath],
+            ["presentation", additionalPaths[0]],
+            ["spreadsheet", additionalPaths[1]],
+            ["csv", additionalPaths[2]],
+          ].sort(),
+        );
 
         yield* fileSystem.remove(absolutePath);
         yield* appendAndProject({
@@ -442,7 +455,7 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("kairo-projection-a
         FROM artifact_metadata
         WHERE thread_id = ${threadId}
       `;
-        assert.equal(remaining[0]?.count ?? 0, 0);
+        assert.equal(remaining[0]?.count ?? 0, 3);
       }),
     );
   },

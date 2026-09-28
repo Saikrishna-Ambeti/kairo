@@ -54,6 +54,7 @@ import { useAtomQueryRunner } from "~/state/use-atom-query-runner";
 import FileBrowserPanel from "./FileBrowserPanel";
 import { FileBreadcrumbs } from "./FileBreadcrumbs";
 import { FileMarkdownPreview } from "./FileMarkdownPreview";
+import { WorkspaceDocumentPreview } from "./WorkspaceDocumentPreview";
 import {
   type FileCommentAnnotationEntry,
   type FileCommentAnnotationGroup,
@@ -986,6 +987,9 @@ export default function FilePreviewPanel({
   // PDFs have no text to show; HTML has, and can toggle between page and source.
   const isPdf = relativePath !== null && isPdfPreviewFile(relativePath);
   const isHtml = relativePath !== null && !isPdf && isBrowserPreviewFile(relativePath);
+  const isOfficeFile = relativePath !== null && /\.(?:docx|pptx|xlsx)$/i.test(relativePath);
+  const isWorkspaceOfficeFile =
+    isOfficeFile && relativePath !== null && !isAbsolutePath(relativePath);
   // A file outside the workspace (an absolute path) is shown, never edited.
   const isHostFile =
     attachment !== undefined || (relativePath !== null && isAbsolutePath(relativePath));
@@ -993,7 +997,7 @@ export default function FilePreviewPanel({
     environmentId,
     cwd,
     relativePath,
-    attachment === undefined && !isMedia && !isPdf,
+    attachment === undefined && !isMedia && !isPdf && !isWorkspaceOfficeFile,
   );
   const [explorerOpen, setExplorerOpen] = useState(initialExplorerOpen);
   const showExplorer = shouldShowFileExplorer({
@@ -1047,6 +1051,7 @@ export default function FilePreviewPanel({
       relativePath !== null &&
       !isMedia &&
       !isPdf &&
+      !isWorkspaceOfficeFile &&
       !selectedFilePending,
     mutationId: workspaceMutationId,
     refresh: file.refresh,
@@ -1246,6 +1251,21 @@ export default function FilePreviewPanel({
               workspaceRoot={cwd}
               alt={relativePath}
               workspaceMutationId={workspaceMutationId}
+            />
+          ) : relativePath && isWorkspaceOfficeFile ? (
+            <WorkspaceDocumentPreview
+              key={`${environmentId}:${threadRef.threadId}:${relativePath}`}
+              environmentId={environmentId}
+              threadRef={threadRef}
+              relativePath={relativePath}
+              workspaceMutationId={workspaceMutationId}
+              kind={
+                /\.docx$/i.test(relativePath)
+                  ? "docx"
+                  : /\.pptx$/i.test(relativePath)
+                    ? "pptx"
+                    : "xlsx"
+              }
             />
           ) : relativePath && renderBrowserFile && absolutePath ? (
             <WorkspaceBrowserPreview

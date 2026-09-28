@@ -93,4 +93,35 @@ describe("mobile slash commands", () => {
       }),
     ).toEqual({ text: "/plan ", cursor: 6, interactionMode: null });
   });
+
+  it("offers file creation with no interaction mode or provider command", () => {
+    const items = buildComposerSlashCommandItems({
+      query: "presentation",
+      atMessageStart: false,
+      hasThread: false,
+      allowInteractionMode: false,
+      selectedProviderStatus: null,
+    });
+    expect(items).toHaveLength(1);
+    const item = items[0];
+    if (!item) throw new Error("Expected the file creation command");
+    const selected = resolveComposerCommandSelection({
+      draftMessage: "Please /presentation use my notes",
+      trigger: { rangeStart: 7, rangeEnd: 20 },
+      item,
+      allowInteractionMode: false,
+    });
+    expect(selected.text).toContain("Create an editable PowerPoint presentation (.pptx)");
+    expect(selected.text).toContain("Please ");
+    expect(selected.text).toContain("use my notes");
+    expect(selected.interactionMode).toBeNull();
+    expect(
+      resolveComposerCommandSelection({
+        draftMessage: "/presentation",
+        trigger: { rangeStart: 0, rangeEnd: 13 },
+        item,
+        allowInteractionMode: true,
+      }).interactionMode,
+    ).toBe("default");
+  });
 });

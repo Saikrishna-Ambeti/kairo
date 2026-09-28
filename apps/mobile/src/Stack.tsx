@@ -21,6 +21,7 @@ import { useAgentNotificationNavigation } from "./features/agent-awareness/notif
 import { ConnectOnboardingRouteScreen } from "./features/cloud/ConnectOnboardingRouteScreen";
 import { useConnectOnboardingNavigation } from "./features/cloud/connectOnboardingNavigation";
 import { ThreadFilesTreeScreen, ThreadFileScreen } from "./features/files/ThreadFilesRouteScreen";
+import { ArtifactLibraryScreen } from "./features/files/ArtifactLibraryScreen";
 import { AdaptiveWorkspaceLayout } from "./features/layout/AdaptiveWorkspaceLayout";
 import { HardwareKeyboardCommandProvider } from "./features/keyboard/HardwareKeyboardCommandProvider";
 import { ReviewCommentComposerSheet } from "./features/review/ReviewCommentComposerSheet";
@@ -474,6 +475,10 @@ export const RootStack = createNativeStackNavigator({
         headerBackVisible: false,
         ...getCompactBrandHeaderOptions(),
       },
+    }),
+    ArtifactLibrary: createNativeStackScreen({
+      screen: ArtifactLibraryScreen,
+      options: { ...GLASS_HEADER_OPTIONS, title: "Library" },
     }),
     Thread: createNativeStackScreen({
       screen: ThreadRouteScreen,

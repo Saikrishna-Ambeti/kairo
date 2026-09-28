@@ -12,6 +12,11 @@ import {
   normalizePastedCloneUrl,
 } from "@kairo/client-runtime/operations/projects";
 import { connectionStatusText } from "@kairo/client-runtime/connection";
+import {
+  ARTIFACT_CREATION_COMMANDS,
+  prependArtifactCreationPrompt,
+  type ArtifactCreationKind,
+} from "@kairo/client-runtime/artifact-creation";
 import { threadSearchMatchKey } from "@kairo/client-runtime/state/thread-search";
 import { resolveThreadReferenceCopyTarget } from "@kairo/shared/threadReference";
 import {
@@ -44,6 +49,7 @@ import {
   CalendarClockIcon,
   CornerLeftUpIcon,
   FileSearchIcon,
+  FilePlus2Icon,
   FolderIcon,
   FolderPlusIcon,
   GitPullRequestArrowIcon,
@@ -72,6 +78,7 @@ import { isDesktopLocalConnectionTarget } from "../connection/desktopLocal";
 import { useDesktopLocalBootstraps } from "../connection/useDesktopLocalBootstraps";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useOpenPanelPullRequestUrl } from "../hooks/useOpenPanelPullRequestUrl";
+import { useComposerDraftStore, type ComposerThreadTarget } from "../composerDraftStore";
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
 import { useClientSettings } from "../hooks/useSettings";
 import { useTheme } from "../hooks/useTheme";
@@ -411,6 +418,7 @@ export function CommandPalette({ children }: { children: ReactNode }) {
   );
   const openAddProject = useCallback(() => dispatch({ _tag: "OpenAddProject" }), []);
   const openNewThreadIn = useCallback(() => dispatch({ _tag: "OpenNewThreadIn" }), []);
+  const openCreateFile = useCallback(() => dispatch({ _tag: "OpenCreateFile" }), []);
   const clearOpenIntent = useCallback(() => dispatch({ _tag: "ClearOpenIntent" }), []);
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const { theme, themeHalves, resolvedTheme } = useTheme();
@@ -485,6 +493,8 @@ export function CommandPalette({ children }: { children: ReactNode }) {
           openNewThreadIn();
         } else if (detail.open === "add-project") {
           openAddProject();
+        } else if (detail.open === "create-file") {
+          openCreateFile();
         } else if (detail.query !== undefined) {
           dispatch({
             _tag: "OpenSearch",
@@ -495,7 +505,7 @@ export function CommandPalette({ children }: { children: ReactNode }) {
           setOpen(true);
         }
       }),
-    [openAddProject, openNewThreadIn, setOpen],
+    [openAddProject, openCreateFile, openNewThreadIn, setOpen],
   );
 
   return (
@@ -573,6 +583,16 @@ function CommandPaletteDialog(props: {
   );
 }
 
+function insertArtifactCreationPrompt(
+  kind: ArtifactCreationKind,
+  target: ComposerThreadTarget,
+): void {
+  const drafts = useComposerDraftStore.getState();
+  const prompt = drafts.getComposerDraft(target)?.prompt ?? "";
+  drafts.setPrompt(target, prependArtifactCreationPrompt(kind, prompt));
+  drafts.setInteractionMode(target, "default");
+}
+
 function OpenCommandPaletteDialog(props: {
   readonly openIntent: CommandPaletteOpenIntent | null;
   readonly setOpen: (open: boolean) => void;
@@ -591,6 +611,10 @@ function OpenCommandPaletteDialog(props: {
   const deferredQuery = useDeferredValue(query);
   const isActionsOnly = deferredQuery.startsWith(">");
   const [highlightedItemValue, setHighlightedItemValue] = useState<string | null>(null);
+  const composerRouteTarget = useParams({
+    strict: false,
+    select: (params) => resolveThreadRouteTarget(params),
+  });
   const clientSettings = useClientSettings();
   const createProject = useAtomCommand(projectEnvironment.create, {
     reportFailure: false,
@@ -1616,6 +1640,73 @@ function OpenCommandPaletteDialog(props: {
     });
   }
 
+  const buildFileProjectGroups = (kind: ArtifactCreationKind): CommandPaletteView["groups"] => {
+    const command = ARTIFACT_CREATION_COMMANDS.find((item) => item.kind === kind);
+    if (!command) return [];
+    return [
+      {
+        value: `file-projects:${kind}`,
+        label: `Create ${command.label} in`,
+        items: projects.map((project) => ({
+          kind: "action" as const,
+          value: `create-${kind}:${project.environmentId}:${project.id}`,
+          searchTerms: [project.title, project.workspaceRoot],
+          title: project.title,
+          description: `${environments.find((item) => item.environmentId === project.environmentId)?.label ?? "Environment"} · ${project.workspaceRoot}`,
+          icon: <FolderIcon className={ITEM_ICON_CLASS} />,
+          run: async () => {
+            const result = await handleNewThread(
+              scopeProjectRef(project.environmentId, project.id),
+            );
+            if (!result) throw new Error("Could not open the project draft.");
+            insertArtifactCreationPrompt(kind, result.draftId);
+          },
+        })),
+      },
+    ];
+  };
+
+  const fileCreationItems: CommandPaletteActionItem[] = ARTIFACT_CREATION_COMMANDS.map(
+    ({ kind, label, extension }) => ({
+      kind: "action",
+      value: `action:create-${kind}`,
+      searchTerms: ["create", "file", "artifact", label, extension],
+      title: `Create ${label}`,
+      icon: <FilePlus2Icon className={ITEM_ICON_CLASS} />,
+      keepOpen: composerRouteTarget === null,
+      disabled: composerRouteTarget === null && projects.length === 0,
+      run: async () => {
+        if (composerRouteTarget) {
+          insertArtifactCreationPrompt(
+            kind,
+            composerRouteTarget.kind === "server"
+              ? composerRouteTarget.threadRef
+              : composerRouteTarget.draftId,
+          );
+          return;
+        }
+        pushPaletteView({
+          addonIcon: <FolderIcon className={ADDON_ICON_CLASS} />,
+          groups: buildFileProjectGroups(kind),
+        });
+      },
+    }),
+  );
+  actionItems.push(...fileCreationItems);
+
+  useLayoutEffect(() => {
+    if (openIntent?.kind !== "create-file") return;
+    clearOpenIntent();
+    browseNavigation.invalidate();
+    setAddProjectCloneFlow(null);
+    setViewStack([]);
+    setQuery("");
+    pushPaletteView({
+      addonIcon: <FilePlus2Icon className={ADDON_ICON_CLASS} />,
+      groups: [{ value: "file-formats", label: "Choose a format", items: fileCreationItems }],
+    });
+  }, [browseNavigation, clearOpenIntent, fileCreationItems, openIntent, pushPaletteView]);
+
   if (activeThreadReferenceCopyTarget !== null) {
     actionItems.push({
       kind: "action",
@@ -1834,6 +1925,9 @@ function OpenCommandPaletteDialog(props: {
   }));
   const sourceSelectionViewValue =
     addProjectEnvironmentId === null ? null : `sources:${addProjectEnvironmentId}`;
+  const fileProjectKind = ARTIFACT_CREATION_COMMANDS.find(
+    ({ kind }) => currentView?.groups[0]?.value === `file-projects:${kind}`,
+  )?.kind;
   const activeGroups =
     addProjectEnvironmentId !== null &&
     currentView !== null &&
@@ -1842,7 +1936,11 @@ function OpenCommandPaletteDialog(props: {
           addProjectEnvironmentId,
           buildAddProjectRemoteSourceReadiness(sourceControlDiscovery.data),
         )
-      : (currentView?.groups ?? rootGroups);
+      : currentView?.groups[0]?.value === "file-formats"
+        ? [{ value: "file-formats", label: "Choose a format", items: fileCreationItems }]
+        : fileProjectKind
+          ? buildFileProjectGroups(fileProjectKind)
+          : (currentView?.groups ?? rootGroups);
 
   const filteredGroups = filterCommandPaletteGroups({
     activeGroups,

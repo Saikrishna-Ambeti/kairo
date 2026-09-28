@@ -131,6 +131,11 @@ describe("reduceCommandPaletteUiState", () => {
       mode: "command",
       openIntent: { kind: "new-thread-in" },
     });
+    expect(reduceCommandPaletteUiState(filesOpen, { _tag: "OpenCreateFile" })).toEqual({
+      open: true,
+      mode: "command",
+      openIntent: { kind: "create-file" },
+    });
   });
 
   it("preserves the mode on close and resets it on open", () => {

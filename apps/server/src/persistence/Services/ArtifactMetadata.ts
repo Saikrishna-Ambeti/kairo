@@ -40,6 +40,9 @@ export const ListArtifactMetadataInput = Schema.Struct({
   threadId: Schema.NullOr(ThreadId),
   queryLike: Schema.NullOr(Schema.String),
   includeDocuments: Schema.Literals([0, 1]),
+  includePresentations: Schema.Literals([0, 1]),
+  includeSpreadsheets: Schema.Literals([0, 1]),
+  includeCsv: Schema.Literals([0, 1]),
   includePdfs: Schema.Literals([0, 1]),
   limit: NonNegativeInt,
 });

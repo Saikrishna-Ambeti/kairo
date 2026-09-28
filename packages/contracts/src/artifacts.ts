@@ -9,7 +9,13 @@ import {
   TurnId,
 } from "./baseSchemas.ts";
 
-export const ArtifactKind = Schema.Literals(["document", "pdf"]);
+export const ArtifactKind = Schema.Literals([
+  "document",
+  "presentation",
+  "spreadsheet",
+  "csv",
+  "pdf",
+]);
 export type ArtifactKind = typeof ArtifactKind.Type;
 
 export const ArtifactMetadata = Schema.Struct({

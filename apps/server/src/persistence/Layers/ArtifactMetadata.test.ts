@@ -100,23 +100,43 @@ artifactMetadataLayer("ArtifactMetadataRepository", (it) => {
         createdAt,
         updatedAt: "2026-04-01T11:00:00.000Z",
       });
+      yield* artifacts.upsert({
+        threadId,
+        projectId,
+        turnId: TurnId.make("turn-presentation"),
+        checkpointTurnCount: 3,
+        kind: "presentation",
+        title: "Lab slides",
+        fileName: "lab-slides.pptx",
+        relativePath: "artifacts/lab-slides.pptx",
+        sizeBytes: 12288,
+        searchText: "lab slides lab-slides.pptx artifacts/lab-slides.pptx physics lab presentation",
+        createdAt,
+        updatedAt: "2026-04-01T12:00:00.000Z",
+      });
 
       const byProject = yield* artifacts.list({
         threadId: null,
         queryLike: "%physics%",
         includeDocuments: 1,
+        includePresentations: 1,
+        includeSpreadsheets: 1,
+        includeCsv: 1,
         includePdfs: 1,
         limit: 20,
       });
       assert.deepEqual(
         byProject.map((artifact) => artifact.fileName),
-        ["equation-sheet.pdf", "lab-report.docx"],
+        ["lab-slides.pptx", "equation-sheet.pdf", "lab-report.docx"],
       );
 
       const documents = yield* artifacts.list({
         threadId,
         queryLike: null,
         includeDocuments: 1,
+        includePresentations: 0,
+        includeSpreadsheets: 0,
+        includeCsv: 0,
         includePdfs: 0,
         limit: 20,
       });
