@@ -124,7 +124,12 @@ export function MobileArtifactRow(props: {
                 threadId: String(props.artifact.threadId),
               }),
             );
-          })()
+          })().catch((error: unknown) => {
+            Alert.alert(
+              "Could not prepare revision",
+              error instanceof Error ? error.message : "Try again.",
+            );
+          })
         }
       >
         <Text className="text-xs font-kairo-medium text-accent">Revise</Text>
@@ -140,6 +145,7 @@ export function ThreadArtifactsList(props: {
   readonly refreshToken?: number;
 }) {
   const [queryText, setQueryText] = useState("");
+  const [pageState, setPageState] = useState({ key: "", page: 0 });
   useEffect(() => {
     const timer = setTimeout(() => setQueryText(props.searchQuery.trim()), 200);
     return () => clearTimeout(timer);
@@ -158,8 +164,14 @@ export function ThreadArtifactsList(props: {
   useEffect(() => {
     if (props.refreshToken !== undefined && props.refreshToken > 0) refreshArtifacts();
   }, [props.refreshToken]);
+  const pageKey = JSON.stringify([props.environmentId, props.threadId, queryText]);
+  if (pageState.key !== pageKey) setPageState({ key: pageKey, page: 0 });
   const artifacts = query.data?.artifacts;
   if (!artifacts?.length) return null;
+  const page = pageState.key === pageKey ? pageState.page : 0;
+  const pageCount = Math.ceil(artifacts.length / 20);
+  const currentPage = Math.min(page, pageCount - 1);
+  const firstIndex = currentPage * 20;
 
   return (
     <View className="border-b border-border pb-2 pt-2">
@@ -169,17 +181,37 @@ export function ThreadArtifactsList(props: {
         </Text>
         <Text className="text-2xs text-foreground-muted">{artifacts.length}</Text>
       </View>
-      {artifacts.slice(0, 20).map((artifact) => (
+      {artifacts.slice(firstIndex, firstIndex + 20).map((artifact) => (
         <MobileArtifactRow
           key={`${artifact.threadId}:${artifact.relativePath}`}
           artifact={artifact}
           environmentId={props.environmentId}
         />
       ))}
-      {artifacts.length > 20 ? (
-        <Text className="px-4 pt-1 text-xs text-foreground-muted">
-          Showing 20 of {artifacts.length} files. Search to narrow the list.
-        </Text>
+      {pageCount > 1 ? (
+        <View className="flex-row items-center justify-between px-4">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Previous artifact page"
+            className="min-h-[44px] justify-center rounded-xl px-2 active:bg-subtle disabled:opacity-40"
+            disabled={currentPage === 0}
+            onPress={() => setPageState({ key: pageKey, page: currentPage - 1 })}
+          >
+            <Text className="text-xs font-kairo-medium text-accent">Previous</Text>
+          </Pressable>
+          <Text className="text-xs text-foreground-muted">
+            {firstIndex + 1}-{Math.min(firstIndex + 20, artifacts.length)} of {artifacts.length}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Next artifact page"
+            className="min-h-[44px] justify-center rounded-xl px-2 active:bg-subtle disabled:opacity-40"
+            disabled={currentPage === pageCount - 1}
+            onPress={() => setPageState({ key: pageKey, page: currentPage + 1 })}
+          >
+            <Text className="text-xs font-kairo-medium text-accent">Next</Text>
+          </Pressable>
+        </View>
       ) : null}
     </View>
   );

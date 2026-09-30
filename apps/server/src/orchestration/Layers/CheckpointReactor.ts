@@ -447,7 +447,7 @@ const make = Effect.gen(function* () {
     const { threadId, turnId, checkpointTurnCount, status } = event.payload;
 
     // Only replace placeholders; skip events from our own real captures.
-    if (status !== "missing") {
+    if (status !== "missing" || finalizedTurns.get(threadId) === turnId) {
       return;
     }
 
@@ -458,6 +458,15 @@ const make = Effect.gen(function* () {
       });
       return;
     }
+
+    if (thread.session?.activeTurnId && !sameId(thread.session.activeTurnId, turnId)) return;
+    const latestStartedTurnId = latestStartedTurns.get(threadId);
+    if (latestStartedTurnId && !sameId(latestStartedTurnId, turnId)) return;
+    const currentTurnCount = thread.checkpoints.reduce(
+      (count, checkpoint) => Math.max(count, checkpoint.checkpointTurnCount),
+      0,
+    );
+    if (checkpointTurnCount < currentTurnCount) return;
 
     // If a real checkpoint already exists for this turn, skip.
     if (

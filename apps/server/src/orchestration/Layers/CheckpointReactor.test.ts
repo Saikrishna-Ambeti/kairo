@@ -726,6 +726,15 @@ describe("CheckpointReactor", () => {
           createdAt,
         });
         yield* Effect.promise(harness.drain);
+        expect(yield* harness.nextReceipt).toMatchObject({
+          type: "checkpoint.diff.finalized",
+          turnId,
+          checkpointTurnCount: 1,
+        });
+        expect(yield* harness.nextReceipt).toMatchObject({
+          type: "turn.processing.quiesced",
+          turnId,
+        });
 
         NodeFS.writeFileSync(NodePath.join(harness.cwd, "late.ts"), "export const late = 2;\n");
         yield* harness.engine.dispatch({
@@ -834,24 +843,26 @@ describe("CheckpointReactor", () => {
     ).toBe(false);
   });
 
-  it("recaptures files written after a mid-turn diff checkpoint", async () => {
-    const harness = await createHarness({ seedFilesystemCheckpoints: false });
-    const threadId = ThreadId.make("thread-1");
-    const turnId = asTurnId("turn-late-file");
-    const checkpointRef = checkpointRefForThreadTurn(threadId, 1);
+  effectIt.effect("recaptures files written after a mid-turn diff checkpoint", () =>
+    Effect.gen(function* () {
+      const harness = yield* Effect.promise(() =>
+        createHarness({ seedFilesystemCheckpoints: false }),
+      );
+      const threadId = ThreadId.make("thread-1");
+      const turnId = asTurnId("turn-late-file");
+      const checkpointRef = checkpointRefForThreadTurn(threadId, 1);
 
-    harness.provider.emit({
-      type: "turn.started",
-      eventId: EventId.make("evt-late-file-started"),
-      provider: ProviderDriverKind.make("codex"),
-      createdAt: "2026-01-01T00:00:00.000Z",
-      threadId,
-      turnId,
-    });
-    await waitForGitRefExists(harness.cwd, checkpointRefForThreadTurn(threadId, 0));
+      harness.provider.emit({
+        type: "turn.started",
+        eventId: EventId.make("evt-late-file-started"),
+        provider: ProviderDriverKind.make("codex"),
+        createdAt: "2026-01-01T00:00:00.000Z",
+        threadId,
+        turnId,
+      });
+      expect(yield* harness.nextReceipt).toMatchObject({ type: "checkpoint.baseline.captured" });
 
-    await Effect.runPromise(
-      harness.engine.dispatch({
+      yield* harness.engine.dispatch({
         type: "thread.turn.diff.complete",
         commandId: CommandId.make("cmd-late-file-placeholder"),
         threadId,
@@ -862,36 +873,86 @@ describe("CheckpointReactor", () => {
         files: [],
         checkpointTurnCount: 1,
         createdAt: "2026-01-01T00:00:01.000Z",
-      }),
-    );
-    await harness.drain();
-    expect(runGit(harness.cwd, ["ls-tree", "-r", "--name-only", checkpointRef])).not.toContain(
-      "report.csv",
-    );
+      });
+      yield* Effect.promise(harness.drain);
+      expect(runGit(harness.cwd, ["ls-tree", "-r", "--name-only", checkpointRef])).not.toContain(
+        "report.csv",
+      );
 
-    NodeFS.writeFileSync(NodePath.join(harness.cwd, "report.csv"), "name,value\napples,2\n");
-    harness.provider.emit({
-      type: "turn.completed",
-      eventId: EventId.make("evt-late-file-completed"),
-      provider: ProviderDriverKind.make("codex"),
-      createdAt: "2026-01-01T00:00:01.000Z",
-      threadId,
-      turnId,
-      payload: { state: "completed" },
-    });
-    await harness.drain();
+      NodeFS.writeFileSync(NodePath.join(harness.cwd, "report.csv"), "name,value\napples,2\n");
+      harness.provider.emit({
+        type: "turn.completed",
+        eventId: EventId.make("evt-late-file-completed"),
+        provider: ProviderDriverKind.make("codex"),
+        createdAt: "2026-01-01T00:00:01.000Z",
+        threadId,
+        turnId,
+        payload: { state: "completed" },
+      });
+      yield* Effect.promise(harness.drain);
 
-    expect(gitShowFileAtRef(harness.cwd, checkpointRef, "report.csv")).toBe(
-      "name,value\napples,2\n",
-    );
-    const thread = (await harness.readModel()).threads.find((entry) => entry.id === threadId);
-    expect(thread?.checkpoints).toHaveLength(1);
-    expect(thread?.checkpoints[0]?.checkpointTurnCount).toBe(1);
-    expect(thread?.checkpoints[0]?.files.some((file) => file.path === "report.csv")).toBe(true);
-    expect(
-      thread?.activities.filter((activity) => activity.kind === "checkpoint.captured"),
-    ).toHaveLength(1);
-  });
+      expect(gitShowFileAtRef(harness.cwd, checkpointRef, "report.csv")).toBe(
+        "name,value\napples,2\n",
+      );
+      const thread = (yield* Effect.promise(harness.readModel)).threads.find(
+        (entry) => entry.id === threadId,
+      );
+      expect(thread?.checkpoints).toHaveLength(1);
+      expect(thread?.checkpoints[0]?.checkpointTurnCount).toBe(1);
+      expect(thread?.checkpoints[0]?.files.some((file) => file.path === "report.csv")).toBe(true);
+      expect(
+        thread?.activities.filter((activity) => activity.kind === "checkpoint.captured"),
+      ).toHaveLength(1);
+    }),
+  );
+
+  effectIt.effect("does not capture a late placeholder over an older checkpoint", () =>
+    Effect.gen(function* () {
+      const harness = yield* Effect.promise(() => createHarness());
+      const threadId = ThreadId.make("thread-1");
+      const createdAt = "2026-01-01T00:00:00.000Z";
+      for (const turnCount of [1, 2]) {
+        yield* harness.engine.dispatch({
+          type: "thread.turn.diff.complete",
+          commandId: CommandId.make(`cmd-placeholder-history-${turnCount}`),
+          threadId,
+          turnId: asTurnId(`turn-${turnCount}`),
+          completedAt: createdAt,
+          checkpointRef: checkpointRefForThreadTurn(threadId, turnCount),
+          status: "ready",
+          files: [],
+          checkpointTurnCount: turnCount,
+          createdAt,
+        });
+      }
+      yield* Effect.promise(harness.drain);
+      NodeFS.writeFileSync(NodePath.join(harness.cwd, "newer.csv"), "name,value\napples,2\n");
+      yield* harness.engine.dispatch({
+        type: "thread.turn.diff.complete",
+        commandId: CommandId.make("cmd-stale-placeholder"),
+        threadId,
+        turnId: asTurnId("turn-1"),
+        completedAt: createdAt,
+        checkpointRef: CheckpointRef.make("provider-diff:stale"),
+        status: "missing",
+        files: [],
+        checkpointTurnCount: 1,
+        createdAt,
+      });
+      yield* Effect.promise(harness.drain);
+      expect(
+        gitShowFileAtRef(harness.cwd, checkpointRefForThreadTurn(threadId, 1), "README.md"),
+      ).toBe("v2\n");
+      expect(
+        runGit(harness.cwd, [
+          "ls-tree",
+          "-r",
+          "--name-only",
+          checkpointRefForThreadTurn(threadId, 1),
+        ]),
+      ).not.toContain("newer.csv");
+    }),
+  );
 
   it("does not rewrite an older checkpoint after a newer turn", async () => {
     const harness = await createHarness();
