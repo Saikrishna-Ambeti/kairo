@@ -32,7 +32,7 @@ import { MediaActions, type MediaActionSource } from "~/components/media/MediaAc
 import { useRemoteOpenState } from "~/remoteOpen";
 import { useClientSettings } from "~/hooks/useSettings";
 import { useTheme } from "~/hooks/useTheme";
-import { getLocalStorageItem, setLocalStorageItem, useLocalStorage } from "~/hooks/useLocalStorage";
+import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { useWorkspaceMutationRefresh } from "~/hooks/useWorkspaceMutationRefresh";
 import { DIFF_SURFACE_THEME_UNSAFE_CSS, resolveDiffThemeName } from "~/lib/diffRendering";
 import { PREFERRED_HIGHLIGHTER } from "~/lib/syntaxHighlighting";
@@ -98,7 +98,6 @@ interface FilePreviewPanelProps {
   workspaceMutationId: string | null;
 }
 
-const FILE_EXPLORER_STORAGE_KEY = "kairo.fileExplorerOpen";
 const RENDER_MARKDOWN_STORAGE_KEY = "kairo.renderMarkdown";
 const RENDER_BROWSER_FILE_STORAGE_KEY = "kairo.renderBrowserFile";
 const FILE_LINK_REVEAL_ATTRIBUTE = "data-file-link-reveal";
@@ -944,15 +943,6 @@ function renderedToggleLabel(isMarkdown: boolean, rendered: boolean): string {
   return rendered ? "Show HTML source" : "Show rendered page";
 }
 
-function initialExplorerOpen(): boolean {
-  try {
-    return getLocalStorageItem(FILE_EXPLORER_STORAGE_KEY, Schema.Boolean) ?? true;
-  } catch (error) {
-    console.error(error);
-    return true;
-  }
-}
-
 export default function FilePreviewPanel({
   environmentId,
   cwd,
@@ -999,7 +989,7 @@ export default function FilePreviewPanel({
     relativePath,
     attachment === undefined && !isMedia && !isPdf && !isWorkspaceOfficeFile,
   );
-  const [explorerOpen, setExplorerOpen] = useState(initialExplorerOpen);
+  const [explorerOpen, setExplorerOpen] = useState(false);
   const showExplorer = shouldShowFileExplorer({
     relativePath,
     explorerOpen,
@@ -1066,15 +1056,7 @@ export default function FilePreviewPanel({
   }, [relativePath]);
 
   const toggleExplorer = () => {
-    setExplorerOpen((current) => {
-      const next = !current;
-      try {
-        setLocalStorageItem(FILE_EXPLORER_STORAGE_KEY, next, Schema.Boolean);
-      } catch (error) {
-        console.error(error);
-      }
-      return next;
-    });
+    setExplorerOpen((current) => !current);
   };
 
   const handleOpenInBrowser = useCallback(() => {

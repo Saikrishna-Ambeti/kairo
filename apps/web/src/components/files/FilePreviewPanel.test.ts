@@ -88,7 +88,7 @@ describe("shouldShowFileExplorer", () => {
     ).toBe(false);
   });
 
-  it("keeps the saved explorer preference for workspace files", () => {
+  it("only shows the workspace tree beside a file when explicitly opened", () => {
     expect(
       shouldShowFileExplorer({
         relativePath: "docs/report.pdf",
