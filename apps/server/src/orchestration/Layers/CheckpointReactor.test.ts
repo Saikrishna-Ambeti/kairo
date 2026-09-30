@@ -1065,7 +1065,7 @@ describe("CheckpointReactor", () => {
     ).not.toContain("late.txt");
   });
 
-  it("does not create an older missing checkpoint after a newer turn aborts", async () => {
+  it("does not add newer files to an older aborted turn checkpoint", async () => {
     const harness = await createHarness({ seedFilesystemCheckpoints: false });
     const threadId = ThreadId.make("thread-1");
     for (const turnNumber of [1, 2]) {
@@ -1102,9 +1102,17 @@ describe("CheckpointReactor", () => {
     });
     await harness.drain();
 
-    expect(gitRefExists(harness.cwd, checkpointRefForThreadTurn(threadId, 1))).toBe(false);
+    expect(
+      runGit(harness.cwd, [
+        "ls-tree",
+        "-r",
+        "--name-only",
+        checkpointRefForThreadTurn(threadId, 1),
+      ]),
+    ).not.toContain("late.txt");
     const thread = (await harness.readModel()).threads.find((entry) => entry.id === threadId);
-    expect(thread?.checkpoints).toHaveLength(0);
+    expect(thread?.checkpoints).toHaveLength(2);
+    expect(thread?.checkpoints.every((checkpoint) => checkpoint.status === "ready")).toBe(true);
   });
 
   it("refreshes local git status state on turn completion using the session cwd", async () => {
