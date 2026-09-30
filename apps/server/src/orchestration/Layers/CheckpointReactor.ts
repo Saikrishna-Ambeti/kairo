@@ -425,7 +425,7 @@ const make = Effect.gen(function* () {
           event.type === "turn.aborted"
             ? "ready"
             : checkpointStatusFromRuntime(event.payload.state),
-        assistantMessageId: existingPlaceholder?.assistantMessageId ?? undefined,
+        assistantMessageId: existingCheckpoint?.assistantMessageId ?? undefined,
         createdAt: event.createdAt,
         announceCapture: !existingCheckpoint || existingCheckpoint.status === "missing",
       });

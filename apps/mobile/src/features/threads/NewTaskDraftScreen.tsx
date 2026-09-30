@@ -83,7 +83,6 @@ import {
   scheduleUnusedComposerAttachmentCleanup,
   waitForComposerDraftsLoaded,
   type ComposerDraft,
-  waitForComposerDraftsLoaded,
 } from "../../state/use-composer-drafts";
 import { useEnvironmentServerConfig, useProjects } from "../../state/entities";
 import {
