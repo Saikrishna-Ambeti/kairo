@@ -22,17 +22,21 @@ We wanted something performant, remote-ready, and truly open. If we ever go the 
 > - OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
 > - Antigravity: enable it in Settings, then use **Install Antigravity** and **Sign in with Google**. No CLI is required.
 
-### Try it out (install-free)
-
-The easiest way to test Kairo is to run the server in your terminal (requires Node.js 22.16+, 23.11+, or 24.10+):
+### Command line
 
 ```bash
-npx kairo@latest
+curl -fsSL https://kairo.codes/install.sh | sh
 ```
 
-This will launch Kairo's backend on your machine as well as the local web app to control your agents.
+On Windows, in PowerShell:
 
-Tip: Use `npx kairo@latest --help` for the full CLI reference.
+```powershell
+irm https://kairo.codes/install.ps1 | iex
+```
+
+Then run `kairo` to start the server and open the local web app. `kairo service install` keeps it running in the background, `kairo update` moves to a newer release, and `kairo --help` has the full reference.
+
+To try it once without installing, run `npx kairo@latest` instead.
 
 ### Desktop app
 
@@ -48,6 +52,14 @@ winget install Kairo.Kairo
 
 ```bash
 brew install --cask kairo-code
+```
+
+#### Debian, Ubuntu (`.deb`)
+
+Download the `.deb` from [GitHub Releases](https://github.com/Saikrishna-Ambeti/kairo/releases), then:
+
+```bash
+sudo apt install ./Kairo-Code-*.deb
 ```
 
 #### Arch Linux (AUR)

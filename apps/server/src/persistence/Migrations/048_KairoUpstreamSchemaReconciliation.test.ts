@@ -6,7 +6,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as NodeSqliteClient from "@kairo/shared/nodeSqliteClient";
 import { runMigrations } from "../Migrations.ts";
 
-const layer = it.layer(Layer.mergeAll(NodeSqliteClient.layerMemory()));
+const layer = it.layer(Layer.mergeAll(NodeSqliteClient.layer({ filename: ":memory:" })));
 
 layer("048_KairoUpstreamSchemaReconciliation", (it) => {
   it.effect("repairs databases whose Kairo migrations occupied upstream IDs 42 and 43", () =>
@@ -22,7 +22,25 @@ layer("048_KairoUpstreamSchemaReconciliation", (it) => {
       yield* runMigrations({ toMigrationInclusive: 50 });
       yield* sql`INSERT INTO scheduled_tasks (task_id, revision, data_json, deleted, updated_at)
         VALUES ('preserved-task', 7, '{"title":"Keep this task"}', 0, '2026-09-10T00:00:00Z')`;
-      yield* runMigrations({ toMigrationInclusive: 53 });
+      yield* sql`INSERT INTO artifact_metadata (
+        thread_id, project_id, turn_id, checkpoint_turn_count, kind, title, file_name,
+        relative_path, size_bytes, search_text, created_at, updated_at
+      ) VALUES (
+        'preserved-thread', 'preserved-project', 'preserved-turn', 2, 'pdf', 'Keep this artifact',
+        'report.pdf', 'reports/report.pdf', 128, 'Saved report',
+        '2026-09-10T00:00:00Z', '2026-09-10T00:00:00Z'
+      )`;
+      yield* runMigrations({ toMigrationInclusive: 57 });
+      const artifacts = yield* sql<{
+        readonly title: string;
+        readonly relative_path: string;
+        readonly size_bytes: number;
+      }>`
+        SELECT title, relative_path, size_bytes FROM artifact_metadata WHERE thread_id = 'preserved-thread'
+      `;
+      assert.deepStrictEqual(artifacts, [
+        { title: "Keep this artifact", relative_path: "reports/report.pdf", size_bytes: 128 },
+      ]);
       const tasks = yield* sql<{ readonly revision: number; readonly data_json: string }>`
         SELECT revision, data_json FROM scheduled_tasks WHERE task_id = 'preserved-task'
       `;
@@ -35,6 +53,7 @@ layer("048_KairoUpstreamSchemaReconciliation", (it) => {
       assert.ok(columns.some((column) => column.name === "unsettled_at"));
       assert.ok(columns.some((column) => column.name === "branch_pull_request_json"));
       assert.ok(columns.some((column) => column.name === "active_order_key"));
+      assert.ok(columns.some((column) => column.name === "auto_settle_disabled_at"));
       const pullRequestTables = yield* sql<{ readonly name: string }>`
         SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'projection_thread_pull_requests'
       `;

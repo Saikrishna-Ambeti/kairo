@@ -14,15 +14,14 @@ Behavioral specification of the Kairo changes applied on top of upstream T3 Code
 - Upstream URL: https://github.com/pingdotgg/t3code.git
 - Upstream remote: `upstream`. `origin` is the Kairo fork.
 - Target: latest upstream default branch, resolved live to an exact commit each update. Cached default branch at setup: `main`.
-- Integration: merge into a new local review branch in a separate worktree; leave uncommitted using `--no-ff --no-commit`.
+- Integration: merge into a new local review branch in a separate worktree using `--no-ff --no-commit`. Leave uncommitted by default; the user authorized a local review commit for this attempt so Greptile can review committed changes.
 - Preserve the behavior below and other local work. Reuse equivalent upstream implementations when the same acceptance checks pass.
 - Preserve existing Git state. Record a verified candidate separately from the landed baseline; failed or pending checks never advance the verified baseline.
 
 ## Upstream baseline
 
-- Synced with upstream T3 Code through `caab2fdb` in merge `30f57d111`.
-- Full upstream baseline: `caab2fdbac041ac2e851ad4fa3ac4a40a1d4a8f6`. Verified as the second parent of merge `30f57d111a9f0b71b30a33f6ac45255b9993fbb2` and an ancestor of current HEAD.
-- Observed local HEAD at setup: `ff1c4ef08ba85174b44482cf394fc83902df7b5c`.
+- Observed integrated upstream commit: `d29c56a5c404cb0f58d3b2ac41762fa0d0ac28d4`. It is the second parent of merge `0235375fae757e104ea4f02b6873204cafe229f9`, which is an ancestor of starting HEAD. The September review was committed and subsequently merged into the fork.
+- Observed local HEAD at setup: `b2f0ac9752eacb18fd2b1c4a751b0e561263aaf2` on `t3code/upstream-sync-patch`.
 - Last behaviorally verified baseline: unknown. Existing baseline records integration history, not a new test result.
 - The Kairo behavior described below remains the source of truth when resolving upstream changes.
 - Equivalent upstream behavior is reused instead of maintained twice. The desktop launcher now uses upstream launcher version 19 in the review candidate, which already preserves framework symlinks.
@@ -146,15 +145,15 @@ Use focused tests from the repo root, selected according to changed behavior:
 - P005: `vp test run scripts/build-desktop-artifact.test.ts`, plus packaging on the affected macOS configuration when authorized.
 - P006: inspect affected workflow jobs, dependency resolution, and relevant browser tests. Follow AGENTS.md limits on broad suites and browser use.
 
-Use the workspace-local `./node_modules/.bin/vp` for verification. The globally installed runner used Vitest 4.1.10 against dependencies requiring 4.1.11 and failed before executing tests. The local runner executes the focused suites successfully. Web unit tests run from `apps/web` with `../../node_modules/.bin/vp test run --project unit <files>`.
+Use the workspace-local `./node_modules/.bin/vp` for verification. The globally installed runner used Vitest 4.1.10 against workspace dependencies requiring 5.0.1 and failed before executing tests. The local runner executes the focused suites successfully. Web unit tests run from `apps/web` with `../../node_modules/.bin/vp test run --project unit <files>`.
 
-The review candidate declares Electron `44.1.0`. No additional Electron pin is required. Effect moves to `4.0.0-rc.112`, TypeScript to `7.0.2`, and Vite+ to `0.3.0`. Claude Agent SDK remains exactly pinned, now at `0.3.260`. The workspace lockfile was regenerated with `vp i --lockfile-only`, followed by installation. Dependency declarations do not prove graphics or older-macOS runtime compatibility.
+The review candidate declares Electron `44.4.2`. Effect moves to `4.0.0-rc.115`, TypeScript remains `7.0.2`, and Vite+ moves to `1.0.0`. Claude Agent SDK remains exactly pinned, now at `0.3.276` to match upstream adapter APIs. The workspace lockfile was regenerated with `vp install --lockfile-only`, followed by installation. Dependency declarations do not prove graphics or older-macOS runtime compatibility.
 
 ### P007: Existing data and local features
 
 - Status: active; migration and focused service checks pass in the candidate.
 - Purpose: Preserve Kairo data and committed behavior beyond the original six patch entries.
-- Keep migration IDs 48, 49, and 50 assigned to Kairo reconciliation, artifact metadata, and scheduled tasks. Incoming upstream migrations use IDs 51, 52, and 53. Existing databases must retain scheduled tasks and artifacts while gaining upstream pull-request and thread-order fields.
+- Keep migration IDs 48, 49, and 50 assigned to Kairo reconciliation, artifact metadata, and scheduled tasks. Previously integrated upstream migrations use IDs 51 through 53. This update allocates incoming message context, title state, viewed pull-request files, and auto-settle migrations to IDs 54 through 57. Existing databases must retain scheduled tasks and artifacts while gaining upstream pull-request and thread-order fields.
 - Preserve study mode, deep research, artifact panels, scheduled tasks, source-control visibility preferences, notification sound, desktop Clerk headers, cloud identity, and Kairo marketing designs.
 - Implementation hints: `apps/server/src/persistence/Migrations.ts`, provider services, chat and settings components, desktop Clerk integration, and marketing pages.
 - Verification: migration reconciliation test, scheduled-task and provider-service tests, affected client typechecks, and manual feature acceptance when authorized.
@@ -163,29 +162,34 @@ The review candidate declares Electron `44.1.0`. No additional Electron pin is r
 ### Known verification gaps
 
 - P002 and P003 describe historical installer and CLI flows. Before this update, committed Kairo code had already moved to cloud credential exchange for Supermemory and cloud MCP for Composio. This merge preserves that implementation and tests its current service behavior. It does not claim that historical installer, toolkit catalog, or per-provider setup requirements pass. Those historical descriptions remain until separately reconciled with product requirements.
-- P004's repeated-launch gate is removed in this candidate. Completion uses persisted settings, and optional memory and connected-app steps reuse current settings panels. Fresh-profile, restart, failure-retry, and back-navigation acceptance still needs a real client pass.
+- P004 completion uses persisted settings, and optional memory and connected-app steps reuse current settings panels. This update retains the previously committed first-run behavior. Fresh-profile, restart, failure-retry, and back-navigation acceptance still needs a real client pass.
 - Web and desktop share the updated onboarding flow. Mobile remains a separate client; its typecheck passes, but no native flow was launched. Provider-service tests cover capability selection, not live acceptance on Codex, Claude, Cursor, Grok, OpenCode, or Antigravity accounts.
 - Local, remote/relay, tunnel, and multi-environment acceptance remain unverified. Server-side operations must target the selected environment.
 - Browser checks and application launches require explicit user authorization under `AGENTS.md`. No browser or app was launched. DMG creation on older macOS, target-hardware graphics, and CI execution remain pending.
 
 ## Latest attempt
 
-- Date: 2026-09-11.
-- Publication follow-up: the user authorized committing and pushing this review branch. The Git-state notes below record the completed review before publication; consult branch history for the resulting merge commit.
-- Status at review completion: upstream merge prepared for review, uncommitted. Focused automated checks pass; manual acceptance remains pending. This is not a landed or fully behaviorally verified baseline.
-- Starting HEAD and rollback reference: `ff1c4ef08ba85174b44482cf394fc83902df7b5c`.
-- Previous integrated baseline: `caab2fdbac041ac2e851ad4fa3ac4a40a1d4a8f6`, confirmed ancestor of the target.
-- Exact target: `d29c56a5c404cb0f58d3b2ac41762fa0d0ac28d4`. Resolved live from upstream default branch `main` on 2026-09-10 and fetched. This is the update's fixed target, not a claim about later upstream changes. It includes 576 commits after the prior baseline.
-- Review branch: `review/upstream-20260910`.
-- Review worktree: `/Users/saikrishnaambeti/Documents/projects/kairo-upstream-20260910`.
-- Git state at review completion: `HEAD` remains the starting revision, `MERGE_HEAD` is the target, all conflicts resolved, merged changes staged. No commit, push, PR, or deployment.
-- Original checkout: `/Users/saikrishnaambeti/Documents/projects/kairo` remains on `main` with its original pending specification edits. Those edits were copied into this review and adapted. No unrelated pending edits were excluded.
-- Adaptations: Kairo identity across incoming package, environment, desktop, mobile, and native-helper identifiers; upstream MIT attribution retained; memory and pull-request MCP capabilities coexist without enabling preview implicitly; provider login follows the selected executable; upstream provider-update ownership detection retained; Effect schema and service APIs updated; migrations allocated after Kairo IDs; durable first-run completion with Kairo setup steps; launcher version 19; existing DMG fallback; GitHub-hosted CI runners; local marketing designs and other P007 behavior retained.
-- Check outcomes: server, web, desktop, and mobile package typechecks passed. Focused lint passed with no errors. Earlier integrated checks reported four React dependency/ref warnings; the final onboarding/test check reported two React memo/effect warnings. Whitespace checks passed outside vendored files and upstream embedded patch files, whose context lines contain space-before-tab indentation.
-- Focused tests passed: onboarding/settings/first-run logic, 66 tests; provider maintenance, maintenance runner, provider service, Codex runtime, and scheduled tasks, 168 tests before the final added login regression; Supermemory, Composio, MCP registry, memory handlers, and migration reconciliation; Supermemory MCP, 4 tests; desktop launcher, environment, Clerk, web branding, and artifact packaging; provider-tool presentation, 65 tests. The final provider-maintenance, managed-provider, and migration batch passed all 40 tests, including selected-executable login and scheduled-task data preservation. Onboarding tests still pass after restoring optional steps.
-- Checks not run: repo-wide suites, browser automation, native launch, DMG build, CI. No live Kairo data was modified.
-- Scratch evidence retained outside the worktree under `/var/folders/26/8qwghqmn5sq9fsv3qw8_wlhm0000gn/T/kairo-upstream-review-p9cgw4uu`, with focused logs in `/tmp/kairo-*.log`.
-- Landed baseline and last behaviorally verified baseline: unchanged.
+- Date: 2026-10-01.
+- State: merge candidate prepared; focused validation passed. The user authorized a local review merge commit to enable Greptile. CodeRabbit rejected the full diff as too large; provider, chat, and relay review requests are still scanning changes. Greptile committed review and manual acceptance remain pending.
+- Starting HEAD and rollback reference: `b2f0ac9752eacb18fd2b1c4a751b0e561263aaf2`.
+- Previous integrated upstream: `d29c56a5c404cb0f58d3b2ac41762fa0d0ac28d4`, confirmed ancestor of the target.
+- Exact target: `bd89c1302026255c62cc09278207bfaf2664da4a`, fetched from `upstream/main` after checking the remote's live default branch. It contains 738 commits after the integrated upstream baseline. This is the attempt's fixed target, not a claim about later upstream changes.
+- Review branch: `review/upstream-20261001`.
+- Review worktree: `/Users/saikrishnaambeti/Documents/projects/kairo-upstream-20261001`.
+- Git state: conflicts are resolved and final validation fixes are staged for the authorized local review merge commit. The resulting commit has the starting revision and exact upstream target as parents; inspect review branch history for its identity. No push, PR, or deployment is authorized.
+- Original checkout: `/Users/saikrishnaambeti/.t3/worktrees/kairo/t3code-a4bf8512` remains on its original branch and HEAD, with no pending changes at setup. No pending edits were excluded.
+- Adaptations: preserve Kairo package, native-module, configuration, and release identities; retain upstream license attribution and vendored reference sources; use GitHub-hosted runners, including the new Windows release job; regenerate the route tree and lockfile; retain cloud Supermemory and Composio, identity without managed relay, Neon relay storage, onboarding completion, artifacts, scheduled tasks, and marketing designs. Provider context now carries Study instructions in both native collaboration settings and additional context. Memory, preview, device, and pull-request capabilities follow project settings and provider selection. Split mobile settings retain Kairo routes and account gates. Web and mobile custom Connect account pages require managed relay configuration; cloud identity alone remains usable. Plan and Study controls remain available without the upstream legacy opt-in.
+- Focused tests passed: patch services, cloud gateway, migration reconciliation, scheduled-task service, and desktop packaging, 91 tests; provider service, maintenance, MCP registry, runtime instruction, and interaction-mode suites, 127 tests across five files; Codex runtime, tool presentation, reconciliation, and auto-settle migration, 126 tests; web onboarding, right-panel state, header, and settings search, 145 tests; web schedules and first-run logic, 49 tests; mobile preferences and message-context migration, 8 tests; final logger and task/artifact-preservation regression, 7 tests. The final Codex runtime pass also passed all 51 tests after converting the affected tests to Effect test helpers. Mobile public-configuration tests also passed all 8 tests after the account gates changed. Some tests overlap across batches. The initial tool-presentation failures were fixed by preserving Kairo and legacy upstream tool aliases.
+- Typechecks: web, desktop, mobile, scripts, relay, and cloud API passed. Server package check found one remaining logger fixture missing the fork's product-surface configuration; the fixture is fixed and a focused typecheck of the logger, migration-preservation, and Codex runtime tests passed. This focused rerun does not claim a second complete server-package pass. Earlier server API and test-double failures were corrected.
+- Lint: initial focused pass found newly enforced component-style rules and a synchronous Effect test. The final focused lint pass has no errors. The scoped pass reported 59 React compiler and hook warnings in the affected large client components. The additional mobile account-page lint passed with two ref warnings; web account-page lint passed. Whitespace checks passed for apps, packages, scripts, docs, relay, and workflows.
+- Reviews use the user's `personal` profile. Both accounts authenticated. CodeRabbit rejected the full uncommitted diff against starting HEAD with `payload_too_large`. Provider, chat, and relay scope requests are in progress; observed CLI preprocessing still scans paths outside these directories, so their effective scope must be checked from the results. Greptile initially returned `there are no committed code changes to review` because its CLI excludes staged and unstaged changes. The user then explicitly approved a local review commit, overriding the uncommitted default for this attempt.
+- Checks not run: repo-wide suites, browser automation, native launch, old-macOS DMG build, CI, live provider accounts, or remote/tunnel acceptance. No live Kairo data was modified.
+- Evidence: `/tmp/kairo-upstream-20261001-evidence/`, including original change inventory, conflict decisions, generated-file work, validation logs, and review outputs.
+- Landed baseline remains `d29c56a5c404cb0f58d3b2ac41762fa0d0ac28d4`. Last fully behaviorally verified baseline remains unknown.
+
+### Prior attempt
+
+The September 2026 review integrated `d29c56a5c404cb0f58d3b2ac41762fa0d0ac28d4` from baseline `caab2fdbac041ac2e851ad4fa3ac4a40a1d4a8f6`, starting at `ff1c4ef08ba85174b44482cf394fc83902df7b5c`. Its focused tests and client typechecks passed, with manual acceptance pending. The user later authorized publication; merge `0235375fae757e104ea4f02b6873204cafe229f9` records the integration. Review worktree and evidence remain under `/Users/saikrishnaambeti/Documents/projects/kairo-upstream-20260910` and `/var/folders/26/8qwghqmn5sq9fsv3qw8_wlhm0000gn/T/kairo-upstream-review-p9cgw4uu`.
 
 ## Patch history
 

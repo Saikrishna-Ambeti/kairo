@@ -79,11 +79,7 @@ const colors = {
 
 const customIcons = {
   agents: "kairo-file-icon-agents",
-  claude: "kairo-file-icon-claude",
-  package: "kairo-file-icon-package-json",
   pnpm: "kairo-file-icon-pnpm",
-  readme: "kairo-file-icon-readme",
-  tsconfig: "kairo-file-icon-tsconfig",
   video: "kairo-file-icon-video",
 };
 

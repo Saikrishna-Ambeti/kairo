@@ -35,9 +35,9 @@ export const ComposerFeaturesMenu = memo(function ComposerFeaturesMenu(props: {
       <MenuTrigger
         render={
           <Button
-            size="sm"
-            variant="ghost"
-            className="shrink-0 px-2 text-muted-foreground/70 hover:text-foreground/80"
+            size="icon-sm"
+            variant="ghost-muted"
+            className="shrink-0"
             aria-label="Composer features"
           />
         }

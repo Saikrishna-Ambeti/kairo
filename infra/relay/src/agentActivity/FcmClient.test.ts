@@ -51,7 +51,7 @@ const config = {
 const input = {
   token: "device-token",
   packageName: "com.kairo.app.dev",
-  data: { t3_kind: "agent_activity", active: "true" },
+  data: { kairo_kind: "agent_activity", active: "true" },
   alert: false,
 };
 

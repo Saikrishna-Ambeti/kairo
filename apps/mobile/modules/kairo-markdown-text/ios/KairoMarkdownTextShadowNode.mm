@@ -1,5 +1,6 @@
 #include "KairoMarkdownTextShadowNode.h"
 #include "KairoMarkdownTextRunShadowNode.h"
+#import "KairoContextChip.h"
 #include <react/renderer/components/view/ViewShadowNode.h>
 #import <react/renderer/textlayoutmanager/RCTAttributedTextUtils.h>
 
@@ -64,12 +65,18 @@ static void applyAttachments(
         KairoMarkdownTextAttachmentBaselineOffset(attachmentRange),
         attachmentSize,
         attachmentSize);
+    NSDictionary *runAttributes =
+        [attributedString attributesAtIndex:attachmentRange.location effectiveRange:nil];
+    if (attachmentRange.chipWidth > 0) {
+      attachment.bounds = KairoContextChipBounds(
+          runAttributes[NSFontAttributeName],
+          CGSizeMake(attachmentRange.chipWidth, attachmentRange.chipHeight));
+    }
     const NSRange range = NSMakeRange(
         attachmentRange.location,
         MIN(attachmentRange.length, attributedString.length - attachmentRange.location));
-    NSAttributedString *attachmentString =
-        [NSAttributedString attributedStringWithAttachment:attachment];
-    [attributedString replaceCharactersInRange:range withAttributedString:attachmentString];
+    [attributedString replaceCharactersInRange:range
+                          withAttributedString:KairoMarkdownTextAttachmentString(attachment, runAttributes)];
   }
 }
 
@@ -188,7 +195,24 @@ Size KairoMarkdownTextShadowNode::measureContent(
               props.shadowRadius - ParagraphStyleEncodingOffset,
           });
         }
-        if (props.nativeId.rfind(FileAttachmentNativeIdPrefix, 0) == 0 && fragmentLength > 0) {
+        if (props.nativeId.rfind("kairo-chip:", 0) == 0 && fragmentLength > 0) {
+          const std::string uri = props.nativeId.substr(3);
+          NSMutableDictionary *payload =
+              [KairoContextChipPayload([NSString stringWithUTF8String:uri.c_str()]) mutableCopy];
+          // Chips must scale with the paragraph or smaller Dynamic Type sizes clip them.
+          // Store the scaled payload so measurement and the rendered bitmap use the same font.
+          payload[@"fontSizeMultiplier"] = @(fontSizeMultiplier);
+          NSData *data = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];
+          NSString *scaledUri = [@"chip:" stringByAppendingString:
+              [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]];
+          const CGFloat maxWidth = std::isfinite(layoutConstraints.maximumSize.width)
+              ? layoutConstraints.maximumSize.width : 320;
+          const CGSize size = KairoContextChipSize(payload, maxWidth);
+          attachmentRanges.push_back(KairoMarkdownTextAttachmentRange{
+              utf16Offset, 1, std::string(scaledUri.UTF8String), false,
+              static_cast<Float>(size.width), static_cast<Float>(size.height),
+          });
+        } else if (props.nativeId.rfind(FileAttachmentNativeIdPrefix, 0) == 0 && fragmentLength > 0) {
           attachmentRanges.push_back(KairoMarkdownTextAttachmentRange{
               utf16Offset,
               1,
@@ -226,6 +250,10 @@ Size KairoMarkdownTextShadowNode::measureContent(
         [RCTNSAttributedStringFromAttributedString(baseAttributedString) mutableCopy];
     applyParagraphStyles(convertedAttributedString, paragraphStyleRanges);
     applyAttachments(convertedAttributedString, attachmentRanges);
+    // TextKit stacks a paragraph's extra line height above the glyphs. React Native's own
+    // layout manager centres them with a baseline offset; do the same, after attachments
+    // so chips shift with the words.
+    RCTApplyBaselineOffset(convertedAttributedString);
 
     const CGFloat maximumWidth = std::isfinite(layoutConstraints.maximumSize.width)
         ? layoutConstraints.maximumSize.width

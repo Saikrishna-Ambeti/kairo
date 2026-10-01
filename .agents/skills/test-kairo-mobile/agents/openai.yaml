@@ -1,4 +1,4 @@
 interface:
   display_name: "Test Kairo Mobile"
-  short_description: "Test Kairo on iOS or Android"
-  default_prompt: "Use $test-kairo-mobile to launch Kairo against an isolated backend and verify the affected flow on an available simulator or emulator."
+  short_description: "Test iOS and Android in Kairo's Device panel"
+  default_prompt: "Use $test-kairo-mobile to verify the affected native mobile flow through Kairo's Device panel and AgentDevice."

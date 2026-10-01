@@ -39,7 +39,7 @@ export const getKairoCloudAccessToken = (): Effect.Effect<
     const stored = yield* readSecret(KAIRO_CLOUD_ACCESS_TOKEN_SECRET);
     if (stored) return Redacted.make(stored);
 
-    const fromEnvironment = yield* Config.redacted("KAIRO_CLOUD_ACCESS_TOKEN").pipe(
+    const fromEnvironment = yield* Config.Redacted("KAIRO_CLOUD_ACCESS_TOKEN").pipe(
       Config.option,
       Effect.mapError(
         (cause) =>

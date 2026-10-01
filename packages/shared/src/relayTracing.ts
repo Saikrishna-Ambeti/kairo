@@ -142,6 +142,7 @@ export function makeRelayClientTracingLayer(
       serviceName: resource.serviceName,
       serviceVersion: resource.serviceVersion,
       attributes: {
+        "service.namespace": "kairo",
         "service.runtime": resource.runtime,
         "service.component": resource.component ?? "relay-client",
         "kairo.client.surface": resource.client,
@@ -151,6 +152,6 @@ export function makeRelayClientTracingLayer(
 
   return Layer.effect(
     RelayClientTracer,
-    Tracer.Tracer.pipe(Effect.map(nonInterferingTracer), Effect.map(Option.some)),
+    Tracer.Tracer.pipe(Effect.map(nonInterferingTracer), Effect.asSome),
   ).pipe(Layer.provide(tracerLayer));
 }

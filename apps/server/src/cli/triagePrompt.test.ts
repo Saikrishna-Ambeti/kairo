@@ -54,7 +54,8 @@ it("context file carries every path the playbook depends on", () => {
       dbPath: "/home/u/.kairo/userdata/state.sqlite",
       settingsPath: "/home/u/.kairo/userdata/settings.json",
       logsDir: "/home/u/.kairo/userdata/logs",
-      serverLogPath: "/home/u/.kairo/userdata/logs/server.log",
+      serviceLogPath: "/home/u/.kairo/userdata/logs/boot-service.log",
+      desktopBackendLogGlob: "/home/u/.kairo/userdata/logs/server-child*.log*",
       serverTracePath: "/home/u/.kairo/userdata/logs/server.trace.ndjson",
       providerEventLogPath: "/home/u/.kairo/userdata/logs/provider/events.log",
       terminalLogsDir: "/home/u/.kairo/userdata/logs/terminals",
@@ -65,6 +66,8 @@ it("context file carries every path the playbook depends on", () => {
   });
   assert.include(context, "/home/u/.kairo/userdata/state.sqlite");
   assert.include(context, "/home/u/.kairo/userdata/logs/server.trace.ndjson");
+  assert.include(context, "/home/u/.kairo/userdata/logs/boot-service.log");
+  assert.include(context, "/home/u/.kairo/userdata/logs/server-child*.log*");
   assert.include(context, "/home/u/.kairo/userdata/logs/provider/events.log");
   assert.include(context, "/home/u/.kairo/userdata/secrets");
   assert.include(context, "/home/u/.kairo/source");

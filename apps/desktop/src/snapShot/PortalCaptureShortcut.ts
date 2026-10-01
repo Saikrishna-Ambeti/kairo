@@ -268,7 +268,7 @@ export class PortalCaptureShortcut {
     body: unknown[],
     options: Record<string, Variant<unknown>> = {},
   ) {
-    const token = `t3_${NodeCrypto.randomUUID().replaceAll("-", "")}`;
+    const token = `kairo_${NodeCrypto.randomUUID().replaceAll("-", "")}`;
     const expectedPath = this.namespace + token;
     let resolve!: (body: unknown) => void;
     const response = new Promise<unknown>((done) => {
@@ -398,7 +398,7 @@ export class PortalCaptureShortcut {
     const created = await this.request("CreateSession", "", [], {
       session_handle_token: new Variant(
         "s",
-        `t3_capture_${NodeCrypto.randomUUID().replaceAll("-", "")}`,
+        `kairo_capture_${NodeCrypto.randomUUID().replaceAll("-", "")}`,
       ),
     });
     const session = decodeSession(created).session_handle.value;

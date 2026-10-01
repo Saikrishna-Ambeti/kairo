@@ -51,7 +51,11 @@ describe("DesktopEnvironment", () => {
           VITE_DEV_SERVER_URL: "http://localhost:5173",
           KAIRO_DEV_REMOTE_SERVER_ENTRY_PATH: " /remote/server.mjs ",
           KAIRO_OTLP_TRACES_URL: " http://127.0.0.1:4318/v1/traces ",
+          KAIRO_OTLP_METRICS_URL: " http://127.0.0.1:4318/v1/metrics ",
+          KAIRO_OTLP_LOGS_URL: " http://127.0.0.1:4318/v1/logs ",
           KAIRO_OTLP_EXPORT_INTERVAL_MS: "2500",
+          KAIRO_OTLP_HEADERS: "authorization=Basic%20abc%3D%3D,x-tenant=kairo",
+          KAIRO_OTLP_PROTOCOL: "http/protobuf",
         },
       );
 
@@ -87,7 +91,17 @@ describe("DesktopEnvironment", () => {
       assert.deepEqual(environment.configuredBackendPort, Option.some(4949));
       assert.deepEqual(environment.commitHashOverride, Option.some("0123456789abcdef"));
       assert.deepEqual(environment.otlpTracesUrl, Option.some("http://127.0.0.1:4318/v1/traces"));
+      assert.deepEqual(environment.otlpMetricsUrl, Option.some("http://127.0.0.1:4318/v1/metrics"));
+      assert.deepEqual(environment.otlpLogsUrl, Option.some("http://127.0.0.1:4318/v1/logs"));
       assert.equal(environment.otlpExportIntervalMs, 2500);
+      assert.deepEqual(
+        environment.otlpHeaders,
+        Option.some({
+          authorization: "Basic abc==",
+          "x-tenant": "kairo",
+        }),
+      );
+      assert.equal(environment.otlpProtocol, "http/protobuf");
     }),
   );
 
@@ -105,6 +119,7 @@ describe("DesktopEnvironment", () => {
       assert.equal(environment.logDir, "/tmp/kairo/userdata/logs");
       assert.equal(environment.browserArtifactsDir, "/tmp/kairo/userdata/browser-artifacts");
       assert.equal(environment.serverSettingsPath, "/tmp/kairo/userdata/settings.json");
+      assert.equal(environment.otlpProtocol, "http/json");
     }),
   );
 
@@ -122,6 +137,10 @@ describe("DesktopEnvironment", () => {
       assert.equal(
         environment.backendEntryPath,
         "/install/resources/server.asar/apps/server/dist/bin.mjs",
+      );
+      assert.equal(
+        environment.clientAssetsDir,
+        "/install/resources/server.asar/apps/server/dist/client",
       );
     }),
   );

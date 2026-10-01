@@ -11,10 +11,11 @@ import { primaryEnvironmentHttpLayer } from "../environments/primary/httpLayer";
 import { browserCryptoLayer } from "../cloud/dpop";
 import { managedRelayClientLayer } from "../cloud/managedRelayLayer";
 import { resolveCloudPublicConfig, resolveRelayTracingConfig } from "../cloud/publicConfig";
+import * as ClientTracer from "../observability/clientTracer";
 
 const httpClientLayer = remoteHttpClientLayer((input, init) => globalThis.fetch(input, init));
 const relayTracingLayer = makeRelayClientTracingLayer(resolveRelayTracingConfig(), {
-  serviceName: "kairo-web-relay-client",
+  serviceName: "kairo-web",
   serviceVersion: import.meta.env.APP_VERSION,
   runtime: "browser",
   client: typeof window !== "undefined" && window.desktopBridge ? "desktop" : "web",
@@ -25,6 +26,7 @@ type RuntimeLayerSource =
   | typeof browserCryptoLayer
   | typeof Socket.layerWebSocketConstructorGlobal
   | typeof relayTracingLayer
+  | typeof ClientTracer.layer
   | ReturnType<typeof managedRelayClientLayer>;
 
 const primaryHttpRuntime = ManagedRuntime.make(
@@ -52,6 +54,7 @@ const runtimeLayer = Layer.mergeAll(
   httpClientLayer,
   browserCryptoLayer,
   Socket.layerWebSocketConstructorGlobal,
+  ClientTracer.layer,
   relayTracingLayer,
   managedRelayClientLayer(resolveCloudPublicConfig().relayUrl).pipe(
     Layer.provide(Layer.mergeAll(httpClientLayer, browserCryptoLayer)),

@@ -83,8 +83,8 @@ export function ArtifactRow({
         className={cn(
           "grid size-9 shrink-0 place-items-center rounded-lg",
           artifact.kind === "pdf"
-            ? "bg-red-500/10 text-red-600 dark:text-red-300"
-            : "bg-blue-500/10 text-blue-600 dark:text-blue-300",
+            ? "bg-destructive/10 text-destructive"
+            : "bg-info/10 text-info-foreground",
         )}
       >
         <FileTextIcon className="size-4" aria-hidden />
@@ -96,7 +96,7 @@ export function ArtifactRow({
             ? `${artifact.projectTitle} · ${artifact.threadTitle}`
             : artifact.fileName}
         </span>
-        <span className="mt-1 block text-muted-foreground/80 text-[11px] tabular-nums">
+        <span className="mt-1 block text-muted-foreground/80 text-2xs tabular-nums">
           {formatLabel} · {formatFileSize(artifact.sizeBytes)} ·{" "}
           {formatArtifactTime(artifact.updatedAt)}
         </span>

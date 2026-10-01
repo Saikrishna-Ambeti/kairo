@@ -222,7 +222,7 @@ export class LinuxCaptureConnection {
       body: [PORTAL],
     });
     const sender = decodeString(owner.body[0]);
-    const token = `t3_${NodeCrypto.randomUUID().replaceAll("-", "")}`;
+    const token = `kairo_${NodeCrypto.randomUUID().replaceAll("-", "")}`;
     const namespace = `${PORTAL_PATH}/request/${this.uniqueName.slice(1).replaceAll(".", "_")}/`;
     let handle = namespace + token;
     let completed = false;
