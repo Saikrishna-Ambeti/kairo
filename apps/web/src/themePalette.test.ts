@@ -90,16 +90,17 @@ describe("theme files", () => {
     }
   });
 
-  it("keeps stock dark controls in the neutral-black surface hierarchy", () => {
+  it("keeps stock dark controls in the soft charcoal surface hierarchy", () => {
     expectThemeColors(getStandardThemeColors("dark"), {
-      canvas: "#0a0a0a",
-      surface: "#111111",
-      surfaceRaised: "#111111",
-      surfaceOverlay: "#111111",
-      toolbarControl: "#111111",
-      secondary: "#111111",
-      muted: "#111111",
-      accentSurface: "#141414",
+      canvas: "#212121",
+      surface: "#282828",
+      surfaceRaised: "#282828",
+      surfaceOverlay: "#282828",
+      toolbarControl: "#282828",
+      secondary: "#262626",
+      muted: "#262626",
+      accentSurface: "#2a2a2a",
+      sidebar: "#181818",
     });
   });
 

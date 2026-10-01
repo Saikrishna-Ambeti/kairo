@@ -970,7 +970,9 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(kairo-mo
 :root {
   color-scheme: light;
   --radius: 0.625rem;
-  --background: var(--color-zinc-25);
+  /* Two quiet surfaces (white canvas, near-white sidebar) and a neutral ink
+     accent. Blue is reserved for links, info, and update affordances. */
+  --background: var(--color-white);
   --app-chrome-background: var(--background);
   --toolbar-background: var(--app-chrome-background);
   --toolbar-foreground: var(--foreground);
@@ -984,7 +986,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(kairo-mo
   --card-foreground: var(--color-zinc-800);
   --popover: var(--color-white);
   --popover-foreground: var(--color-zinc-800);
-  --primary: oklch(0.488 0.217 264);
+  --primary: var(--color-zinc-900);
   --primary-foreground: var(--color-white);
   --secondary: var(--color-zinc-50);
   --secondary-foreground: var(--color-zinc-800);
@@ -1016,8 +1018,8 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(kairo-mo
   --warning: var(--color-amber-500);
   --warning-foreground: var(--color-amber-700);
   --warning-surface: color-mix(in srgb, var(--warning) 8%, transparent);
-  --update: var(--primary);
-  --update-foreground: var(--primary);
+  --update: oklch(0.488 0.217 264);
+  --update-foreground: var(--update);
   --update-surface: color-mix(in srgb, var(--update) 12%, transparent);
   /* Keep every sidebar primitive on the same light surface hierarchy, including
      portaled mobile sheets and settings navigation outside the app sidebar. */
@@ -1025,9 +1027,9 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(kairo-mo
   --sidebar-foreground: var(--foreground);
   --sidebar-muted-foreground: var(--muted-foreground);
   --sidebar-control-surface: var(--color-zinc-100);
-  --sidebar-row-hover: var(--color-zinc-25);
-  --sidebar-row-active: var(--color-white);
-  --sidebar-row-selected: var(--color-white);
+  --sidebar-row-hover: var(--color-zinc-100);
+  --sidebar-row-active: var(--color-zinc-200);
+  --sidebar-row-selected: color-mix(in srgb, var(--color-zinc-200) 70%, var(--sidebar));
   --sidebar-border: var(--border);
   --sidebar-stage-fade: var(--sidebar);
   --code-background: color-mix(in srgb, var(--card) 90%, var(--background));
@@ -1041,14 +1043,15 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(kairo-mo
     color-scheme: dark;
     /* Keep controls and floating surfaces close to the neutral-black canvas.
        Borders and hover states provide separation without milky gray fills. */
-    --background: var(--color-neutral-950);
+    --background: #212121;
     --surface-raised: color-mix(in srgb, var(--background) 97%, var(--color-white));
     --foreground: var(--color-neutral-100);
     --card: color-mix(in srgb, var(--background) 97%, var(--color-white));
     --card-foreground: var(--color-neutral-100);
     --popover: color-mix(in srgb, var(--background) 97%, var(--color-white));
     --popover-foreground: var(--color-neutral-100);
-    --primary: oklch(0.571 0.21 264);
+    --primary: var(--color-neutral-100);
+    --primary-foreground: var(--color-neutral-900);
     --secondary: --alpha(var(--color-white) / 3%);
     --secondary-foreground: var(--color-neutral-100);
     --muted: --alpha(var(--color-white) / 3%);
@@ -1065,6 +1068,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(kairo-mo
     --success-foreground: var(--color-emerald-400);
     --warning-foreground: var(--color-amber-400);
     --warning-surface: color-mix(in srgb, var(--warning) 16%, transparent);
+    --update: oklch(0.571 0.21 264);
     --update-foreground: var(--color-blue-400);
     --update-surface: color-mix(in srgb, var(--update) 18%, transparent);
     --sidebar: var(--card);
@@ -1079,10 +1083,9 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(kairo-mo
 }
 
 /* Keep both sidebar implementations (default and legacy) on the same quiet
-   zinc hierarchy: zinc-50 navigation, zinc-25 hover, and white selected/raised
-   surfaces. */
+   zinc hierarchy: zinc-50 navigation with gray hover and selected rows. */
 [data-app-sidebar] {
-  --background: var(--color-zinc-25);
+  --background: var(--color-white);
   --foreground: var(--color-zinc-800);
   --card: var(--color-white);
   --card-foreground: var(--color-zinc-800);
@@ -1096,20 +1099,20 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(kairo-mo
   --sidebar-foreground: var(--color-zinc-800);
   --sidebar-muted-foreground: var(--color-zinc-500);
   --sidebar-control-surface: var(--color-zinc-100);
-  --sidebar-row-hover: var(--color-zinc-25);
-  --sidebar-row-active: var(--color-white);
-  --sidebar-row-selected: var(--color-white);
+  --sidebar-row-hover: var(--color-zinc-100);
+  --sidebar-row-active: var(--color-zinc-200);
+  --sidebar-row-selected: color-mix(in srgb, var(--color-zinc-200) 70%, var(--sidebar));
   --sidebar-border: var(--color-zinc-200);
   --sidebar-stage-fade: var(--sidebar);
 
   @variant dark {
-    --background: #000;
+    --background: #181818;
     --foreground: #f1f3f7;
-    --card: #000;
+    --card: #181818;
     --card-foreground: var(--foreground);
-    --accent: #191a1d;
+    --accent: #262626;
     --accent-foreground: #f7f9ff;
-    --muted: #0a0a0a;
+    --muted: #1f1f1f;
     --muted-foreground: #a3a3a3;
     --border: rgb(255 255 255 / 8%);
     --input: rgb(255 255 255 / 18%);
@@ -1660,6 +1663,20 @@ code {
 .chat-markdown pre,
 .chat-markdown .chat-markdown-table-container {
   margin: 0.65rem 0;
+}
+
+/* Conversation text reads at a comfortable size; tool rows and chrome stay
+   compact. rem keeps it tied to Settings -> Appearance interface size. The
+   reading class may sit on the markdown root (assistant) or on a wrapper
+   (user bubble); :where() keeps specificity at the plain .chat-markdown rules
+   so the first/last-child margin resets above still win. */
+.chat-markdown:where(.chat-markdown-reading, .chat-markdown-reading *) {
+  font-size: 0.9375rem;
+  line-height: 1.7;
+}
+
+.chat-markdown:where(.chat-markdown-reading, .chat-markdown-reading *) :is(p, ul, ol) {
+  margin: 0.85rem 0;
 }
 
 .chat-markdown h1,
