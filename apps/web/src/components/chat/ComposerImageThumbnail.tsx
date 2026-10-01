@@ -17,9 +17,14 @@ export const ComposerImageThumbnail = memo(function ComposerImageThumbnail({
   const [preview, setPreview] = useState<{ file: File; src: string | null } | null>(null);
   useEffect(() => {
     let active = true;
-    void createComposerImageThumbnail(file).then((src) => {
-      if (active) setPreview({ file, src });
-    });
+    void createComposerImageThumbnail(file).then(
+      (src) => {
+        if (active) setPreview({ file, src });
+      },
+      () => {
+        if (active) setPreview({ file, src: null });
+      },
+    );
     return () => {
       active = false;
     };

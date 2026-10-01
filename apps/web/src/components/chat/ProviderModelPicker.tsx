@@ -204,7 +204,9 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
       <PopoverTrigger
         render={
           <ComposerControl
-            aria-label={props.triggerAriaLabel ?? allModelNames}
+            aria-label={
+              props.triggerAriaLabel ?? props.triggerLabel ?? allModelNames ?? triggerLabel
+            }
             size={size}
             data-chat-provider-model-picker="true"
             className={cn(

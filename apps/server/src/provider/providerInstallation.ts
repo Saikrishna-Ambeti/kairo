@@ -68,6 +68,7 @@ export const makeProviderInstallation = Effect.fn("makeProviderInstallation")(fu
       });
     }
     const installation = isCodex ? codexInstallation : antigravityInstallation;
+    if (!managedOnly) return { installation, driver: instance.driverKind };
     const entries = yield* readEntries(instanceId, operation);
     const invalidConfig = () =>
       new ProviderSetupError({

@@ -370,8 +370,8 @@ const makeHarnessFor = Effect.fnUntraced(function* (
     setIdentityFailure: (value: "issuer" | "audience" | "signature") => {
       identityFailure = value;
     },
-    mismatchCallbackState: () => {
-      mismatchedState = true;
+    mismatchCallbackState: (value = true) => {
+      mismatchedState = value;
     },
     setCallbackClientId: (value: string) => {
       callbackClientId = value;
@@ -952,12 +952,34 @@ it.effect("rejects mismatched callback state before any token exchange or creden
   provision(
     Effect.gen(function* () {
       const h = yield* makeHarness;
+      yield* h.auth.controller.start("owner", Effect.void);
+      const waiting = yield* h.phase("waiting");
       h.mismatchCallbackState();
-      yield* h.signIn;
-      assert.include((yield* h.phase("failed")).message!, "could not be verified");
+      const rejected = yield* h.finishCallback(waiting);
+      assert.strictEqual(rejected.status, 400);
+      assert.strictEqual((yield* h.phase("waiting")).flowId, waiting.flowId);
       assert.strictEqual(h.exchanges.length, 0);
       assert.deepEqual(h.storedRecords(), []);
       assert.isTrue(Option.isNone(yield* h.auth.read));
+      h.mismatchCallbackState(false);
+      assert.strictEqual((yield* h.finishCallback(waiting)).status, 200);
+      yield* h.phase("succeeded");
+      assert.strictEqual(h.exchanges.length, 1);
+    }),
+  ),
+);
+it.effect("keeps existing credentials usable while another browser sign-in waits", () =>
+  provision(
+    Effect.gen(function* () {
+      const h = yield* makeHarness;
+      yield* h.signIn;
+      yield* h.phase("succeeded");
+      const current = yield* h.auth.access;
+      yield* h.auth.controller.start("owner", Effect.void, "chatgpt-change-account");
+      const waiting = yield* h.phase("waiting");
+      assert.deepEqual(yield* h.auth.access, current);
+      yield* h.finishCallback(waiting);
+      yield* h.phase("succeeded");
     }),
   ),
 );

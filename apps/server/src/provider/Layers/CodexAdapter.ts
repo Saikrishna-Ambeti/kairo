@@ -2421,6 +2421,12 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
               : undefined;
             if (managedError?.revoke && options?.onManagedConnectionRevoked)
               yield* options.onManagedConnectionRevoked;
+            if (
+              event.method === "error" &&
+              managedError &&
+              readPayload(EffectCodexSchema.V2ErrorNotification, event.payload)?.willRetry === false
+            )
+              return;
             let usageLimitError: ProviderRuntimeEvent | undefined;
             let usageLimitMessage: string | undefined;
             if (event.method === "turn/completed") {

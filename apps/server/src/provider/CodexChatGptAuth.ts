@@ -477,6 +477,10 @@ export const makeCodexChatGptAuth = Effect.fn("makeCodexChatGptAuth")(function* 
                     response.writeHead(410).end("Sign-in is no longer active.");
                     return;
                   }
+                  if (url.searchParams.get("state") !== state) {
+                    response.writeHead(400).end("Sign-in callback could not be verified.");
+                    return;
+                  }
                   used = true;
                   callback.resolve({ url, response });
                 });
@@ -591,7 +595,9 @@ export const makeCodexChatGptAuth = Effect.fn("makeCodexChatGptAuth")(function* 
           Effect.gen(function* () {
             if (error.operation === "code-expired") {
               if (!registeredClientId)
-                yield* withSessionLock(saveRegistration({ clientId, redirectUri }));
+                yield* lock.withPermit(
+                  withSessionLock(saveRegistration({ clientId, redirectUri })),
+                );
               return yield* failure(
                 "exchange",
                 "This sign-in code expired. Reconnect the saved ChatGPT profile to start a fresh sign-in.",
@@ -657,29 +663,31 @@ export const makeCodexChatGptAuth = Effect.fn("makeCodexChatGptAuth")(function* 
           "ChatGPT returned an unsupported connection. Sign in again.",
         );
       const scopes = tokens.scope.split(/\s+/).filter(Boolean);
-      yield* withSessionLock(
-        Effect.gen(function* () {
-          yield* saveRegistration({
-            clientId,
-            redirectUri,
-            sharingEnabled: scopes.includes(REQUIRED_SCOPE),
-            ...identity,
-          });
-          yield* save(
-            {
+      yield* lock.withPermit(
+        withSessionLock(
+          Effect.gen(function* () {
+            yield* saveRegistration({
               clientId,
-              accessToken: tokens.access_token,
-              idToken: tokens.id_token!,
-              issuer: endpoints.issuer,
-              refreshToken: tokens.refresh_token ?? null,
-              expiresAt: (yield* Clock.currentTimeMillis) + tokens.expires_in * 1000,
-              earliestRefreshAt: earliest(tokens.earliest_refresh_at),
-              scopes,
+              redirectUri,
+              sharingEnabled: scopes.includes(REQUIRED_SCOPE),
               ...identity,
-            },
-            scopes.includes(REQUIRED_SCOPE) || Option.isNone(yield* read),
-          );
-        }),
+            });
+            yield* save(
+              {
+                clientId,
+                accessToken: tokens.access_token,
+                idToken: tokens.id_token!,
+                issuer: endpoints.issuer,
+                refreshToken: tokens.refresh_token ?? null,
+                expiresAt: (yield* Clock.currentTimeMillis) + tokens.expires_in * 1000,
+                earliestRefreshAt: earliest(tokens.earliest_refresh_at),
+                scopes,
+                ...identity,
+              },
+              scopes.includes(REQUIRED_SCOPE) || Option.isNone(yield* read),
+            );
+          }),
+        ),
       );
       if (!scopes.includes(REQUIRED_SCOPE))
         return yield* failure(
@@ -857,26 +865,24 @@ export const makeCodexChatGptAuth = Effect.fn("makeCodexChatGptAuth")(function* 
       ];
     }),
     authenticate: (method, context) =>
-      lock.withPermit(
-        track(
-          "auth",
-          {
-            flow: options.telemetryFlow ?? "direct",
-            intent:
-              options.telemetryFlow === "primary_handoff"
-                ? options.reconnectProfile
+      track(
+        "auth",
+        {
+          flow: options.telemetryFlow ?? "direct",
+          intent:
+            options.telemetryFlow === "primary_handoff"
+              ? options.reconnectProfile
+                ? "saved_profile"
+                : "different_account"
+              : method === "chatgpt-change-account"
+                ? "different_account"
+                : method.startsWith("chatgpt-profile:")
                   ? "saved_profile"
-                  : "different_account"
-                : method === "chatgpt-change-account"
-                  ? "different_account"
-                  : method.startsWith("chatgpt-profile:")
-                    ? "saved_profile"
-                    : "default",
-            callbackMode: context.callbackMode ?? "server",
-          },
-          authenticate(method, context),
-          context.expiresAt,
-        ),
+                  : "default",
+          callbackMode: context.callbackMode ?? "server",
+        },
+        authenticate(method, context),
+        context.expiresAt,
       ),
     logout: lock.withPermit(withSessionLock(logout)),
   });

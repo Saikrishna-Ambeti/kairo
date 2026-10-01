@@ -241,7 +241,7 @@ export function KairoConnectUserProfilePage() {
               <EmptyHeader>
                 <EmptyTitle>No Kairo Connect environments</EmptyTitle>
                 <EmptyDescription>
-                  Link an environment from its local Settings to make it available through T3
+                  Link an environment from its local Settings to make it available through Kairo
                   Connect.
                 </EmptyDescription>
               </EmptyHeader>

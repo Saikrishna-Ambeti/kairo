@@ -25,6 +25,7 @@ import {
   readCodexThread,
   rollbackCodexThread,
   toMcpElicitationResponse,
+  toPermissionsApprovalResponse,
 } from "./CodexSessionRuntime.ts";
 const isCodexAppServerRequestError = Schema.is(CodexErrors.CodexAppServerRequestError);
 
@@ -1094,4 +1095,27 @@ describe("openCodexThread", () => {
       NodeAssert.equal(error.errorMessage, "timed out waiting for server");
     }),
   );
+});
+
+describe("Codex permission grants", () => {
+  const requested = { network: { enabled: true }, fileSystem: { write: ["/workspace"] } };
+  for (const decision of ["acceptAlways", "acceptForSession"] as const) {
+    it(`grants requested access for the session on ${decision}`, () => {
+      const response = toPermissionsApprovalResponse(requested, decision);
+      NodeAssert.deepStrictEqual(response, { permissions: requested, scope: "session" });
+      NodeAssert.ok(Schema.is(EffectCodexSchema.PermissionsRequestApprovalResponse)(response));
+    });
+  }
+  it("grants one-turn access without extending it to the session", () => {
+    NodeAssert.deepStrictEqual(toPermissionsApprovalResponse(requested, "accept"), {
+      permissions: requested,
+    });
+  });
+  for (const decision of ["decline", "cancel"] as const) {
+    it(`withholds network and file access on ${decision}`, () => {
+      NodeAssert.deepStrictEqual(toPermissionsApprovalResponse(requested, decision), {
+        permissions: {},
+      });
+    });
+  }
 });

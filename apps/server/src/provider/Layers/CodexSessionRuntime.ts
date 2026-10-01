@@ -1298,6 +1298,17 @@ export const rollbackCodexThread = Effect.fn("rollbackCodexThread")(function* (
   return { threadId, turns: snapshot.turns.slice(0, retainedCount) };
 });
 
+export function toPermissionsApprovalResponse(
+  permissions: EffectCodexSchema.PermissionsRequestApprovalResponse["permissions"],
+  decision: ProviderApprovalDecision,
+): EffectCodexSchema.PermissionsRequestApprovalResponse {
+  const session = decision === "acceptForSession" || decision === "acceptAlways";
+  return {
+    permissions: decision === "accept" || session ? permissions : {},
+    ...(session ? { scope: "session" as const } : {}),
+  };
+}
+
 export const makeCodexSessionRuntime = (
   options: CodexSessionRuntimeOptions,
 ): Effect.Effect<
@@ -2340,12 +2351,7 @@ export const makeCodexSessionRuntime = (
         );
         // Approving grants the requested profile; denying answers with an
         // empty grant so the app-server treats the permission as withheld.
-        const grantedPermissions =
-          resolved === "accept" || resolved === "acceptForSession" ? payload.permissions : {};
-        return {
-          permissions: grantedPermissions,
-          ...(resolved === "acceptForSession" ? { scope: "session" as const } : {}),
-        } satisfies EffectCodexSchema.PermissionsRequestApprovalResponse;
+        return toPermissionsApprovalResponse(payload.permissions, resolved);
       }),
     );
 

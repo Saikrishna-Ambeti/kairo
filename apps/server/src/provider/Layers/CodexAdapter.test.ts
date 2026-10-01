@@ -2827,6 +2827,7 @@ function codexErrorNotification(input: {
   readonly id: string;
   readonly message: string;
   readonly codexErrorInfo?: string;
+  readonly willRetry?: boolean;
 }): ProviderEvent {
   return {
     id: asEventId(input.id),
@@ -2839,7 +2840,7 @@ function codexErrorNotification(input: {
     payload: {
       threadId: "thread-1",
       turnId: "turn-limit",
-      willRetry: false,
+      willRetry: input.willRetry ?? false,
       error: {
         message: input.message,
         ...(input.codexErrorInfo ? { codexErrorInfo: input.codexErrorInfo } : {}),
@@ -3142,54 +3143,80 @@ it.effect("managed runtime rotation restarts app-server and resumes the same nat
   }).pipe(Effect.provide(layer));
 });
 
-it.effect("managed turn failures preserve the sharing-limit code for client notices", () => {
-  const factory = makeRuntimeFactory();
-  const layer = Layer.effect(
-    CodexAdapter,
-    Effect.gen(function* () {
-      return yield* makeCodexAdapter(decodeCodexSettings({}), {
-        makeRuntime: factory.factory,
-        resolveRuntime: Effect.succeed({
-          config: decodeCodexSettings({}),
-          environment: {},
-          revision: "managed",
+for (const willRetry of [false, true]) {
+  it.effect(
+    `managed failures preserve retry=${willRetry} notifications without duplicating final errors`,
+    () => {
+      const factory = makeRuntimeFactory();
+      const layer = Layer.effect(
+        CodexAdapter,
+        Effect.gen(function* () {
+          return yield* makeCodexAdapter(decodeCodexSettings({}), {
+            makeRuntime: factory.factory,
+            resolveRuntime: Effect.succeed({
+              config: decodeCodexSettings({}),
+              environment: {},
+              revision: "managed",
+            }),
+          });
         }),
-      });
-    }),
-  ).pipe(
-    Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
-    Layer.provideMerge(ServerSettingsService.layerTest()),
-    Layer.provideMerge(providerSessionDirectoryTestLayer),
-    Layer.provideMerge(NodeServices.layer),
+      ).pipe(
+        Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
+        Layer.provideMerge(ServerSettingsService.layerTest()),
+        Layer.provideMerge(providerSessionDirectoryTestLayer),
+        Layer.provideMerge(NodeServices.layer),
+      );
+      return Effect.gen(function* () {
+        const adapter = yield* CodexAdapter;
+        yield* adapter.startSession({
+          threadId: asThreadId("thread-1"),
+          runtimeMode: "full-access",
+        });
+        const eventsFiber = yield* adapter.streamEvents.pipe(
+          Stream.take(willRetry ? 3 : 2),
+          Stream.runCollect,
+          Effect.forkChild,
+        );
+        const error = codexErrorNotification({
+          id: "managed-error-notification",
+          message: "subscription_sharing_usage_limit_exceeded",
+          codexErrorInfo: "other",
+          willRetry,
+        });
+        yield* factory.lastRuntime!.emit(error);
+        const notification = codexUsageLimitTurnFailed("managed-sharing-limit");
+        yield* factory.lastRuntime!.emit({
+          ...notification,
+          payload: {
+            threadId: "thread-1",
+            turn: {
+              id: "turn-limit",
+              items: [],
+              status: "failed",
+              error: {
+                message: "subscription_sharing_usage_limit_exceeded",
+                codexErrorInfo: "other",
+              },
+            },
+          },
+        });
+        const events = Array.from(yield* Fiber.join(eventsFiber));
+        const finalError = events[willRetry ? 1 : 0];
+        NodeAssert.equal(finalError?.type, "runtime.error");
+        if (finalError?.type === "runtime.error") {
+          NodeAssert.equal(finalError.payload.code, "subscription_sharing_usage_limit_exceeded");
+          NodeAssert.match(finalError.payload.message, /ChatGPT usage limit/);
+        }
+        NodeAssert.deepEqual(
+          events.map((event) => event.type),
+          willRetry
+            ? ["runtime.warning", "runtime.error", "turn.completed"]
+            : ["runtime.error", "turn.completed"],
+        );
+        const completed = events.at(-1);
+        if (completed?.type === "turn.completed")
+          NodeAssert.equal(completed.payload.state, "failed");
+      }).pipe(Effect.provide(layer));
+    },
   );
-  return Effect.gen(function* () {
-    const adapter = yield* CodexAdapter;
-    yield* adapter.startSession({ threadId: asThreadId("thread-1"), runtimeMode: "full-access" });
-    const eventsFiber = yield* adapter.streamEvents.pipe(
-      Stream.take(2),
-      Stream.runCollect,
-      Effect.forkChild,
-    );
-    const notification = codexUsageLimitTurnFailed("managed-sharing-limit");
-    yield* factory.lastRuntime!.emit({
-      ...notification,
-      payload: {
-        threadId: "thread-1",
-        turn: {
-          id: "turn-limit",
-          items: [],
-          status: "failed",
-          error: { message: "subscription_sharing_usage_limit_exceeded", codexErrorInfo: "other" },
-        },
-      },
-    });
-    const events = Array.from(yield* Fiber.join(eventsFiber));
-    NodeAssert.equal(events[0]?.type, "runtime.error");
-    if (events[0]?.type === "runtime.error") {
-      NodeAssert.equal(events[0].payload.code, "subscription_sharing_usage_limit_exceeded");
-      NodeAssert.match(events[0].payload.message, /ChatGPT usage limit/);
-    }
-    NodeAssert.equal(events[1]?.type, "turn.completed");
-    if (events[1]?.type === "turn.completed") NodeAssert.equal(events[1].payload.state, "failed");
-  }).pipe(Effect.provide(layer));
-});
+}

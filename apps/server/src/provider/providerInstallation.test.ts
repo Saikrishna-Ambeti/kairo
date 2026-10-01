@@ -190,6 +190,22 @@ describe("provider installation routing", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
+  it.effect("keeps cancellation and observation available after leaving managed setup", () =>
+    Effect.gen(function* () {
+      const codexId = ProviderInstanceId.make("codex");
+      const harness = yield* makeHarness({
+        instance: instance(ProviderDriverKind.make("codex"), codexId),
+        settings: {
+          providers: { codex: { setupMode: "existing", binaryPath: "/external/codex" } },
+        },
+      });
+      yield* harness.router.cancel({ instanceId: codexId, operationId: "operation" });
+      const observed = yield* Stream.runCollect(harness.router.subscribe({ instanceId: codexId }));
+      assert.equal(Array.from(observed)[0]?.driver, "codex");
+      assert.deepEqual(harness.calls, ["codex-cancel"]);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("protects another instance's binary found through its own PATH", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;

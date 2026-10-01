@@ -185,7 +185,7 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
                   setHoveredInstanceId((current) => (current === entry.instanceId ? null : current))
                 }
                 disabled={isDisabled}
-                focusableWhenDisabled={!isDisabled}
+                focusableWhenDisabled
                 aria-pressed={isSelected}
                 type="button"
                 aria-label={

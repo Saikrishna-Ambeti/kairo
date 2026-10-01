@@ -18,7 +18,7 @@ export function SkillInlineText(props: { text: string; skills: ReadonlyArray<Inl
     const prefix = match[1] ?? "";
     const name = match[2] ?? "";
     const start = (match.index ?? 0) + prefix.length;
-    const rawText = `$${name}`;
+    const rawText = match[0].slice(prefix.length);
     const skill = props.skills.find((candidate) => candidate.name === name);
     if (!skill) {
       continue;
