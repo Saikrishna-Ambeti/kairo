@@ -2,6 +2,7 @@
 #import "KairoMarkdownTextShadowNode.h"
 #import "KairoMarkdownTextComponentDescriptor.h"
 #import "KairoMarkdownTextRun.h"
+#import "KairoContextChip.h"
 #import <React/RCTConversions.h>
 #import <objc/runtime.h>
 
@@ -12,6 +13,83 @@
 #import "RCTFabricComponentsPlugins.h"
 
 using namespace facebook::react;
+
+@interface KairoContextChipAccessibilityElement : UIAccessibilityElement
+@property(nonatomic, weak) KairoMarkdownTextRun *run;
+@end
+
+@implementation KairoContextChipAccessibilityElement
+- (BOOL)accessibilityActivate
+{
+  if (self.run == nil) return NO;
+  [self.run onPress];
+  return YES;
+}
+@end
+
+/** Preserve canonical references and their payload when copying a native text selection. */
+@interface KairoContextCopyTextView : UITextView
+@property(nonatomic, copy) NSDictionary *contextClipboardConfig;
+@end
+
+@implementation KairoContextCopyTextView
+// Read-only text still supports selecting the entire document after selecting a word.
+- (BOOL)canPerformAction:(SEL)action withSender:(id)sender
+{
+  if (action == @selector(selectAll:)) {
+    return self.selectable && self.text.length > 0 && self.selectedRange.length < self.text.length;
+  }
+  return [super canPerformAction:action withSender:sender];
+}
+
+- (void)copy:(id)sender
+{
+  NSRange selected = self.selectedRange;
+  NSArray *ranges = self.contextClipboardConfig[@"ranges"];
+  if (selected.location == NSNotFound || selected.length == 0 || NSMaxRange(selected) > self.text.length || ranges.count == 0) {
+    [super copy:sender];
+    return;
+  }
+  NSMutableString *text = [[self.text substringWithRange:selected] mutableCopy];
+  BOOL hasContext = NO;
+  for (NSDictionary *range in [ranges reverseObjectEnumerator]) {
+    NSUInteger start = [range[@"start"] unsignedIntegerValue];
+    NSUInteger end = [range[@"end"] unsignedIntegerValue];
+    if (end <= start || end > self.text.length) continue;
+    NSRange overlap = NSIntersectionRange(selected, NSMakeRange(start, end - start));
+    if (overlap.length == 0 || ![range[@"text"] isKindOfClass:NSString.class]) continue;
+    [text replaceCharactersInRange:NSMakeRange(overlap.location - selected.location, overlap.length) withString:range[@"text"]];
+    hasContext = YES;
+  }
+  if (!hasContext) { [super copy:sender]; return; }
+  [text replaceOccurrencesOfString:@"\uFFFC\u00A0" withString:@"" options:0 range:NSMakeRange(0, text.length)];
+  NSString *fragment = self.contextClipboardConfig[@"fragment"];
+  NSMutableDictionary *payload = [[NSJSONSerialization JSONObjectWithData:[fragment dataUsingEncoding:NSUTF8StringEncoding] options:NSJSONReadingMutableContainers error:nil] mutableCopy];
+  NSArray *records = payload[@"records"];
+  NSMutableArray *copied = [NSMutableArray array];
+  NSMutableSet *screenshots = [NSMutableSet set];
+  for (NSDictionary *record in records) {
+    if ([text containsString:[NSString stringWithFormat:@"/%@)", record[@"contextId"]]]) {
+      [copied addObject:record];
+      if ([record[@"screenshotContextId"] isKindOfClass:NSString.class]) [screenshots addObject:record[@"screenshotContextId"]];
+    }
+  }
+  for (NSDictionary *record in records) {
+    if ([screenshots containsObject:record[@"contextId"]] && ![copied containsObject:record]) [copied addObject:record];
+  }
+  payload[@"records"] = copied;
+  NSData *encoded = payload ? [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil] : nil;
+  NSMutableDictionary *item = [@{@"public.utf8-plain-text": text} mutableCopy];
+  if (encoded && copied.count > 0) {
+    NSString *raw = [[NSString alloc] initWithData:encoded encoding:NSUTF8StringEncoding];
+    NSString *attribute = [raw stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.alphanumericCharacterSet];
+    NSString *escaped = [[[text stringByReplacingOccurrencesOfString:@"&" withString:@"&amp;"] stringByReplacingOccurrencesOfString:@"<" withString:@"&lt;"] stringByReplacingOccurrencesOfString:@">" withString:@"&gt;"];
+    item[@"app.kairo.context-fragment"] = encoded;
+    item[@"public.html"] = [[NSString stringWithFormat:@"<pre data-kairo-context-fragment=\"%@\">%@</pre>", attribute, escaped] dataUsingEncoding:NSUTF8StringEncoding];
+  }
+  UIPasteboard.generalPasteboard.items = @[item];
+}
+@end
 
 static void KairoMarkdownTextApplyParagraphStyles(
     NSMutableAttributedString *attributedString,
@@ -64,9 +142,9 @@ static void KairoMarkdownTextApplyAttachments(
     if (isSymbol) {
       image = [UIImage systemImageNamed:[imageUri substringFromIndex:3]];
     }
-    UIColor *foregroundColor = [attributedString attribute:NSForegroundColorAttributeName
-                                                   atIndex:attachmentRange.location
-                                            effectiveRange:nil];
+    NSDictionary *runAttributes =
+        [attributedString attributesAtIndex:attachmentRange.location effectiveRange:nil];
+    UIColor *foregroundColor = runAttributes[NSForegroundColorAttributeName];
     if (image != nil && (isSymbol || attachmentRange.tintWithForeground)) {
       image = [image imageWithTintColor:foregroundColor ?: UIColor.labelColor
                           renderingMode:UIImageRenderingModeAlwaysOriginal];
@@ -78,19 +156,18 @@ static void KairoMarkdownTextApplyAttachments(
         KairoMarkdownTextAttachmentBaselineOffset(attachmentRange),
         attachmentSize,
         attachmentSize);
+    NSDictionary *chip = KairoContextChipPayload(imageUri);
+    if (chip != nil) {
+      CGSize size = CGSizeMake(attachmentRange.chipWidth, attachmentRange.chipHeight);
+      attachment.bounds = KairoContextChipBounds(runAttributes[NSFontAttributeName], size);
+      NSString *iconUri = [chip[@"iconUri"] isKindOfClass:NSString.class] ? chip[@"iconUri"] : nil;
+      attachment.image = KairoContextChipImage(chip, size, iconUri ? images[iconUri] : nil);
+    }
     const NSRange range = NSMakeRange(
         attachmentRange.location,
         MIN(attachmentRange.length, attributedString.length - attachmentRange.location));
-    NSMutableAttributedString *attachmentString =
-        [[NSAttributedString attributedStringWithAttachment:attachment] mutableCopy];
-    // Keep the run color on the attachment so a later re-apply (after the image
-    // loads asynchronously) still tints with the link color, not labelColor.
-    if (foregroundColor != nil) {
-      [attachmentString addAttribute:NSForegroundColorAttributeName
-                               value:foregroundColor
-                               range:NSMakeRange(0, attachmentString.length)];
-    }
-    [attributedString replaceCharactersInRange:range withAttributedString:attachmentString];
+    [attributedString replaceCharactersInRange:range
+                          withAttributedString:KairoMarkdownTextAttachmentString(attachment, runAttributes)];
   }
 }
 
@@ -201,7 +278,7 @@ KairoMarkdownOutsideTapCoordinatorForWindow(UIWindow *window)
 
 @implementation KairoMarkdownText {
   UIView * _view;
-  UITextView * _textView;
+  KairoContextCopyTextView * _textView;
   KairoMarkdownTextShadowNode::ConcreteState::Shared _state;
   __weak UIWindow * _outsideTapWindow;
   BOOL _suppressSelectionChange;
@@ -209,6 +286,7 @@ KairoMarkdownOutsideTapCoordinatorForWindow(UIWindow *window)
   NSMutableSet<NSString *> * _pendingAttachmentUris;
   UILongPressGestureRecognizer *_longPressGestureRecognizer;
   UITapGestureRecognizer *_pressGestureRecognizer;
+  NSArray *_contextAccessibilityElements;
 }
 
 + (ComponentDescriptorProvider)componentDescriptorProvider
@@ -226,7 +304,7 @@ KairoMarkdownOutsideTapCoordinatorForWindow(UIWindow *window)
     self.contentView = _view;
     self.clipsToBounds = true;
 
-    _textView = [[UITextView alloc] init];
+    _textView = [[KairoContextCopyTextView alloc] init];
     _attachmentImages = [[NSMutableDictionary alloc] init];
     _pendingAttachmentUris = [[NSMutableSet alloc] init];
     _textView.scrollEnabled = false;
@@ -281,6 +359,11 @@ KairoMarkdownOutsideTapCoordinatorForWindow(UIWindow *window)
   [coordinator removeTarget:self];
 }
 
+- (NSArray *)accessibilityElements
+{
+  return _contextAccessibilityElements ?: [super accessibilityElements];
+}
+
 // See RCTParagraphComponentView
 - (void)prepareForRecycle
 {
@@ -294,6 +377,7 @@ KairoMarkdownOutsideTapCoordinatorForWindow(UIWindow *window)
   // Reset the frame to zero so that when it properly lays out on the next use
   _textView.frame = CGRectZero;
   _textView.attributedText = nil;
+  _contextAccessibilityElements = nil;
 }
 
 - (void)layoutSubviews
@@ -326,6 +410,8 @@ KairoMarkdownOutsideTapCoordinatorForWindow(UIWindow *window)
       convertedAttrString,
       _state->getData().attachmentRanges,
       _attachmentImages);
+  // Matches the shadow node so drawn lines sit where measurement put them.
+  RCTApplyBaselineOffset(convertedAttrString);
   NSUInteger runLocation = 0;
   for (UIView *child in self.subviews) {
     if (![child isKindOfClass:[KairoMarkdownTextRun class]]) {
@@ -343,7 +429,17 @@ KairoMarkdownOutsideTapCoordinatorForWindow(UIWindow *window)
     NSURL *link = [NSURL URLWithString:
         [NSString stringWithFormat:@"kairo-markdown-run://%ld", (long)textChild.tag]];
     if (link != nil) {
-      [convertedAttrString addAttribute:NSLinkAttributeName value:link range:runRange];
+      // A glyph must not be both a link and an attachment. UIKit caches them as
+      // different text-item classes and can send `attachment` to a cached link
+      // on a later tap. Attachment actions already use primaryActionForTextItem.
+      [convertedAttrString enumerateAttribute:NSAttachmentAttributeName
+                                     inRange:runRange
+                                     options:0
+                                  usingBlock:^(id attachment, NSRange range, BOOL *stop) {
+        if (attachment == nil) {
+          [convertedAttrString addAttribute:NSLinkAttributeName value:link range:range];
+        }
+      }];
     }
   }
   [self loadAttachmentImages:_state->getData().attachmentRanges];
@@ -365,6 +461,15 @@ KairoMarkdownOutsideTapCoordinatorForWindow(UIWindow *window)
     const NSRange savedRange = _textView.selectedRange;
     _suppressSelectionChange = YES;
     _textView.attributedText = convertedAttrString;
+    NSMutableString *accessibleText = [convertedAttrString.string mutableCopy];
+    for (auto it = _state->getData().attachmentRanges.rbegin();
+         it != _state->getData().attachmentRanges.rend(); ++it) {
+      NSDictionary *chip = KairoContextChipPayload([NSString stringWithUTF8String:it->imageUri.c_str()]);
+      if (chip != nil && it->location < accessibleText.length) {
+        [accessibleText replaceCharactersInRange:NSMakeRange(it->location, 1) withString:chip[@"label"]];
+      }
+    }
+    _textView.accessibilityLabel = accessibleText;
     if (savedRange.length > 0 && NSMaxRange(savedRange) <= _textView.attributedText.length) {
       _textView.selectedRange = savedRange;
     }
@@ -373,6 +478,36 @@ KairoMarkdownOutsideTapCoordinatorForWindow(UIWindow *window)
   if (frameChanged) {
     _textView.frame = _view.frame;
   }
+
+  // Text attachments have no native link element. Expose their existing runs
+  // at the measured glyph bounds, without inserting views into text layout.
+  NSMutableArray *accessibleElements = [NSMutableArray arrayWithObject:_textView];
+  for (UIView *child in self.subviews) {
+    if (![child isKindOfClass:KairoMarkdownTextRun.class]) continue;
+    KairoMarkdownTextRun *run = (KairoMarkdownTextRun *)child;
+    run.contextChipInteractive = NO;
+  }
+  for (const auto &attachmentRange : _state->getData().attachmentRanges) {
+    NSDictionary *chip = KairoContextChipPayload(
+        [NSString stringWithUTF8String:attachmentRange.imageUri.c_str()]);
+    if (![chip[@"interactive"] boolValue]) continue;
+    NSRange range = NSMakeRange(attachmentRange.location, 1);
+    KairoMarkdownTextRun *run = [self childForCharacterRange:range];
+    if (!run || NSMaxRange(range) > convertedAttrString.length) continue;
+    NSRange glyphRange = [_textView.layoutManager glyphRangeForCharacterRange:range actualCharacterRange:nil];
+    CGRect bounds = [_textView.layoutManager boundingRectForGlyphRange:glyphRange
+                                                     inTextContainer:_textView.textContainer];
+    bounds = CGRectOffset(bounds, _textView.textContainerInset.left, _textView.textContainerInset.top);
+    run.contextChipInteractive = YES;
+    KairoContextChipAccessibilityElement *element =
+        [[KairoContextChipAccessibilityElement alloc] initWithAccessibilityContainer:self];
+    element.run = run;
+    element.accessibilityLabel = chip[@"label"];
+    element.accessibilityTraits = UIAccessibilityTraitButton;
+    element.accessibilityFrameInContainerSpace = [_textView convertRect:bounds toView:self];
+    [accessibleElements addObject:element];
+  }
+  _contextAccessibilityElements = accessibleElements;
 
   __block std::vector<std::string> lines;
   const int maxLines = props.numberOfLines;
@@ -403,6 +538,11 @@ KairoMarkdownOutsideTapCoordinatorForWindow(UIWindow *window)
     NSString *imageUri = [NSString stringWithUTF8String:attachmentRange.imageUri.c_str()];
     if ([imageUri hasPrefix:@"sf:"]) {
       continue;
+    }
+    NSDictionary *chip = KairoContextChipPayload(imageUri);
+    if (chip != nil) {
+      imageUri = [chip[@"iconUri"] isKindOfClass:NSString.class] ? chip[@"iconUri"] : nil;
+      if (imageUri.length == 0) continue;
     }
     if (_attachmentImages[imageUri] != nil || [_pendingAttachmentUris containsObject:imageUri]) {
       continue;
@@ -465,6 +605,10 @@ KairoMarkdownOutsideTapCoordinatorForWindow(UIWindow *window)
 {
   const auto &oldViewProps = *std::static_pointer_cast<KairoMarkdownTextProps const>(_props);
   const auto &newViewProps = *std::static_pointer_cast<KairoMarkdownTextProps const>(props);
+  if (oldViewProps.contextClipboardConfig != newViewProps.contextClipboardConfig) {
+    NSString *config = RCTNSStringFromString(newViewProps.contextClipboardConfig);
+    _textView.contextClipboardConfig = config.length ? [NSJSONSerialization JSONObjectWithData:[config dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil] : nil;
+  }
 
   if (oldViewProps.numberOfLines != newViewProps.numberOfLines) {
     _textView.textContainer.maximumNumberOfLines = newViewProps.numberOfLines;
@@ -633,7 +777,7 @@ KairoMarkdownOutsideTapCoordinatorForWindow(UIWindow *window)
                defaultAction:(UIAction *)defaultAction API_AVAILABLE(ios(17.0))
 {
   KairoMarkdownTextRun *child = [self childForCharacterRange:textItem.range];
-  if (![child hasContextMenu]) {
+  if (![child hasContextMenu] && !child.contextChipInteractive) {
     return defaultAction;
   }
 
@@ -649,6 +793,7 @@ KairoMarkdownOutsideTapCoordinatorForWindow(UIWindow *window)
 {
   KairoMarkdownTextRun *child = [self childForCharacterRange:textItem.range];
   UIMenu *menu = [child contextMenu];
+  if (child.contextChipInteractive && menu == nil) return nil;
   return [UITextItemMenuConfiguration configurationWithMenu:menu ?: defaultMenu];
 }
 

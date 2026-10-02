@@ -48,6 +48,38 @@ describe("normalizeGitRemoteUrl", () => {
       "bitbucket.org/workspace/repo",
     );
   });
+
+  it("gives an Azure DevOps repository the same key over SSH as over HTTPS", () => {
+    expect(normalizeGitRemoteUrl("git@ssh.dev.azure.com:v3/KairoTools/Platform/Kairo")).toBe(
+      "dev.azure.com/kairotools/platform/_git/kairo",
+    );
+    expect(
+      normalizeGitRemoteUrl("ssh://git@ssh.dev.azure.com:22/v3/KairoTools/Platform/Kairo"),
+    ).toBe("dev.azure.com/kairotools/platform/_git/kairo");
+    expect(
+      normalizeGitRemoteUrl("https://KairoTools@dev.azure.com/KairoTools/Platform/_git/Kairo"),
+    ).toBe("dev.azure.com/kairotools/platform/_git/kairo");
+  });
+
+  it("puts the organization back in the host on the name dev.azure.com replaced", () => {
+    expect(
+      normalizeGitRemoteUrl("KairoTools@vs-ssh.visualstudio.com:v3/KairoTools/Platform/Kairo"),
+    ).toBe("kairotools.visualstudio.com/platform/_git/kairo");
+    expect(normalizeGitRemoteUrl("https://KairoTools.visualstudio.com/Platform/_git/Kairo")).toBe(
+      "kairotools.visualstudio.com/platform/_git/kairo",
+    );
+  });
+
+  it("leaves an Azure SSH host it cannot read as the path it was given", () => {
+    // Not `v3`, and not four segments: rewriting either would invent a repository that the web
+    // spelling has no name for, so the remote stands as it arrived.
+    expect(normalizeGitRemoteUrl("git@ssh.dev.azure.com:v4/KairoTools/Platform/Kairo")).toBe(
+      "ssh.dev.azure.com/v4/kairotools/platform/kairo",
+    );
+    expect(normalizeGitRemoteUrl("git@ssh.dev.azure.com:v3/KairoTools/Kairo")).toBe(
+      "ssh.dev.azure.com/v3/kairotools/kairo",
+    );
+  });
 });
 
 describe("parseOriginUrlFromGitConfig", () => {

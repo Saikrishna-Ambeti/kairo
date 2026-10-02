@@ -8,7 +8,7 @@ import {
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 
-export type McpCapability = "memory" | "preview" | "pull-requests";
+export type McpCapability = "memory" | "preview" | "device" | "pull-requests";
 
 export interface McpInvocationScope {
   readonly environmentId: EnvironmentId;
@@ -47,9 +47,11 @@ const missingCapability = (
 export const requireMcpCapability = <const C extends McpCapability>(
   capability: C,
 ): Effect.Effect<McpInvocationScope, McpCapabilityError<C>, McpInvocationContext> =>
-  Effect.flatMap(McpInvocationContext, (invocation) =>
-    invocation.capabilities.has(capability)
-      ? Effect.succeed(invocation)
-      : // The conditional type narrows what the literal argument decided at runtime.
-        Effect.fail(missingCapability(invocation, capability) as McpCapabilityError<C>),
-  ).pipe(Effect.withSpan("mcp.requireCapability"));
+  McpInvocationContext.pipe(
+    Effect.filterOrFail(
+      (invocation) => invocation.capabilities.has(capability),
+      // The conditional type narrows what the literal argument decided at runtime.
+      (invocation) => missingCapability(invocation, capability) as McpCapabilityError<C>,
+    ),
+    Effect.withSpan("mcp.requireCapability"),
+  );

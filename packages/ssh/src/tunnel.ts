@@ -3,6 +3,7 @@ import {
   describeReadinessCause,
   waitForHttpReady as waitForHttpReadyShared,
 } from "@kairo/shared/httpReadiness";
+import { cliReleaseDownloadBaseUrl } from "@kairo/shared/cliRelease";
 import * as NetService from "@kairo/shared/Net";
 import { extractJsonObject, fromLenientJson } from "@kairo/shared/schemaJson";
 import { satisfiesSemverRange } from "@kairo/shared/semver";
@@ -53,16 +54,35 @@ const SSH_READY_PROBE_TIMEOUT_MS = 1_000;
 const TUNNEL_SHUTDOWN_TIMEOUT_MS = 2_000;
 const REMOTE_READY_TIMEOUT_MS = 60_000;
 const REMOTE_LAUNCH_TIMEOUT_MS = 90_000;
+// A cold archive launch also downloads and unpacks a ~70 MB release archive
+// and may wait on another installer's lock. The budgets nest: the checksum
+// file is tiny and the archive download is bounded; a waiter outlasts both
+// downloads plus extraction so it can reuse the result; and the SSH command
+// outlasts an install (own or waited-for) plus readiness, with slack for
+// verification and extraction, which have no timeout of their own.
+const REMOTE_ARCHIVE_CHECKSUMS_SECONDS = 30;
+const REMOTE_ARCHIVE_DOWNLOAD_SECONDS = 240;
+const REMOTE_ARCHIVE_LOCK_WAIT_SECONDS = 360;
+const REMOTE_ARCHIVE_LAUNCH_TIMEOUT_MS = 900_000;
 const REMOTE_REUSE_READY_TIMEOUT_MS = 2_000;
 
 export interface RemoteKairoRunnerOptions {
-  readonly packageSpec?: string;
+  /**
+   * Dev mode: run `node <path>` on the remote instead of a release archive.
+   * The only mode that needs Node on the remote.
+   */
   readonly nodeScriptPath?: string | null;
   readonly nodeEngineRange?: string | null;
+  /**
+   * Exact version whose self-contained release archive the remote installs
+   * and runs. Required unless `nodeScriptPath` is set; the remote then needs
+   * neither Node nor npm.
+   */
+  readonly archiveVersion?: string | null;
+  readonly releaseBaseUrl?: string | null;
 }
 
 export interface SshEnvironmentManagerOptions {
-  readonly resolveCliPackageSpec?: () => string;
   readonly resolveCliRunner?: Effect.Effect<RemoteKairoRunnerOptions>;
 }
 
@@ -104,14 +124,18 @@ function sshTargetLogFields(target: DesktopSshEnvironmentTarget) {
   };
 }
 
+function isNodeScriptRunner(runner: RemoteKairoRunnerOptions | undefined): boolean {
+  return Boolean(runner?.nodeScriptPath?.trim());
+}
+
 function sshRunnerLogFields(runner: RemoteKairoRunnerOptions | undefined) {
   if (runner?.nodeScriptPath?.trim()) {
     return { runner: "node-script", nodeScriptPath: runner.nodeScriptPath.trim() };
   }
-  if (runner?.packageSpec?.trim()) {
-    return { runner: "package", packageSpec: runner.packageSpec.trim() };
+  if (runner?.archiveVersion?.trim()) {
+    return { runner: "archive", archiveVersion: runner.archiveVersion.trim() };
   }
-  return { runner: "default" };
+  return { runner: "archive" };
 }
 
 interface SshAuthOperationInput<T> {
@@ -333,6 +357,7 @@ ensure_remote_node_path() {
   prepend_path_if_dir "$HOME/.local/bin"
   prepend_path_if_dir "$HOME/bin"
   prepend_path_if_dir "/opt/homebrew/bin"
+  prepend_path_if_dir "/home/linuxbrew/.linuxbrew/bin"
   prepend_path_if_dir "/usr/local/bin"
   prepend_path_if_dir "/usr/bin"
   prepend_path_if_dir "/bin"
@@ -402,46 +427,116 @@ ensure_remote_node_path() {
 const REMOTE_RUNNER_SCRIPT = `#!/bin/sh
 set -eu
 @@KAIRO_NODE_ENV_SCRIPT@@
-ensure_remote_node_path || true
 KAIRO_NODE_SCRIPT_PATH=@@KAIRO_NODE_SCRIPT_PATH@@
 if [ -n "$KAIRO_NODE_SCRIPT_PATH" ]; then
+  # Dev mode: a source checkout on the remote. This is the only path that
+  # needs Node, so Node discovery runs here and nowhere else.
+  ensure_remote_node_path || true
   if ! command -v node >/dev/null 2>&1; then
     printf 'Remote host is missing node on PATH. Install Node or configure a supported version manager for non-interactive shells.\\n' >&2
     exit 1
   fi
   exec node "$KAIRO_NODE_SCRIPT_PATH" "$@"
 fi
-if command -v kairo >/dev/null 2>&1; then
-  exec kairo "$@"
+KAIRO_ARCHIVE_VERSION=@@KAIRO_ARCHIVE_VERSION@@
+if [ -z "$KAIRO_ARCHIVE_VERSION" ]; then
+  printf 'No kairo release version was provided for the remote runtime.\\n' >&2
+  exit 1
 fi
-# npm extracts a package before it runs the native builds of its dependencies,
-# so a failed build (kairo depends on node-pty, which needs a C toolchain) leaves
-# the npx cache without a kairo executable. \`npx --yes\` then exits 0 without
-# running anything at all, which the caller only ever sees as a server that
-# never becomes ready. Resolve the CLI once up front so that install failure is
-# reported here, with npm's own output on stderr.
-require_installed_kairo_cli() {
-  if ! KAIRO_CLI_PATH="$("$@" -- sh -c 'command -v kairo')"; then
-    printf 'Remote host could not install %s. See npm output above for the cause.\\n' @@KAIRO_PACKAGE_SPEC@@ >&2
-    return 1
-  fi
-  if [ -n "$KAIRO_CLI_PATH" ]; then
-    return 0
-  fi
-  printf 'Remote host installed %s but npm produced no kairo executable, which usually means a native dependency (node-pty) failed to build. Install a C toolchain on the remote host (Debian/Ubuntu: build-essential, Fedora/RHEL: gcc-c++ make, macOS: xcode-select --install) and try again.\\n' @@KAIRO_PACKAGE_SPEC@@ >&2
-  return 1
+# Self-contained release archive: no Node, npm, or compiler on the remote.
+# Unpacked into the pinned-runtime layout so \`kairo service install\` reuses it.
+KAIRO_RELEASE_BASE_URL=@@KAIRO_RELEASE_BASE_URL@@
+KAIRO_RUNTIME_DIR="$HOME/.kairo/runtime/versions/$KAIRO_ARCHIVE_VERSION"
+kairo_runtime_ready() {
+  [ -x "$KAIRO_RUNTIME_DIR/kairo" ] && [ "$(cat "$KAIRO_RUNTIME_DIR/.install-complete" 2>/dev/null)" = "$KAIRO_ARCHIVE_VERSION" ]
 }
-# The launcher records this PID, so exec the CLI without an npm wrapper process.
-if command -v npx >/dev/null 2>&1; then
-  require_installed_kairo_cli npx --yes --package @@KAIRO_PACKAGE_SPEC@@ || exit 1
-  exec "$KAIRO_CLI_PATH" "$@"
+if ! kairo_runtime_ready; then
+  mkdir -p "$HOME/.kairo/runtime/versions"
+  # Concurrent launches (two clients, a retry racing a slow first run) must
+  # not both install: mkdir is the atomic lock and the ready check repeats
+  # under it.
+  KAIRO_LOCK="$HOME/.kairo/runtime/versions/.$KAIRO_ARCHIVE_VERSION.install.lock"
+  # mkdir is the only portable atomic exclusive create (mv would silently
+  # nest a candidate inside an existing lock). The owner publishes its pid
+  # right after, so a lock with a live owner is never reclaimed however
+  # slow its download is, and a lock whose owner is dead is reclaimed at
+  # once. A lock with no pid at all is a crash between mkdir and the pid
+  # write; it is reclaimed after a short grace so a live owner has time to
+  # publish.
+  KAIRO_LOCK_WAITED=0
+  KAIRO_LOCK_UNOWNED=0
+  while ! mkdir "$KAIRO_LOCK" 2>/dev/null; do
+    KAIRO_LOCK_OWNER="$(cat "$KAIRO_LOCK/pid" 2>/dev/null || true)"
+    if [ -n "$KAIRO_LOCK_OWNER" ]; then
+      KAIRO_LOCK_UNOWNED=0
+      if ! kill -0 "$KAIRO_LOCK_OWNER" 2>/dev/null; then
+        rm -rf "$KAIRO_LOCK"
+        continue
+      fi
+    else
+      KAIRO_LOCK_UNOWNED=$((KAIRO_LOCK_UNOWNED + 1))
+      if [ "$KAIRO_LOCK_UNOWNED" -ge 5 ]; then
+        rm -rf "$KAIRO_LOCK"
+        continue
+      fi
+    fi
+    if [ "$KAIRO_LOCK_WAITED" -ge @@KAIRO_ARCHIVE_LOCK_WAIT_SECONDS@@ ]; then
+      printf 'Another kairo %s installation has held %s for too long.\\n' "$KAIRO_ARCHIVE_VERSION" "$KAIRO_LOCK" >&2
+      exit 1
+    fi
+    sleep 1
+    KAIRO_LOCK_WAITED=$((KAIRO_LOCK_WAITED + 1))
+  done
+  printf '%s\\n' "$$" > "$KAIRO_LOCK/pid.tmp" && mv "$KAIRO_LOCK/pid.tmp" "$KAIRO_LOCK/pid"
+  trap 'rm -rf "$KAIRO_LOCK"' EXIT
 fi
-if command -v npm >/dev/null 2>&1; then
-  require_installed_kairo_cli npm exec --yes --package @@KAIRO_PACKAGE_SPEC@@ || exit 1
-  exec "$KAIRO_CLI_PATH" "$@"
+if ! kairo_runtime_ready; then
+  case "$(uname -s)" in
+    Darwin) KAIRO_PLATFORM="darwin" ;;
+    Linux) KAIRO_PLATFORM="linux" ;;
+    *) printf 'Remote host %s has no kairo release archive.\\n' "$(uname -s)" >&2; exit 1 ;;
+  esac
+  case "$(uname -m)" in
+    arm64 | aarch64) KAIRO_ARCH="arm64" ;;
+    x86_64 | amd64) KAIRO_ARCH="x64" ;;
+    *) printf 'Remote host %s has no kairo release archive.\\n' "$(uname -m)" >&2; exit 1 ;;
+  esac
+  KAIRO_ARCHIVE="kairo-$KAIRO_ARCHIVE_VERSION-$KAIRO_PLATFORM-$KAIRO_ARCH.tar.gz"
+  KAIRO_STAGING="$(mktemp -d "$HOME/.kairo/runtime/versions/.staging-XXXXXX")"
+  trap 'rm -rf "$KAIRO_STAGING" "$KAIRO_LOCK"' EXIT
+  kairo_fetch() {
+    if command -v curl >/dev/null 2>&1; then curl -fsSL --connect-timeout 30 --max-time "$3" "$1" -o "$2"
+    elif command -v wget >/dev/null 2>&1; then wget -q --timeout=30 --tries=1 "$1" -O "$2"
+    else printf 'Remote host needs curl or wget to download %s.\\n' "$KAIRO_ARCHIVE" >&2; exit 1
+    fi
+  }
+  kairo_fetch "$KAIRO_RELEASE_BASE_URL/v$KAIRO_ARCHIVE_VERSION/SHA256SUMS" "$KAIRO_STAGING/SHA256SUMS" @@KAIRO_ARCHIVE_CHECKSUMS_SECONDS@@
+  kairo_fetch "$KAIRO_RELEASE_BASE_URL/v$KAIRO_ARCHIVE_VERSION/$KAIRO_ARCHIVE" "$KAIRO_STAGING/$KAIRO_ARCHIVE" @@KAIRO_ARCHIVE_DOWNLOAD_SECONDS@@
+  KAIRO_EXPECTED="$(grep " \\*\\{0,1\\}$KAIRO_ARCHIVE$" "$KAIRO_STAGING/SHA256SUMS" | cut -d' ' -f1)"
+  if command -v sha256sum >/dev/null 2>&1; then
+    KAIRO_ACTUAL="$(sha256sum "$KAIRO_STAGING/$KAIRO_ARCHIVE" | cut -d' ' -f1)"
+  else
+    KAIRO_ACTUAL="$(shasum -a 256 "$KAIRO_STAGING/$KAIRO_ARCHIVE" | cut -d' ' -f1)"
+  fi
+  if [ -z "$KAIRO_EXPECTED" ] || [ "$KAIRO_ACTUAL" != "$KAIRO_EXPECTED" ]; then
+    printf 'Checksum mismatch for %s.\\n' "$KAIRO_ARCHIVE" >&2; exit 1
+  fi
+  tar -xzf "$KAIRO_STAGING/$KAIRO_ARCHIVE" -C "$KAIRO_STAGING" --strip-components=1
+  rm -f "$KAIRO_STAGING/$KAIRO_ARCHIVE" "$KAIRO_STAGING/SHA256SUMS"
+  # Prove the binary runs here (libc, arch) before marking it ready, or every
+  # later launch would exec a broken install instead of retrying.
+  if ! "$KAIRO_STAGING/kairo" --version >/dev/null 2>&1; then
+    printf 'The kairo %s executable does not run on this host.\\n' "$KAIRO_ARCHIVE_VERSION" >&2; exit 1
+  fi
+  printf '%s\\n' "$KAIRO_ARCHIVE_VERSION" > "$KAIRO_STAGING/.install-complete"
+  rm -rf "$KAIRO_RUNTIME_DIR"
+  mv "$KAIRO_STAGING" "$KAIRO_RUNTIME_DIR"
 fi
-printf 'Remote host is missing the kairo CLI and could not install @@KAIRO_PACKAGE_SPEC@@ because node/npm/npx are unavailable on PATH. Install Node or configure a supported version manager for non-interactive shells.\\n' >&2
-exit 1
+if [ -n "\${KAIRO_LOCK:-}" ]; then
+  rm -rf "$KAIRO_LOCK"
+  trap - EXIT
+fi
+exec "$KAIRO_RUNTIME_DIR/kairo" "$@"
 `;
 
 const REMOTE_LAUNCH_SCRIPT = `set -eu
@@ -470,16 +565,30 @@ if [ ! -f "$RUNNER_FILE" ] || ! cmp -s "$RUNNER_NEXT" "$RUNNER_FILE"; then
 fi
 mv "$RUNNER_NEXT" "$RUNNER_FILE"
 chmod 700 "$RUNNER_FILE"
-if ! ensure_remote_node_path; then
+KAIRO_ARCHIVE_MODE=@@KAIRO_ARCHIVE_MODE@@
+if [ "$KAIRO_ARCHIVE_MODE" = "1" ]; then
+  # The archive ships the helpers below inside the executable; the remote
+  # needs no Node at all. Resolving the runner once here also downloads the
+  # archive before the port and readiness probes rely on it.
+  "$RUNNER_FILE" --version >/dev/null
+elif ! ensure_remote_node_path; then
   printf 'Remote host is missing node on PATH. Install Node or configure a supported version manager for non-interactive shells.\\n' >&2
   exit 1
 fi
 pick_port() {
+  if [ "$KAIRO_ARCHIVE_MODE" = "1" ]; then
+    "$RUNNER_FILE" __ssh-helper pick-port "$PORT_FILE" "@@KAIRO_DEFAULT_REMOTE_PORT@@" "@@KAIRO_REMOTE_PORT_SCAN_WINDOW@@"
+    return
+  fi
   node - "$PORT_FILE" "@@KAIRO_DEFAULT_REMOTE_PORT@@" "@@KAIRO_REMOTE_PORT_SCAN_WINDOW@@" <<'NODE'
 @@KAIRO_PICK_PORT_SCRIPT@@
 NODE
 }
 wait_ready() {
+  if [ "$KAIRO_ARCHIVE_MODE" = "1" ]; then
+    "$RUNNER_FILE" __ssh-helper wait-ready "$REMOTE_PORT" "$1" "@@KAIRO_READY_PROBE_TIMEOUT_MS@@"
+    return
+  fi
   node - "$REMOTE_PORT" "$1" "@@KAIRO_READY_PROBE_TIMEOUT_MS@@" <<'NODE'
 @@KAIRO_WAIT_READY_SCRIPT@@
 NODE
@@ -493,6 +602,10 @@ wait_for_pid_exit() {
   done
 }
 resolve_default_runtime_port() {
+  if [ "$KAIRO_ARCHIVE_MODE" = "1" ]; then
+    "$RUNNER_FILE" __ssh-helper runtime-port "$DEFAULT_RUNTIME_FILE"
+    return
+  fi
   node - "$DEFAULT_RUNTIME_FILE" <<'NODE'
 const fs = require("node:fs");
 const runtimePath = process.argv[2] ?? "";
@@ -579,7 +692,11 @@ fi
 if [ -z "$REMOTE_PORT" ]; then
   REMOTE_PORT="$(pick_port)" || true
   if [ -z "$REMOTE_PORT" ]; then
-    printf 'Failed to find an available port on the remote host. Ensure node is available on PATH.\\n' >&2
+    if [ "$KAIRO_ARCHIVE_MODE" = "1" ]; then
+      printf 'Failed to find an available port on the remote host.\\n' >&2
+    else
+      printf 'Failed to find an available port on the remote host. Ensure node is available on PATH.\\n' >&2
+    fi
     exit 1
   fi
   nohup env KAIRO_NO_BROWSER=1 "$RUNNER_FILE" serve --host 127.0.0.1 --port "$REMOTE_PORT" --base-dir "$DEFAULT_SERVER_HOME" >>"$LOG_FILE" 2>&1 < /dev/null &
@@ -647,13 +764,52 @@ if [ -f "$LOG_FILE" ]; then
 fi
 `;
 
+export class SshInvalidArchiveVersionError extends Schema.TaggedError<SshInvalidArchiveVersionError>()(
+  "SshInvalidArchiveVersionError",
+  { archiveVersion: Schema.String },
+) {
+  override get message(): string {
+    return `'${this.archiveVersion}' is not an exact kairo version and cannot name a runtime directory.`;
+  }
+}
+
+// The version becomes a directory name the runner removes and recreates, so
+// it must be one exact SemVer segment: no separators, no `..`, no shell
+// metacharacters beyond what SemVer allows.
+const EXACT_ARCHIVE_VERSION =
+  /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
+
+export class SshMissingRunnerError extends Schema.TaggedError<SshMissingRunnerError>()(
+  "SshMissingRunnerError",
+  {},
+) {
+  override get message(): string {
+    return "A remote kairo runner needs an archive version or a node script path.";
+  }
+}
+
 export function buildRemoteKairoRunnerScript(input?: RemoteKairoRunnerOptions): string {
-  const packageSpec = shellSingleQuote(input?.packageSpec?.trim() || "kairo@latest");
   const nodeScriptPath = input?.nodeScriptPath?.trim() || "";
+  const archiveVersion = input?.archiveVersion?.trim() || "";
+  if (nodeScriptPath === "" && archiveVersion === "") {
+    throw new SshMissingRunnerError();
+  }
+  if (archiveVersion !== "" && !EXACT_ARCHIVE_VERSION.test(archiveVersion)) {
+    throw new SshInvalidArchiveVersionError({ archiveVersion });
+  }
+  // Strip the `/v<version>` the helper appends: the script builds URLs itself.
+  const releaseBaseUrl = cliReleaseDownloadBaseUrl("", input?.releaseBaseUrl ?? undefined).replace(
+    /\/v$/u,
+    "",
+  );
   return stripTrailingNewlines(
     applyScriptPlaceholders(REMOTE_RUNNER_SCRIPT, {
-      KAIRO_PACKAGE_SPEC: packageSpec,
       KAIRO_NODE_SCRIPT_PATH: shellSingleQuote(nodeScriptPath),
+      KAIRO_ARCHIVE_VERSION: shellSingleQuote(archiveVersion),
+      KAIRO_RELEASE_BASE_URL: shellSingleQuote(releaseBaseUrl),
+      KAIRO_ARCHIVE_LOCK_WAIT_SECONDS: String(REMOTE_ARCHIVE_LOCK_WAIT_SECONDS),
+      KAIRO_ARCHIVE_DOWNLOAD_SECONDS: String(REMOTE_ARCHIVE_DOWNLOAD_SECONDS),
+      KAIRO_ARCHIVE_CHECKSUMS_SECONDS: String(REMOTE_ARCHIVE_CHECKSUMS_SECONDS),
       KAIRO_NODE_ENV_SCRIPT: buildRemoteNodeEnvScript(input),
     }),
   );
@@ -670,6 +826,7 @@ export function buildRemoteNodeEnvScript(input?: RemoteKairoRunnerOptions): stri
 
 export function buildRemoteLaunchScript(input?: RemoteKairoRunnerOptions): string {
   return applyScriptPlaceholders(REMOTE_LAUNCH_SCRIPT, {
+    KAIRO_ARCHIVE_MODE: isNodeScriptRunner(input) ? "0" : "1",
     KAIRO_NODE_ENV_SCRIPT: buildRemoteNodeEnvScript(input),
     KAIRO_RUNNER_SCRIPT: stripTrailingNewlines(buildRemoteKairoRunnerScript(input)),
     KAIRO_PICK_PORT_SCRIPT: stripTrailingNewlines(REMOTE_PICK_PORT_SCRIPT),
@@ -722,7 +879,9 @@ export const launchOrReuseRemoteServer = Effect.fn("ssh/tunnel.launchOrReuseRemo
     const result = yield* runSshCommand(target, {
       remoteCommandArgs: ["sh", "-l", "-s", "--", remoteStateKey(target)],
       stdin: buildRemoteLaunchScript(runner),
-      timeoutMs: REMOTE_LAUNCH_TIMEOUT_MS,
+      timeoutMs: isNodeScriptRunner(runner)
+        ? REMOTE_LAUNCH_TIMEOUT_MS
+        : REMOTE_ARCHIVE_LAUNCH_TIMEOUT_MS,
       ...(input?.authSecret === undefined ? {} : { authSecret: input.authSecret }),
       ...(input?.batchMode === undefined ? {} : { batchMode: input.batchMode }),
       ...(input?.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
@@ -780,6 +939,9 @@ export const issueRemotePairingToken = Effect.fn("ssh/tunnel.issueRemotePairingT
   const result = yield* runSshCommand(target, {
     remoteCommandArgs: ["sh", "-s"],
     stdin: buildRemotePairingScript(target, runner),
+    // Pairing may be the first command on a cold remote, so it can install
+    // the archive on the way.
+    ...(isNodeScriptRunner(runner) ? {} : { timeoutMs: REMOTE_ARCHIVE_LAUNCH_TIMEOUT_MS }),
     ...(input?.authSecret === undefined ? {} : { authSecret: input.authSecret }),
     ...(input?.batchMode === undefined ? {} : { batchMode: input.batchMode }),
     ...(input?.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
@@ -1510,13 +1672,8 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
       ...sshTargetLogFields(resolvedTarget),
       key,
     });
-    const packageSpec = options.resolveCliPackageSpec?.();
     const runner =
-      options.resolveCliRunner === undefined
-        ? packageSpec === undefined
-          ? undefined
-          : { packageSpec }
-        : yield* options.resolveCliRunner;
+      options.resolveCliRunner === undefined ? undefined : yield* options.resolveCliRunner;
     yield* Effect.logDebug("ssh.environment.runner.resolved", {
       ...sshTargetLogFields(resolvedTarget),
       ...sshRunnerLogFields(runner),

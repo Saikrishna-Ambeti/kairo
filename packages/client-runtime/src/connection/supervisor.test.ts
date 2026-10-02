@@ -56,11 +56,13 @@ const RELAY_TARGET = new RelayConnectionTarget({
 const TARGET_ENTRY: ConnectionCatalogEntry = {
   target: TARGET,
   profile: Option.none(),
+  enabled: true,
 };
 
 const RELAY_ENTRY: ConnectionCatalogEntry = {
   target: RELAY_TARGET,
   profile: Option.none(),
+  enabled: true,
 };
 
 const PREPARED_CONNECTION: PreparedConnection = {
@@ -1235,7 +1237,7 @@ describe("EnvironmentSupervisor", () => {
                   policy: "loopback-browser",
                   bootstrapMethods: ["one-time-token"],
                   sessionMethods: ["dpop-access-token"],
-                  sessionCookieName: "t3_session_test",
+                  sessionCookieName: "kairo_session_test",
                 },
                 scopes: AuthStandardClientScopes,
               }),
@@ -1288,11 +1290,11 @@ describe("EnvironmentSupervisor", () => {
             Layer.succeed(ManagedRelayDpopSigner, signer),
             Layer.succeed(ManagedRelayClient, relay),
             Layer.succeed(ClientCapabilities.CloudSession, {
-              identity: Effect.succeed(Option.some({ accountId: "test-account" })),
+              identity: Effect.succeedSome({ accountId: "test-account" }),
               clerkToken: Effect.succeed("clerk-token"),
             }),
             Layer.succeed(ClientCapabilities.RelayDeviceIdentity, {
-              deviceId: Effect.succeed(Option.none()),
+              deviceId: Effect.succeedNone,
             }),
             TokenStore.layer({
               get: () => Ref.get(token),

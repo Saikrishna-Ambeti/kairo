@@ -1,10 +1,9 @@
 import { UserButton, useAuth } from "@clerk/react";
-import { LogInIcon, ServerIcon, SmartphoneIcon } from "lucide-react";
+import { LogInIcon } from "lucide-react";
 
 import { hasCloudIdentityConfig, hasManagedRelayConfig } from "../../cloud/publicConfig";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
-import { MobileClientsUserProfilePage } from "./MobileClientsUserProfilePage";
-import { KairoConnectUserProfilePage } from "./KairoConnectUserProfilePage";
+import { KAIRO_CONNECT_ACCOUNT_PAGES } from "./KairoConnectAccountPages";
 import { useKairoConnectAuthPrompt } from "./useKairoConnectAuthPrompt";
 
 export function KairoConnectSidebarSignIn() {
@@ -37,24 +36,18 @@ function ConfiguredKairoConnectSidebarAvatar({
         },
       }}
     >
-      {managedRelayEnabled ? (
-        <UserButton.UserProfilePage
-          label="Mobile clients"
-          labelIcon={<SmartphoneIcon className="size-4" />}
-          url="mobile-clients"
-        >
-          <MobileClientsUserProfilePage />
-        </UserButton.UserProfilePage>
-      ) : null}
-      {managedRelayEnabled ? (
-        <UserButton.UserProfilePage
-          label="Kairo Connect"
-          labelIcon={<ServerIcon className="size-4" />}
-          url="kairo-connect"
-        >
-          <KairoConnectUserProfilePage />
-        </UserButton.UserProfilePage>
-      ) : null}
+      {managedRelayEnabled
+        ? KAIRO_CONNECT_ACCOUNT_PAGES.map((page) => (
+            <UserButton.UserProfilePage
+              key={page.url}
+              label={page.label}
+              labelIcon={page.icon}
+              url={page.url}
+            >
+              {page.content}
+            </UserButton.UserProfilePage>
+          ))
+        : null}
     </UserButton>
   );
 }

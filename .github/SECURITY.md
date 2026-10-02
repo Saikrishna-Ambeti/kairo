@@ -1,6 +1,6 @@
 # Security policy
 
-Report security vulnerabilities affecting Kairo or T3 Tools-operated infrastructure to
+Report security vulnerabilities affecting Kairo or Kairo Tools-operated infrastructure to
 [security@ping.gg](mailto:security@ping.gg). Please do not disclose them publicly until we have had
 a reasonable opportunity to investigate and remediate them.
 

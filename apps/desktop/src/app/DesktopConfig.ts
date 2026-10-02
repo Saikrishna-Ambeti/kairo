@@ -1,3 +1,4 @@
+import { OtlpHeadersFromString, OtlpProtocol } from "@kairo/shared/observability";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Option from "effect/Option";
@@ -8,10 +9,10 @@ const trimNonEmptyOption = (value: string): Option.Option<string> => {
 };
 
 const trimmedString = (name: string) =>
-  Config.string(name).pipe(Config.option, Config.map(Option.flatMap(trimNonEmptyOption)));
+  Config.String(name).pipe(Config.option, Config.map(Option.flatMap(trimNonEmptyOption)));
 
 const optionalBoolean = (name: string) =>
-  Config.boolean(name).pipe(Config.option, Config.map(Option.getOrElse(() => false)));
+  Config.Boolean(name).pipe(Config.option, Config.map(Option.getOrElse(() => false)));
 
 const commaSeparatedStrings = (name: string) =>
   trimmedString(name).pipe(
@@ -37,21 +38,27 @@ export const DesktopConfig = Config.all({
   xdgConfigHome: trimmedString("XDG_CONFIG_HOME"),
   xdgDataHome: trimmedString("XDG_DATA_HOME"),
   kairoHome: trimmedString("KAIRO_HOME"),
-  devServerUrl: Config.url("VITE_DEV_SERVER_URL").pipe(Config.option),
+  devServerUrl: Config.URL("VITE_DEV_SERVER_URL").pipe(Config.option),
   appUserModelIdOverride: trimmedString("KAIRO_DESKTOP_APP_USER_MODEL_ID"),
   devRemoteKairoServerEntryPath: trimmedString("KAIRO_DEV_REMOTE_SERVER_ENTRY_PATH"),
-  configuredBackendPort: Config.port("KAIRO_PORT").pipe(Config.option),
+  configuredBackendPort: Config.Port("KAIRO_PORT").pipe(Config.option),
   commitHashOverride: trimmedString("KAIRO_COMMIT_HASH"),
   desktopLanHostOverride: trimmedString("KAIRO_DESKTOP_LAN_HOST"),
   desktopHttpsEndpointUrls: commaSeparatedStrings("KAIRO_DESKTOP_HTTPS_ENDPOINTS"),
   otlpTracesUrl: trimmedString("KAIRO_OTLP_TRACES_URL"),
-  otlpExportIntervalMs: Config.int("KAIRO_OTLP_EXPORT_INTERVAL_MS").pipe(
+  otlpMetricsUrl: trimmedString("KAIRO_OTLP_METRICS_URL"),
+  otlpLogsUrl: trimmedString("KAIRO_OTLP_LOGS_URL"),
+  otlpExportIntervalMs: Config.Int("KAIRO_OTLP_EXPORT_INTERVAL_MS").pipe(
     Config.withDefault(10_000),
+  ),
+  otlpHeaders: Config.schema(OtlpHeadersFromString, "KAIRO_OTLP_HEADERS").pipe(Config.option),
+  otlpProtocol: Config.schema(OtlpProtocol, "KAIRO_OTLP_PROTOCOL").pipe(
+    Config.withDefault("http/json"),
   ),
   appImagePath: trimmedString("APPIMAGE"),
   disableAutoUpdate: optionalBoolean("KAIRO_DISABLE_AUTO_UPDATE"),
   mockUpdates: optionalBoolean("KAIRO_DESKTOP_MOCK_UPDATES"),
-  mockUpdateServerPort: Config.port("KAIRO_DESKTOP_MOCK_UPDATE_SERVER_PORT").pipe(
+  mockUpdateServerPort: Config.Port("KAIRO_DESKTOP_MOCK_UPDATE_SERVER_PORT").pipe(
     Config.withDefault(3000),
   ),
 });

@@ -116,6 +116,8 @@ export function makeDevelopmentEnvironmentScript(environment) {
     ["KAIRO_COMMIT_HASH", environment.KAIRO_COMMIT_HASH],
     ["KAIRO_OTLP_TRACES_URL", environment.KAIRO_OTLP_TRACES_URL],
     ["KAIRO_OTLP_EXPORT_INTERVAL_MS", environment.KAIRO_OTLP_EXPORT_INTERVAL_MS],
+    ["KAIRO_OTLP_HEADERS", environment.KAIRO_OTLP_HEADERS],
+    ["KAIRO_OTLP_PROTOCOL", environment.KAIRO_OTLP_PROTOCOL],
     ["KAIRO_DESKTOP_APP_USER_MODEL_ID", APP_BUNDLE_ID],
   ].filter((entry) => typeof entry[1] === "string" && entry[1].trim().length > 0);
   return [

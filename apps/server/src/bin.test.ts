@@ -17,6 +17,8 @@ import {
 } from "@kairo/contracts";
 import * as NetService from "@kairo/shared/Net";
 import { HostProcessEnvironment } from "@kairo/shared/hostProcess";
+import { DEFAULT_SIGNAL_EXPORT } from "@kairo/shared/observability";
+import * as OtelEnvironment from "@kairo/shared/otelEnvironment";
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as DateTime from "effect/DateTime";
@@ -41,6 +43,7 @@ import * as ProjectionSnapshotQuery from "./orchestration/Services/ProjectionSna
 import * as OrchestrationEngine from "./orchestration/Services/OrchestrationEngine.ts";
 import { OrchestrationLayerLive } from "./orchestration/runtimeLayer.ts";
 import { orchestrationHttpApiLayer } from "./orchestration/http.ts";
+import * as ProjectCloneTracker from "./project/ProjectCloneTracker.ts";
 import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite.ts";
 import * as RepositoryIdentityResolver from "./project/RepositoryIdentityResolver.ts";
 import {
@@ -101,8 +104,11 @@ const makeCliTestServerConfig = (baseDir: string) =>
       traceMaxFiles: 10,
       otlpTracesUrl: undefined,
       otlpMetricsUrl: undefined,
-      otlpExportIntervalMs: 10_000,
-      otlpServiceName: "kairo-server",
+      otlpLogsUrl: undefined,
+      otlpTracesExport: DEFAULT_SIGNAL_EXPORT,
+      otlpMetricsExport: DEFAULT_SIGNAL_EXPORT,
+      otlpLogsExport: DEFAULT_SIGNAL_EXPORT,
+      otelEnvironment: OtelEnvironment.none,
       mode: "web",
       port: 0,
       host: "127.0.0.1",
@@ -364,7 +370,16 @@ const withLiveProjectCliServer = <A, E, R>(baseDir: string, run: () => Effect.Ef
   Effect.gen(function* () {
     const config = yield* makeCliTestServerConfig(baseDir);
     const routesLayer = HttpApiBuilder.layer(ProjectCliHttpApi).pipe(
-      Layer.provide(orchestrationHttpApiLayer),
+      Layer.provide(
+        orchestrationHttpApiLayer.pipe(
+          Layer.provide(
+            Layer.mock(ProjectCloneTracker.ProjectCloneTracker)({
+              get: () => Effect.succeed(null),
+              discard: () => Effect.void,
+            }),
+          ),
+        ),
+      ),
       Layer.provide(environmentAuthenticatedAuthLayer),
     );
     const appLayer = HttpRouter.serve(routesLayer, {

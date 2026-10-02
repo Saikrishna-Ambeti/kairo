@@ -166,7 +166,7 @@ function OnboardingFrame({
       <div className="mx-auto flex min-h-dvh w-full max-w-4xl flex-col justify-center gap-4 px-4 py-5 sm:px-6 sm:py-6">
         <header className="space-y-4 rounded-xl border border-border/80 bg-card p-5 sm:p-6">
           <div className="space-y-2">
-            <h1 className="text-3xl font-semibold tracking-[-0.03em]">Set up Kairo</h1>
+            <h1 className="text-3xl font-semibold tracking-tight">Set up Kairo</h1>
             <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
               Sign in, tell us how you work, then connect a coding agent.
             </p>
@@ -198,7 +198,7 @@ function SignInStep({
         <span className="mb-4 flex size-11 items-center justify-center rounded-xl border border-primary/25 bg-primary/10 text-primary">
           <LogInIcon className="size-5" />
         </span>
-        <h2 className="text-2xl font-semibold tracking-[-0.025em]">Sign in to continue</h2>
+        <h2 className="text-2xl font-semibold tracking-tight">Sign in to continue</h2>
         <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
           Clerk securely connects this device to your Kairo account.
         </p>
@@ -219,7 +219,7 @@ function SignInStep({
           <CheckCircle2Icon className="size-5" />
         )}
       </span>
-      <h2 className="text-2xl font-semibold tracking-[-0.025em]">
+      <h2 className="text-2xl font-semibold tracking-tight">
         {loading ? "Checking your account" : "Account connected"}
       </h2>
       <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
@@ -241,7 +241,7 @@ function LocalSignInStep({ onContinue }: { readonly onContinue: () => void }) {
       <span className="mb-4 flex size-11 items-center justify-center rounded-xl border border-border bg-muted text-foreground">
         <LogInIcon className="size-5" />
       </span>
-      <h2 className="text-2xl font-semibold tracking-[-0.025em]">Continue without an account</h2>
+      <h2 className="text-2xl font-semibold tracking-tight">Continue without an account</h2>
       <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
         Clerk is not configured in this self-hosted build. You can still finish local setup.
       </p>
@@ -259,7 +259,7 @@ function ClerkLoadErrorStep({ onRetry }: { readonly onRetry: () => void }) {
       <span className="mb-4 flex size-11 items-center justify-center rounded-xl border border-destructive/25 bg-destructive/10 text-destructive">
         <RefreshCwIcon className="size-5" />
       </span>
-      <h2 className="text-2xl font-semibold tracking-[-0.025em]">Sign-in could not load</h2>
+      <h2 className="text-2xl font-semibold tracking-tight">Sign-in could not load</h2>
       <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
         Check your connection, then retry. Your onboarding will stay here.
       </p>
@@ -289,9 +289,7 @@ function ProfessionStep({
   return (
     <section className="mx-auto max-w-4xl">
       <div className="mb-6 text-center">
-        <h2 className="text-2xl font-semibold tracking-[-0.025em]">
-          What best describes your work?
-        </h2>
+        <h2 className="text-2xl font-semibold tracking-tight">What best describes your work?</h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
           Choose one so Kairo can tailor setup guidance to the way you build.
         </p>
@@ -346,7 +344,7 @@ function ProviderSetupStep({
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <section className="space-y-4">
         <div className="space-y-1">
-          <h2 className="text-2xl font-semibold tracking-[-0.025em]">Connect a coding agent</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">Connect a coding agent</h2>
           <p className="text-sm leading-6 text-muted-foreground">
             Install or sign in to one supported provider. Optional memory and connected apps come
             next.

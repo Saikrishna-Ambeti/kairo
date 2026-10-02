@@ -7,7 +7,7 @@ const relayClientTracingConfig = resolveRelayClientTracingConfig();
 export const headlessRelayClientTracingLayer = makeRelayClientTracingLayer(
   relayClientTracingConfig,
   {
-    serviceName: "kairo-headless-relay-client",
+    serviceName: "kairo-server",
     runtime: "node",
     client: "headless-cli",
   },

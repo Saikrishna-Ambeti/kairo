@@ -6,7 +6,7 @@ provisioning instructions.
 
 ## Public application configuration
 
-Kairo Connect is disabled in a fresh clone. To build against the production deployment, copy the
+Cloud identity is disabled in a fresh clone. To build against the configured deployment, copy the
 repository-root example:
 
 ```sh
@@ -20,6 +20,8 @@ KAIRO_CLERK_PUBLISHABLE_KEY=<publishable key>
 KAIRO_CLERK_JWT_TEMPLATE=<JWT template name>
 KAIRO_CLERK_CLI_OAUTH_CLIENT_ID=<public OAuth application client ID>
 KAIRO_RELAY_URL=https://relay.example.com
+KAIRO_HOSTED_APP_URL=https://hosted-app.example.com
+KAIRO_CLOUD_API_URL=https://cloud-api.example.com
 ```
 
 Process variables take precedence over `.env.local`, then `.env`. Use these canonical names;
@@ -27,23 +29,24 @@ the build loader supplies framework-specific aliases. These values are public id
 `CLERK_SECRET_KEY` belongs only in the relay's secrets, never in client configuration.
 
 Client and bundled-server builds embed the public values, so set them before building.
-EAS preview and production environments need the publishable key, JWT template name, and relay URL.
+EAS preview and production environments need the publishable key and JWT template name for account sign-in and hosted memory. The relay URL enables Connect separately.
 Bundled servers also accept runtime overrides for operator-managed deployments.
 
 Copy `infra/relay/.env.example` to `infra/relay/.env` for relay deployment settings.
 Deploy `prod` before personal stages because it owns the retained database that their branches
-depend on. The deploy wrapper writes the resulting relay URL back to the root `.env`.
+depend on. The stack's `PublishClientConfig` action writes the resulting relay URL back to the root `.env`.
 
 ## CLI OAuth application
 
 In Clerk's OAuth applications settings:
 
-1. Create a public OAuth application for the T3 CLI, using authorization-code exchange with PKCE.
-2. Allow both redirect URIs: `http://127.0.0.1:34338/callback` and
-   `https://app.kairo.codes/connect/callback`. A custom `KAIRO_HOSTED_APP_URL` needs its own
-   `/connect/callback` URL. Headless and SSH authorization depend on the hosted redirect.
-3. Enable the `openid`, `profile`, and `email` scopes.
-4. Set `KAIRO_CLERK_CLI_OAUTH_CLIENT_ID` to the generated public client ID in local and release
+1. Create a public OAuth application for the Kairo CLI, using authorization-code exchange with PKCE.
+2. Allow the redirect URI `http://127.0.0.1:34338/callback`.
+3. Enable the `openid`, `profile`, `email`, and `offline_access` scopes.
+4. Enable **Device authorization grant** on the application. Headless and SSH authorization use
+   it, and Clerk only advertises the device endpoint once it is on. The feature is in beta and
+   Clerk enables it per account on request.
+5. Set `KAIRO_CLERK_CLI_OAUTH_CLIENT_ID` to the generated public client ID in local and release
    build environments.
 
 ## JWT template
@@ -51,11 +54,11 @@ In Clerk's OAuth applications settings:
 Create a Clerk JWT template named `kairo-relay` with claims:
 
 ```json
-{ "aud": "kairo-code-relay" }
+{ "aud": "kairo-relay" }
 ```
 
 Set `KAIRO_CLERK_JWT_TEMPLATE=kairo-relay` for clients and
-`CLERK_JWT_AUDIENCE=kairo-code-relay` for the relay. The production relay deployment environment
+`CLERK_JWT_AUDIENCE=kairo-relay` for the relay. The production relay deployment environment
 also defines `CLERK_JWT_TEMPLATE`. The audience stays the same across relay stages; the relay
 URL selects the deployment.
 

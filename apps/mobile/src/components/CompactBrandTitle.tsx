@@ -6,6 +6,7 @@ import { AppText as Text } from "./AppText";
 import { KairoMark } from "./KairoMark";
 import { IPAD_HOME_TITLE_OFFSET } from "../lib/layoutMetrics";
 import { resolveMobileStageLabel } from "../lib/mobileBranding";
+import { useAndroidControlSizing } from "./useAndroidControlSizing";
 
 /**
  * Horizontal correction applied to content rendered in the brand title slot,
@@ -26,6 +27,7 @@ export function CompactBrandTitle(
 ) {
   const stageLabel = resolveMobileStageLabel(Constants.expoConfig?.extra?.appVariant);
   const titleOffset = brandTitleOffset();
+  const { scale } = useAndroidControlSizing();
 
   return (
     <View
@@ -34,21 +36,28 @@ export function CompactBrandTitle(
       accessible
       role="heading"
       className="flex-row items-center gap-1.5"
-      style={{ marginLeft: titleOffset }}
+      style={[{ marginLeft: titleOffset }, Platform.OS === "android" && { gap: 5.25 * scale }]}
     >
-      <View className="flex-row items-center">
-        <KairoMark size={22} />
+      <KairoMark size={Math.round(22 * scale)} />
+      <Text
+        allowFontScaling={props.allowFontScaling}
+        className="font-kairo-medium text-foreground-muted"
+        style={{ fontSize: 21 * scale, letterSpacing: -0.5 * scale }}
+      >
+        airo
+      </Text>
+      <View
+        className="rounded-full bg-subtle px-1.5 py-0.5"
+        style={
+          Platform.OS === "android"
+            ? { paddingHorizontal: 5.25 * scale, paddingVertical: 1.75 * scale }
+            : undefined
+        }
+      >
         <Text
           allowFontScaling={props.allowFontScaling}
-          className="-ml-px font-kairo-medium text-[21px] tracking-[-0.5px] text-foreground-muted"
-        >
-          airo
-        </Text>
-      </View>
-      <View className="rounded-full bg-subtle px-1.5 py-0.5">
-        <Text
-          allowFontScaling={props.allowFontScaling}
-          className="font-kairo-bold text-[9px] tracking-[0.9px] text-foreground-muted uppercase"
+          className="font-kairo-bold text-foreground-muted uppercase"
+          style={{ fontSize: 9 * scale, letterSpacing: 0.9 * scale }}
         >
           {stageLabel}
         </Text>

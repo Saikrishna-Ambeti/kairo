@@ -5,25 +5,40 @@ to keep a terminal open.
 
 ## Manage the service
 
-Run these commands on the machine that will host Kairo:
+Install the `kairo` CLI first ([Install Kairo](./install.md#command-line)), then
+run these commands on the machine that will host Kairo:
 
-| Task                            | Command                              |
-| ------------------------------- | ------------------------------------ |
-| Install and start               | `npx kairo@latest service install`   |
-| Inspect status and log location | `npx kairo@latest service status`    |
-| Update or repair                | `npx kairo@latest service update`    |
-| Stop and remove from startup    | `npx kairo@latest service uninstall` |
+| Task                            | Command                   |
+| ------------------------------- | ------------------------- |
+| Install and start               | `kairo service install`   |
+| Inspect status and log location | `kairo service status`    |
+| Move to a newer release         | `kairo update`            |
+| Restart                         | `kairo service restart`   |
+| Stop and remove from startup    | `kairo service uninstall` |
 
 Uninstalling the service leaves your projects, threads, and settings intact.
+Running `kairo service install` again repairs a service that `kairo service status`
+reports as broken.
 
-Install and update use the version of the CLI you invoke. For nightly, use
-`npx kairo@nightly service update`; replace `nightly` with an exact version to pin
-one. An older CLI refuses to replace a newer service unless you explicitly add
-`--allow-downgrade`.
-
-Updating restarts the server. Finish active work first, and wait for any remote
-update already in progress. To match a remote client's version, follow
+`kairo update` downloads the newest release on your channel and switches `kairo`
+and the service to it. Restarting interrupts running agent turns, terminals,
+and remote clients, so it asks first; answer no and the service keeps running
+the old version until you run `kairo service restart`. Pass `--yes` from a
+script. A server you started by hand is left running; stop and start it again
+to pick up the new version. Wait for any remote update already in progress
+before updating; to match a remote client's version, follow
 [Updating Kairo](./updating.md).
+
+Pass an exact version (`kairo update 0.0.42`) to pin one, `--channel nightly` to
+switch trains, or `--allow-downgrade` to move backwards. `preview` is a
+maintainers' test train: its builds can be broken and are never offered as
+updates, so the installer and `kairo update` ask for confirmation before
+installing one.
+
+`kairo uninstall` removes the background service, the `kairo` launcher, and the
+downloaded versions after showing you the list and asking once. Your projects,
+threads, and settings under `~/.kairo/userdata` are kept. Pass `--yes` from a
+script.
 
 ## Platform support
 
@@ -70,10 +85,11 @@ that session open.
 | `linger-unavailable`                    | Run `loginctl show-user "$(id -un)" --property=Linger` and check that systemd-logind is available.                             |
 | `user-manager-unavailable`              | Run `systemctl --user status` in a login session for the service user; check your distribution's systemd user-session support. |
 | `service-disabled` or `service-stopped` | Read the log and `systemctl --user status kairo.service`, then use the repair command printed by Kairo.                        |
+| `restart-pending`                       | A newer version is installed but the service still runs the previous one. Run `kairo service restart`.                         |
 
 On macOS, check **System Settings → General → Login Items** if the service no
 longer starts at login. If agent work cannot access Desktop, Documents, or
-Downloads, it may need Full Disk Access for the Node executable listed in
+Downloads, it may need Full Disk Access for the `kairo` executable listed in
 `ProgramArguments` in
 `~/Library/LaunchAgents/com.kairo.app.service.plist`.
 

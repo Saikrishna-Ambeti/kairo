@@ -1,6 +1,6 @@
 import * as NodeCrypto from "node:crypto";
 
-import type { DesktopSshEnvironmentTarget, DesktopUpdateChannel } from "@kairo/contracts";
+import type { DesktopSshEnvironmentTarget } from "@kairo/contracts";
 import { HostProcessPlatform } from "@kairo/shared/hostProcess";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -14,7 +14,6 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { buildSshChildEnvironment, type SshAuthOptions } from "./auth.ts";
 import { SshCommandError, SshInvalidTargetError } from "./errors.ts";
 
-const PUBLISHABLE_KAIRO_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
 const DEFAULT_SSH_COMMAND_TIMEOUT_MS = 60_000;
 const MAX_SSH_ERROR_OUTPUT_LENGTH = 4_000;
 
@@ -363,20 +362,3 @@ export const resolveSshTarget = Effect.fn("ssh/command.resolveSshTarget")(functi
     ),
   );
 });
-
-export function resolveRemoteKairoCliPackageSpec(input: {
-  readonly appVersion: string;
-  readonly updateChannel: DesktopUpdateChannel;
-  readonly isDevelopment?: boolean;
-}): string {
-  const appVersion = input.appVersion.trim();
-  if (!input.isDevelopment && PUBLISHABLE_KAIRO_VERSION_PATTERN.test(appVersion)) {
-    return `kairo@${appVersion}`;
-  }
-
-  if (input.isDevelopment) {
-    return "kairo@nightly";
-  }
-
-  return input.updateChannel === "nightly" ? "kairo@nightly" : "kairo@latest";
-}

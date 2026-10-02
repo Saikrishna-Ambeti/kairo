@@ -8,7 +8,7 @@ import { WorkspaceBreadcrumb, WorkspaceBreadcrumbItem } from "../WorkspaceBreadc
 import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { Button } from "../ui/button";
-import { Input } from "../ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group";
 import { ScrollArea } from "../ui/scroll-area";
 import { SidebarInset } from "../ui/sidebar";
 import { ArtifactRow } from "./ArtifactRow";
@@ -33,7 +33,7 @@ export function LibraryPage() {
   });
 
   return (
-    <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground isolate">
+    <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none isolate">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
         <WorkspacePageHeader electron={isElectron}>
           <WorkspaceBreadcrumb ariaLabel="Library breadcrumb" className="min-w-0">
@@ -67,18 +67,18 @@ export function LibraryPage() {
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <label className="relative block min-w-0 flex-1 sm:max-w-xl">
                   <span className="sr-only">Search library</span>
-                  <SearchIcon
-                    className="pointer-events-none absolute top-1/2 left-3 z-10 size-4 -translate-y-1/2 text-muted-foreground"
-                    aria-hidden
-                  />
-                  <Input
-                    nativeInput
-                    type="search"
-                    value={search}
-                    onChange={(event) => setSearch(event.currentTarget.value)}
-                    placeholder="Search titles, files, projects, and threads"
-                    className="[&_input]:pl-9"
-                  />
+                  <InputGroup>
+                    <InputGroupAddon>
+                      <SearchIcon aria-hidden />
+                    </InputGroupAddon>
+                    <InputGroupInput
+                      nativeInput
+                      type="search"
+                      value={search}
+                      onChange={(event) => setSearch(event.currentTarget.value)}
+                      placeholder="Search titles, files, projects, and threads"
+                    />
+                  </InputGroup>
                 </label>
                 <div className="flex shrink-0 items-center gap-1" aria-label="Artifact type">
                   {(["all", "document", "pdf"] as const).map((value) => (

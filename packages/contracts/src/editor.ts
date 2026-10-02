@@ -24,6 +24,8 @@ export const EDITORS = [
     id: "cursor",
     label: "Cursor",
     commands: ["cursor"],
+    // File and workspace opens must target the IDE even when the Agents Window is active.
+    baseArgs: ["--classic"],
     launchStyle: "goto",
     remoteScheme: "cursor",
   },
@@ -57,7 +59,14 @@ export const EDITORS = [
     launchStyle: "direct-path",
     remoteScheme: "zed",
   },
-  { id: "antigravity", label: "Antigravity", commands: ["agy"], launchStyle: "goto" },
+  {
+    id: "antigravity",
+    label: "Antigravity",
+    // `agy` is the standalone Antigravity CLI, not the IDE. The IDE bundle
+    // ships `antigravity-ide`, so it comes first for install-folder lookups.
+    commands: ["antigravity-ide", "agy-ide"],
+    launchStyle: "goto",
+  },
   { id: "idea", label: "IntelliJ IDEA", commands: ["idea"], launchStyle: "line-column" },
   { id: "aqua", label: "Aqua", commands: ["aqua"], launchStyle: "line-column" },
   { id: "clion", label: "CLion", commands: ["clion"], launchStyle: "line-column" },
@@ -91,7 +100,7 @@ export type LaunchEditorInput = typeof LaunchEditorInput.Type;
 
 const remoteSchemeOf = (editor: EditorDefinition): string | undefined => editor.remoteScheme;
 
-/** Editors that can open a remote workspace via `vscode-remote` deep links. */
+/** Editors that can open a remote workspace via an SSH deep link. */
 export const REMOTE_CAPABLE_EDITOR_IDS: ReadonlyArray<EditorId> = EDITORS.flatMap((editor) =>
   remoteSchemeOf(editor) !== undefined ? [editor.id] : [],
 );
@@ -119,11 +128,18 @@ export const buildRemoteOpenUrl = (input: {
   // Windows server paths (`C:\...`) appear as `/C:/...` in vscode-remote URIs.
   const posixPath = input.absolutePath.replaceAll("\\", "/");
   const rootedPath = posixPath.startsWith("/") ? posixPath : `/${posixPath}`;
-  const encodedPath = rootedPath.split("/").map(encodeURIComponent).join("/");
   const encodedHost = encodeURIComponent(input.host);
-  return input.editor === "zed"
-    ? `${scheme}://ssh/${encodedHost}${encodedPath}`
-    : `${scheme}://vscode-remote/ssh-remote+${encodedHost}${encodedPath}`;
+  if (input.editor === "zed") {
+    // Zed's remote server resolves a rooted path on the system drive, so a
+    // Windows `C:\Users\x` must become `/Users/x` (verified in #8938). Other
+    // drives are untested and kept as is rather than silently remapped, and a
+    // POSIX path that happens to start with `/C:` is left alone.
+    const zedPath = /^[Cc]:[\\/]/.test(input.absolutePath) ? rootedPath.slice(3) : rootedPath;
+    const encodedZedPath = zedPath.split("/").map(encodeURIComponent).join("/");
+    return `${scheme}://ssh/${encodedHost}${encodedZedPath}`;
+  }
+  const encodedPath = rootedPath.split("/").map(encodeURIComponent).join("/");
+  return `${scheme}://vscode-remote/ssh-remote+${encodedHost}${encodedPath}`;
 };
 
 /**

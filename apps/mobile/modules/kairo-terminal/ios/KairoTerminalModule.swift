@@ -51,7 +51,10 @@ public class KairoTerminalModule: Module {
         view.mutedForegroundColorHex = mutedForegroundColor
       }
 
-      Events("onInput", "onResize")
+      Prop("captureRequest") { (view: KairoTerminalView, request: Double) in
+        view.captureRequest = request
+      }
+      Events("onInput", "onResize", "onCapture")
     }
   }
 }
