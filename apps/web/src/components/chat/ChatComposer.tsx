@@ -44,6 +44,12 @@ import {
 import type { EnvironmentConnectionPresentation } from "@kairo/client-runtime/connection";
 import { resolveVisibleInteractionModes } from "@kairo/client-runtime/interactionModes";
 import {
+  ARTIFACT_CREATION_COMMANDS,
+  artifactCreationPrompt,
+  isArtifactCreationKind,
+  prependArtifactCreationPrompt,
+} from "@kairo/client-runtime/artifact-creation";
+import {
   isPasteAsTextShortcut,
   nextPastedTextFileName,
   pastedTextDisposition,
@@ -931,6 +937,7 @@ function ComposerCommandMenuLayer(props: { anchor: HTMLElement | null; children:
   );
 }
 import { Button } from "../ui/button";
+import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Select, SelectItem, SelectPopup, SelectValue } from "../ui/select";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
@@ -939,6 +946,7 @@ import {
   BotIcon,
   CircleAlertIcon,
   FileIcon,
+  FilePlus2Icon,
   GraduationCapIcon,
   PaperclipIcon,
   PencilRulerIcon,
@@ -2158,6 +2166,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const [isComposerPrimaryActionsCompact, setIsComposerPrimaryActionsCompact] = useState(false);
   const [isComposerModelPickerOpen, setIsComposerModelPickerOpen] = useState(false);
   const isMobileViewport = useMediaQuery("max-sm");
+  const [isFileCreationOpen, setIsFileCreationOpen] = useState(false);
   const {
     isComposerFocused,
     setIsComposerFocused,
@@ -2410,6 +2419,15 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           label: "/research",
           description: "Research this request in the background",
         },
+        ...(pendingUserInputs.length === 0
+          ? ARTIFACT_CREATION_COMMANDS.map(({ kind, label, extension }) => ({
+              id: `slash:${kind}`,
+              type: "slash-command" as const,
+              command: kind,
+              label: `/${kind}`,
+              description: `Create ${label.toLowerCase()} ${extension}`,
+            }))
+          : []),
         ...(interactionModes.includes("plan")
           ? ([
               {
@@ -2549,6 +2567,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     compactSlashCommandAvailable,
     composerTrigger,
     interactionModes,
+    pendingUserInputs.length,
     exactPullRequestLookup.data,
     pullRequestLookup.data,
     pullRequestProjectId,
@@ -3680,6 +3699,21 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         return;
       }
       if (item.type === "slash-command") {
+        if (isArtifactCreationKind(item.command)) {
+          if (pendingUserInputs.length > 0) return;
+          void handleInteractionModeChange("default");
+          const replacement = artifactCreationPrompt(item.command);
+          const applied = applyPromptReplacement(
+            trigger.rangeStart,
+            trigger.rangeEnd,
+            replacement,
+            {
+              expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
+            },
+          );
+          if (applied) setComposerHighlightedItemId(null);
+          return;
+        }
         if (item.command === "model") {
           const applied = applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, "", {
             expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
@@ -3802,6 +3836,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       composerDraftTarget,
       handleInteractionModeChange,
       onUsageLimitsCommand,
+      pendingUserInputs.length,
       resolveActiveComposerTrigger,
     ],
   );
@@ -7101,6 +7136,43 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                         <TooltipPopup>Attach files</TooltipPopup>
                       </Tooltip>
                     </>
+                  ) : null}
+                  {pendingUserInputs.length === 0 && !isComposerResting ? (
+                    <Popover open={isFileCreationOpen} onOpenChange={setIsFileCreationOpen}>
+                      <PopoverTrigger
+                        render={
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label="Create file"
+                          />
+                        }
+                      >
+                        <FilePlus2Icon />
+                      </PopoverTrigger>
+                      <PopoverPopup align="end" side="top" className="w-52">
+                        <div className="flex flex-col gap-1">
+                          {ARTIFACT_CREATION_COMMANDS.map(({ kind, label, extension }) => (
+                            <button
+                              key={kind}
+                              type="button"
+                              className="flex items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
+                              onClick={() => {
+                                void handleInteractionModeChange("default");
+                                setPromptFromTraits(
+                                  prependArtifactCreationPrompt(kind, promptRef.current),
+                                );
+                                setIsFileCreationOpen(false);
+                              }}
+                            >
+                              <span>{label}</span>
+                              <span className="text-muted-foreground">{extension}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </PopoverPopup>
+                    </Popover>
                   ) : null}
                   <ComposerFooterPrimaryActions
                     compact={isComposerResting || isComposerPrimaryActionsCompact}

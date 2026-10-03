@@ -34,6 +34,11 @@ import {
   resolveProviderSkillsForCwd,
   resolveProviderSlashCommandsForCwd,
 } from "@kairo/client-runtime/providerSkills";
+import {
+  ARTIFACT_CREATION_COMMANDS,
+  artifactCreationPrompt,
+  isArtifactCreationKind,
+} from "@kairo/client-runtime/artifact-creation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ComposerEditorSelection } from "../../components/ComposerEditor";
@@ -87,9 +92,18 @@ export function buildComposerSlashCommandItems(input: {
       label: "/default",
       description: "Switch to default mode",
     },
+    ...ARTIFACT_CREATION_COMMANDS.map(({ kind, label, extension }) => ({
+      id: `cmd:${kind}`,
+      type: "slash-command" as const,
+      command: kind,
+      label: `/${kind}`,
+      description: `Create ${label.toLowerCase()} ${extension}`,
+    })),
   ] satisfies ComposerCommandItem[];
   const items: ComposerCommandItem[] = builtIn.filter(
-    (item) => item.command.includes(query) && (item.command === "model" || allowInteractionMode),
+    (item) =>
+      item.command.includes(query) &&
+      (item.command === "model" || isArtifactCreationKind(item.command) || allowInteractionMode),
   );
 
   // Providers expand commands only at the start of a message. Kairo commands
@@ -149,13 +163,20 @@ export function resolveComposerCommandSelection(input: {
   } else if (item.type === "skill") {
     replacement = `$${item.skill.name} `;
   } else if (item.type === "slash-command") {
-    replacement = `/${item.command} `;
+    replacement = isArtifactCreationKind(item.command)
+      ? artifactCreationPrompt(item.command)
+      : `/${item.command} `;
   } else if (item.type === "provider-slash-command") {
     replacement = `/${item.command.name} `;
   }
   return {
     ...replaceTextRange(draftMessage, trigger.rangeStart, trigger.rangeEnd, replacement),
-    interactionMode: null,
+    interactionMode:
+      item.type === "slash-command" &&
+      isArtifactCreationKind(item.command) &&
+      input.allowInteractionMode
+        ? "default"
+        : null,
   };
 }
 

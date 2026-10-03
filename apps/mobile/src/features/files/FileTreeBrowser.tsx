@@ -1,6 +1,6 @@
 import type { ProjectEntry } from "@kairo/contracts";
 import { SymbolView } from "../../components/AppSymbol";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -113,6 +113,7 @@ export function FileTreeBrowser(props: {
   readonly searchQuery: string;
   readonly searchTruncated: boolean;
   readonly selectedPath: string | null;
+  readonly listHeader?: ReactElement;
   readonly loadedDirectories: ReadonlySet<string>;
   readonly onLoadDirectory: (path: string) => void;
   readonly onPreviewFile?: (path: string) => void;
@@ -262,6 +263,7 @@ export function FileTreeBrowser(props: {
       renderItem={renderItem}
       ListHeaderComponent={
         <>
+          {props.listHeader}
           {props.error && props.entries.length > 0 ? (
             <Text accessibilityRole="alert" className="mx-4 my-2 text-xs text-foreground-muted">
               {props.error}

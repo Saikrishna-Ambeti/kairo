@@ -1,6 +1,7 @@
 import { useNavigation, usePreventRemove, type StaticScreenProps } from "@react-navigation/native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, View } from "react-native";
+import { isArtifactCreationKind } from "@kairo/client-runtime/artifact-creation";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -26,10 +27,17 @@ type NewTaskDraftRouteParams = {
   readonly pendingTaskId?: string | string[];
   readonly draftId?: string | string[];
   readonly incomingShareId?: string | string[];
+  readonly artifactKind?: string | string[];
 };
 
 export function NewTaskDraftRouteScreen({ route }: StaticScreenProps<NewTaskDraftRouteParams>) {
   const params = useMemo(() => route.params ?? {}, [route.params]);
+  const requestedArtifactKind = Array.isArray(params.artifactKind)
+    ? (params.artifactKind[0] ?? "")
+    : (params.artifactKind ?? "");
+  const artifactKind = isArtifactCreationKind(requestedArtifactKind)
+    ? requestedArtifactKind
+    : undefined;
   const pendingTaskId = Array.isArray(params.pendingTaskId)
     ? params.pendingTaskId[0]
     : params.pendingTaskId;
@@ -160,6 +168,7 @@ export function NewTaskDraftRouteScreen({ route }: StaticScreenProps<NewTaskDraf
         </View>
       ) : (
         <NewTaskDraftScreen
+          artifactKind={artifactKind}
           initialProjectRef={preparedProjectRef}
           incomingShareId={
             Array.isArray(params.incomingShareId)

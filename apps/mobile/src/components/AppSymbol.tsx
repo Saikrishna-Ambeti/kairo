@@ -25,6 +25,8 @@ import IconArrowsMinimize from "@tabler/icons-react-native/IconArrowsMinimize";
 import IconBellRinging from "@tabler/icons-react-native/IconBellRinging";
 import IconBolt from "@tabler/icons-react-native/IconBolt";
 import IconBox from "@tabler/icons-react-native/IconBox";
+import IconBooks from "@tabler/icons-react-native/IconBooks";
+import IconPresentation from "@tabler/icons-react-native/IconPresentation";
 import IconBrain from "@tabler/icons-react-native/IconBrain";
 import IconCamera from "@tabler/icons-react-native/IconCamera";
 import IconChartBar from "@tabler/icons-react-native/IconChartBar";
@@ -96,6 +98,7 @@ import IconStar from "@tabler/icons-react-native/IconStar";
 import IconStarFilled from "@tabler/icons-react-native/IconStarFilled";
 import IconStethoscope from "@tabler/icons-react-native/IconStethoscope";
 import IconSun from "@tabler/icons-react-native/IconSun";
+import IconTable from "@tabler/icons-react-native/IconTable";
 import IconTerminal2 from "@tabler/icons-react-native/IconTerminal2";
 import IconTextDecrease from "@tabler/icons-react-native/IconTextDecrease";
 import IconTextIncrease from "@tabler/icons-react-native/IconTextIncrease";
@@ -135,6 +138,7 @@ const ANDROID_ICON_BY_SF_SYMBOL = {
   "bolt.circle": IconBolt,
   "bolt.horizontal.circle": IconBolt,
   brain: IconBrain,
+  "books.vertical": IconBooks,
   camera: IconCamera,
   "chart.bar.xaxis": IconChartBar,
   checkmark: IconCheck,
@@ -200,12 +204,14 @@ const ANDROID_ICON_BY_SF_SYMBOL = {
   "slider.horizontal.3": IconAdjustmentsHorizontal,
   "square.and.pencil": IconEdit,
   "square.on.square": IconCopy,
+  "rectangle.on.rectangle": IconPresentation,
   "square.grid.2x2": IconApps,
   "square.split.2x1": IconLayoutColumns,
   star: IconStar,
   "star.fill": IconStarFilled,
   "sun.max": IconSun,
   "stop.fill": IconPlayerStopFilled,
+  tablecells: IconTable,
   terminal: IconTerminal2,
   "text.alignleft": IconAlignLeft,
   "text.bubble": IconMessage,

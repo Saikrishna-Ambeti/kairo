@@ -133,17 +133,22 @@ function extractActivityRequestId(payload: unknown): ApprovalRequestId | null {
   return typeof requestId === "string" ? ApprovalRequestId.make(requestId) : null;
 }
 
-function artifactKindForPath(relativePath: string): "document" | "pdf" | null {
+function artifactKindForPath(
+  relativePath: string,
+): "document" | "presentation" | "spreadsheet" | "csv" | "pdf" | null {
   const lowerPath = relativePath.toLowerCase();
   if (lowerPath.endsWith(".docx")) return "document";
+  if (lowerPath.endsWith(".pptx")) return "presentation";
+  if (lowerPath.endsWith(".xlsx")) return "spreadsheet";
+  if (lowerPath.endsWith(".csv")) return "csv";
   if (lowerPath.endsWith(".pdf")) return "pdf";
   return null;
 }
 
 function artifactTitleFromFileName(fileName: string): string {
-  const baseName = fileName.replace(/\.(?:docx|pdf)$/i, "");
+  const baseName = fileName.replace(/\.(?:docx|pptx|xlsx|csv|pdf)$/i, "");
   const words = baseName.replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
-  if (words.length === 0) return "Untitled document";
+  if (words.length === 0) return "Untitled file";
   return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 }
 

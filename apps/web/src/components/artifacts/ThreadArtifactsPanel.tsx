@@ -6,8 +6,7 @@ import { useArtifacts } from "../../state/artifacts";
 import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
 import { ArtifactRow } from "./ArtifactRow";
-
-type ArtifactFilter = "all" | "document" | "pdf";
+import { ARTIFACT_FILTERS, type ArtifactFilter } from "./artifactDisplay";
 
 export function ThreadArtifactsPanel({
   environmentId,
@@ -34,7 +33,7 @@ export function ThreadArtifactsPanel({
     <div className="flex min-h-0 flex-1 flex-col bg-background">
       <div className="flex min-h-12 shrink-0 items-center gap-2 border-b border-border/70 px-3">
         <div className="flex min-w-0 flex-1 items-center gap-1" aria-label="Artifact type">
-          {(["all", "document", "pdf"] as const).map((value) => (
+          {ARTIFACT_FILTERS.map(({ value, label }) => (
             <button
               key={value}
               type="button"
@@ -42,7 +41,7 @@ export function ThreadArtifactsPanel({
               className="rounded-md px-2.5 py-1.5 text-muted-foreground text-xs hover:bg-accent hover:text-foreground aria-pressed:bg-accent aria-pressed:font-medium aria-pressed:text-foreground"
               onClick={() => setFilter(value)}
             >
-              {value === "all" ? "All" : value === "document" ? "Documents" : "PDFs"}
+              {label}
             </button>
           ))}
         </div>
@@ -77,7 +76,7 @@ export function ThreadArtifactsPanel({
               </span>
               <h2 className="mt-4 font-medium text-sm text-foreground">No artifacts yet</h2>
               <p className="mt-1 max-w-64 text-muted-foreground text-xs leading-relaxed">
-                Ask the agent to create a Word document or PDF. Finished files appear here.
+                Ask the agent to create a document, presentation, spreadsheet, CSV, or PDF.
               </p>
             </div>
           ) : (
