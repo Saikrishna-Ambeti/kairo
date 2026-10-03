@@ -1269,12 +1269,12 @@ describe("CheckpointReactor", () => {
     ).not.toContain("late.txt");
   });
 
-  it("does not rewrite a checkpoint after the next turn starts and aborts", async () => {
-    const harness = await createHarness();
-    const threadId = ThreadId.make("thread-1");
-    const createdAt = "2026-01-01T00:00:00.000Z";
-    await Effect.runPromise(
-      harness.engine.dispatch({
+  effectIt.effect("does not rewrite a checkpoint after the next turn starts and aborts", () =>
+    Effect.gen(function* () {
+      const harness = yield* Effect.promise(() => createHarness());
+      const threadId = ThreadId.make("thread-1");
+      const createdAt = "2026-01-01T00:00:00.000Z";
+      yield* harness.engine.dispatch({
         type: "thread.turn.diff.complete",
         commandId: CommandId.make("cmd-before-next-turn"),
         threadId,
@@ -1285,53 +1285,53 @@ describe("CheckpointReactor", () => {
         files: [],
         checkpointTurnCount: 1,
         createdAt,
-      }),
-    );
-    harness.provider.emit({
-      type: "turn.started",
-      eventId: EventId.make("evt-next-turn-started"),
-      provider: ProviderDriverKind.make("codex"),
-      createdAt: "2026-01-01T00:00:01.000Z",
-      threadId,
-      turnId: asTurnId("turn-2"),
-    });
-    await harness.drain();
+      });
+      harness.provider.emit({
+        type: "turn.started",
+        eventId: EventId.make("evt-next-turn-started"),
+        provider: ProviderDriverKind.make("codex"),
+        createdAt: "2026-01-01T00:00:01.000Z",
+        threadId,
+        turnId: asTurnId("turn-2"),
+      });
+      yield* Effect.promise(harness.drain);
 
-    harness.provider.emit({
-      type: "turn.aborted",
-      eventId: EventId.make("evt-next-turn-aborted"),
-      provider: ProviderDriverKind.make("codex"),
-      createdAt: "2026-01-01T00:00:01.500Z",
-      threadId,
-      turnId: asTurnId("turn-2"),
-      payload: { reason: "stopped" },
-    });
-    await harness.drain();
+      harness.provider.emit({
+        type: "turn.aborted",
+        eventId: EventId.make("evt-next-turn-aborted"),
+        provider: ProviderDriverKind.make("codex"),
+        createdAt: "2026-01-01T00:00:01.500Z",
+        threadId,
+        turnId: asTurnId("turn-2"),
+        payload: { reason: "stopped" },
+      });
+      yield* Effect.promise(harness.drain);
 
-    NodeFS.writeFileSync(NodePath.join(harness.cwd, "late.txt"), "newer work\n");
-    harness.provider.emit({
-      type: "turn.completed",
-      eventId: EventId.make("evt-previous-turn-late-completion"),
-      provider: ProviderDriverKind.make("codex"),
-      createdAt: "2026-01-01T00:00:02.000Z",
-      threadId,
-      turnId: asTurnId("turn-1"),
-      payload: { state: "completed" },
-    });
-    await harness.drain();
+      NodeFS.writeFileSync(NodePath.join(harness.cwd, "late.txt"), "newer work\n");
+      harness.provider.emit({
+        type: "turn.completed",
+        eventId: EventId.make("evt-previous-turn-late-completion"),
+        provider: ProviderDriverKind.make("codex"),
+        createdAt: "2026-01-01T00:00:02.000Z",
+        threadId,
+        turnId: asTurnId("turn-1"),
+        payload: { state: "completed" },
+      });
+      yield* Effect.promise(harness.drain);
 
-    expect(
-      gitShowFileAtRef(harness.cwd, checkpointRefForThreadTurn(threadId, 1), "README.md"),
-    ).toBe("v2\n");
-    expect(
-      runGit(harness.cwd, [
-        "ls-tree",
-        "-r",
-        "--name-only",
-        checkpointRefForThreadTurn(threadId, 1),
-      ]),
-    ).not.toContain("late.txt");
-  });
+      expect(
+        gitShowFileAtRef(harness.cwd, checkpointRefForThreadTurn(threadId, 1), "README.md"),
+      ).toBe("v2\n");
+      expect(
+        runGit(harness.cwd, [
+          "ls-tree",
+          "-r",
+          "--name-only",
+          checkpointRefForThreadTurn(threadId, 1),
+        ]),
+      ).not.toContain("late.txt");
+    }),
+  );
 
   it("does not add newer files to an older aborted turn checkpoint", async () => {
     const harness = await createHarness({ seedFilesystemCheckpoints: false });

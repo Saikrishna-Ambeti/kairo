@@ -170,7 +170,7 @@ export function ThreadFileNavigatorPane(props: {
             projectName={props.projectName}
             searchQuery={searchQuery}
             onSearchQueryChange={setSearchQuery}
-            onRefresh={entriesQuery.refresh}
+            onRefresh={refreshFiles}
           />
         ) : (
           <View className="h-12 flex-row items-center gap-2 px-3">
@@ -185,7 +185,7 @@ export function ThreadFileNavigatorPane(props: {
               accessibilityLabel="Refresh files"
               hitSlop={8}
               className="h-8 w-8 items-center justify-center rounded-full active:bg-subtle"
-              onPress={entriesQuery.refresh}
+              onPress={refreshFiles}
             >
               <SymbolView
                 name="arrow.clockwise"
