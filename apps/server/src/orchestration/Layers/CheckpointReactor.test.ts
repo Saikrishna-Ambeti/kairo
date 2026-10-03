@@ -1167,7 +1167,7 @@ describe("CheckpointReactor", () => {
     }),
   );
 
-  effectIt.effect("does not capture a late placeholder over an older checkpoint", () =>
+  effectIt.effect("rejects a late placeholder over an older checkpoint", () =>
     Effect.gen(function* () {
       const harness = yield* Effect.promise(() => createHarness());
       const threadId = ThreadId.make("thread-1");
@@ -1188,17 +1188,24 @@ describe("CheckpointReactor", () => {
       }
       yield* Effect.promise(harness.drain);
       NodeFS.writeFileSync(NodePath.join(harness.cwd, "newer.csv"), "name,value\napples,2\n");
-      yield* harness.engine.dispatch({
-        type: "thread.turn.diff.complete",
-        commandId: CommandId.make("cmd-stale-placeholder"),
-        threadId,
-        turnId: asTurnId("turn-1"),
-        completedAt: createdAt,
-        checkpointRef: CheckpointRef.make("provider-diff:stale"),
-        status: "missing",
-        files: [],
-        checkpointTurnCount: 1,
-        createdAt,
+      const error = yield* harness.engine
+        .dispatch({
+          type: "thread.turn.diff.complete",
+          commandId: CommandId.make("cmd-stale-placeholder"),
+          threadId,
+          turnId: asTurnId("turn-1"),
+          completedAt: createdAt,
+          checkpointRef: CheckpointRef.make("provider-diff:stale"),
+          status: "missing",
+          files: [],
+          checkpointTurnCount: 1,
+          createdAt,
+        })
+        .pipe(Effect.flip);
+      expect(error).toMatchObject({
+        _tag: "OrchestrationCommandInvariantError",
+        commandType: "thread.turn.diff.complete",
+        detail: "turn turn-1 already has a captured checkpoint",
       });
       yield* Effect.promise(harness.drain);
       expect(
