@@ -25,7 +25,7 @@ export function resolveTracingConfig(): TracingConfig | null {
 
 export function makeTracingLayer(config: TracingConfig | null, resource: TracingResource) {
   return makeRelayClientTracingLayer(config, {
-    serviceName: "kairo-mobile-relay-client",
+    serviceName: "kairo-mobile",
     serviceVersion: resource.serviceVersion,
     runtime: "react-native",
     client: `mobile-${resource.appVariant}`,

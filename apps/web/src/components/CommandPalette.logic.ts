@@ -1,6 +1,7 @@
 import { threadPullRequestSearchTerms } from "@kairo/shared/threadPullRequests";
 import type { CommandPaletteLinkedThreads } from "../commandPaletteBus";
 import {
+  type EnvironmentId,
   type FilesystemBrowseEntry,
   type KeybindingCommand,
   THREAD_JUMP_KEYBINDING_COMMANDS,
@@ -10,7 +11,7 @@ import type { SidebarThreadSortOrder } from "@kairo/contracts/settings";
 import * as Arr from "effect/Array";
 import * as Result from "effect/Result";
 import { type ReactNode } from "react";
-import { sortThreads } from "../lib/threadSort";
+import { getThreadSortTimestamp, sortThreads } from "../lib/threadSort";
 import { normalizeSearchText } from "../lib/utils";
 import { formatRelativeTimeLabel } from "../timestampFormat";
 import { type Project, type SidebarThreadSummary, type Thread } from "../types";
@@ -60,7 +61,7 @@ export function browseInputEndPaddingClass(input: {
 export type SearchOverlayMode = "command" | "files" | "content";
 
 export type CommandPaletteOpenIntent =
-  | { readonly kind: "add-project" | "new-thread-in" | "create-file" }
+  | { readonly kind: "add-project" | "new-thread-in" | "create-file" | "change-theme" }
   | {
       readonly kind: "search";
       readonly query: string;
@@ -84,6 +85,7 @@ export type CommandPaletteUiAction =
   | { readonly _tag: "OpenAddProject" }
   | { readonly _tag: "OpenNewThreadIn" }
   | { readonly _tag: "OpenCreateFile" }
+  | { readonly _tag: "OpenChangeTheme" }
   | { readonly _tag: "ClearOpenIntent" };
 
 export function reduceCommandPaletteUiState(
@@ -115,6 +117,8 @@ export function reduceCommandPaletteUiState(
       return { open: true, mode: "command", openIntent: { kind: "new-thread-in" } };
     case "OpenCreateFile":
       return { open: true, mode: "command", openIntent: { kind: "create-file" } };
+    case "OpenChangeTheme":
+      return { open: true, mode: "command", openIntent: { kind: "change-theme" } };
     case "ClearOpenIntent":
       return state.openIntent ? { ...state, openIntent: null } : state;
   }
@@ -134,6 +138,7 @@ export interface CommandPaletteItem {
   readonly description?: ReactNode;
   readonly threadContentMatch?: CommandPaletteThreadContentMatch;
   readonly timestamp?: string;
+  readonly searchRecency?: number;
   readonly icon: ReactNode;
   readonly disabled?: boolean;
   /** Optional content rendered inline before the title text. */
@@ -141,6 +146,8 @@ export interface CommandPaletteItem {
   /** Optional content rendered inline after the title text (before the timestamp). */
   readonly titleTrailingContent?: ReactNode;
   readonly shortcutCommand?: KeybindingCommand;
+  /** Sorts after every other match in its group; see `SettingsSearchItem.secondary`. */
+  readonly secondary?: boolean;
 }
 
 export interface CommandPaletteActionItem extends CommandPaletteItem {
@@ -187,6 +194,22 @@ export type CommandPaletteMode = "root" | "root-browse" | "submenu" | "submenu-b
 // as the real project title: the automatic project icon is derived from it, and
 // every other surface uses the real title, so overriding it desyncs the icon.
 export type CommandPaletteProject = Project & { readonly displayName: string };
+
+export function buildCommandPaletteProjectMetadata(input: {
+  readonly projects: ReadonlyArray<Pick<Project, "environmentId" | "title" | "workspaceRoot">>;
+  readonly locationByEnvironmentId: ReadonlyMap<EnvironmentId, { readonly label: string }>;
+}) {
+  const searchTerms: string[] = [];
+  const environmentLabels = new Set<string>();
+
+  for (const project of input.projects) {
+    const label = input.locationByEnvironmentId.get(project.environmentId)?.label ?? "Remote";
+    searchTerms.push(project.title, project.workspaceRoot, label);
+    environmentLabels.add(label);
+  }
+
+  return { searchTerms, environmentLabels: [...environmentLabels] };
+}
 
 export function buildProjectActionItems(input: {
   projects: ReadonlyArray<CommandPaletteProject>;
@@ -288,12 +311,15 @@ export function buildThreadActionItems<TThread extends BuildThreadActionItemsThr
           projectTitle ?? ``,
           thread.branch ?? ``,
           contentMatch?.snippet ?? ``,
+          // Last so pasted IDs never outrank title matches for shared substrings.
+          thread.id,
         ],
         title: thread.title,
         description,
         timestamp: formatRelativeTimeLabel(
           thread.latestUserMessageAt ?? thread.updatedAt ?? thread.createdAt,
         ),
+        searchRecency: getThreadSortTimestamp(thread, "updated_at"),
         icon: input.icon,
       },
       leadingContent ? { titleLeadingContent: leadingContent } : {},
@@ -345,6 +371,10 @@ function rankCommandPaletteItemMatch(
   for (const [index, field] of terms.entries()) {
     const fieldRank = rankSearchFieldMatch(field, normalizedQuery, queryTokens);
     if (fieldRank !== Number.NEGATIVE_INFINITY) {
+      if (index === 0 && item.searchRecency !== undefined) {
+        // All non-exact thread title matches share a tier so recency breaks the tie.
+        return 1_000 + Number(fieldRank === 3);
+      }
       return 1_000 - index * 100 + fieldRank;
     }
   }
@@ -417,7 +447,13 @@ export function filterCommandPaletteGroups(input: {
         rank: rankCommandPaletteItemMatch(item, normalizedQuery, queryTokens),
       });
     })
-      .toSorted((left, right) => right.rank - left.rank || left.index - right.index)
+      .toSorted(
+        (left, right) =>
+          Number(left.item.secondary ?? false) - Number(right.item.secondary ?? false) ||
+          right.rank - left.rank ||
+          (right.item.searchRecency ?? 0) - (left.item.searchRecency ?? 0) ||
+          left.index - right.index,
+      )
       .map((entry) => entry.item);
 
     if (items.length === 0) {

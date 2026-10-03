@@ -43,7 +43,7 @@ export function ProfessionalRolePicker({
             className={cn(
               "group relative min-h-32 cursor-pointer rounded-xl border p-5 text-left outline-none transition-[border-color,background-color,box-shadow,transform] has-focus-visible:ring-2 has-focus-visible:ring-ring has-focus-visible:ring-offset-2 has-focus-visible:ring-offset-card",
               selected
-                ? "border-primary/55 bg-primary/8 shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_18%,transparent)]"
+                ? "border-primary/55 bg-primary/8 ring-1 ring-primary/20"
                 : "border-border/80 bg-background/65 hover:-translate-y-px hover:border-primary/30 hover:bg-accent/45",
             )}
           >

@@ -1,24 +1,21 @@
+import { createDebugLogger } from "../../lib/debugLog";
+
 /**
  * Debug logging for the mobile terminal pipeline. Prefix: `[kairo-terminal]`.
  *
- * Enabled when `__DEV__` is true, or set `globalThis.__KAIRO_TERMINAL_DEBUG__ = true` in a JS
- * debugger / Metro console to trace release/TestFlight builds.
+ * Enabled when `__DEV__` is true, or set `globalThis.__KAIRO_TERMINAL_DEBUG__`
+ * (or the shared `globalThis.__KAIRO_DEBUG__` filter) in a JS debugger / Metro
+ * console to trace release/TestFlight builds.
  */
+const logger = createDebugLogger("terminal", {
+  enabledInDev: true,
+  legacyGlobalFlag: "__KAIRO_TERMINAL_DEBUG__",
+});
+
 export function isTerminalDebugEnabled(): boolean {
-  return (
-    (typeof __DEV__ !== "undefined" && __DEV__) ||
-    (typeof globalThis !== "undefined" &&
-      (globalThis as { __KAIRO_TERMINAL_DEBUG__?: boolean }).__KAIRO_TERMINAL_DEBUG__ === true)
-  );
+  return logger.isEnabled();
 }
 
 export function terminalDebugLog(message: string, data?: Record<string, unknown>): void {
-  if (!isTerminalDebugEnabled()) {
-    return;
-  }
-  if (data !== undefined) {
-    console.log(`[kairo-terminal] ${message}`, data);
-  } else {
-    console.log(`[kairo-terminal] ${message}`);
-  }
+  logger.log(message, data);
 }

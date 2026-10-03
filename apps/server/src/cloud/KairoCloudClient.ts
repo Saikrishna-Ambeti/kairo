@@ -56,7 +56,7 @@ export class KairoCloudClient extends Context.Service<KairoCloudClient, KairoClo
   "kairo/cloud/KairoCloudClient",
 ) {}
 
-const apiUrlConfig = Config.string("KAIRO_CLOUD_API_URL").pipe(
+const apiUrlConfig = Config.String("KAIRO_CLOUD_API_URL").pipe(
   Config.withDefault(DEFAULT_KAIRO_CLOUD_API_URL),
 );
 

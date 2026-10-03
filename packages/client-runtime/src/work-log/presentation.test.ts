@@ -221,6 +221,19 @@ describe("resolveWorkEntryToolPresentation", () => {
     });
   });
 
+  it("labels device tools with the device icon", () => {
+    expect(
+      resolveWorkEntryToolPresentation({
+        label: "mcp__kairo__device_open",
+        toolLifecycleStatus: "completed",
+      }),
+    ).toEqual({ displayName: "Opened a device in the Device panel", icon: "device" });
+    expect(resolveWorkEntryToolPresentation({ label: "kairo · device_screenshot" })).toEqual({
+      displayName: "Taking a screenshot of the device",
+      icon: "device",
+    });
+  });
+
   it("uses structured MCP identity when the provider supplies a custom title", () => {
     expect(
       resolveWorkEntryToolPresentation({
@@ -574,8 +587,8 @@ describe("resolveViewedImageAsset", () => {
 
 describe("pull request tool presentation", () => {
   it.each([
-    "mcp__kairo-code__link_pull_request",
-    "mcp__t3_code__link_pull_request",
+    "mcp__kairo__link_pull_request",
+    "mcp__kairo_code__link_pull_request",
     "Kairo-code · link_pull_request",
     "kairo/link_pull_request",
     "link_pull_request",
@@ -601,7 +614,7 @@ describe("pull request tool presentation", () => {
         toolTitle: "Custom title",
         toolLifecycleStatus,
         toolData: {
-          server: "kairo-code",
+          server: "kairo",
           tool: "link_pull_request",
           arguments: { url: "https://github.com/acme/web/pull/42" },
         },
@@ -615,7 +628,7 @@ describe("pull request tool presentation", () => {
         label: "MCP tool call",
         toolLifecycleStatus: "completed",
         toolData: {
-          toolName: "mcp__kairo-code__unlink_pull_request",
+          toolName: "mcp__kairo__unlink_pull_request",
           rawInput: { repository: "acme/web", number: 42 },
         },
       }),
@@ -628,7 +641,7 @@ describe("pull request tool presentation", () => {
       tone: "tool",
       itemType: "mcp_tool_call",
       toolLifecycleStatus: "completed",
-      toolSource: { key: "kairo-code", name: "Kairo", kind: "integration" },
+      toolSource: { key: "kairo", name: "Kairo", kind: "integration" },
     };
     const list: WorkLogPresentationEntry = {
       ...link,
@@ -645,5 +658,55 @@ describe("pull request tool presentation", () => {
     expect(
       resolveWorkEntryToolPresentation({ label: "mcp__another-server__link_pull_request" }),
     ).toBeNull();
+  });
+});
+
+describe("device group summaries", () => {
+  const deviceEntry = (tool: string): WorkLogPresentationEntry => ({
+    label: "MCP tool call",
+    toolData: { server: "kairo", tool },
+    itemType: "mcp_tool_call",
+    toolLifecycleStatus: "completed",
+    tone: "tool",
+  });
+
+  it.each(["device_list", "device_open", "device_screenshot", "device_close"])(
+    "recognizes %s as device controls",
+    (tool) => {
+      const entry = deviceEntry(tool);
+      expect(summarizeToolGroup([entry])).toBe("Used device controls 1 time");
+      expect(toolGroupSummaryKind([entry])).toBe("device");
+    },
+  );
+
+  it("summarizes device calls alongside shell commands", () => {
+    expect(
+      summarizeToolGroup([
+        { label: "Ran command", itemType: "command_execution", command: "pwd", tone: "tool" },
+        deviceEntry("device_list"),
+        deviceEntry("device_open"),
+      ]),
+    ).toBe("Ran 1 command and used device controls 2 times");
+  });
+
+  it("recognizes Claude tool names and preserves screenshot previews", () => {
+    const entry = {
+      ...deviceEntry("device_screenshot"),
+      toolData: { toolName: "mcp__kairo_code__device_screenshot" },
+      viewedImagePath: "/workspace/device.png",
+    };
+    expect(summarizeToolGroup([entry])).toBe("Used device controls 1 time");
+    expect(workEntryViewedImagePath(entry)).toBe("/workspace/device.png");
+  });
+
+  it("does not classify another server's tools as T3 device controls", () => {
+    expect(
+      summarizeToolGroup([
+        {
+          ...deviceEntry("device_open"),
+          toolData: { server: "another-server", tool: "device_open" },
+        },
+      ]),
+    ).toBe("Used 1 tool");
   });
 });

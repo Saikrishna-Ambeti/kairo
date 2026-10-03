@@ -6,6 +6,7 @@ import {
 } from "@kairo/client-runtime/artifact-creation";
 import { Pressable } from "react-native";
 
+import { useAndroidControlSizing } from "./useAndroidControlSizing";
 import { SymbolView } from "./AppSymbol";
 import { ControlPillMenu } from "./ControlPill";
 
@@ -24,6 +25,7 @@ export function ComposerAttachmentButton(props: {
   readonly onPickFiles: () => Promise<void>;
   readonly onCreateFile?: (kind: ArtifactCreationKind) => void;
 }) {
+  const { scale } = useAndroidControlSizing();
   const button = (
     <Pressable
       accessibilityLabel="Add attachment"
@@ -37,7 +39,7 @@ export function ComposerAttachmentButton(props: {
     >
       <SymbolView
         name="plus"
-        size={20}
+        size={Math.round(20 * scale)}
         weight="regular"
         tintColorClassName="accent-icon"
         type="monochrome"
@@ -51,6 +53,9 @@ export function ComposerAttachmentButton(props: {
 
   return (
     <ControlPillMenu
+      accessible
+      accessibilityLabel="Add attachment"
+      accessibilityRole="button"
       actions={[
         ...ATTACHMENT_MENU_ACTIONS.filter((action) => action.id !== "files" || props.supportsFiles),
         ...(props.onCreateFile ? FILE_CREATION_MENU_ACTIONS : []),

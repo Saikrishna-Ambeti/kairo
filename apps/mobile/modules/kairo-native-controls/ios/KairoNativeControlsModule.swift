@@ -50,6 +50,13 @@ public final class KairoNativeControlsModule: Module {
       }
     }
 
+    View(KairoContextSheetSizeView.self) {
+      ViewName("ContextSheetSize")
+      Prop("contentHeight") { (view: KairoContextSheetSizeView, height: Double) in
+        view.contentHeight = CGFloat(height)
+      }
+    }
+
     AsyncFunction("shareFileFromSource") { (url: URL, title: String, identifier: String, promise: Promise) in
       try self.shareFile(url: url, title: title, sourceIdentifier: identifier, promise: promise)
     }.runOnQueue(.main)

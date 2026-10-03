@@ -22,10 +22,14 @@ import * as Stream from "effect/Stream";
 import { HttpClient } from "effect/unstable/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
+import * as ModelManifest from "./ModelManifest.ts";
+import { resolveProviderCompatibility } from "./providerCompatibility.ts";
 import { ProviderRegistry } from "./Services/ProviderRegistry.ts";
 import { makeProviderMaintenanceCommandCoordinator } from "./providerMaintenanceCommandCoordinator.ts";
 import {
   enrichProviderSnapshotWithVersionAdvisory,
+  makeTargetedProviderUpdateAction,
+  resolveLatestProviderVersion,
   type ProviderMaintenanceCommandAction,
   ProviderVersionCache,
 } from "./providerMaintenance.ts";
@@ -61,6 +65,7 @@ export interface ProviderMaintenanceRunnerShape {
       | {
           readonly provider: ProviderDriverKind;
           readonly instanceId?: ProviderInstanceId | undefined;
+          readonly targetVersion?: string | undefined;
         },
   ) => Effect.Effect<ServerProviderUpdatedPayload, ServerProviderUpdateError>;
 }
@@ -305,6 +310,7 @@ function makeUpdateState(input: {
 export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
   const providerRegistry = yield* ProviderRegistry;
   const externalLauncher = yield* ExternalLauncher.ExternalLauncher;
+  const manifestService = yield* ModelManifest.ModelManifest;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const httpClient = yield* HttpClient.HttpClient;
   const versionCache = yield* ProviderVersionCache;
@@ -561,6 +567,7 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
     "ProviderMaintenanceRunner.updateProvider",
   )(function* (target) {
     const { provider, instanceId } = resolveTarget(target);
+    const targetVersion = typeof target === "string" ? undefined : target.targetVersion;
     const targetKey = `update:${instanceId}`;
     const capabilities = yield* providerRegistry.getProviderMaintenanceCapabilitiesForInstance(
       instanceId,
@@ -627,7 +634,44 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
               );
             }
 
-            const result = yield* runMaintenanceCommand(fresh.update);
+            const manifest = yield* manifestService.current;
+            const candidateVersion =
+              targetVersion ??
+              (yield* resolveLatestProviderVersion(fresh).pipe(
+                Effect.provideService(HttpClient.HttpClient, httpClient),
+                Effect.provideService(ProviderVersionCache, versionCache),
+              ));
+            const advisory =
+              resolveProviderCompatibility(manifest.compatibility, provider, candidateVersion) ??
+              resolveProviderCompatibility(
+                ModelManifest.BUNDLED_MODEL_MANIFEST.compatibility,
+                provider,
+                candidateVersion,
+              );
+            const command =
+              targetVersion !== undefined
+                ? makeTargetedProviderUpdateAction(fresh, targetVersion)
+                : fresh.update;
+            const rejected =
+              targetVersion !== undefined
+                ? !command ||
+                  advisory?.recommendedVersion !== targetVersion ||
+                  advisory.status !== "supported"
+                : advisory?.status === "broken" || advisory?.status === "unsupported";
+            if (rejected || !command) {
+              return yield* finish(
+                makeUpdateState({
+                  status: "failed",
+                  startedAt,
+                  finishedAt: yield* nowIso,
+                  message:
+                    targetVersion !== undefined
+                      ? "This version is no longer recommended or this installer cannot install a specific version. Refresh provider settings."
+                      : "The latest provider version is incompatible with this Kairo release. Review provider settings.",
+                }),
+              );
+            }
+            const result = yield* runMaintenanceCommand(command);
             const finishedAt = yield* nowIso;
             if (result.timedOut || result.exitCode !== 0) {
               return yield* finish(
@@ -658,10 +702,15 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
             // Cursor's `about` probe can fail transiently on a healthy binary.
             const couldNotVerify =
               verifiedProviders.length === 0 ||
-              verifiedProviders.some((verifiedProvider) => !isStillInstalled(verifiedProvider));
-            const stillOutdated = verifiedProviders.some((verifiedProvider) =>
-              isOutdatedProvider(verifiedProvider),
-            );
+              verifiedProviders.some(
+                (verifiedProvider) =>
+                  !isStillInstalled(verifiedProvider) ||
+                  (targetVersion !== undefined &&
+                    verifiedProvider.version?.replace(/^v/, "") !== targetVersion),
+              );
+            const stillOutdated =
+              targetVersion === undefined &&
+              verifiedProviders.some((verifiedProvider) => isOutdatedProvider(verifiedProvider));
             return yield* finish(
               makeUpdateState({
                 status: couldNotVerify || stillOutdated ? "unchanged" : "succeeded",

@@ -1,6 +1,6 @@
 # Attribution
 
-Kairo is derived from [Kairo](https://github.com/pingdotgg/t3code), an open-source project by T3 Tools Inc.
+Kairo is derived from [Kairo](https://github.com/Saikrishna-Ambeti/kairo), an open-source project by Kairo Tools Inc.
 
 This repository retains the upstream MIT copyright and permission notice in [LICENSE](./LICENSE). Kairo-specific changes are documented in [docs/project/PATCH.md](./docs/project/PATCH.md), including provider memory, connected-app support, onboarding, branding, packaging, and CI changes.
 

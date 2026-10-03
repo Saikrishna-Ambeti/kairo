@@ -224,6 +224,7 @@ export const makeRelayTraceLayer = (input: {
       resource: {
         serviceName: "kairo-relay-worker",
         attributes: {
+          "service.namespace": "kairo",
           "service.runtime": "cloudflare-worker",
           "service.component": "relay",
         },

@@ -22,7 +22,7 @@ import type {
   VcsStatusStreamEvent,
 } from "@kairo/contracts";
 import { mergeGitStatusParts } from "@kairo/shared/git";
-import { resolveProjectAutoPull } from "@kairo/shared/serverSettings";
+import { resolveProjectSettings } from "@kairo/shared/projectSettings";
 
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
@@ -160,7 +160,7 @@ export const autoPullPolicyLayer = Layer.effect(
           const project = yield* snapshots.getActiveProjectByWorkspaceRoot(cwd);
           if (project._tag === "None") return false;
           const settings = yield* serverSettings.getSettings;
-          return resolveProjectAutoPull(settings, project.value.id, project.value.autoPull);
+          return resolveProjectSettings(settings, project.value.id).settings.defaultAutoPull;
         },
         Effect.orElseSucceed(() => false),
       ),
@@ -541,13 +541,13 @@ export const make = Effect.gen(function* () {
         const demandCwds = yield* Ref.get(demandCwdsRef);
         const shouldRun =
           needsInitialRefresh ||
-          (yield* Effect.all(
-            [...demandCwds.keys()].map((demandCwd) =>
+          (yield* Effect.forEach(
+            [...demandCwds.keys()],
+            (demandCwd) =>
               backgroundPolicy.shouldRunScopeWork({
                 type: "vcs-status",
                 cwd: demandCwd,
               }),
-            ),
             { concurrency: "unbounded" },
           )).some(Boolean);
         if (!shouldRun) {

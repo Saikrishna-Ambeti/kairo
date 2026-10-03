@@ -292,7 +292,7 @@ export const make = Effect.gen(function* () {
       // already forgotten its baseline. Finished cards are visible, but idle.
       if (!displayedAggregate && !alert && !previousAggregate && job.state !== null) return;
       const data = {
-        t3_kind: "agent_activity",
+        kairo_kind: "agent_activity",
         device_id: job.deviceId,
         user_id: job.userId,
         updated_at: String(now.epochMilliseconds),

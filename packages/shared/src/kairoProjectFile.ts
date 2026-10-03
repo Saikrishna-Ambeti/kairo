@@ -30,7 +30,9 @@ export function parseKairoProjectFile(contents: string): KairoProjectFile | null
  * editors get LSP support via a `$schema` reference.
  */
 export function buildKairoProjectFileJsonSchema(): Record<string, unknown> {
-  const document = Schema.toJsonSchemaDocument(KairoProjectFile);
+  // Closed objects, as before effect rc.113 changed the generator default;
+  // editors then flag unknown keys in kairo.json.
+  const document = Schema.toJsonSchemaDocument(KairoProjectFile, { onExcessProperty: "error" });
   const jsonSchema: Record<string, unknown> = {
     $schema: "https://json-schema.org/draft/2020-12/schema",
     $id: KAIRO_PROJECT_FILE_SCHEMA_URL,

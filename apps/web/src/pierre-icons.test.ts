@@ -14,18 +14,21 @@ describe("Pierre file icons", () => {
     assert.equal(resolvePierreIconForEntry("vite.config.ts", "file")?.token, "vite");
   });
 
-  it("extends Pierre with Kairo-specific exact filename icons", () => {
-    assert.equal(
-      resolvePierreIconForEntry("package.json", "file")?.name,
-      "kairo-file-icon-package-json",
-    );
+  it("uses built-in Pierre icons where available", () => {
+    assert.equal(resolvePierreIconForEntry("package.json", "file")?.name, "file-tree-builtin-npm");
     assert.equal(
       resolvePierreIconForEntry("config/tsconfig.json", "file")?.name,
-      "kairo-file-icon-tsconfig",
+      "file-tree-builtin-typescript",
     );
+    assert.equal(resolvePierreIconForEntry("CLAUDE.md", "file")?.name, "file-tree-builtin-claude");
+    assert.equal(
+      resolvePierreIconForEntry("README.md", "file")?.name,
+      "file-tree-builtin-markdown",
+    );
+  });
+
+  it("extends Pierre with T3-specific exact filename icons", () => {
     assert.equal(resolvePierreIconForEntry("AGENTS.md", "file")?.name, "kairo-file-icon-agents");
-    assert.equal(resolvePierreIconForEntry("CLAUDE.md", "file")?.name, "kairo-file-icon-claude");
-    assert.equal(resolvePierreIconForEntry("README.md", "file")?.name, "kairo-file-icon-readme");
     assert.equal(resolvePierreIconForEntry("pnpm-lock.yaml", "file")?.name, "kairo-file-icon-pnpm");
     assert.equal(
       resolvePierreIconForEntry("pnpm-workspace.yaml", "file")?.name,
@@ -34,7 +37,9 @@ describe("Pierre file icons", () => {
   });
 
   it("ships every custom icon referenced by the extended resolver", () => {
-    const customIconNames = new Set(Object.values(KAIRO_PIERRE_ICONS.byFileName));
+    const customIconNames = new Set(
+      Object.values(KAIRO_PIERRE_ICONS.byFileName).filter((name) => name.startsWith("kairo-")),
+    );
     for (const iconName of customIconNames) {
       assert.include(KAIRO_PIERRE_ICONS.spriteSheet, `id="${iconName}"`);
     }

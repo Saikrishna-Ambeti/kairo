@@ -46,15 +46,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { ScrollArea } from "../ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import {
-  Sheet,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetPanel,
-  SheetPopup,
-  SheetTitle,
-} from "../ui/sheet";
+import { Sheet, SheetDescription, SheetHeader, SheetPopup, SheetTitle } from "../ui/sheet";
 import { SidebarInset } from "../ui/sidebar";
 import { Textarea } from "../ui/textarea";
 import { WorkspaceBreadcrumb, WorkspaceBreadcrumbItem } from "../WorkspaceBreadcrumb";
@@ -406,7 +398,7 @@ export function ScheduledTasksPage() {
     );
 
   return (
-    <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground isolate">
+    <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none  isolate">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <WorkspacePageHeader electron={isElectron} className="border-b border-border/60">
           <div className="flex w-full items-center gap-3">
@@ -428,10 +420,10 @@ export function ScheduledTasksPage() {
           <WorkspacePageContainer width="wide" className="gap-8 py-8">
             <section className="grid gap-5 border-b border-border/60 pb-7 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
               <div className="max-w-2xl">
-                <div className="mb-4 flex size-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-700 dark:text-blue-300">
+                <div className="mb-4 flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
                   <GraduationCapIcon className="size-5" aria-hidden />
                 </div>
-                <h2 className="text-balance text-3xl font-semibold tracking-[-0.03em] sm:text-4xl">
+                <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
                   Schoolwork that starts on time.
                 </h2>
                 <p className="mt-3 max-w-[68ch] text-sm leading-6 text-muted-foreground sm:text-base">
@@ -600,11 +592,11 @@ export function ScheduledTasksPage() {
                       className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm"
                     >
                       {run.status === "succeeded" ? (
-                        <CheckCircle2Icon className="size-4 text-emerald-600" />
+                        <CheckCircle2Icon className="size-4 text-success" />
                       ) : run.status === "failed" || run.status === "skipped" ? (
-                        <CircleAlertIcon className="size-4 text-amber-600" />
+                        <CircleAlertIcon className="size-4 text-warning" />
                       ) : (
-                        <Clock3Icon className="size-4 text-blue-600" />
+                        <Clock3Icon className="size-4 text-primary" />
                       )}
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-medium">{run.taskTitle}</p>
@@ -756,18 +748,17 @@ function RoutineForm({
     });
   };
 
-  const settingTriggerClassName =
-    "w-auto min-w-0 max-w-[68%] justify-end px-2 text-right shadow-none sm:min-h-8";
+  const settingTriggerClassName = "w-auto min-w-0 max-w-[68%] justify-end text-right sm:min-h-8";
 
   return (
     <SheetPopup className="max-w-[min(48rem,calc(100vw-3rem))] max-sm:w-full max-sm:max-w-none">
-      <SheetHeader className="border-b border-border/70 px-6 py-5 sm:px-7">
+      <SheetHeader>
         <SheetTitle>{editing ? "Edit routine" : "New routine"}</SheetTitle>
         <SheetDescription>
           Runs open a normal Kairo chat with selected project and agent settings.
         </SheetDescription>
       </SheetHeader>
-      <SheetPanel className="grid gap-6 px-6 py-6 sm:px-7">
+      <div data-slot="sheet-panel" className="grid gap-6 px-6 py-6 sm:px-7">
         <label className="grid gap-1.5 text-sm font-medium">
           Name
           <Input
@@ -913,7 +904,7 @@ function RoutineForm({
                 type="time"
                 value={draft.time}
                 onChange={(event) => change("time", event.target.value)}
-                className="w-36 shadow-none"
+                className="w-36"
               />
             </RoutineSettingsRow>
           ) : null}
@@ -923,7 +914,7 @@ function RoutineForm({
                 type="datetime-local"
                 value={draft.oneTimeAt}
                 onChange={(event) => change("oneTimeAt", event.target.value)}
-                className="w-52 shadow-none"
+                className="w-52"
               />
             </RoutineSettingsRow>
           ) : null}
@@ -933,7 +924,7 @@ function RoutineForm({
                 value={draft.cron}
                 onChange={(event) => change("cron", event.target.value)}
                 placeholder="0 19 * * 1-5"
-                className="w-52 shadow-none"
+                className="w-52"
               />
             </RoutineSettingsRow>
           ) : null}
@@ -953,7 +944,7 @@ function RoutineForm({
                 value={draft.externalFilter}
                 onChange={(event) => change("externalFilter", event.target.value)}
                 placeholder={draft.triggerKind === "github" ? "owner/repository" : undefined}
-                className="w-64 shadow-none"
+                className="w-64"
               />
             </RoutineSettingsRow>
           ) : null}
@@ -961,7 +952,7 @@ function RoutineForm({
             <Input
               value={draft.timezone}
               onChange={(event) => change("timezone", event.target.value)}
-              className="w-52 shadow-none"
+              className="w-52"
             />
           </RoutineSettingsRow>
         </RoutineSettingsGroup>
@@ -1005,8 +996,8 @@ function RoutineForm({
             </Select>
           </RoutineSettingsRow>
         </RoutineSettingsGroup>
-      </SheetPanel>
-      <SheetFooter className="px-6 sm:px-7">
+      </div>
+      <div className="px-6 sm:px-7">
         <Button variant="outline" onClick={onCancel}>
           Cancel
         </Button>
@@ -1022,7 +1013,7 @@ function RoutineForm({
         >
           {saving ? "Saving..." : editing ? "Save changes" : "Schedule routine"}
         </Button>
-      </SheetFooter>
+      </div>
     </SheetPopup>
   );
 }
@@ -1070,7 +1061,7 @@ function RoutineRow({
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-sm font-medium">{task.title}</h3>
             <span
-              className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${task.enabled ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "bg-muted text-muted-foreground"}`}
+              className={`rounded-full px-2 py-0.5 text-2xs font-medium ${task.enabled ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}
             >
               {task.enabled ? "Active" : "Paused"}
             </span>

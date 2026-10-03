@@ -8,7 +8,7 @@ This document preserves Kairo changes made on top of upstream Kairo before repla
 
 These corrections were made after initial capture. They are maintenance fixes, not new product features, and must remain when replaying the patch set.
 
-- Restore `T3 Tools Inc.` copyright beside `Kairo Tools Inc.` in `LICENSE`. Add `ATTRIBUTION.md` and README attribution identifying Kairo as the MIT-licensed upstream foundation. Confirm external hackathon eligibility separately; source code cannot establish it.
+- Restore `Kairo Tools Inc.` copyright beside `Kairo Tools Inc.` in `LICENSE`. Add `ATTRIBUTION.md` and README attribution identifying Kairo as the MIT-licensed upstream foundation. Confirm external hackathon eligibility separately; source code cannot establish it.
 - Replace incorrect `pingdotgg/kairo` release, package, and marketing links with `Saikrishna-Ambeti/kairo`. Do not change `pingdotgg/kairo` attribution link or test fixtures that model arbitrary repository URLs.
 - Make public setup documentation use the project-supported Vite+ commands: `vp install`, `vp run <script>`, and `vp test`. Remove stale Bun/Turbo claims.
 - Keep release stage labels unchanged: `Beta` is development build identity and `Alpha` is packaged stable-channel identity. This is intentional current channel behavior, not a branding replacement.
@@ -56,7 +56,7 @@ Apply mapping throughout application code, tests, docs, `.env.example`, shell sc
 
 - Rename root workspace to `@kairo/monorepo`, server CLI package to `kairo`, and all internal workspace dependencies/imports to `@kairo/*`.
 - Rename `oxlint-plugin-kairo` directory/package/rules namespace to `oxlint-plugin-kairo` and use `kairo/no-inline-schema-compile` plus `kairo/no-manual-effect-runtime-in-tests` in root `vite.config.ts`.
-- Rename web Clerk components from `KairoConnect...` / `useT3Connect...` to Kairo Connect equivalents.
+- Rename web Clerk components from `KairoConnect...` / `useKairoConnect...` to Kairo Connect equivalents.
 - Rename mobile native modules and their registration names:
   - `kairo-review-diff` to `kairo-review-diff`, including podspec, Expo module config, Swift module/view names, and Android package/module names.
   - `kairo-terminal` to `kairo-terminal`, with matching iOS and Android native symbols and Expo configuration.

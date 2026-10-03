@@ -74,7 +74,8 @@ describe("ConnectionDriver memory provisioning", () => {
 
       yield* Effect.forEach(
         targets,
-        (target) => driver.connect({ target, profile: Option.none() }, () => Effect.void),
+        (target) =>
+          driver.connect({ target, profile: Option.none(), enabled: true }, () => Effect.void),
         { discard: true },
       );
 
