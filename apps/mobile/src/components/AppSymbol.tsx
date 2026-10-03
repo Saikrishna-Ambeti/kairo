@@ -256,7 +256,6 @@ const ANDROID_ICON_BY_MATERIAL_NAME = {
   public: IconWorld,
   remove: IconMinus,
   smartphone: IconDeviceMobile,
-  tablecells: IconTable,
   terminal: IconTerminal2,
   visibility: IconEye,
 } satisfies Partial<Record<AndroidSymbol, Icon>>;
