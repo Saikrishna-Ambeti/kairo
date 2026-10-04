@@ -34,6 +34,7 @@ import { ConnectOnboardingRouteScreen } from "./features/cloud/ConnectOnboarding
 import { useConnectOnboardingNavigation } from "./features/cloud/connectOnboardingNavigation";
 import { AttachmentFileScreen } from "./features/files/AttachmentFileScreen";
 import { ThreadFilesTreeScreen, ThreadFileScreen } from "./features/files/ThreadFilesRouteScreen";
+import { ArtifactLibraryScreen } from "./features/files/ArtifactLibraryScreen";
 import { AdaptiveWorkspaceLayout } from "./features/layout/AdaptiveWorkspaceLayout";
 import {
   HardwareKeyboardCommandOverlay,
@@ -621,6 +622,10 @@ const RootStackConfig = createNativeStackNavigator({
         headerBackVisible: false,
         ...getCompactBrandHeaderOptions(),
       },
+    }),
+    ArtifactLibrary: createNativeStackScreen({
+      screen: ArtifactLibraryScreen,
+      options: { ...GLASS_HEADER_OPTIONS, title: "Library" },
     }),
     Thread: createNativeStackScreen({
       screen: ThreadRouteScreen,

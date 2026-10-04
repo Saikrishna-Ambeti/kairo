@@ -4,6 +4,10 @@ import type { ComposerTextPaste } from "../../native/KairoComposerEditor.types";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { useAtomValue } from "@effect/atom-react";
 import { resolveVisibleInteractionModes } from "@kairo/client-runtime/interactionModes";
+import {
+  prependArtifactCreationPrompt,
+  type ArtifactCreationKind,
+} from "@kairo/client-runtime/artifact-creation";
 import { clampFileAttachmentUploadBytes } from "@kairo/client-runtime/state/attachments";
 import { pastedTextDisposition, replaceTextSelection } from "@kairo/client-runtime/text-paste";
 import {
@@ -386,6 +390,13 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     }
     return report !== null;
   }, [currentModelSelection.instanceId, onShowUsageLimits, props.serverConfig]);
+  const handleCreateFile = useCallback(
+    (kind: ArtifactCreationKind) => {
+      props.onUpdateInteractionMode("default");
+      props.onChangeDraftMessage(prependArtifactCreationPrompt(kind, props.draftMessage));
+    },
+    [props.draftMessage, props.onChangeDraftMessage, props.onUpdateInteractionMode],
+  );
 
   const composerMenu = useComposerCommandMenu({
     draftMessage: props.draftMessage,
@@ -732,6 +743,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
                 )}
                 onPickMedia={props.onPickDraftMedia}
                 onPickFiles={props.onPickDraftFiles}
+                onCreateFile={handleCreateFile}
               />
             ) : null}
             {isExpanded && stripAttachments.length > 0 ? (
@@ -1000,6 +1012,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
                       )}
                       onPickMedia={props.onPickDraftMedia}
                       onPickFiles={props.onPickDraftFiles}
+                      onCreateFile={handleCreateFile}
                     />
                     <View className="min-w-0 shrink">
                       <ComposerInlineControl

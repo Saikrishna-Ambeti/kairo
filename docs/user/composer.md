@@ -143,6 +143,12 @@ awake; it can sleep normally once recording stops.
 Transcription runs on your device. Kairo deletes the temporary audio after
 transcription or cancellation; only the message text is sent when you submit.
 
+## Create files
+
+Use the composer's file menu or `/document`, `/presentation`, `/spreadsheet`,
+`/csv`, or `/pdf` to start a file request. See [file artifacts](file-artifacts.md)
+for previewing, revising, and downloading the result.
+
 ## Commands and skills
 
 Type `/` for commands or `$` to add a skill from the selected environment and

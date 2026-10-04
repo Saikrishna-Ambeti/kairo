@@ -117,13 +117,29 @@ export function HomeRouteScreen() {
         {Platform.OS === "ios" ? (
           <NativeHeaderToolbar placement="left">
             <NativeHeaderToolbar.Button
+              accessibilityLabel="Open library"
+              icon="books.vertical"
+              onPress={() => navigation.navigate("ArtifactLibrary", {})}
+            />
+            <NativeHeaderToolbar.Button
               accessibilityLabel="New task"
               icon="square.and.pencil"
               onPress={() => navigation.navigate("NewTaskSheet", { screen: "NewTask" })}
             />
           </NativeHeaderToolbar>
         ) : null}
-        {Platform.OS === "android" ? <AndroidScreenHeader title="Threads" /> : null}
+        {Platform.OS === "android" ? (
+          <AndroidScreenHeader
+            title="Threads"
+            actions={[
+              {
+                accessibilityLabel: "Open library",
+                icon: "books.vertical",
+                onPress: () => navigation.navigate("ArtifactLibrary", {}),
+              },
+            ]}
+          />
+        ) : null}
         <WorkspaceEmptyDetail
           onAddConnection={
             Platform.OS === "android" && !catalogState.hasConnections
@@ -184,6 +200,13 @@ export function HomeRouteScreen() {
             navigation.navigate("SettingsSheet", {
               screen: "SettingsContent",
               params: { screen: "Settings" },
+            })
+          }
+          onOpenLibrary={() =>
+            navigation.navigate("ArtifactLibrary", {
+              ...(selectedEnvironmentId === null
+                ? {}
+                : { environmentId: String(selectedEnvironmentId) }),
             })
           }
           onSearchQueryChange={setSearchQuery}

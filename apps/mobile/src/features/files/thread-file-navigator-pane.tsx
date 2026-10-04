@@ -1,4 +1,4 @@
-import type { EnvironmentId } from "@kairo/contracts";
+import type { EnvironmentId, ThreadId } from "@kairo/contracts";
 import { SymbolView } from "../../components/AppSymbol";
 import { MaterialScreenContent } from "../../components/MaterialScreenContent";
 import { useCallback, useMemo, useState, type ComponentProps } from "react";
@@ -17,6 +17,7 @@ import { nativeHeaderScrollEdgeEffects } from "../../native/StackHeader";
 import { useUniwindTheme } from "../../lib/useUniwindTheme";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { FileTreeBrowser } from "./FileTreeBrowser";
+import { ThreadArtifactsList } from "./ThreadArtifactsList";
 import { useFileTreeEntries } from "./useFileTreeEntries";
 import { preloadWorkspaceFileContents } from "./preload-workspace-file";
 import { useAdaptiveWorkspaceLayout } from "../layout/AdaptiveWorkspaceLayout";
@@ -26,10 +27,12 @@ export function ThreadFileNavigatorPane(props: {
   readonly environmentId: EnvironmentId;
   readonly headerInset: number;
   readonly projectName: string;
+  readonly threadId: ThreadId;
   readonly selectedPath: string | null;
   readonly onSelectFile: (path: string) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [artifactRefreshToken, setArtifactRefreshToken] = useState(0);
   const { toggleAuxiliaryPane } = useAdaptiveWorkspaceLayout();
   const { themeAppearance: highlightTheme } = useAppearancePreferences();
   const theme = useUniwindTheme();
@@ -41,6 +44,10 @@ export function ThreadFileNavigatorPane(props: {
     cwd: props.cwd,
     searchQuery,
   });
+  const refreshFiles = useCallback(() => {
+    entriesQuery.refresh();
+    setArtifactRefreshToken((value) => value + 1);
+  }, [entriesQuery.refresh]);
   const handlePreviewFile = useCallback(
     (relativePath: string) => {
       preloadWorkspaceFileContents({
@@ -80,8 +87,16 @@ export function ThreadFileNavigatorPane(props: {
       searchQuery={searchQuery}
       searchTruncated={entriesQuery.searchTruncated}
       selectedPath={props.selectedPath}
+      listHeader={
+        <ThreadArtifactsList
+          environmentId={props.environmentId}
+          threadId={props.threadId}
+          searchQuery={searchQuery}
+          refreshToken={artifactRefreshToken}
+        />
+      }
       onPreviewFile={handlePreviewFile}
-      onRefresh={entriesQuery.refresh}
+      onRefresh={refreshFiles}
       onSelectFile={props.onSelectFile}
     />
   );
@@ -155,7 +170,7 @@ export function ThreadFileNavigatorPane(props: {
             projectName={props.projectName}
             searchQuery={searchQuery}
             onSearchQueryChange={setSearchQuery}
-            onRefresh={entriesQuery.refresh}
+            onRefresh={refreshFiles}
           />
         ) : (
           <View className="h-12 flex-row items-center gap-2 px-3">
@@ -170,7 +185,7 @@ export function ThreadFileNavigatorPane(props: {
               accessibilityLabel="Refresh files"
               hitSlop={8}
               className="h-8 w-8 items-center justify-center rounded-full active:bg-subtle"
-              onPress={entriesQuery.refresh}
+              onPress={refreshFiles}
             >
               <SymbolView
                 name="arrow.clockwise"

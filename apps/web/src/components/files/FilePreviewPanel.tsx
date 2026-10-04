@@ -33,7 +33,7 @@ import { MediaActions, type MediaActionSource } from "~/components/media/MediaAc
 import { useRemoteOpenState } from "~/remoteOpen";
 import { useClientSettings, useUpdateClientSettings } from "~/hooks/useSettings";
 import { useTheme } from "~/hooks/useTheme";
-import { getLocalStorageItem, setLocalStorageItem, useLocalStorage } from "~/hooks/useLocalStorage";
+import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { useWorkspaceMutationRefresh } from "~/hooks/useWorkspaceMutationRefresh";
 import { resolveDiffThemeName } from "~/lib/diffRendering";
 import { PREFERRED_HIGHLIGHTER } from "~/lib/syntaxHighlighting";
@@ -57,6 +57,7 @@ import { DelimitedTablePreview } from "./DelimitedTablePreview";
 import FileBrowserPanel from "./FileBrowserPanel";
 import { FileBreadcrumbs } from "./FileBreadcrumbs";
 import { FileMarkdownPreview } from "./FileMarkdownPreview";
+import { WorkspaceDocumentPreview } from "./WorkspaceDocumentPreview";
 import {
   type FileCommentAnnotationEntry,
   type FileCommentAnnotationGroup,
@@ -110,7 +111,6 @@ interface FilePreviewPanelProps {
   workspaceMutationId: string | null;
 }
 
-const FILE_EXPLORER_STORAGE_KEY = "kairo.fileExplorerOpen";
 const RENDER_MARKDOWN_STORAGE_KEY = "kairo.renderMarkdown";
 const RENDER_BROWSER_FILE_STORAGE_KEY = "kairo.renderBrowserFile";
 const RENDER_TABLE_STORAGE_KEY = "kairo.renderTable";
@@ -895,15 +895,6 @@ function renderedToggleLabel(mode: "markdown" | "html" | "table", rendered: bool
   return rendered ? "Show HTML source" : "Show rendered page";
 }
 
-function initialExplorerOpen(): boolean {
-  try {
-    return getLocalStorageItem(FILE_EXPLORER_STORAGE_KEY, Schema.Boolean) ?? true;
-  } catch (error) {
-    console.error(error);
-    return true;
-  }
-}
-
 export default function FilePreviewPanel({
   environmentId,
   cwd,
@@ -941,6 +932,9 @@ export default function FilePreviewPanel({
   // PDFs have no text to show; HTML has, and can toggle between page and source.
   const isPdf = relativePath !== null && isPdfPreviewFile(relativePath);
   const isHtml = relativePath !== null && !isPdf && isBrowserPreviewFile(relativePath);
+  const isOfficeFile = relativePath !== null && /\.(?:docx|pptx|xlsx)$/i.test(relativePath);
+  const isWorkspaceOfficeFile =
+    isOfficeFile && relativePath !== null && !isAbsolutePath(relativePath);
   // A file outside the workspace (an absolute path) is shown, never edited.
   const isHostFile =
     attachment !== undefined || (relativePath !== null && isAbsolutePath(relativePath));
@@ -962,7 +956,7 @@ export default function FilePreviewPanel({
   const isDirectory = file.isNotFile && !isHostFile;
   // Everything preview-related keys off previewPath; a folder has no preview.
   const previewPath = isDirectory ? null : relativePath;
-  const [explorerOpen, setExplorerOpen] = useState(initialExplorerOpen);
+  const [explorerOpen, setExplorerOpen] = useState(false);
   const showExplorer = shouldShowFileExplorer({
     relativePath: previewPath,
     explorerOpen,
@@ -1042,7 +1036,7 @@ export default function FilePreviewPanel({
       // Media and PDFs never show their contents, so re-reading them on every
       // workspace mutation is waste. A folder named like one still re-reads, so
       // it notices when the path becomes a file.
-      (isDirectory || (!isMedia && !isPdf)) &&
+      (isDirectory || (!isMedia && !isPdf && !isWorkspaceOfficeFile)) &&
       !selectedFilePending,
     mutationId: workspaceMutationId,
     refresh: file.refresh,
@@ -1057,15 +1051,7 @@ export default function FilePreviewPanel({
   }, [relativePath]);
 
   const toggleExplorer = () => {
-    setExplorerOpen((current) => {
-      const next = !current;
-      try {
-        setLocalStorageItem(FILE_EXPLORER_STORAGE_KEY, next, Schema.Boolean);
-      } catch (error) {
-        console.error(error);
-      }
-      return next;
-    });
+    setExplorerOpen((current) => !current);
   };
 
   const handleOpenInBrowser = useCallback(() => {
@@ -1224,6 +1210,21 @@ export default function FilePreviewPanel({
               workspaceRoot={cwd}
               alt={relativePath}
               workspaceMutationId={workspaceMutationId}
+            />
+          ) : relativePath && isWorkspaceOfficeFile ? (
+            <WorkspaceDocumentPreview
+              key={`${environmentId}:${threadRef.threadId}:${relativePath}`}
+              environmentId={environmentId}
+              threadRef={threadRef}
+              relativePath={relativePath}
+              workspaceMutationId={workspaceMutationId}
+              kind={
+                /\.docx$/i.test(relativePath)
+                  ? "docx"
+                  : /\.pptx$/i.test(relativePath)
+                    ? "pptx"
+                    : "xlsx"
+              }
             />
           ) : relativePath && renderBrowserFile && absolutePath ? (
             <WorkspaceBrowserPreview

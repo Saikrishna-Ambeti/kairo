@@ -8,6 +8,7 @@ import {
 } from "@react-navigation/native";
 import { SymbolView } from "../../components/AppSymbol";
 import type { EnvironmentProject } from "@kairo/client-runtime/state/shell";
+import type { ArtifactCreationKind } from "@kairo/client-runtime/artifact-creation";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -27,6 +28,8 @@ import { filterProjectScopes, getProjectScopeSelectionTarget } from "./new-task-
 
 type NewTaskRouteParams = {
   readonly incomingShareId?: string | string[];
+  readonly artifactKind?: ArtifactCreationKind;
+  readonly environmentId?: string | string[];
 };
 
 function deriveProjectEmptyState(catalogState: WorkspaceState): {
@@ -137,6 +140,14 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
   const routeShareId = Array.isArray(route.params?.incomingShareId)
     ? route.params.incomingShareId[0]
     : route.params?.incomingShareId;
+  const requestedEnvironmentId = Array.isArray(route.params?.environmentId)
+    ? route.params.environmentId[0]
+    : route.params?.environmentId;
+  const visibleProjectScopes = requestedEnvironmentId
+    ? projectScopes.filter((scope) =>
+        scope.projects.some((project) => project.environmentId === requestedEnvironmentId),
+      )
+    : projectScopes;
   const incomingShare = routeShareId ? getShare(routeShareId) : null;
   const incomingShareSubtitle = incomingShare
     ? incomingShare.attachments.length === 0
@@ -147,7 +158,15 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
     : null;
   const screenTitle = incomingShare ? "Start a task" : "Choose project";
   const projectEmptyState = deriveProjectEmptyState(catalogState);
-  const visibleScopes = filterProjectScopes(projectScopes, searchText);
+  const scopedProjectEmptyState =
+    requestedEnvironmentId && projectScopes.length > 0 && visibleProjectScopes.length === 0
+      ? {
+          title: "No projects in this environment",
+          detail: "Add a project here or choose another environment in Library.",
+          loading: false,
+        }
+      : projectEmptyState;
+  const visibleScopes = filterProjectScopes(visibleProjectScopes, searchText);
   const resumedDestinationKeyRef = useRef<string | null>(null);
   const reservedDestinationProject = incomingShare?.destination
     ? (projects.find(
@@ -185,6 +204,7 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
         projectId: project.id,
         title: project.title,
         incomingShareId: incomingShare?.id,
+        artifactKind: route.params?.artifactKind,
       }),
     );
   }
@@ -246,7 +266,7 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
               : {}),
           }}
         >
-          {projectScopes.length === 0 ? (
+          {visibleProjectScopes.length === 0 ? (
             <View
               collapsable={false}
               className={cn(
@@ -254,14 +274,14 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
                 Platform.OS !== "android" && "rounded-[24px] bg-card",
               )}
             >
-              {projectEmptyState.loading ? (
+              {scopedProjectEmptyState.loading ? (
                 <ActivityIndicator colorClassName="accent-icon-muted" />
               ) : null}
               <Text className="text-center text-lg font-kairo-bold text-foreground">
-                {projectEmptyState.title}
+                {scopedProjectEmptyState.title}
               </Text>
               <Text className="text-center text-sm leading-normal text-foreground-muted">
-                {projectEmptyState.detail}
+                {scopedProjectEmptyState.detail}
               </Text>
               {Platform.OS === "android" ? (
                 <MaterialButton
@@ -312,11 +332,15 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
               }
             >
               {visibleScopes.map((scope, scopeIndex) => {
-                const hasMultipleProjects = scope.projects.length > 1;
-                const selectionTarget = getProjectScopeSelectionTarget(
-                  scope,
-                  selectedEnvironmentId,
-                );
+                const availableProjects = requestedEnvironmentId
+                  ? scope.projects.filter(
+                      (project) => project.environmentId === requestedEnvironmentId,
+                    )
+                  : scope.projects;
+                const hasMultipleProjects = availableProjects.length > 1;
+                const selectionTarget = requestedEnvironmentId
+                  ? (availableProjects[0] ?? scope.representative)
+                  : getProjectScopeSelectionTarget(scope, selectedEnvironmentId);
                 if (Platform.OS === "android") {
                   return (
                     <MaterialListRow
@@ -324,19 +348,19 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
                       title={scope.title}
                       subtitle={
                         hasMultipleProjects
-                          ? `${scope.projects.length} workspaces`
+                          ? `${availableProjects.length} workspaces`
                           : selectionTarget.workspaceRoot
                       }
                       disabled={reservedDestinationProject !== null}
                       onPress={() => void selectProject(selectionTarget)}
                       leading={
                         <ProjectFavicon
-                          environmentId={scope.representative.environmentId}
-                          faviconPath={scope.representative.faviconPath}
-                          projectIcon={scope.representative.projectIcon}
+                          environmentId={selectionTarget.environmentId}
+                          faviconPath={selectionTarget.faviconPath}
+                          projectIcon={selectionTarget.projectIcon}
                           size={24}
                           projectTitle={scope.title}
-                          workspaceRoot={scope.representative.workspaceRoot}
+                          workspaceRoot={selectionTarget.workspaceRoot}
                         />
                       }
                     />
@@ -356,12 +380,12 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
                     >
                       <View className="h-7 w-7 items-center justify-center">
                         <ProjectFavicon
-                          environmentId={scope.representative.environmentId}
-                          faviconPath={scope.representative.faviconPath}
-                          projectIcon={scope.representative.projectIcon}
+                          environmentId={selectionTarget.environmentId}
+                          faviconPath={selectionTarget.faviconPath}
+                          projectIcon={selectionTarget.projectIcon}
                           size={20}
                           projectTitle={scope.title}
-                          workspaceRoot={scope.representative.workspaceRoot}
+                          workspaceRoot={selectionTarget.workspaceRoot}
                         />
                       </View>
                       <View className="min-w-0 flex-1">
@@ -374,7 +398,7 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
                           numberOfLines={1}
                         >
                           {hasMultipleProjects
-                            ? `${scope.projects.length} workspaces`
+                            ? `${availableProjects.length} workspaces`
                             : selectionTarget.workspaceRoot}
                         </Text>
                       </View>

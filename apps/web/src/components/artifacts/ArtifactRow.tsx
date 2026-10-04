@@ -1,9 +1,30 @@
 import type { ArtifactMetadata, EnvironmentId } from "@kairo/contracts";
-import { DownloadIcon, ExternalLinkIcon, FileTextIcon } from "lucide-react";
+import { scopeThreadRef } from "@kairo/client-runtime/environment";
+import { prependArtifactRevisionPrompt } from "@kairo/client-runtime/artifact-creation";
+import { useNavigate } from "@tanstack/react-router";
+import {
+  DownloadIcon,
+  ExternalLinkIcon,
+  FileSpreadsheetIcon,
+  FileTextIcon,
+  PresentationIcon,
+  PencilIcon,
+} from "lucide-react";
 import { useState } from "react";
 
 import { useAssetUrlState } from "../../assets/assetUrls";
+import { useComposerDraftStore } from "../../composerDraftStore";
 import { cn } from "../../lib/utils";
+import { buildThreadRouteParams } from "../../threadRoutes";
+import { ARTIFACT_FORMAT_LABELS } from "./artifactDisplay";
+
+const ARTIFACT_ICONS = {
+  document: FileTextIcon,
+  presentation: PresentationIcon,
+  spreadsheet: FileSpreadsheetIcon,
+  csv: FileSpreadsheetIcon,
+  pdf: FileTextIcon,
+} as const;
 
 function formatFileSize(sizeBytes: number): string {
   if (sizeBytes < 1024) return `${sizeBytes} B`;
@@ -72,7 +93,9 @@ export function ArtifactRow({
   readonly showProvenance?: boolean;
 }) {
   const [accessRequested, setAccessRequested] = useState(false);
-  const formatLabel = artifact.kind === "pdf" ? "PDF" : "Word document";
+  const navigate = useNavigate();
+  const formatLabel = ARTIFACT_FORMAT_LABELS[artifact.kind];
+  const Icon = ARTIFACT_ICONS[artifact.kind];
 
   return (
     <div
@@ -84,10 +107,14 @@ export function ArtifactRow({
           "grid size-9 shrink-0 place-items-center rounded-lg",
           artifact.kind === "pdf"
             ? "bg-destructive/10 text-destructive"
-            : "bg-info/10 text-info-foreground",
+            : artifact.kind === "presentation"
+              ? "bg-warning/10 text-warning-foreground"
+              : artifact.kind === "spreadsheet" || artifact.kind === "csv"
+                ? "bg-success/10 text-success-foreground"
+                : "bg-info/10 text-info-foreground",
         )}
       >
-        <FileTextIcon className="size-4" aria-hidden />
+        <Icon className="size-4" aria-hidden />
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate font-medium text-sm text-foreground">{artifact.title}</span>
@@ -101,6 +128,29 @@ export function ArtifactRow({
           {formatArtifactTime(artifact.updatedAt)}
         </span>
       </span>
+      <button
+        type="button"
+        className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 font-medium text-primary text-xs hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={() => {
+          const threadRef = scopeThreadRef(environmentId, artifact.threadId);
+          const drafts = useComposerDraftStore.getState();
+          drafts.setPrompt(
+            threadRef,
+            prependArtifactRevisionPrompt(
+              artifact.relativePath,
+              drafts.getComposerDraft(threadRef)?.prompt ?? "",
+            ),
+          );
+          drafts.setInteractionMode(threadRef, "default");
+          void navigate({
+            to: "/$environmentId/$threadId",
+            params: buildThreadRouteParams(threadRef),
+          });
+        }}
+      >
+        <PencilIcon className="size-3.5" aria-hidden />
+        Revise
+      </button>
       {accessRequested ? (
         <ArtifactAccess artifact={artifact} environmentId={environmentId} />
       ) : (
