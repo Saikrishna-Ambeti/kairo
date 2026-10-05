@@ -71,6 +71,7 @@ import Migration0056 from "./Migrations/053_PullRequestFilesViewed.ts";
 import Migration0057 from "./Migrations/054_ProjectionThreadsAutoSettleDisabledAt.ts";
 import Migration0058 from "./Migrations/058_ArtifactFileKinds.ts";
 import Migration0059 from "./Migrations/059_BackfillArtifactFileKinds.ts";
+import Migration0060 from "./Migrations/060_KairoThreadSchemaReconciliation.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -142,6 +143,7 @@ const migrationEntries = [
   [57, "ProjectionThreadsAutoSettleDisabledAt", Migration0057],
   [58, "ArtifactFileKinds", Migration0058],
   [59, "BackfillArtifactFileKinds", Migration0059],
+  [60, "KairoThreadSchemaReconciliation", Migration0060],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);
