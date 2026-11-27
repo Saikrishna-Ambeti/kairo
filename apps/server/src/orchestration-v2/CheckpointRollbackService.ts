@@ -541,7 +541,7 @@ export const layer: Layer.Layer<
           if (restoreFiles && Option.isSome(artifacts)) {
             const repository = artifacts.value;
             yield* Effect.gen(function* () {
-              const history = yield* projections.getCheckpointContext(input.threadId);
+              const history = yield* projections.getThreadRecords(input.threadId, ["checkpoints"]);
               const retained = history.checkpoints
                 .filter(
                   (entry) =>

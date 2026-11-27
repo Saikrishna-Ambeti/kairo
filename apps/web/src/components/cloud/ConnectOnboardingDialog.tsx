@@ -37,7 +37,7 @@ import {
   useEnvironmentScope,
 } from "~/state/session";
 import {
-  type T3ConnectAccountPageUrl,
+  type KairoConnectAccountPageUrl,
   useKairoConnectAccountPage,
 } from "../clerk/KairoConnectAccountPages";
 import { CloudEnvironmentConnectRows } from "./CloudEnvironmentConnectList";
@@ -236,7 +236,7 @@ function ConfiguredConnectOnboardingDialog() {
   const openAccountPage = accountPage.open;
   // The account page is a Clerk modal, so close this dialog before it opens.
   const leaveForAccountPage = openAccountPage
-    ? (page: T3ConnectAccountPageUrl) => {
+    ? (page: KairoConnectAccountPageUrl) => {
         complete();
         openAccountPage(page);
       }
@@ -360,7 +360,7 @@ function PublishStep({
   readonly disabled: boolean;
   readonly operationError: string | null;
   readonly tunnelLimit: number | null;
-  readonly onOpenAccountPage: ((page: T3ConnectAccountPageUrl) => void) | null;
+  readonly onOpenAccountPage: ((page: KairoConnectAccountPageUrl) => void) | null;
   readonly onExposeEnvironmentChange: (enabled: boolean) => void;
   readonly onPublishAgentActivityChange: (enabled: boolean) => void;
 }) {
@@ -409,14 +409,14 @@ function PublishStep({
 function OnboardingTunnelLimitAlert({
   onOpenAccountPage,
 }: {
-  readonly onOpenAccountPage: ((page: T3ConnectAccountPageUrl) => void) | null;
+  readonly onOpenAccountPage: ((page: KairoConnectAccountPageUrl) => void) | null;
 }) {
   const { upgrade } = useManagedTunnelUsage();
   return (
     <TunnelLimitAlert
       upgrade={upgrade}
-      onLinkT3Chat={onOpenAccountPage ? () => onOpenAccountPage("t3-chat") : null}
-      onManageTunnels={onOpenAccountPage ? () => onOpenAccountPage("t3-connect") : null}
+      onLinkT3Chat={onOpenAccountPage ? () => onOpenAccountPage("kairo-chat") : null}
+      onManageTunnels={onOpenAccountPage ? () => onOpenAccountPage("kairo-connect") : null}
     />
   );
 }

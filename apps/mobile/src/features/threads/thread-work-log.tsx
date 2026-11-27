@@ -68,7 +68,7 @@ import {
 } from "@kairo/client-runtime/work-log/command-label";
 
 import { AppText as Text } from "../../components/ui/AppText";
-import { KairoWordmark } from "../../components/KairoWordmark";
+import { KairoMark } from "../../components/KairoMark";
 import { BrowserAppIcon } from "./BrowserAppIcon";
 import { useAppActive, useReduceMotionEnabled } from "../../lib/appState";
 import { cn } from "../../lib/cn";
@@ -137,7 +137,7 @@ function WorkLogIcon(props: {
   readonly highlighted?: boolean;
 }) {
   const colorClassName = props.highlighted ? "accent-foreground" : props.colorClassName;
-  if (props.icon === "kairo") {
+  if (props.icon === "kairo-code") {
     return <KairoMark size={14} />;
   }
   if (props.icon === "computer") {
@@ -1424,7 +1424,7 @@ export function ThreadWorkGroupToggle(props: {
   readonly iconSubtleColor: import("react-native").ColorValue;
   readonly summary: string;
   readonly summaryKind: ToolGroupSummaryKind;
-  readonly summaryToolIcon?: "browser" | "device" | "kairo" | "pull-request" | "brain";
+  readonly summaryToolIcon?: "browser" | "device" | "kairo-code" | "pull-request" | "brain";
   readonly themeAppearance: "light" | "dark";
   readonly toolSurface?: import("@kairo/contracts").ToolActivitySurface;
   readonly toolIcon?: ToolActivityIcon;

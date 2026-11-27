@@ -74,9 +74,6 @@ function lifecycleFor(provider: ProviderDriverKind): ProviderMaintenanceCapabili
         ? ["install", "-g", "opencode-ai@latest"]
         : ["install", "-g", "@openai/codex@latest"],
     updateLockKey: "npm-global",
-    loginExecutable: provider === OPENCODE_DRIVER ? "opencode" : "codex",
-    loginArgs: provider === OPENCODE_DRIVER ? ["auth", "login"] : ["login"],
-    loginLockKey: provider === OPENCODE_DRIVER ? "opencode-auth" : "codex-auth",
   });
 }
 
@@ -167,17 +164,6 @@ function layerMockSpawner(
   );
 }
 
-function mockExternalLauncherLayer(
-  launchBrowser: (target: string) => Effect.Effect<void> = () => Effect.void,
-) {
-  return Layer.succeed(ExternalLauncher.ExternalLauncher, {
-    resolveAvailableEditors: () => Effect.succeed([]),
-    resolveFileManagerRevealKind: () => Effect.succeed(undefined),
-    launchBrowser,
-    launchEditor: () => Effect.void,
-  });
-}
-
 function makeRegistry(
   initialProviders: ServerProvider | ReadonlyArray<ServerProvider> = baseProvider,
   options?: {
@@ -194,7 +180,7 @@ function makeRegistry(
       "providerMaintenanceRunner.test.setProviderMaintenanceActionState",
     )(function* (input: {
       readonly instanceId: ProviderInstanceId;
-      readonly action: ProviderMaintenanceActionKind;
+      readonly action: "update";
       readonly state: ServerProviderUpdateState | null;
     }) {
       const updateState = input.state;
@@ -262,7 +248,7 @@ const makeTestRunner = (
     currentModels: {},
     compatibility: [CODEX_DRIVER, OPENCODE_DRIVER].map((driver) => ({
       driver,
-      kairoRange: ">=0.0.42",
+      kairoCodeRange: ">=0.0.42",
       ranges: [],
     })),
   },
@@ -305,47 +291,6 @@ function layerFailingLatestLookupAfterFirst() {
 }
 
 describe("providerMaintenanceRunner", () => {
-  it.effect("opens the provider login URL from command output in the browser", () => {
-    const commandCalls: Array<{ command: string; args: ReadonlyArray<string> }> = [];
-    const browserTargets: string[] = [];
-    return Effect.gen(function* () {
-      const { registry } = yield* makeRegistry(baseProvider);
-      const updater = yield* makeTestRunner(
-        registry,
-        mockExternalLauncherLayer((target) =>
-          Effect.sync(() => {
-            browserTargets.push(target);
-          }),
-        ),
-      );
-
-      const result = yield* updater.loginProvider(CODEX_DRIVER);
-      assert.deepStrictEqual(commandCalls, [
-        {
-          command: "codex",
-          args: ["login"],
-        },
-      ]);
-      assert.deepStrictEqual(browserTargets, [
-        "https://auth.openai.com/oauth/authorize?device=abc",
-      ]);
-      assert.deepStrictEqual(result.providers, [baseProvider]);
-    }).pipe(
-      Effect.provide(
-        Layer.mergeAll(
-          latestVersionHttpClient("1.2.3"),
-          mockSpawnerLayer((command, args) => {
-            commandCalls.push({ command, args });
-            return {
-              stdout:
-                "Open this URL to authenticate: https://auth.openai.com/oauth/authorize?device=abc\n",
-            };
-          }),
-        ),
-      ),
-    );
-  });
-
   it.effect("runs the allowlisted provider update command and records success", () => {
     const calls: Array<{ command: string; args: ReadonlyArray<string> }> = [];
     return Effect.gen(function* () {
@@ -1684,7 +1629,7 @@ it.effect("refuses incompatible latest versions and unapproved or unpinnable tar
     compatibility: [
       {
         driver: "codex",
-        kairoRange: ">=0.0.42",
+        kairoCodeRange: ">=0.0.42",
         recommendedVersion: "2.0.0",
         ranges: [
           { range: "=2.0.0", status: "supported" },
@@ -1707,7 +1652,6 @@ it.effect("refuses incompatible latest versions and unapproved or unpinnable tar
         ...registry,
         getProviderMaintenanceCapabilitiesForInstance: () => Effect.succeed(pinnedCapabilities),
       },
-      undefined,
       manifest,
     );
     for (const targetVersion of [undefined, "", "1.0.0", "2.0.0; echo unsafe"]) {
@@ -1744,7 +1688,6 @@ it.effect("refuses incompatible latest versions and unapproved or unpinnable tar
             update: { ...pinnedCapabilities.update!, lockKey: "codex-native" },
           }),
       },
-      undefined,
       manifest,
     );
     const refused = yield* nativeUpdater.updateProvider({

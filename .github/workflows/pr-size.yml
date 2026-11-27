@@ -237,12 +237,12 @@ jobs:
               execFileSync(
                 "git",
                 diffArgs,
-                { encoding: "utf8" },
+                { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
               ),
             );
             const nonTestChangedLines = sumNumstat(
               execFileSync("git", [...diffArgs, "--", ".", ...testExcludePathspecs], {
-                encoding: "utf8",
+                encoding: "utf8", maxBuffer: 32 * 1024 * 1024,
               }),
             );
             const testChangedLines = Math.max(0, totalChangedLines - nonTestChangedLines);

@@ -27,6 +27,13 @@ import {
   serializeThemeFile,
   KAIRO_CHAT_THEME,
   GROVE_THEME,
+  EMBER_THEME,
+  IRIS_THEME,
+  OCEAN_THEME,
+  getThemePreferenceMode,
+  isKnownThemePreference,
+  subscribeToCustomThemes,
+  themeAllowsSidebarArtwork,
   updateCustomTheme,
   updateThemeColorFamily,
   CUSTOM_THEMES_STORAGE_KEY,
@@ -47,6 +54,15 @@ function canonical(value: string): string {
   const color = toCanonicalThemeColor(value);
   if (!color) throw new Error(`Expected a theme color, received ${value}`);
   return color;
+}
+
+function expectThemeColors(
+  colors: Readonly<Record<string, string>>,
+  expected: Readonly<Record<string, string>>,
+): void {
+  for (const [role, value] of Object.entries(expected)) {
+    expect(asHex(colors[role]!)).toBe(value);
+  }
 }
 
 function contrastRatio(first: string, second: string): number {

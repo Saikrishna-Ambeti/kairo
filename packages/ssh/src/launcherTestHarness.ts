@@ -11,11 +11,11 @@ import * as Layer from "effect/Layer";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import { ChildProcessSpawner } from "effect/process";
-import { launchOrReuseRemoteServer, type RemoteT3RunnerOptions } from "./tunnel.ts";
+import { launchOrReuseRemoteServer, type RemoteKairoRunnerOptions } from "./tunnel.ts";
 
 // Capture exactly the script sent over SSH, then run it with fake remote commands.
 export const captureLauncherFor = Effect.fn("test.captureLauncher")(function* (
-  runner: RemoteT3RunnerOptions,
+  runner: RemoteKairoRunnerOptions,
 ) {
   let script = "";
   const spawner = ChildProcessSpawner.make((command) =>

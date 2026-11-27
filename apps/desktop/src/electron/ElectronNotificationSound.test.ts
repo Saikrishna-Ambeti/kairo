@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
 import type { DesktopNotificationSound } from "@kairo/contracts";
-import { HostProcessPlatform } from "@kairo/shared/HostProcess";
+import { Platform as HostProcessPlatform } from "@kairo/shared/HostProcess";
 import * as Effect from "effect/Effect";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { beforeEach, vi } from "vite-plus/test";
 
 const { beepMock } = vi.hoisted(() => ({ beepMock: vi.fn() }));

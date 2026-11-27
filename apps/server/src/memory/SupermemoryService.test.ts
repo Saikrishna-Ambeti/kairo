@@ -68,7 +68,7 @@ describe("SupermemoryService", () => {
     Effect.gen(function* () {
       const storedGrants = new Map<string, string>();
       const provisioningSecretStore = ServerSecretStore.ServerSecretStore.of({
-        get: () => Effect.succeed(Option.none()),
+        get: () => Effect.succeedNone,
         set: (name, value) =>
           Effect.sync(() => {
             storedGrants.set(name, new TextDecoder().decode(value));

@@ -24,8 +24,8 @@ export const KAIRO_CONNECT_ACCOUNT_PAGES = [
     content: <KairoConnectUserProfilePage />,
   },
   {
-    label: msg("T3 Chat"),
-    url: "t3-chat",
+    label: msg("Kairo Chat"),
+    url: "kairo-chat",
     icon: <MessageSquareIcon className="size-4" />,
     content: <T3ChatUserProfilePage />,
   },

@@ -75,6 +75,7 @@ it.effect("parks automatic pull until activation without delaying command readin
       Layer.Services<ReturnType<typeof ServerRuntimeStartup.layerWithOptions>>
     > = Layer.mergeAll(
       Layer.mock(ServerConfig.ServerConfig)({
+        surface: DEFAULT_PRODUCT_SURFACE_CONFIG,
         ...(yield* ServerConfig.deriveServerPaths(cwd, undefined).pipe(Effect.provide(Path.layer))),
         baseDir: cwd,
         logLevel: "Error",

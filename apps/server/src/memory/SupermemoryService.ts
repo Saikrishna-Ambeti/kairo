@@ -114,39 +114,38 @@ export const makeSupermemoryService = Effect.gen(function* () {
     );
   });
 
-  const request = <A>(input: {
+  const request = Effect.fn("request")(function* <A>(input: {
     readonly providerInstanceId: ProviderInstanceId;
     readonly execute: (
       accessToken: Redacted.Redacted<string>,
     ) => Effect.Effect<A, SupermemoryError>;
-  }) =>
-    Effect.gen(function* () {
-      const settings = yield* serverSettings.getSettings.pipe(
-        Effect.mapError(
-          (cause) =>
-            new SupermemoryError({
-              message: "Failed to read hosted Supermemory settings.",
-              cause,
-            }),
-        ),
-      );
-      const memorySettings = settings.memory.supermemory;
-      if (
-        !memorySettings.enabled ||
-        !memorySettings.providerInstanceIds.includes(input.providerInstanceId)
-      ) {
-        return yield* new SupermemoryError({
-          message: "Hosted memory is not enabled for this provider.",
-        });
-      }
-      const accessToken = yield* readAccessToken;
-      if (!accessToken) {
-        return yield* new SupermemoryError({
-          message: "Kairo Cloud memory is unavailable on this server.",
-        });
-      }
-      return yield* input.execute(accessToken);
-    });
+  }) {
+    const settings = yield* serverSettings.getSettings.pipe(
+      Effect.mapError(
+        (cause) =>
+          new SupermemoryError({
+            message: "Failed to read hosted Supermemory settings.",
+            cause,
+          }),
+      ),
+    );
+    const memorySettings = settings.memory.supermemory;
+    if (
+      !memorySettings.enabled ||
+      !memorySettings.providerInstanceIds.includes(input.providerInstanceId)
+    ) {
+      return yield* new SupermemoryError({
+        message: "Hosted memory is not enabled for this provider.",
+      });
+    }
+    const accessToken = yield* readAccessToken;
+    if (!accessToken) {
+      return yield* new SupermemoryError({
+        message: "Kairo Cloud memory is unavailable on this server.",
+      });
+    }
+    return yield* input.execute(accessToken);
+  });
 
   const save: SupermemoryServiceShape["save"] = (providerInstanceId, content) =>
     request({
@@ -204,27 +203,26 @@ export const makeSupermemoryService = Effect.gen(function* () {
     } satisfies SupermemoryStatus;
   });
 
-  const configure: SupermemoryServiceShape["configure"] = (input) =>
-    Effect.gen(function* () {
-      const accessToken = yield* readAccessToken;
-      if (!accessToken) {
-        return yield* new SupermemoryError({
-          message: "Kairo Cloud access is required before enabling hosted memory.",
-        });
-      }
-      yield* cloud.getCapabilities(accessToken);
-      yield* serverSettings.updateSettings({
-        memory: {
-          supermemory: {
-            enabled: true,
-            mode: "hosted",
-            scope: "user",
-            providerInstanceIds: input.providerInstanceIds,
-          },
-        },
+  const configure: SupermemoryServiceShape["configure"] = Effect.fn("configure")(function* (input) {
+    const accessToken = yield* readAccessToken;
+    if (!accessToken) {
+      return yield* new SupermemoryError({
+        message: "Kairo Cloud access is required before enabling hosted memory.",
       });
-      return yield* buildStatus;
+    }
+    yield* cloud.getCapabilities(accessToken);
+    yield* serverSettings.updateSettings({
+      memory: {
+        supermemory: {
+          enabled: true,
+          mode: "hosted",
+          scope: "user",
+          providerInstanceIds: input.providerInstanceIds,
+        },
+      },
     });
+    return yield* buildStatus;
+  });
 
   const disable = Effect.gen(function* () {
     yield* serverSettings.updateSettings({

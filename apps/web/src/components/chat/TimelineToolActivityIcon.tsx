@@ -3,7 +3,6 @@ import { type ToolActivityIcon } from "@kairo/contracts";
 import { toolActivityFaviconUrl } from "@kairo/shared/favicon";
 import { getProjectFaviconCacheKey } from "@kairo/shared/projectFavicon";
 import { use, useState } from "react";
-import { T3Wordmark } from "../T3Wordmark";
 import {
   BotIcon,
   BrainIcon,
@@ -245,7 +244,7 @@ function WorkEntryIcon({ name, className }: { name: WorkEntryIconName; className
     case "device":
       return <SmartphoneIcon className={className} aria-hidden />;
     case "kairo-code":
-      return <T3Wordmark className={className} aria-hidden />;
+      return <img src="/kairo.svg" alt="" className={className} aria-hidden />;
     case "check":
       return <CheckIcon className={className} aria-hidden />;
     case "list-todo":

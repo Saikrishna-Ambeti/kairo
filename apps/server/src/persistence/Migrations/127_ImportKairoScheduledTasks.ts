@@ -44,6 +44,8 @@ const LegacyTask = Schema.Struct({
 
 const decodeLegacyTask = Schema.decodeUnknownOption(Schema.fromJsonString(LegacyTask));
 const decodeSchedule = Schema.decodeUnknownOption(ScheduledTaskSchedule);
+const encodeSchedule = Schema.encodeEffect(Schema.fromJsonString(ScheduledTaskSchedule));
+const encodeModelSelection = Schema.encodeEffect(Schema.fromJsonString(ModelSelection));
 
 function convertSchedule(task: typeof LegacyTask.Type, serverTimeZone: string) {
   const trigger = task.trigger;
@@ -101,6 +103,8 @@ export default Effect.gen(function* () {
       continue;
     }
 
+    const scheduleJson = yield* encodeSchedule(schedule.value);
+    const modelSelectionJson = yield* encodeModelSelection(value.modelSelection);
     yield* sql`
       INSERT INTO scheduled_tasks (
         task_id, title, prompt, enabled, schedule_json, project_id, thread_mode,
@@ -109,8 +113,8 @@ export default Effect.gen(function* () {
         last_run_status, run_count
       ) VALUES (
         ${row.task_id}, ${value.title}, ${value.prompt}, ${value.enabled ? 1 : 0},
-        ${JSON.stringify(schedule.value)}, ${value.projectId}, 'new_thread', '{"type":"root"}',
-        ${JSON.stringify(value.modelSelection)}, ${value.runtimeMode}, ${value.interactionMode},
+        ${scheduleJson}, ${value.projectId}, 'new_thread', '{"type":"root"}',
+        ${modelSelectionJson}, ${value.runtimeMode}, ${value.interactionMode},
         'user', 'server', ${value.createdAt}, ${value.updatedAt},
         ${value.enabled ? value.nextRunAt : null}, ${value.lastRunAt},
         ${row.last_status ?? "never"}, ${row.run_count}

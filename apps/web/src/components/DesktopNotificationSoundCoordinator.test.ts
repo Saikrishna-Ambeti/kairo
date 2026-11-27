@@ -26,7 +26,7 @@ describe("session notification sounds", () => {
       sessionNotificationSounds(
         snapshot(running),
         snapshot({
-          sessionStatus: "ready",
+          sessionStatus: "idle",
           turnId: "turn-1",
           turnState: "completed",
           completedAt: "2026-08-22T08:00:00.000Z",
@@ -59,9 +59,9 @@ describe("session notification sounds", () => {
       sessionNotificationSounds(
         retrying,
         snapshot({
-          sessionStatus: "error",
+          sessionStatus: "failed",
           turnId: "turn-1",
-          turnState: "error",
+          turnState: "failed",
           completedAt: "2026-08-22T08:00:00.000Z",
         }),
       ),
@@ -84,7 +84,7 @@ describe("session notification sounds", () => {
 
   it("does not replay a terminal notification", () => {
     const completed = snapshot({
-      sessionStatus: "ready",
+      sessionStatus: "idle",
       turnId: "turn-1",
       turnState: "completed",
       completedAt: "2026-08-22T08:00:00.000Z",
@@ -94,7 +94,7 @@ describe("session notification sounds", () => {
 
   it("ignores terminal state loaded for a newly discovered thread", () => {
     const completed = snapshot({
-      sessionStatus: "ready",
+      sessionStatus: "idle",
       turnId: "turn-1",
       turnState: "completed",
       completedAt: "2026-08-22T08:00:00.000Z",
@@ -106,13 +106,13 @@ describe("session notification sounds", () => {
     expect(
       sessionNotificationSounds(
         snapshot({
-          sessionStatus: "ready",
+          sessionStatus: "idle",
           turnId: "turn-1",
           turnState: "completed",
           completedAt: "2026-08-22T08:00:00.000Z",
         }),
         snapshot({
-          sessionStatus: "ready",
+          sessionStatus: "idle",
           turnId: "turn-2",
           turnState: "completed",
           completedAt: "2026-08-22T08:01:00.000Z",

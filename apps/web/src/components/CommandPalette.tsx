@@ -1,3 +1,9 @@
+import {
+  ARTIFACT_CREATION_COMMANDS,
+  prependArtifactCreationPrompt,
+  type ArtifactCreationKind,
+} from "@kairo/client-runtime/artifact-creation";
+import { useComposerDraftStore, type ComposerThreadTarget } from "../composerDraftStore";
 import { thrownErrorMessage } from "@kairo/client-runtime/errors";
 import { msg, T, useGT, useMessages, Var } from "gt-react";
 import { m, type MessageResolver } from "../i18n/messages";
@@ -69,6 +75,7 @@ import {
   ChevronRightIcon,
   CornerLeftUpIcon,
   FileSearchIcon,
+  FilePlus2Icon,
   FolderGit2Icon,
   FolderIcon,
   FolderPlusIcon,
@@ -320,6 +327,11 @@ function openIntentView(
       return {
         addonIcon: <SquarePenIcon className={ADDON_ICON_CLASS} />,
         groups: [{ value: NEW_THREAD_IN_GROUP, label: resolve(msg("Projects")), items: [] }],
+      };
+    case "create-file":
+      return {
+        addonIcon: <FilePlus2Icon className={ADDON_ICON_CLASS} />,
+        groups: [{ value: "file-formats", label: resolve(msg("Choose a format")), items: [] }],
       };
     case "change-theme":
       return {
@@ -1899,32 +1911,88 @@ function OpenCommandPaletteDialog(props: {
   const rootGroups = buildRootGroups({ actionItems, recentThreadItems }, messages);
   const sourceSelectionViewValue =
     addProjectEnvironmentId === null ? null : `sources:${addProjectEnvironmentId}`;
+  const prepareArtifactDraft = (kind: ArtifactCreationKind, target: ComposerThreadTarget) => {
+    const drafts = useComposerDraftStore.getState();
+    drafts.setPrompt(
+      target,
+      prependArtifactCreationPrompt(kind, drafts.getComposerDraft(target)?.prompt ?? ""),
+    );
+  };
+  const fileCreationItems: CommandPaletteActionItem[] = ARTIFACT_CREATION_COMMANDS.map(
+    ({ kind, label, extension }) => ({
+      kind: "action",
+      value: `action:create-${kind}`,
+      searchTerms: ["create", "file", label, extension],
+      title: `Create ${label}`,
+      icon: <FilePlus2Icon className={ITEM_ICON_CLASS} />,
+      keepOpen: paletteRouteTarget === null,
+      disabled: paletteRouteTarget === null && projects.length === 0,
+      run: async () => {
+        if (paletteRouteTarget !== null) {
+          prepareArtifactDraft(
+            kind,
+            paletteRouteTarget.kind === "server"
+              ? paletteRouteTarget.threadRef
+              : paletteRouteTarget.draftId,
+          );
+          return;
+        }
+        pushPaletteView({
+          addonIcon: <FolderIcon className={ADDON_ICON_CLASS} />,
+          groups: [
+            {
+              value: `file-projects:${kind}`,
+              label: `Create ${label} in`,
+              items: projects
+                .filter((project) => project.archivedAt == null)
+                .map((project) => ({
+                  kind: "action",
+                  value: `create-${kind}:${project.environmentId}:${project.id}`,
+                  searchTerms: [project.title, project.workspaceRoot],
+                  title: project.title,
+                  description: project.workspaceRoot,
+                  icon: <FolderIcon className={ITEM_ICON_CLASS} />,
+                  run: async () => {
+                    const result = await handleNewThread(
+                      scopeProjectRef(project.environmentId, project.id),
+                    );
+                    if (result) prepareArtifactDraft(kind, result.draftId);
+                  },
+                })),
+            },
+          ],
+        });
+      },
+    }),
+  );
   const activeGroups =
-    addProjectEnvironmentId !== null &&
-    currentView !== null &&
-    currentView.groups[0]?.value === sourceSelectionViewValue
-      ? buildAddProjectSourceGroups(
-          addProjectEnvironmentId,
-          buildPaletteRemoteSourceReadiness(sourceControlDiscovery.data, messages),
-        )
-      : currentView?.groups[0]?.value === ADD_PROJECT_ENTRY_GROUP
-        ? addProjectEntryGroups()
-        : currentView?.groups[0]?.value === NEW_THREAD_IN_GROUP
-          ? [
-              {
-                value: NEW_THREAD_IN_GROUP,
-                label: gt("Projects"),
-                // Every project archived and no "No project" home leaves only adding one.
-                items: projectThreadItems.length > 0 ? projectThreadItems : [addProjectAction],
-              },
-            ]
-          : currentView?.groups[0]?.value.startsWith(PORT_FORWARD_GROUP_PREFIX) && portForwardItem
-            ? portForwardItem.groups
-            : currentView?.groups[0]?.value === "themes"
-              ? changeThemeItem.groups
-              : currentView?.groups[0]?.value === "appearance"
-                ? changeAppearanceItem.groups
-                : (currentView?.groups ?? rootGroups);
+    currentView?.groups[0]?.value === "file-formats"
+      ? [{ value: "file-formats", label: gt("Choose a format"), items: fileCreationItems }]
+      : addProjectEnvironmentId !== null &&
+          currentView !== null &&
+          currentView.groups[0]?.value === sourceSelectionViewValue
+        ? buildAddProjectSourceGroups(
+            addProjectEnvironmentId,
+            buildPaletteRemoteSourceReadiness(sourceControlDiscovery.data, messages),
+          )
+        : currentView?.groups[0]?.value === ADD_PROJECT_ENTRY_GROUP
+          ? addProjectEntryGroups()
+          : currentView?.groups[0]?.value === NEW_THREAD_IN_GROUP
+            ? [
+                {
+                  value: NEW_THREAD_IN_GROUP,
+                  label: gt("Projects"),
+                  // Every project archived and no "No project" home leaves only adding one.
+                  items: projectThreadItems.length > 0 ? projectThreadItems : [addProjectAction],
+                },
+              ]
+            : currentView?.groups[0]?.value.startsWith(PORT_FORWARD_GROUP_PREFIX) && portForwardItem
+              ? portForwardItem.groups
+              : currentView?.groups[0]?.value === "themes"
+                ? changeThemeItem.groups
+                : currentView?.groups[0]?.value === "appearance"
+                  ? changeAppearanceItem.groups
+                  : (currentView?.groups ?? rootGroups);
 
   const isLinkedThreadSearch =
     linkedThreadSearch?.linkedThreads !== undefined && deferredQuery === linkedThreadSearch.query;

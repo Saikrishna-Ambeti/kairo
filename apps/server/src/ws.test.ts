@@ -1,3 +1,6 @@
+import { ArtifactMetadataRepository } from "./persistence/Services/ArtifactMetadata.ts";
+import { SupermemoryService } from "./memory/SupermemoryService.ts";
+import { ComposioService } from "./composio/ComposioService.ts";
 import * as SecretResolver from "@kairo/secret-provider-core/server/SecretResolver";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { WebSocket } from "@effect/platform-node/NodeWS";
@@ -831,6 +834,9 @@ it.effect("shell snapshots omit idle children and older settled threads only on 
 
 // Build the production RPC layer; unrelated capabilities fail if this test calls them.
 const layerUnusedConfigRpcServices = Layer.mergeAll(
+  Layer.mock(ArtifactMetadataRepository)({}),
+  Layer.mock(SupermemoryService)({}),
+  Layer.mock(ComposioService)({}),
   Layer.mock(DocumentText.DocumentText)({}),
   Layer.mock(ServerSecretStore.ServerSecretStore)({}),
   Layer.mock(SecretCheck.SecretCheck)({}),

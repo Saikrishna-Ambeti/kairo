@@ -1,3 +1,7 @@
+import {
+  prependArtifactCreationPrompt,
+  type ArtifactCreationKind,
+} from "@kairo/client-runtime/artifact-creation";
 import { T, useGT, useMessages, Var } from "gt-react-native";
 import { errorDisplayMessage } from "@kairo/client-runtime/errors";
 import { DraftEnvironmentControl } from "./DraftEnvironmentControl";
@@ -166,6 +170,7 @@ export function NewTaskDraftScreen(props: {
     readonly cloning?: boolean;
   };
   readonly draftId?: string;
+  readonly artifactKind?: ArtifactCreationKind | undefined;
   readonly incomingShareId?: string;
 }) {
   const gt = useGT();
@@ -173,6 +178,22 @@ export function NewTaskDraftScreen(props: {
   const [creationMetadata] = useState(makeTurnCommandMetadata);
   const projects = useProjects();
   const flow = useNewTaskFlow();
+  const preparedArtifactDraft = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      !props.artifactKind ||
+      flow.draftKey === null ||
+      flow.draftKey === preparedArtifactDraft.current
+    )
+      return;
+    preparedArtifactDraft.current = flow.draftKey;
+    flow.setPrompt(
+      prependArtifactCreationPrompt(
+        props.artifactKind,
+        getComposerDraftSnapshot(flow.draftKey).text,
+      ),
+    );
+  }, [flow.draftKey, flow.setPrompt, props.artifactKind]);
   const navigation = useNavigation();
   const isFocused = useIsFocused();
   const goBack = useWorkspaceBackNavigation();

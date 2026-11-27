@@ -2,10 +2,7 @@ import {
   DESKTOP_UPDATE_IN_PROGRESS_MARKER_FILE,
   DESKTOP_UPDATE_IN_PROGRESS_TTL_MS,
 } from "@kairo/contracts";
-import type {
-  DesktopSshEnvironmentBootstrap,
-  DesktopSshEnvironmentTarget,
-} from "@kairo/contracts";
+import type { DesktopSshEnvironmentBootstrap, DesktopSshEnvironmentTarget } from "@kairo/contracts";
 import { waitForHttpReady as waitForHttpReadyShared } from "@kairo/shared/httpReadiness";
 import { cliReleaseDownloadBaseUrl } from "@kairo/shared/cliRelease";
 import * as KeyedLock from "@kairo/shared/KeyedLock";

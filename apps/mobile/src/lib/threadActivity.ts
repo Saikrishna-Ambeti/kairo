@@ -40,8 +40,8 @@ import {
 import type { ToolCallVisibility } from "@kairo/contracts/settings";
 import {
   resolveT3McpToolDefinition,
-  type KairoMcpToolLogo,
-  type KairoMcpToolPresentation,
+  type T3McpToolLogo as KairoMcpToolLogo,
+  type T3McpToolPresentation as KairoMcpToolPresentation,
 } from "@kairo/shared/kairoMcpToolPresentation";
 import { resolveT3McpToolPresentation } from "@kairo/shared/kairoMcpToolPresentationCopy";
 import type {
@@ -85,10 +85,7 @@ import {
 import * as DateTime from "effect/DateTime";
 import { msg } from "gt-react-native";
 import { m, type MessageResolver } from "../i18n/messages";
-import {
-  IDLE_COMPACTION_TITLES,
-  IDLE_COMPACTING_LABELS,
-} from "@kairo/client-runtime/user-message";
+import { IDLE_COMPACTION_TITLES, IDLE_COMPACTING_LABELS } from "@kairo/client-runtime/user-message";
 
 export type PendingApproval = ThreadPendingApproval;
 export type PendingUserInput = ThreadPendingUserInput;

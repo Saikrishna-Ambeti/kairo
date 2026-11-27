@@ -101,7 +101,7 @@ export function loadRepoEnv({
   };
 }
 
-function resolvePublicConfig(...sources: readonly Environment[]): KairoPublicConfig {
+export function resolvePublicConfig(...sources: readonly Environment[]): KairoPublicConfig {
   return {
     clerkPublishableKey: firstNonEmpty(
       sources,

@@ -179,7 +179,7 @@ describe("linkCreatedPullRequest", () => {
 
       expect(
         (yield* Ref.get(commands)).map((command) => "repository" in command && command.repository),
-      ).toEqual(["t3tools/kairo", "platform/tracked"]);
+      ).toEqual(["kairo/kairo", "platform/tracked"]);
       expect((yield* Ref.get(commands)).slice(0, 1)).toEqual([
         {
           type: "thread.pull-request.link",

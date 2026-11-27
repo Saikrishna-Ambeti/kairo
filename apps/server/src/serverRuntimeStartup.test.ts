@@ -74,6 +74,7 @@ it.effect.each([
       NodeCrypto.layer,
       Path.layer,
       Layer.mock(ServerConfig.ServerConfig)({
+        surface: DEFAULT_PRODUCT_SURFACE_CONFIG,
         ...(yield* ServerConfig.deriveServerPaths("/bootstrap-project", undefined).pipe(
           Effect.provide(Path.layer),
         )),

@@ -3,9 +3,8 @@ import * as Schema from "effect/Schema";
 import { Tool, Toolkit } from "effect/ai";
 
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
-import { SupermemoryService } from "../../../memory/SupermemoryService.ts";
 
-const dependencies = [McpInvocationContext.McpInvocationContext, SupermemoryService];
+const dependencies = [McpInvocationContext.McpInvocationContext];
 
 export const MemorySaveInput = Schema.Struct({
   content: Schema.String.annotate({

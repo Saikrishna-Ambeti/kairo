@@ -1,3 +1,4 @@
+import * as ElectronNotificationSound from "../electron/ElectronNotificationSound.ts";
 import { assert, it } from "@effect/vitest";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -139,7 +140,11 @@ const runStubbedDesktop = (stub: StubbedDesktop) =>
         }),
         Effect.provideService(DesktopClerk.DesktopClerk, {
           configure: Effect.void,
+          configureSession: Effect.void,
         } as DesktopClerk.DesktopClerk["Service"]),
+        Effect.provideService(ElectronNotificationSound.ElectronNotificationSound, {
+          play: () => Effect.void,
+        }),
         Effect.provideService(ElectronSafeStorage.ElectronSafeStorage, {
           selectedStorageBackend: Effect.succeedNone,
         } as unknown as ElectronSafeStorage.ElectronSafeStorage["Service"]),

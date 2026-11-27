@@ -213,6 +213,7 @@ export function NewTaskDraftRouteScreen({ route }: StaticScreenProps<NewTaskDraf
       ) : (
         <NewTaskDraftScreen
           initialProjectRef={preparedProjectRef}
+          artifactKind={params.artifactKind}
           incomingShareId={
             Array.isArray(params.incomingShareId)
               ? params.incomingShareId[0]

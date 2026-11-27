@@ -115,6 +115,7 @@ export function FileTreeBrowser(props: {
   readonly searchQuery: string;
   readonly searchResultPaths: ReadonlySet<string> | null;
   readonly searchTruncated: boolean;
+  readonly listHeader?: React.ReactNode;
   readonly selectedPath: string | null;
   readonly loadingDirectories: ReadonlySet<string>;
   readonly onLoadDirectory: (path: string, retry?: boolean) => void;

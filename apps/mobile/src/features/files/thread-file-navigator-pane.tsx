@@ -1,6 +1,6 @@
 import { resolveFilesystemReadAccess } from "@kairo/client-runtime/state/filesystem";
 import { environmentSession } from "../../state/session";
-import type { EnvironmentId } from "@kairo/contracts";
+import type { EnvironmentId, ThreadId } from "@kairo/contracts";
 import { AppBar } from "../../components/ui/AppBar";
 import { ScreenContent } from "../../components/ui/ScreenContent";
 import { useGT, useMessages } from "gt-react-native";
@@ -19,7 +19,7 @@ export function ThreadFileNavigatorPane(props: {
   readonly cwd: string;
   readonly environmentId: EnvironmentId;
   readonly projectName: string;
-  readonly threadId: ThreadId;
+  readonly threadId?: ThreadId;
   readonly selectedPath: string | null;
   readonly onSelectFile: (path: string) => void;
 }) {
@@ -61,6 +61,15 @@ export function ThreadFileNavigatorPane(props: {
   const fileTree = (
     <FileTreeBrowser
       key={workspaceKey}
+      listHeader={
+        props.threadId ? (
+          <ThreadArtifactsList
+            environmentId={props.environmentId}
+            threadId={props.threadId}
+            searchQuery={searchQuery}
+          />
+        ) : undefined
+      }
       revealSelection={entriesQuery.revealSelection}
       expandedPaths={entriesQuery.expandedPaths}
       setExpandedPaths={entriesQuery.setExpandedPaths}

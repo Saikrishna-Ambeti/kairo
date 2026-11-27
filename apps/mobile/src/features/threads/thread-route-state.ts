@@ -8,6 +8,7 @@ export type NewTaskDraftRouteParams = {
   readonly cloning?: string | string[];
   readonly draftId?: string | string[];
   readonly incomingShareId?: string | string[];
+  readonly artifactKind?: import("@kairo/client-runtime/artifact-creation").ArtifactCreationKind;
 };
 
 export function isDraftThreadRoute(

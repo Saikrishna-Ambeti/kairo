@@ -17,14 +17,15 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 
 import { hasCloudIdentityConfig } from "../../cloud/publicConfig";
 import { isElectron } from "../../env";
-import { useClientSettings, useUpdateClientSettings } from "../../hooks/useSettings";
+import { useClientSettings, updateClientSettings } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
 import { useServerProviders } from "../../rpc/serverState";
 import { usePrimaryServerApi } from "../../state/primaryServerApi";
 import { resolveClerkSignInProps } from "../clerk/authRedirect";
+import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 import { SupermemorySettingsPanel } from "../settings/SupermemorySettings";
 import { ComposioSettingsPanel } from "../settings/ComposioSettings";
-import { DRIVER_OPTIONS } from "../settings/providerDriverMeta";
+import { providerClients } from "../settings/providerDriverMeta";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { stackedThreadToast, toastManager } from "../ui/toast";
@@ -45,7 +46,7 @@ export type OnboardingStep = "sign-in" | "profession" | "setup" | "memory" | "ap
 type BusyAction = "refresh" | "install-agent" | "login-agent" | null;
 
 interface AgentOption {
-  readonly definition: (typeof DRIVER_OPTIONS)[number];
+  readonly definition: (typeof providerClients.definitions)[number];
   readonly provider: ServerProvider | undefined;
 }
 
@@ -312,10 +313,13 @@ function ProfessionStep({
 }
 
 function ProviderLogo({ option }: { readonly option: AgentOption }) {
-  const Icon = option.definition.icon;
   return (
     <span className="flex size-10 items-center justify-center rounded-lg border bg-background">
-      <Icon className="size-5" />
+      <ProviderInstanceIcon
+        driverKind={option.definition.driverKind}
+        displayName={option.definition.label}
+        iconClassName="size-5"
+      />
     </span>
   );
 }
@@ -367,7 +371,7 @@ function ProviderSetupStep({
             return (
               <div
                 className="grid gap-3 rounded-xl border border-border/80 bg-background/65 p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center"
-                key={option.definition.value}
+                key={option.definition.driverKind}
               >
                 <ProviderLogo option={option} />
                 <div className="min-w-0 space-y-1">
@@ -517,12 +521,12 @@ function ProviderSetupGate({
 
   const agentOptions = useMemo<ReadonlyArray<AgentOption>>(
     () =>
-      DRIVER_OPTIONS.filter((definition) =>
-        ONBOARDING_CODING_AGENT_DRIVERS.has(definition.value),
-      ).map((definition) => ({
-        definition,
-        provider: providers.find((provider) => provider.driver === definition.value),
-      })),
+      providerClients.definitions
+        .filter((definition) => ONBOARDING_CODING_AGENT_DRIVERS.has(definition.driverKind))
+        .map((definition) => ({
+          definition,
+          provider: providers.find((provider) => provider.driver === definition.driverKind),
+        })),
     [providers],
   );
   const usableAgents = useMemo(() => providers.filter(isUsableOnboardingAgent), [providers]);
@@ -694,7 +698,7 @@ function ProviderSetupGate({
 function useProfessionSelection() {
   const role = useClientSettings((settings) => settings.professionalRole);
   const otherRole = useClientSettings((settings) => settings.professionalRoleOther);
-  const updateSettings = useUpdateClientSettings();
+  const updateSettings = updateClientSettings;
   const setRole = useCallback(
     (nextRole: ProfessionalRole) => updateSettings({ professionalRole: nextRole }),
     [updateSettings],

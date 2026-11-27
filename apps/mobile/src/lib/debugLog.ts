@@ -36,7 +36,10 @@ function globalValue(name: string): unknown {
     : (globalThis as Record<string, unknown>)[name];
 }
 
-export function createDebugLogger(namespace: string): DebugLogger {
+export function createDebugLogger(
+  namespace: string,
+  options: DebugLoggerOptions = {},
+): DebugLogger {
   const isEnabled = () => {
     if (options.enabledInDev === true && typeof __DEV__ !== "undefined" && __DEV__) {
       return true;

@@ -1295,7 +1295,6 @@ const WsServerDisableComposioRpc = Rpc.make(WS_METHODS.serverDisableComposio, {
   error: ComposioRpcError,
 });
 
-
 const WsCloudGetRelayClientStatusRpc = Rpc.make(WS_METHODS.cloudGetRelayClientStatus, {
   payload: Schema.Struct({}),
   success: RelayClientStatusSchema,
@@ -1644,13 +1643,21 @@ const WsIssueTrackersBindProjectRpc = Rpc.make(WS_METHODS.issueTrackersBindProje
 const WsSourceControlLookupRepositoryRpc = Rpc.make(WS_METHODS.sourceControlLookupRepository, {
   payload: SourceControlRepositoryLookupInput,
   success: SourceControlRepositoryInfo,
-  error: Schema.Union([SurfaceUnavailableError, SourceControlRepositoryError, EnvironmentAuthorizationError]),
+  error: Schema.Union([
+    SurfaceUnavailableError,
+    SourceControlRepositoryError,
+    EnvironmentAuthorizationError,
+  ]),
 });
 
 const WsSourceControlCloneRepositoryRpc = Rpc.make(WS_METHODS.sourceControlCloneRepository, {
   payload: SourceControlCloneRepositoryInput,
   success: SourceControlCloneRepositoryResult,
-  error: Schema.Union([SurfaceUnavailableError, SourceControlRepositoryError, EnvironmentAuthorizationError]),
+  error: Schema.Union([
+    SurfaceUnavailableError,
+    SourceControlRepositoryError,
+    EnvironmentAuthorizationError,
+  ]),
 });
 
 // Starts a device-flow sign-in the server finishes on its own, so a client can leave meanwhile.
@@ -1727,7 +1734,11 @@ const WsSubscribeProjectClonesRpc = Rpc.make(WS_METHODS.subscribeProjectClones, 
 const WsSourceControlPublishRepositoryRpc = Rpc.make(WS_METHODS.sourceControlPublishRepository, {
   payload: SourceControlPublishRepositoryInput,
   success: SourceControlPublishRepositoryResult,
-  error: Schema.Union([SurfaceUnavailableError, SourceControlRepositoryError, EnvironmentAuthorizationError]),
+  error: Schema.Union([
+    SurfaceUnavailableError,
+    SourceControlRepositoryError,
+    EnvironmentAuthorizationError,
+  ]),
 });
 
 const WsProjectsSearchEntriesRpc = Rpc.make(WS_METHODS.projectsSearchEntries, {
@@ -1930,7 +1941,11 @@ const WsProviderMcpSignInCompleteRpc = Rpc.make(WS_METHODS.providerMcpSignInComp
 const WsSubscribeVcsBranchRpc = Rpc.make(WS_METHODS.subscribeVcsBranch, {
   payload: VcsStatusInput,
   success: VcsBranchStatus,
-  error: Schema.Union([GitManagerServiceError, EnvironmentAuthorizationError]),
+  error: Schema.Union([
+    SurfaceUnavailableError,
+    GitManagerServiceError,
+    EnvironmentAuthorizationError,
+  ]),
   stream: true,
 });
 
@@ -1943,7 +1958,11 @@ const WsVcsRefreshBranchRpc = Rpc.make(WS_METHODS.vcsRefreshBranch, {
 const WsSubscribeVcsStatusRpc = Rpc.make(WS_METHODS.subscribeVcsStatus, {
   payload: VcsStatusSubscriptionInput,
   success: VcsStatusStreamEvent,
-  error: Schema.Union([SurfaceUnavailableError, GitManagerServiceError, EnvironmentAuthorizationError]),
+  error: Schema.Union([
+    SurfaceUnavailableError,
+    GitManagerServiceError,
+    EnvironmentAuthorizationError,
+  ]),
   stream: true,
 });
 
@@ -1959,7 +1978,11 @@ const WsVcsRefreshStatusRpc = Rpc.make(WS_METHODS.vcsRefreshStatus, {
     localOnly: Schema.optional(Schema.Boolean),
   }),
   success: VcsRefreshStatusResult,
-  error: Schema.Union([SurfaceUnavailableError, GitManagerServiceError, EnvironmentAuthorizationError]),
+  error: Schema.Union([
+    SurfaceUnavailableError,
+    GitManagerServiceError,
+    EnvironmentAuthorizationError,
+  ]),
 });
 
 const WsSubscribeWorktreeSetupRpc = Rpc.make(WS_METHODS.subscribeWorktreeSetup, {
@@ -1978,20 +2001,32 @@ const WsWorktreeSetupCancelRpc = Rpc.make(WS_METHODS.worktreeSetupCancel, {
 const WsGitRunStackedActionRpc = Rpc.make(WS_METHODS.gitRunStackedAction, {
   payload: GitRunStackedActionInput,
   success: GitActionProgressEvent,
-  error: Schema.Union([SurfaceUnavailableError, GitManagerServiceError, EnvironmentAuthorizationError]),
+  error: Schema.Union([
+    SurfaceUnavailableError,
+    GitManagerServiceError,
+    EnvironmentAuthorizationError,
+  ]),
   stream: true,
 });
 
 const WsGitResolvePullRequestRpc = Rpc.make(WS_METHODS.gitResolvePullRequest, {
   payload: GitPullRequestRefInput,
   success: GitResolvePullRequestResult,
-  error: Schema.Union([SurfaceUnavailableError, GitManagerServiceError, EnvironmentAuthorizationError]),
+  error: Schema.Union([
+    SurfaceUnavailableError,
+    GitManagerServiceError,
+    EnvironmentAuthorizationError,
+  ]),
 });
 
 const WsGitPreparePullRequestThreadRpc = Rpc.make(WS_METHODS.gitPreparePullRequestThread, {
   payload: GitPreparePullRequestThreadInput,
   success: GitPreparePullRequestThreadResult,
-  error: Schema.Union([SurfaceUnavailableError, GitManagerServiceError, EnvironmentAuthorizationError]),
+  error: Schema.Union([
+    SurfaceUnavailableError,
+    GitManagerServiceError,
+    EnvironmentAuthorizationError,
+  ]),
 });
 
 const WsVcsListRefsRpc = Rpc.make(WS_METHODS.vcsListRefs, {
@@ -2038,7 +2073,11 @@ const WsReviewGetBranchCommitsRpc = Rpc.make(WS_METHODS.reviewGetBranchCommits, 
 const WsReviewGetDiffPreviewRpc = Rpc.make(WS_METHODS.reviewGetDiffPreview, {
   payload: ReviewDiffPreviewInput,
   success: ReviewDiffPreviewResult,
-  error: Schema.Union([SurfaceUnavailableError, ReviewDiffPreviewError, EnvironmentAuthorizationError]),
+  error: Schema.Union([
+    SurfaceUnavailableError,
+    ReviewDiffPreviewError,
+    EnvironmentAuthorizationError,
+  ]),
 });
 
 const WsReviewGetDiffFileContentsRpc = Rpc.make(WS_METHODS.reviewGetDiffFileContents, {

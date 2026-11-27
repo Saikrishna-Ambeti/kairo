@@ -1,3 +1,4 @@
+import * as Config from "effect/Config";
 import {
   DEFAULT_KAIRO_CLOUD_API_URL,
   type ProviderDriverKind,
@@ -65,9 +66,12 @@ export const applyComposioProviderBindings = (
     const accessToken = yield* getComposioAccessToken().pipe(Effect.orElseSucceed(() => null));
     if (!accessToken) return configMap;
 
+    const cloudApiUrl = yield* Config.String("KAIRO_CLOUD_API_URL").pipe(
+      Effect.orElseSucceed(() => DEFAULT_KAIRO_CLOUD_API_URL),
+    );
     const generated = buildComposioProviderEnvironment({
       accessToken,
-      cloudApiUrl: process.env.KAIRO_CLOUD_API_URL ?? DEFAULT_KAIRO_CLOUD_API_URL,
+      cloudApiUrl,
     });
     const selectedIds = new Set<ProviderInstanceId>(composio.providerInstanceIds);
     const merged: Record<string, ProviderInstanceConfig> = { ...configMap };

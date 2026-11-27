@@ -49,6 +49,7 @@ import {
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 
 type NewTaskRouteParams = {
+  readonly artifactKind?: import("@kairo/client-runtime/artifact-creation").ArtifactCreationKind;
   readonly incomingShareId?: string | string[];
   /** An existing draft whose project is gone; the chosen project takes it over. */
   readonly draftId?: string | string[];
@@ -297,6 +298,7 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
           projectId: String(project.id),
           draftId,
           incomingShareId: incomingShare?.id,
+          ...(route.params?.artifactKind ? { artifactKind: route.params.artifactKind } : {}),
         },
       },
     });

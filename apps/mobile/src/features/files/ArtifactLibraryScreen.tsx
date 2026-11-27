@@ -4,7 +4,7 @@ import {
   isArtifactCreationKind,
 } from "@kairo/client-runtime/artifact-creation";
 import { EnvironmentId as EnvironmentIdSchema } from "@kairo/contracts";
-import type { MenuAction } from "@react-native-menu/menu";
+import { MenuView, type MenuAction } from "@react-native-menu/menu";
 import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -16,9 +16,7 @@ import {
   View,
 } from "react-native";
 
-import { AndroidScreenHeader } from "../../components/ui/AndroidScreenHeader";
 import { AppText as Text, AppTextInput as TextInput } from "../../components/ui/AppText";
-import { ControlPillMenu } from "../../components/ui/ControlPill";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { useEnvironments } from "../../state/environments";
 import { useEnvironmentQuery } from "../../state/query";
@@ -84,30 +82,23 @@ export function ArtifactLibraryScreen(
       <NativeStackScreenOptions
         options={{ title: "Library", headerShown: Platform.OS === "ios" }}
       />
-      {Platform.OS === "android" ? <AndroidScreenHeader title="Library" /> : null}
       <View className="gap-3 border-b border-border px-4 py-3">
-        <ControlPillMenu
+        <MenuView
           actions={ARTIFACT_CREATION_COMMANDS.map(({ kind, label }) => ({
             id: kind,
             title: `Create ${label}`,
           }))}
           onPressAction={({ nativeEvent }) => {
             if (!isArtifactCreationKind(nativeEvent.event)) return;
-            navigation.navigate("NewTaskSheet", {
-              screen: "NewTask",
-              params: {
-                artifactKind: nativeEvent.event,
-                environmentId: environmentId ?? undefined,
-              },
-            });
+            navigation.navigate("NewTaskProject", { artifactKind: nativeEvent.event });
           }}
         >
           <Pressable accessibilityRole="button" accessibilityLabel="Create file">
             <Text className="text-sm font-kairo-medium text-accent">Create file ▾</Text>
           </Pressable>
-        </ControlPillMenu>
+        </MenuView>
         {environments.length > 1 ? (
-          <ControlPillMenu
+          <MenuView
             actions={environmentActions}
             onPressAction={({ nativeEvent }) => {
               const selected = environments.find(
@@ -121,7 +112,7 @@ export function ArtifactLibraryScreen(
                 {environmentLabel ?? "Choose environment"} ▾
               </Text>
             </Pressable>
-          </ControlPillMenu>
+          </MenuView>
         ) : null}
         <TextInput
           accessibilityLabel="Search library"

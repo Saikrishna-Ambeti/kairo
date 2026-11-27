@@ -5,7 +5,7 @@ import * as Layer from "effect/Layer";
 import { McpSchema, McpServer } from "effect/ai";
 
 import { SupermemoryService } from "../../../memory/SupermemoryService.ts";
-import { MemoryToolkitRegistrationLive } from "../../McpHttpServer.ts";
+import { layerInProcessMcpServer, MemoryToolkitRegistrationLive } from "../../McpHttpServer.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 
 const client = McpSchema.McpServerClient.of({
@@ -50,7 +50,7 @@ it.effect("routes memory tools only for sessions with the memory capability", ()
     context: () => Effect.die("unused"),
   });
   const testLayer = MemoryToolkitRegistrationLive.pipe(
-    Layer.provideMerge(McpServer.McpServer.layer),
+    Layer.provideMerge(layerInProcessMcpServer),
     Layer.provide(Layer.succeed(SupermemoryService, service)),
   );
 

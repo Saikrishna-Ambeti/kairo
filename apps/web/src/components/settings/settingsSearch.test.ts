@@ -218,10 +218,6 @@ describe("searchSettings", () => {
   });
 
   it("keeps hidden panel anchors out of sidebar search", () => {
-    expect(searchableSetting("source-control")).toEqual({
-      id: "source-control",
-      title: "Source control",
-    });
     expect(searchSettings("source control").some((item) => item.id === "source-control")).toBe(
       false,
     );

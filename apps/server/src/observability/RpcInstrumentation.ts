@@ -46,7 +46,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.serverGetMemoryStatus]: "server",
   [WS_METHODS.serverListArtifacts]: "server",
   [WS_METHODS.serverTestComposioConnection]: "server",
-  [WS_METHODS.serverTestMemoryConnection]: "server",
+  [WS_METHODS.serverProvisionMemoryAccess]: "server",
   [WS_METHODS.serverGetConfig]: "server",
   [WS_METHODS.serverGetNpmRelease]: "server",
   [WS_METHODS.serverRefreshProviders]: "server",

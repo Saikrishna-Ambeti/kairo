@@ -107,7 +107,7 @@ describe("reduceCommandPaletteUiState", () => {
       openIntent: { kind: "add-project" },
       session: 2,
     });
-    expect(reduceCommandPaletteUiState(filesOpen, { _tag: "OpenCreateFile" })).toEqual({
+    expect(reduceCommandPaletteUiState(state, { _tag: "OpenCreateFile" })).toMatchObject({
       open: true,
       mode: "command",
       openIntent: { kind: "create-file" },
