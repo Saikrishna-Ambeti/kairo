@@ -153,7 +153,9 @@ const answering = (text: string) =>
     display: () => Effect.void,
   });
 
-it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, NetService.layer))("kairo up", (it) => {
+const layerUpTest = Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, NetService.layer);
+
+it.layer(layerUpTest)("kairo up", (it) => {
   afterEach(() => vi.restoreAllMocks());
 
   it.effect.each<{
@@ -430,12 +432,12 @@ it("rewrites only the named service.env keys and keeps the user's lines", () => 
   );
   expect(upsertServiceEnv("", { KAIRO_LAN: "false" })).toBe("KAIRO_LAN=false\n");
   expect(
-    upsertServiceEnv('KAIRO_LAN="a\nb"\nCUSTOM="x\nT3CODE_LAN=y"\nT3CODE_LAN=true\n', {
+    upsertServiceEnv('KAIRO_LAN="a\nb"\nCUSTOM="x\nKAIRO_LAN=y"\nKAIRO_LAN=true\n', {
       KAIRO_LAN: "false",
     }),
-  ).toBe('KAIRO_LAN=false\nCUSTOM="x\nT3CODE_LAN=y"\n');
+  ).toBe('KAIRO_LAN=false\nCUSTOM="x\nKAIRO_LAN=y"\n');
   expect(
-    upsertServiceEnv('KAIRO_LAN=\u00a0"unused\nCUSTOM=keep\nEND="\nT3CODE_LAN=true\n', {
+    upsertServiceEnv('KAIRO_LAN=\u00a0"unused\nCUSTOM=keep\nEND="\nKAIRO_LAN=true\n', {
       KAIRO_LAN: "false",
     }),
   ).toBe('KAIRO_LAN=false\nCUSTOM=keep\nEND="\n');

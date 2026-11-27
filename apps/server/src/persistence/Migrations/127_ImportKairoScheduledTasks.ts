@@ -7,6 +7,7 @@ import {
   ScheduledTaskSchedule,
   TrimmedNonEmptyString,
 } from "@kairo/contracts";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -89,6 +90,7 @@ export default Effect.gen(function* () {
     WHERE task.deleted = 0
   `;
   const serverTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const now = yield* Clock.currentTimeMillis;
   let archived = 0;
   for (const row of rows) {
     const task = decodeLegacyTask(row.data_json);
@@ -103,6 +105,9 @@ export default Effect.gen(function* () {
       continue;
     }
 
+    // The upstream scheduler runs overdue one-time tasks. Legacy imports skip missed runs.
+    const enabled =
+      value.enabled && (schedule.value.type !== "once" || Date.parse(schedule.value.runAt) > now);
     const scheduleJson = yield* encodeSchedule(schedule.value);
     const modelSelectionJson = yield* encodeModelSelection(value.modelSelection);
     yield* sql`
@@ -112,11 +117,11 @@ export default Effect.gen(function* () {
         created_by, creation_source, created_at, updated_at, next_run_at, last_run_at,
         last_run_status, run_count
       ) VALUES (
-        ${row.task_id}, ${value.title}, ${value.prompt}, ${value.enabled ? 1 : 0},
+        ${row.task_id}, ${value.title}, ${value.prompt}, ${enabled ? 1 : 0},
         ${scheduleJson}, ${value.projectId}, 'new_thread', '{"type":"root"}',
         ${modelSelectionJson}, ${value.runtimeMode}, ${value.interactionMode},
         'user', 'server', ${value.createdAt}, ${value.updatedAt},
-        ${value.enabled ? value.nextRunAt : null}, ${value.lastRunAt},
+        ${enabled ? value.nextRunAt : null}, ${value.lastRunAt},
         ${row.last_status ?? "never"}, ${row.run_count}
       )
       ON CONFLICT (task_id) DO NOTHING

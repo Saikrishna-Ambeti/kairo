@@ -35,7 +35,7 @@ vi.mock("../cloud/CliState.ts", async (importOriginal) => ({
 }));
 vi.mock("../cloud/publicConfig.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../cloud/publicConfig.ts")>()),
-  hasCloudPublicConfig: true,
+  hasManagedRelayPublicConfig: true,
 }));
 vi.mock("./connect.ts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./connect.ts")>();

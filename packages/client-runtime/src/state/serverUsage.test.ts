@@ -32,6 +32,7 @@ import {
 } from "../connection/model.ts";
 import * as EnvironmentRegistry from "../connection/registry.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import { CloudSession } from "../platform/capabilities.ts";
 import * as Persistence from "../platform/persistence.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import type { RpcSession } from "../rpc/session.ts";
@@ -171,7 +172,8 @@ const makeHarness = Effect.fn("ServerUsageTest.makeHarness")(function* (
     clear: () => Effect.void,
   });
   const runtime = Atom.runtime(
-    Layer.merge(
+    Layer.mergeAll(
+      Layer.mock(CloudSession, { identity: Effect.succeedNone }),
       Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, environments),
       Layer.succeed(Persistence.EnvironmentCacheStore, cache),
     ),

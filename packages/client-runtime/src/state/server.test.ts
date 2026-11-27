@@ -46,6 +46,7 @@ import {
 import * as EnvironmentRegistry from "../connection/registry.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import { RpcPermissionGuard } from "../rpc/client.ts";
+import { CloudSession } from "../platform/capabilities.ts";
 import * as Persistence from "../platform/persistence.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import type { RpcSession } from "../rpc/session.ts";
@@ -76,6 +77,8 @@ import {
 import { errorDisplayMessage, errorI18nMessage } from "../errors/translatable.ts";
 import { runAtomCommand } from "./runtime.ts";
 import { applyServerConfigProjection } from "./serverConfigProjection.ts";
+
+const layerSignedOut = Layer.mock(CloudSession, { identity: Effect.succeedNone });
 
 const CONFIG = {
   availableEditors: [],
@@ -353,6 +356,7 @@ describe("accepted server update recovery", () => {
       } as unknown as EnvironmentRegistry.EnvironmentRegistry["Service"]);
       const runtime = Atom.runtime(
         Layer.mergeAll(
+          layerSignedOut,
           Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
           Layer.succeed(RpcPermissionGuard, { authorize: () => Effect.void }),
           Layer.succeed(Persistence.EnvironmentCacheStore, {
@@ -1612,6 +1616,7 @@ describe("launcher update resume", () => {
     // Share the test clock so the command's timers and the host's restart run on TestClock.
     const runtime = Atom.runtime(
       Layer.mergeAll(
+        layerSignedOut,
         Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, environments),
         Layer.succeed(Persistence.EnvironmentCacheStore, cache),
         Layer.succeed(Clock.Clock, yield* Clock.Clock),
@@ -1767,7 +1772,8 @@ describe("provider setup commands", () => {
         retryNow: Effect.void,
       } satisfies EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
       const runtime = Atom.runtime(
-        Layer.merge(
+        Layer.mergeAll(
+          layerSignedOut,
           Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, {
             run: (_environmentId, effect) =>
               Effect.provideService(
@@ -1838,7 +1844,8 @@ describe("provider setup commands", () => {
         retryNow: Effect.void,
       } satisfies EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
       const runtime = Atom.runtime(
-        Layer.merge(
+        Layer.mergeAll(
+          layerSignedOut,
           Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, {
             run: (_environmentId, effect) =>
               Effect.provideService(
@@ -1943,7 +1950,8 @@ describe("resource telemetry history", () => {
                   ),
               } as EnvironmentRegistry.EnvironmentRegistry["Service"]);
               const runtime = Atom.runtime(
-                Layer.merge(
+                Layer.mergeAll(
+                  layerSignedOut,
                   Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, environments),
                   Layer.succeed(Persistence.EnvironmentCacheStore, {
                     loadServerConfig: () => Effect.succeedNone,

@@ -3,6 +3,7 @@ import { assert, it } from "@effect/vitest";
 import * as NodeSqliteClient from "@kairo/shared/nodeSqliteClient";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as TestClock from "effect/testing/TestClock";
 import * as SqlClient from "effect/sql/SqlClient";
 
 import { runMigrations } from "../Migrations.ts";
@@ -11,6 +12,7 @@ it.effect("upgrades existing Kairo schedules and preserves original task and run
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     yield* runMigrations({ toMigrationInclusive: 60 });
+    yield* TestClock.setTime(Date.parse("2026-11-27T00:00:00Z"));
     const createdAt = "2026-10-01T00:00:00Z";
     const nextRunAt = "2027-10-01T09:30:00Z";
     const task = {
@@ -36,6 +38,12 @@ it.effect("upgrades existing Kairo schedules and preserves original task and run
       trigger: { kind: "one-time", at: nextRunAt },
       lastRunAt: null,
     });
+    const expiredOnce = JSON.stringify({
+      ...task,
+      trigger: { kind: "one-time", at: createdAt },
+      nextRunAt: createdAt,
+      lastRunAt: null,
+    });
     const unsupported = [
       { kind: "calendar", calendarId: "team" },
       { kind: "cron", expression: "* * * * *" },
@@ -50,6 +58,7 @@ it.effect("upgrades existing Kairo schedules and preserves original task and run
       INSERT INTO scheduled_tasks (task_id, revision, data_json, deleted, updated_at)
       VALUES ('task-weekly', 7, ${taskJson}, 0, ${createdAt}),
              ('task-once', 1, ${oneTime}, 0, ${createdAt}),
+             ('task-expired-once', 1, ${expiredOnce}, 0, ${createdAt}),
              ('task-deleted', 2, ${taskJson}, 1, ${createdAt})
     `;
     yield* sql`
@@ -77,6 +86,15 @@ it.effect("upgrades existing Kairo schedules and preserves original task and run
       FROM scheduled_tasks ORDER BY task_id
     `;
     assert.deepEqual(active, [
+      {
+        task_id: "task-expired-once",
+        enabled: 0,
+        schedule_json: JSON.stringify({ type: "once", runAt: createdAt }),
+        runtime_mode: "approval-required",
+        next_run_at: null,
+        last_run_status: "never",
+        run_count: 0,
+      },
       {
         task_id: "task-once",
         enabled: 1,
@@ -109,6 +127,7 @@ it.effect("upgrades existing Kairo schedules and preserves original task and run
           deleted: 0,
         })),
         { task_id: "task-deleted", revision: 2, data_json: taskJson, deleted: 1 },
+        { task_id: "task-expired-once", revision: 1, data_json: expiredOnce, deleted: 0 },
         { task_id: "task-once", revision: 1, data_json: oneTime, deleted: 0 },
         { task_id: "task-weekly", revision: 7, data_json: taskJson, deleted: 0 },
       ].sort((left, right) => left.task_id.localeCompare(right.task_id)),

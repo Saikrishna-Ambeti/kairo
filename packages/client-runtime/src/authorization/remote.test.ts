@@ -5,6 +5,7 @@ import * as Schema from "effect/Schema";
 import { EnvironmentAuthInvalidError } from "@kairo/contracts";
 import { hashTelemetryId } from "@kairo/shared/telemetryId";
 import {
+  appendClientConnectionParams,
   bootstrapRemoteBearerSession,
   exchangeRemoteDpopAccessToken,
   issueRemoteDpopWebSocketTicket,

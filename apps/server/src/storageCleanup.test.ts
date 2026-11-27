@@ -761,7 +761,7 @@ const checkpointCleanupFixture = Effect.fn("test.checkpointCleanupFixture")(func
       .execute({
         operation: "cleanup-test.list-checkpoints",
         cwd: repo,
-        args: ["for-each-ref", "--format=%(refname)", "refs/t3/"],
+        args: ["for-each-ref", "--format=%(refname)", "refs/kairo/"],
         maxOutputBytes: 16 * 1024 * 1024,
       })
       .pipe(Effect.map(({ stdout }) => stdout.trim().split("\n").filter(Boolean).sort()));

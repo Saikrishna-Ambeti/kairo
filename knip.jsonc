@@ -113,6 +113,8 @@
       // reports an entire component module when nothing imports it.
       "ignoreIssues": {
         "src/components/ui/*.tsx": ["exports", "nsExports", "duplicates"],
+        // The Deep Research composer entry point is deferred for the v0.1.13 upgrade.
+        "src/components/chat/ComposerFeaturesMenu.tsx": ["exports"],
         // Compatibility name used by the upstream welcome and settings flows.
         "src/cloud/publicConfig.ts": ["duplicates"],
       },

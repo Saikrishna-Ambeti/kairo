@@ -1028,6 +1028,8 @@ const make = Effect.gen(function* () {
             "HEAD",
             // Checkpoint refs hold workspace snapshots, not commits a user could lose.
             "--exclude=refs/t3/*",
+            "--exclude=refs/kairo/checkpoints/*",
+            "--exclude=refs/kairo/orchestration-v2/checkpoints/*",
             "--all",
             "--reflog",
             "--not",

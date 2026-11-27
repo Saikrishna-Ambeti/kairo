@@ -7,6 +7,7 @@ import * as Ref from "effect/Ref";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
 import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
+import { CloudSession } from "../platform/capabilities.ts";
 import * as RpcSession from "../rpc/session.ts";
 import type { ConnectionCatalogEntry } from "./catalog.ts";
 import * as ConnectionDriver from "./driver.ts";
@@ -57,6 +58,7 @@ describe("ConnectionDriver", () => {
                 ),
             }),
             Layer.mock(RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization)({}),
+            Layer.mock(CloudSession, { identity: Effect.succeedNone }),
             // SSH routes have no HTTP check, so the driver never sends a request.
             FetchHttpClient.layer,
           ),

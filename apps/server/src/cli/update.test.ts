@@ -58,7 +58,7 @@ it.effect("authenticates each release page until the requested channel is found"
     const httpClient = HttpClient.make((request) => {
       const url = new URL(request.url);
       assert.equal(url.origin, "https://api.github.com");
-      assert.equal(url.pathname, "/repos/pingdotgg/kairo/releases");
+      assert.equal(url.pathname, "/repos/Saikrishna-Ambeti/kairo/releases");
       assert.equal(request.headers.accept, "application/vnd.github+json");
       assert.equal(request.headers.authorization, "Bearer gh-token");
       const page = url.searchParams.get("page") ?? "";
@@ -236,7 +236,7 @@ it.layer(NodeServices.layer)("kairo update launcher", (it) => {
       const root = yield* fs.makeTempDirectoryScoped();
       const baseDir = path.join(root, "home");
       const runtimeDir = path.join(baseDir, "runtime");
-      const launcher = path.join(root, "custom bin", "t3.cmd");
+      const launcher = path.join(root, "custom bin", "kairo.cmd");
       const launchedAs = path.join(runtimeDir, "versions", "1.0.0", "kairo.exe");
       const targetEntryPath = path.join(runtimeDir, "versions", "2.0.0", "kairo.exe");
       yield* fs.makeDirectory(runtimeDir, { recursive: true });
@@ -274,8 +274,8 @@ it.layer(NodeServices.layer)("kairo update launcher", (it) => {
             mode: 0o755,
           });
         }
-        const launcher = path.join(root, "bin/t3");
-        const alias = path.join(root, "alias/t3");
+        const launcher = path.join(root, "bin/kairo");
+        const alias = path.join(root, "alias/kairo");
         yield* fs.makeDirectory(path.dirname(launcher), { recursive: true });
         yield* fs.makeDirectory(path.dirname(alias), { recursive: true });
         yield* fs.writeFileString(launcher, posixLauncherScript(entry("1.0.0")), { mode: 0o755 });
@@ -301,7 +301,7 @@ it.layer(NodeServices.layer)("kairo update launcher", (it) => {
 
         // Like the shell, a relative PATH entry resolves from the working directory, and a
         // script nobody can execute is passed over.
-        const unrunnable = path.join(root, "unrunnable/t3");
+        const unrunnable = path.join(root, "unrunnable/kairo");
         yield* fs.makeDirectory(path.dirname(unrunnable), { recursive: true });
         yield* fs.writeFileString(unrunnable, posixLauncherScript(entry("2.0.0")), { mode: 0o644 });
         yield* fs.writeFileString(launcher, posixLauncherScript(entry("2.0.0")), { mode: 0o755 });
@@ -329,12 +329,12 @@ it.layer(NodeServices.layer)("kairo update launcher", (it) => {
   it.effect.each([
     { name: "no launcher records", recorded: undefined },
     { name: "an empty launcher record", recorded: "" },
-    { name: "whole launcher records", recorded: "/opt/t3\n" },
-    { name: "Windows launcher records", recorded: "C:\\t3.cmd\r\n" },
+    { name: "whole launcher records", recorded: "/opt/kairo\n" },
+    { name: "Windows launcher records", recorded: "C:\\kairo.cmd\r\n" },
     // An interrupted append cut this record short.
     { name: "an unterminated launcher record", recorded: "/opt/t" },
     // Another process's append is cut short after kairo update reads the records.
-    { name: "a record cut short after the read", recorded: "/opt/t3\n", cut: "/opt/t" },
+    { name: "a record cut short after the read", recorded: "/opt/kairo\n", cut: "/opt/k" },
   ])("keeps the runtime a repointed launcher off PATH points at with $name", ({ recorded, cut }) =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -353,13 +353,13 @@ it.layer(NodeServices.layer)("kairo update launcher", (it) => {
       }
       // A launcher in the T3 home itself, which neither PATH nor the default bin dir reaches.
       const launcher = path.join(root, "kairo");
-      yield* fs.symlink(path.join(root, "runtime/versions/1.0.0/t3"), launcher);
+      yield* fs.symlink(path.join(root, "runtime/versions/1.0.0/kairo"), launcher);
 
       const launchersFile = path.join(root, "runtime/launchers");
       yield* repointLauncher({
         launchedAs: launcher,
         baseDir: root,
-        targetEntryPath: path.join(root, "runtime/versions/2.0.0/t3"),
+        targetEntryPath: path.join(root, "runtime/versions/2.0.0/kairo"),
       }).pipe(
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
@@ -386,7 +386,7 @@ it.layer(NodeServices.layer)("kairo update launcher", (it) => {
       assert.deepStrictEqual(removed, ["1.0.0"]);
       assert.equal(
         yield* readPosixLauncherTarget(launcher),
-        path.join(root, "runtime/versions/2.0.0/t3"),
+        path.join(root, "runtime/versions/2.0.0/kairo"),
       );
     }).pipe(Effect.provideService(HostProcess.Platform, "linux")),
   );
@@ -395,8 +395,8 @@ it.layer(NodeServices.layer)("kairo update launcher", (it) => {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "kairo-update-" });
-    const oldExe = path.join(root, "runtime/versions/1.0.0/t3");
-    const newExe = path.join(root, "runtime/versions/2.0.0/t3");
+    const oldExe = path.join(root, "runtime/versions/1.0.0/kairo");
+    const newExe = path.join(root, "runtime/versions/2.0.0/kairo");
     const launcher = path.join(root, "kairo");
     for (const file of [oldExe, newExe]) {
       yield* fs.makeDirectory(path.dirname(file), { recursive: true });
@@ -481,12 +481,12 @@ it.layer(NodeServices.layer)("kairo update launcher", (it) => {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "kairo-update-" });
-      const newExe = path.join(root, "runtime/versions/2.0.0/t3");
-      const copy = path.join(root, "copy/t3");
-      const foreign = path.join(root, "foreign/t3");
-      const elsewhere = path.join(root, "elsewhere/t3");
-      const otherHome = path.join(root, "other/runtime/versions/1.0.0/t3");
-      const otherLauncher = path.join(root, "other/bin/t3");
+      const newExe = path.join(root, "runtime/versions/2.0.0/kairo");
+      const copy = path.join(root, "copy/kairo");
+      const foreign = path.join(root, "foreign/kairo");
+      const elsewhere = path.join(root, "elsewhere/kairo");
+      const otherHome = path.join(root, "other/runtime/versions/1.0.0/kairo");
+      const otherLauncher = path.join(root, "other/bin/kairo");
       for (const file of [newExe, copy, elsewhere, otherHome]) {
         yield* fs.makeDirectory(path.dirname(file), { recursive: true });
         yield* fs.writeFileString(file, "");
@@ -515,7 +515,7 @@ it.layer(NodeServices.layer)("kairo update launcher", (it) => {
       const path = yield* Path.Path;
       const delimiter = (yield* HostProcess.Platform) === "win32" ? ";" : ":";
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "kairo-update-" });
-      const launcher = path.join(root, "bin/t3");
+      const launcher = path.join(root, "bin/kairo");
       yield* fs.makeDirectory(path.dirname(launcher), { recursive: true });
       yield* fs.writeFileString(launcher, "", { mode: 0o755 });
 
@@ -527,7 +527,7 @@ it.layer(NodeServices.layer)("kairo update launcher", (it) => {
         Effect.provideService(HostProcess.WorkingDirectory, root),
       );
       const relative = yield* resolveLauncherPath.pipe(
-        Effect.provideService(HostProcess.InvokedAs, "./bin/t3"),
+        Effect.provideService(HostProcess.InvokedAs, "./bin/kairo"),
         Effect.provideService(HostProcess.Environment, { PATH: "" }),
         Effect.provideService(HostProcess.WorkingDirectory, root),
       );
@@ -726,7 +726,7 @@ it.layer(NodeServices.layer)("kairo update checks the database before switching"
           }
           // A target's --version always answers, whatever its database support.
           return input.args?.includes("--version") === true
-            ? Effect.succeed(preflightOutput(`t3 v${targetVersion}\n`))
+            ? Effect.succeed(preflightOutput(`kairo v${targetVersion}\n`))
             : unrelatedLsof.run(input);
         },
       });

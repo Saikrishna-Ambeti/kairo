@@ -140,12 +140,14 @@ const createFixtureSource = Effect.fn("createMigrateDevDbFixtureSource")(functio
           created_at, updated_at, last_run_status, run_count)
         VALUES ('task-1', 'Nightly', 'Run it', 1, '{}', 'project-kept', '{}', '{}',
           'full-access', 'default', 'user', 'user', '2026-08-01', '2026-08-01', 'never', 0)`;
-      yield* sql`INSERT INTO scheduled_task_webhook_replay_keys
-        (task_id, replay_key, delivery_id, expires_at)
-        VALUES ('task-1', 'replay-1', 'delivery-1', 1900000000000)`;
-      yield* sql`INSERT INTO scheduled_task_webhook_pending
-        (delivery_id, task_id, coalesce_key, due_at, task_json, request_json, delivery_ids_json)
-        VALUES ('delivery-1', 'task-1', 'key-1', 1900000000000, '{}', '{}', '[]')`;
+      if (toMigrationInclusive === undefined || toMigrationInclusive >= 74) {
+        yield* sql`INSERT INTO scheduled_task_webhook_replay_keys
+          (task_id, replay_key, delivery_id, expires_at)
+          VALUES ('task-1', 'replay-1', 'delivery-1', 1900000000000)`;
+        yield* sql`INSERT INTO scheduled_task_webhook_pending
+          (delivery_id, task_id, coalesce_key, due_at, task_json, request_json, delivery_ids_json)
+          VALUES ('delivery-1', 'task-1', 'key-1', 1900000000000, '{}', '{}', '[]')`;
+      }
       yield* sql`INSERT INTO auth_sessions (session_id, subject, scopes, method, issued_at, expires_at)
         VALUES ('session-1', 'user', '[]', 'pairing', '2026-08-01', '2027-08-01')`;
       if (toMigrationInclusive === undefined) yield* insertPeerLink(sql);
@@ -397,13 +399,13 @@ it.layer(NodeServices.layer)("migrate-dev-db", (it) => {
       const stateDir = path.join(sourceDir, "userdata");
       const source = path.join(stateDir, "statev2.sqlite");
       yield* fs.makeDirectory(stateDir, { recursive: true });
-      yield* withDatabase(source, runMigrations({ toMigrationInclusive: 54 }));
+      yield* withDatabase(source, runMigrations({ toMigrationInclusive: 60 }));
 
       const result = yield* runMigrateDevDb(
         { baseDir: destDir, source, projects: 5, threadsPerProject: 10 },
         { sharedHome: sourceDir },
       );
-      assert.include(result.executedMigrations, "55_OrchestrationV2");
+      assert.include(result.executedMigrations, "62_OrchestrationV2");
     }),
   );
 
@@ -427,7 +429,7 @@ it.layer(NodeServices.layer)("migrate-dev-db", (it) => {
         source,
         Effect.gen(function* () {
           const sql = yield* SqlClient.SqlClient;
-          yield* runMigrations({ toMigrationInclusive: 54 });
+          yield* runMigrations({ toMigrationInclusive: 60 });
           yield* sql`INSERT INTO projection_projects
             (project_id, title, workspace_root, scripts_json, created_at, updated_at)
             VALUES ('project-legacy', 'Legacy', '/tmp/legacy', '[]', '2026-08-01', '2026-08-01')`;
@@ -507,7 +509,7 @@ it.layer(NodeServices.layer)("migrate-dev-db", (it) => {
         Effect.gen(function* () {
           const sql = yield* SqlClient.SqlClient;
           yield* sql`UPDATE effect_sql_migrations SET name = 'OtherBuildMigration'
-            WHERE migration_id = 60`;
+            WHERE migration_id = 67`;
         }),
       );
 
@@ -522,7 +524,7 @@ it.layer(NodeServices.layer)("migrate-dev-db", (it) => {
       assert.equal(error._tag, "MigrateDevDbPhaseError");
       if (error._tag === "MigrateDevDbPhaseError") {
         assert.equal(error.phase, "migrate");
-        assert.include(String(error.cause), "60_ThreadSnapshotWindowIndexes");
+        assert.include(String(error.cause), "67_ThreadSnapshotWindowIndexes");
       }
       assert.deepStrictEqual(yield* fs.readFile(source), sourceBefore);
       assert.deepStrictEqual(yield* fs.readFile(destination), destinationBefore);

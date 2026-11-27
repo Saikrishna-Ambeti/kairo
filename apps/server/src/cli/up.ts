@@ -13,7 +13,7 @@ import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as BootService from "../cloud/bootService.ts";
 import * as CliState from "../cloud/CliState.ts";
 import { CLOUD_ENDPOINT_RUNTIME_CONFIG, CLOUD_LINK_REVOKED } from "../cloud/config.ts";
-import { hasCloudPublicConfig } from "../cloud/publicConfig.ts";
+import { hasManagedRelayPublicConfig } from "../cloud/publicConfig.ts";
 import { compareExactServiceVersions } from "../cloud/serviceProtocol.ts";
 import * as ServerConfig from "../config.ts";
 import * as ManagedLimits from "../policy/managedLimits.ts";
@@ -70,8 +70,8 @@ const readSetup = Effect.fn("cli.up.read_setup")(function* () {
     .parse(ConfigProvider.fromEnv({ env: entries }));
   const secrets = yield* ServerSecretStore.ServerSecretStore;
   const connectRevoked =
-    hasCloudPublicConfig && Option.isSome(yield* secrets.get(CLOUD_LINK_REVOKED));
-  const connect = hasCloudPublicConfig
+    hasManagedRelayPublicConfig && Option.isSome(yield* secrets.get(CLOUD_LINK_REVOKED));
+  const connect = hasManagedRelayPublicConfig
     ? connectEnabled({
         cliDesired: yield* CliState.readCliDesiredCloudLink,
         cliMode: yield* CliState.readCliDesiredLinkMode,
@@ -248,7 +248,7 @@ const setUp = Effect.fn("cli.up")(function* (flags: {
   const current = { connect: before.connect === true, lan: before.lan };
   // A publish-only link is not "on", but a rollback must put it back.
   const priorPublishOnly =
-    hasCloudPublicConfig &&
+    hasManagedRelayPublicConfig &&
     (yield* CliState.readCliDesiredCloudLink) &&
     (yield* CliState.readCliDesiredLinkMode) === "publish_only";
   const plan = planRoutes({ ...before, installed: before.service.installed }, flags);

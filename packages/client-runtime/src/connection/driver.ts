@@ -82,7 +82,7 @@ export class ConnectionDriver extends Context.Service<
   }
 >()("@kairo/client-runtime/connection/driver/ConnectionDriver") {}
 
-export function provisionMemoryAccess<E, E2>(
+function provisionMemoryAccess<E, E2>(
   clerkToken: Effect.Effect<string, E>,
   provision: (clerkToken: string) => Effect.Effect<unknown, E2>,
 ): Effect.Effect<void> {

@@ -4,6 +4,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Tracer from "effect/Tracer";
 
 import { RELAY_GATEWAY_TIMEOUT_MESSAGE, relayRequestFailureDetail } from "./errorPresentation.ts";
 import * as ManagedRelay from "./managedRelay.ts";
@@ -51,7 +52,7 @@ describe("ManagedRelayClient", () => {
       yield* relayClient.listEnvironments({ clerkToken: "clerk-token" }).pipe(Effect.flip);
 
       expect(requestCount).toBe(0);
-    }).pipe(Effect.provide(managedRelayTestLayer(fetchFn, null)));
+    }).pipe(Effect.provide(layerManagedRelayTest(fetchFn, null)));
   });
 
   it.effect("owns tracing at service and implementation boundaries", () => {
@@ -121,7 +122,7 @@ describe("ManagedRelayClient", () => {
           "clientRuntime.managedRelay.createRequestProof",
         ]),
       );
-    }).pipe(Effect.withTracer(tracer), Effect.provide(managedRelayTestLayer(fetchFn)));
+    }).pipe(Effect.withTracer(tracer), Effect.provide(layerManagedRelayTest(fetchFn)));
   });
 
   it.effect("rejects unsafe relay URLs before sending credentials", () => {

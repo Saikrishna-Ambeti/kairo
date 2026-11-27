@@ -223,5 +223,3 @@ export const hasManagedRelayPublicConfig = Boolean(
   (process.env.KAIRO_CLERK_PUBLISHABLE_KEY?.trim() || buildTimeClerkPublishableKey) &&
   (process.env.KAIRO_CLERK_CLI_OAUTH_CLIENT_ID?.trim() || buildTimeClerkCliOAuthClientId),
 );
-
-export const hasCloudPublicConfig = hasManagedRelayPublicConfig;

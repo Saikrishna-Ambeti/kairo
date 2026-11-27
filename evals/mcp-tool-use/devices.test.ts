@@ -686,7 +686,7 @@ it.effect("refuses an open on a device another thread's agent-device session hol
   Effect.gen(function* () {
     const tools = yield* deviceTools({ deviceOwners: { [IPHONE]: "acme-design-review" } });
     // T3 names the owner's session as it names every thread's.
-    const owner = "kairo-a062c547ef0b6bf8ee839b67";
+    const owner = "t3-a062c547ef0b6bf8ee839b67";
     assert.deepEqual(tools.owners, [
       { deviceId: IPHONE, threadId: "acme-design-review", session: owner },
     ]);
@@ -786,7 +786,7 @@ it.effect(
     Effect.gen(function* () {
       // Opus R11-B3(a): in run 6 the simulator gave the free spare's plain open the owner's
       // DEVICE_IN_USE twice. It could not tell which device a flagless bound launcher drives.
-      const owner = "kairo-a062c547ef0b6bf8ee839b67";
+      const owner = "t3-a062c547ef0b6bf8ee839b67";
       const sample = makeSample(
         deviceCase({ world: { ...twoMacs, deviceOwners: { [IPHONE]: "acme-design-review" } } }),
         base,
