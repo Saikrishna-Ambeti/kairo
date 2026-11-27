@@ -1,5 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off globalConsole:off globalTimers:off
-// Launches a packaged desktop app against a seeded T3 home, opens a thread, and checks its
+// Launches a packaged desktop app against a seeded Kairo home, opens a thread, and checks its
 // messages render. Release jobs run it so a build whose backend or bundle cannot start fails
 // before it is published.
 import * as NodeChildProcess from "node:child_process";
@@ -12,7 +12,7 @@ import { chromium, type Browser } from "playwright-core";
 
 // A snapshot from an older build on purpose: the packaged server must migrate it forward, as it
 // does for every upgrading user. It holds one project and two threads, nothing else.
-const FIXTURE_DB = NodePath.join(import.meta.dirname, "fixtures/desktop-launch/statev2.sqlite");
+const FIXTURE_DB = NodePath.join(import.meta.dirname, "fixtures/desktop-launch/state.sqlite");
 const THREAD_TITLE = "Release launch check";
 const THREAD_MESSAGE = "The release opens and shows this thread.";
 const STEP_TIMEOUT_MS = 60_000;
@@ -34,8 +34,13 @@ const artifactsDir = NodePath.resolve(values["artifacts-dir"] ?? "desktop-launch
 
 const home = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "kairo-desktop-launch-"));
 const kairoHome = NodePath.join(home, "kairo");
-NodeFS.mkdirSync(NodePath.join(kairoHome, "userdata"), { recursive: true });
-NodeFS.copyFileSync(FIXTURE_DB, NodePath.join(kairoHome, "userdata/statev2.sqlite"));
+const stateDir = NodePath.join(kairoHome, "userdata");
+NodeFS.mkdirSync(stateDir, { recursive: true });
+NodeFS.copyFileSync(FIXTURE_DB, NodePath.join(stateDir, "state.sqlite"));
+NodeFS.writeFileSync(
+  NodePath.join(stateDir, "client-settings.json"),
+  JSON.stringify({ onboardingCompletedAt: "2026-10-27T10:00:00.000Z" }),
+);
 
 // Packaged builds turn off Electron's Node inspector fuse, so Playwright's `_electron.launch`
 // (which attaches through `--inspect`) never connects. Chromium's DevTools port still works.
@@ -118,7 +123,7 @@ try {
   console.error(`Desktop launch check failed while ${step}.`);
   NodeFS.mkdirSync(artifactsDir, { recursive: true });
   console.error(error instanceof Error ? error.message : error);
-  const logs = NodePath.join(kairoHome, "userdata/logs");
+  const logs = NodePath.join(stateDir, "logs");
   if (NodeFS.existsSync(logs)) {
     NodeFS.cpSync(logs, NodePath.join(artifactsDir, "logs"), { recursive: true });
     const serverLog = NodePath.join(logs, "server-child.log");

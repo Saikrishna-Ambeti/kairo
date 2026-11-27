@@ -209,7 +209,7 @@ describe("check:changed", () => {
       "apps/desktop/src/backend/DesktopBackendManager.ts",
       "apps/desktop/src/electron/ElectronProtocol.ts",
       "packages/contracts/src/settings.ts",
-      "scripts/fixtures/desktop-launch/statev2.sqlite",
+      "scripts/fixtures/desktop-launch/state.sqlite",
     ]) {
       assert.isTrue(launches(file), file);
     }

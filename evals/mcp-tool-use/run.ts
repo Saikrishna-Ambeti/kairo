@@ -462,7 +462,8 @@ const toolResult = (id: string, content: unknown): Block => ({
 });
 const texts = (content: typeof Content.Type) =>
   typeof content === "string" ? [content] : content.flatMap((block) => block.text ?? []);
-const isT3Name = (name: string) => name.startsWith(KAIRO_PREFIX) || name.startsWith("mcp__t3_code__");
+const isT3Name = (name: string) =>
+  name.startsWith(KAIRO_PREFIX) || name.startsWith("mcp__t3_code__");
 const hasTool = (tools: ReadonlyArray<ApiTool>, name: string) =>
   tools.some((tool) => tool.name === name);
 
@@ -679,7 +680,10 @@ export const kairoSubagentContext = async (model: Model, device = true, browser 
  */
 const kairoContextReport = (model: Model) => {
   const size = (chars: number) => `${chars} chars (~${Math.round(chars / 4)} tokens)`;
-  const descriptions = kairoTools.reduce((sum, tool) => sum + valueText(tool.description).length, 0);
+  const descriptions = kairoTools.reduce(
+    (sum, tool) => sum + valueText(tool.description).length,
+    0,
+  );
   const schemas = JSON.stringify(kairoTools).length;
   return [
     `- T3 context: system text ${size((isCodex(model) ? JSON.stringify(buildCodexAdditionalContext({ model }, { browser: true, device: true })) : kairoSystemAppend(model)).length)}`,
@@ -755,7 +759,12 @@ export const buildBase = (
   const append = options.nativeSubagent
     ? ""
     : forArm(
-        kairoSystemAppend(model, options.deviceAccess, options.browserAccess, options.agentFeedback),
+        kairoSystemAppend(
+          model,
+          options.deviceAccess,
+          options.browserAccess,
+          options.agentFeedback,
+        ),
         options.arm,
       );
   const modelLine = `You are powered by the model named ${MODELS[model]}. The exact model ID is ${model}.`;
@@ -803,7 +812,7 @@ export const buildBase = (
     ],
     /** Tools ToolSearch loads: T3 tools from source, and native tools the template only names. */
     t3,
-    deferred: [...kairo, ...nativeDeferred.map((name) => ({ name, ...nativeSchema(name) }))],
+    deferred: [...t3, ...nativeDeferred.map((name) => ({ name, ...nativeSchema(name) }))],
   };
 };
 
@@ -899,7 +908,7 @@ const buildCodexBase = (
     },
     nativeTools,
     t3,
-    deferred: [...kairo],
+    deferred: [...t3],
     codex: { ...template, input, reasoning: { ...template.reasoning, effort } },
   };
 };
@@ -2298,7 +2307,12 @@ export const answerToolCall = Effect.fn("evaluateMcpToolUse.answerToolCall")(fun
     const result = yield* sample.devices.call(name, input, failure);
     return result.isError ? failed(result.text) : toolResult(call.id, result.text);
   }
-  if (sample.backgroundWait && isT3Name(call.name) && name === "kairo_background_wait" && fromWorld) {
+  if (
+    sample.backgroundWait &&
+    isT3Name(call.name) &&
+    name === "kairo_background_wait" &&
+    fromWorld
+  ) {
     const result = yield* sample.backgroundWait(input);
     return result.isError ? failed(result.text) : toolResult(call.id, result.text);
   }
@@ -2308,7 +2322,11 @@ export const answerToolCall = Effect.fn("evaluateMcpToolUse.answerToolCall")(fun
     const refused = productRefusal(sample, name, input);
     if (refused !== undefined) return failed(refused);
   }
-  if (isT3Name(call.name) && name === "kairo_feedback" && (mock === undefined || mock === "default")) {
+  if (
+    isT3Name(call.name) &&
+    name === "kairo_feedback" &&
+    (mock === undefined || mock === "default")
+  ) {
     const decoded = decodeFeedbackInput(input);
     if (Result.isFailure(decoded)) return failed(decoded.failure.message);
     const report = decoded.success;

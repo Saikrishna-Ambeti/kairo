@@ -853,7 +853,10 @@ it.live("one-click approves only access the browser session holds the scopes for
           Effect.flatMap(json<{ csrfToken?: string; oneClickAccess?: ReadonlyArray<string> }>),
         );
 
-      const admin = yield* browserCookie([...AuthAdministrativeScopes]);
+      const administrativePairingScopes = AuthAdministrativeScopes.filter(
+        (scope) => scope !== "review:write",
+      );
+      const admin = yield* browserCookie(administrativePairingScopes);
       const adminDetails = yield* details(admin);
       expect(adminDetails.csrfToken).toEqual(expect.any(String));
       expect(adminDetails.oneClickAccess).toEqual([
@@ -916,7 +919,7 @@ it.live("one-click approves only access the browser session holds the scopes for
       // The hosted app may load and decide with two credentials minted for the same browser key.
       const key = makeDpopKey();
       const dpopSession = (thumbprint: string) =>
-        auth.issuePairingCredential({ scopes: [...AuthAdministrativeScopes] }).pipe(
+        auth.issuePairingCredential({ scopes: administrativePairingScopes }).pipe(
           Effect.flatMap((pairing) =>
             auth.exchangeBootstrapCredentialForAccessToken(
               pairing.credential,

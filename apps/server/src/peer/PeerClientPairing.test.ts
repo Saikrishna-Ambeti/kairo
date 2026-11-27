@@ -134,11 +134,7 @@ it.effect(
           metadata,
         );
         expect(new Set(session.scope.split(" "))).toEqual(
-          new Set([
-            AuthOrchestrationReadScope,
-            AuthOrchestrationOperateScope,
-            AuthAccessWriteScope,
-          ]),
+          new Set([AuthOrchestrationReadScope, AuthOrchestrationOperateScope]),
         );
         expect(session.scope).not.toContain(AuthTerminalOperateScope);
         const again = yield* b.auth

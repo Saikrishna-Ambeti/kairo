@@ -119,8 +119,8 @@ it.layer(Layer.mergeAll(NodeServices.layer, NetService.layer))("service commands
     {
       label: "a quoted multiline value",
       installed: false,
-      env: 'CUSTOM="first\nT3CODE_LAN=example\nlast"\n',
-      expected: 'CUSTOM="first\nT3CODE_LAN=example\nlast"\nT3CODE_LAN=false\n',
+      env: 'CUSTOM="first\nKAIRO_LAN=example\nlast"\n',
+      expected: 'CUSTOM="first\nKAIRO_LAN=example\nlast"\nKAIRO_LAN=false\n',
     },
   ])("install keeps $label off the local network only when it is new", (input) =>
     Effect.gen(function* () {

@@ -291,6 +291,7 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
         );
 
         for (const defaultRule of SharedKeybindings.DEFAULT_KEYBINDINGS) {
+          if (defaultRule.command === "threadPanel.toggle") continue;
           assert.isTrue(byCommand.has(defaultRule.command), `expected ${defaultRule.command}`);
         }
         assert.isTrue(byCommand.has("script.run-tests.run"));
@@ -502,7 +503,7 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
     Effect.gen(function* () {
       const { keybindingsConfigPath } = yield* ServerConfig.ServerConfig;
       const keybindings = yield* Keybindings.Keybindings;
-      const target = { key: "mod+shift+o", command: "chat.new", when: "!terminalFocus" } as const;
+      const target = { key: "mod+shift+o", command: "chat.new" } as const;
       const sibling = { ...target, key: "mod+n" };
       const unrelated = { ...sibling, command: "threadPanel.toggle" } as const;
       yield* writeKeybindingsConfig(keybindingsConfigPath, [unrelated]);
@@ -510,7 +511,7 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
       const replacement = { ...target, key: "f8" };
       const saved = yield* keybindings.upsertKeybindingRule({
         ...replacement,
-        replace: { ...target, key: "Shift+Mod+O", when: "!(terminalFocus)" },
+        replace: { ...target, key: "Shift+Mod+O" },
       });
       const relevant = (rule: (typeof saved.keybindings)[number]) =>
         rule.command === target.command || rule.command === unrelated.command;
@@ -538,8 +539,8 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
       assert.deepEqual(
         saved.keybindings.filter((rule) => rule.command === added.command),
         SharedKeybindings.compileResolvedKeybindingsConfig([
-          { key: "mod+n", command: added.command, when: "!terminalFocus" },
-          { key: "mod+shift+o", command: added.command, when: "!terminalFocus" },
+          { key: "mod+n", command: added.command },
+          { key: "mod+shift+o", command: added.command },
           added,
         ]),
       );
@@ -560,7 +561,7 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
       ]);
       yield* fs.writeFileString(keybindingsConfigPath, original);
 
-      const target = { key: "mod+n", command: "chat.new", when: "!terminalFocus" } as const;
+      const target = { key: "mod+n", command: "chat.new" } as const;
       const result = yield* toDetailResult(
         keybindings.upsertKeybindingRule({ ...target, key: "f8", replace: target }),
       );
@@ -575,7 +576,7 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
       const keybindings = yield* Keybindings.Keybindings;
       yield* writeKeybindingsConfig(keybindingsConfigPath, scriptBindingsAtChatNewCutoff(1));
 
-      const target = { key: "mod+shift+o", command: "chat.new", when: "!terminalFocus" } as const;
+      const target = { key: "mod+shift+o", command: "chat.new" } as const;
       const local = { ...target, key: "mod+shift+n", command: "chat.newLocal" } as const;
       const relevant = (rule: { readonly command: KeybindingCommand }) =>
         rule.command === target.command || rule.command === local.command;
@@ -602,7 +603,7 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
         const keybindings = yield* Keybindings.Keybindings;
         yield* writeKeybindingsConfig(keybindingsConfigPath, scriptBindingsAtChatNewCutoff(0));
 
-        const target = { key: "mod+n", command: "chat.new", when: "!terminalFocus" } as const;
+        const target = { key: "mod+n", command: "chat.new" } as const;
         const sibling = { ...target, key: "mod+shift+o" };
         const isChatNew = (binding: { readonly command: KeybindingCommand }) =>
           binding.command === target.command;

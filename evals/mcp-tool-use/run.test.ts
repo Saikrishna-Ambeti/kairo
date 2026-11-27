@@ -742,11 +742,11 @@ it("lists link tools only while a case turns the beta on, and sends chips as T3 
   });
   assert.notInclude(
     off.t3.map((tool) => tool.name),
-    "mcp__t3-code__t3_environment_link",
+    "mcp__t3-code__kairo_environment_link",
   );
   assert.include(
     on.t3.map((tool) => tool.name),
-    "mcp__t3-code__t3_environment_link",
+    "mcp__t3-code__kairo_environment_link",
   );
 
   const testCase: McpToolUseCase = {
@@ -1861,7 +1861,8 @@ it.effect("seeds T3's error for a prior background wait whose IDs match nothing"
       assert.equal(sample.priorErrors.has(wait), isError, id);
       const blocks = buildMessages(sample).flatMap((message) => message.content);
       const waitUse = blocks.find(
-        (block) => block.type === "tool_use" && String(block.name).endsWith("kairo_background_wait"),
+        (block) =>
+          block.type === "tool_use" && String(block.name).endsWith("kairo_background_wait"),
       );
       const replayed = blocks.find(
         (block) => block.type === "tool_result" && block.tool_use_id === waitUse?.id,
@@ -2810,7 +2811,8 @@ it("keeps the shared recovery budget when a case is decoded and graded", () => {
     step,
     tool,
     failed: true,
-    input: tool === "Bash" ? { command: "/home/user/.kairo/device/bin/agent-device snapshot -i" } : {},
+    input:
+      tool === "Bash" ? { command: "/home/user/.kairo/device/bin/agent-device snapshot -i" } : {},
   }));
   const run = { calls, text: "Canvas is blocked: daemon unavailable.", stopReason: "end_turn" };
   assert.isTrue(
@@ -4932,7 +4934,7 @@ it.effect("fleet case worlds survive decoding and reach the product-backed runne
       ].join(" ");
       const error = tools.sessionError(sample.shell, command) ?? "";
       assert.include(error, id === "OWN-01" ? "DEVICE_IN_USE" : "SESSION_NOT_FOUND");
-      if (id === "OWN-01") assert.equal(tools.owners[0]!.session, "kairo-a062c547ef0b6bf8ee839b67");
+      if (id === "OWN-01") assert.equal(tools.owners[0]!.session, "t3-a062c547ef0b6bf8ee839b67");
     }
   }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
 );
@@ -5254,7 +5256,9 @@ const capRun6 = [
   },
   {
     ref: "api-dec6-cand-claude-opus-5-5#36",
-    launchers: ["/home/user/.kairo/userdata/device/targets/t3-2b48b357cf96fdad64f0dd3f/agent-device"],
+    launchers: [
+      "/home/user/.kairo/userdata/device/targets/t3-2b48b357cf96fdad64f0dd3f/agent-device",
+    ],
     calls: [
       {
         step: 4,

@@ -52,19 +52,22 @@ const layerEnvironmentAuth = EnvironmentAuth.layer.pipe(
   Layer.provide(ServerEnvironment.layerIdentity),
   Layer.provide(layerConfig),
 );
-const layerRoutes = HttpApiBuilder.layer(AuthTestApi).pipe(
-  Layer.provide(AuthHttp.layer),
-  Layer.provide(AuthHttp.layerAuthenticatedAuth),
-  Layer.provideMerge(layerEnvironmentAuth),
-  Layer.provide(layerConfig),
-  Layer.provideMerge(
-    HttpPlatform.layer.pipe(
-      Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
-      Layer.provideMerge(Etag.layerWeak),
+const layerRoutes = <Extra, E, R>(
+  auth: Layer.Layer<EnvironmentAuth.EnvironmentAuth | Extra, E, R>,
+) =>
+  HttpApiBuilder.layer(AuthTestApi).pipe(
+    Layer.provide(AuthHttp.layer),
+    Layer.provide(AuthHttp.layerAuthenticatedAuth),
+    Layer.provideMerge(auth),
+    Layer.provide(layerConfig),
+    Layer.provideMerge(
+      HttpPlatform.layer.pipe(
+        Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+        Layer.provideMerge(Etag.layerWeak),
+      ),
     ),
-  ),
-  Layer.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
-);
+    Layer.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+  );
 
 const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 const postJson = (path: string, body: unknown, headers?: Readonly<Record<string, string>>) =>
@@ -74,7 +77,7 @@ const postJson = (path: string, body: unknown, headers?: Readonly<Record<string,
     body: encodeJson(body),
   });
 
-it.effect("sets the selected browser session cookies through the HTTP route", () =>
+it.live("sets the selected browser session cookies through the HTTP route", () =>
   Effect.gen(function* () {
     const random = yield* SecureRandom.SecureRandom;
     const unusedSecretStore = ServerSecretStore.ServerSecretStore.of({
@@ -87,12 +90,20 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
     const requestContext = Context.make(SecureRandom.SecureRandom, random).pipe(
       Context.add(ServerSecretStore.ServerSecretStore, unusedSecretStore),
     );
+    const authContext = yield* Layer.build(
+      layerEnvironmentAuth.pipe(
+        Layer.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+      ),
+    );
+    const auth = Context.get(authContext, EnvironmentAuth.EnvironmentAuth);
+    const pairing = yield* auth.issuePairingCredential({ scopes: ["orchestration:read"] });
+    const environmentARoutes = layerRoutes(Layer.succeedContext(authContext));
     return yield* Effect.acquireUseRelease(
       Effect.sync(
         () =>
           [
-            HttpRouter.toWebHandler(layerRoutes, { disableLogger: true }),
-            HttpRouter.toWebHandler(layerRoutes, { disableLogger: true }),
+            HttpRouter.toWebHandler(environmentARoutes, { disableLogger: true }),
+            HttpRouter.toWebHandler(layerRoutes(layerEnvironmentAuth), { disableLogger: true }),
           ] as const,
       ),
       ([environmentA, environmentB]) =>
@@ -147,7 +158,7 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
           expect(environmentBSession.status).toBe(200);
           expect(await environmentBSession.json()).toMatchObject({ authenticated: true });
 
-          const pairingResponse = await environmentA.handler(
+          const refusedPairing = await environmentA.handler(
             postJson(
               "/api/auth/pairing-token",
               { scopes: ["orchestration:read"] },
@@ -155,8 +166,7 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
             ),
             requestContext,
           );
-          expect(pairingResponse.status).toBe(200);
-          const pairing = (await pairingResponse.json()) as { credential: string };
+          expect(refusedPairing.status).toBe(403);
           const restrictedResponse = await environmentA.handler(
             postJson("/api/auth/browser-session", { credential: pairing.credential }),
             requestContext,
@@ -187,7 +197,9 @@ it.effect.each(["DPoP", "dpop"])("challenges a refused %s request with DPoP", (s
       Context.add(ServerSecretStore.ServerSecretStore, unusedSecretStore),
     );
     return yield* Effect.acquireUseRelease(
-      Effect.sync(() => HttpRouter.toWebHandler(layerRoutes, { disableLogger: true })),
+      Effect.sync(() =>
+        HttpRouter.toWebHandler(layerRoutes(layerEnvironmentAuth), { disableLogger: true }),
+      ),
       (environment) =>
         Effect.promise(async () => {
           const refused = await environment.handler(
@@ -236,7 +248,9 @@ it.live("checks token-endpoint DPoP proofs without writing replay state", () =>
         }),
       });
     return yield* Effect.acquireUseRelease(
-      Effect.sync(() => HttpRouter.toWebHandler(layerRoutes, { disableLogger: true })),
+      Effect.sync(() =>
+        HttpRouter.toWebHandler(layerRoutes(layerEnvironmentAuth), { disableLogger: true }),
+      ),
       (environment) =>
         Effect.promise(async () => {
           const unknownToken = await environment.handler(

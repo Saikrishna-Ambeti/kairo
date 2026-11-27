@@ -174,12 +174,12 @@ describe("readEnvironmentFromLoginShell", () => {
       ) => string
     >(() =>
       [
-        "__T3CODE_ENV_PATH_START__",
+        "__KAIRO_ENV_PATH_START__",
         "/a:/b",
-        "__T3CODE_ENV_PATH_END__",
-        "__T3CODE_ENV_SSH_AUTH_SOCK_START__",
+        "__KAIRO_ENV_PATH_END__",
+        "__KAIRO_ENV_SSH_AUTH_SOCK_START__",
         "/tmp/secretive.sock",
-        "__T3CODE_ENV_SSH_AUTH_SOCK_END__",
+        "__KAIRO_ENV_SSH_AUTH_SOCK_END__",
       ].join("\n"),
     );
 
@@ -206,11 +206,11 @@ describe("readEnvironmentFromLoginShell", () => {
       ) => string
     >(() =>
       [
-        "__T3CODE_ENV_PATH_START__",
+        "__KAIRO_ENV_PATH_START__",
         "/a:/b",
-        "__T3CODE_ENV_PATH_END__",
-        "__T3CODE_ENV_SSH_AUTH_SOCK_START__",
-        "__T3CODE_ENV_SSH_AUTH_SOCK_END__",
+        "__KAIRO_ENV_PATH_END__",
+        "__KAIRO_ENV_SSH_AUTH_SOCK_START__",
+        "__KAIRO_ENV_SSH_AUTH_SOCK_END__",
       ].join("\n"),
     );
 
@@ -227,11 +227,9 @@ describe("readEnvironmentFromLoginShell", () => {
         options: { encoding: "utf8"; timeout: number },
       ) => string
     >(() =>
-      [
-        "__T3CODE_ENV_CUSTOM_VAR_START__",
-        "  first\nsecond  ",
-        "__T3CODE_ENV_CUSTOM_VAR_END__",
-      ].join("\n"),
+      ["__KAIRO_ENV_CUSTOM_VAR_START__", "  first\nsecond  ", "__KAIRO_ENV_CUSTOM_VAR_END__"].join(
+        "\n",
+      ),
     );
 
     expect(readEnvironmentFromLoginShell("/bin/zsh", ["CUSTOM_VAR"], execFile)).toEqual({
@@ -401,7 +399,7 @@ describe("readEnvironmentFromWindowsShell", () => {
         ) => string
       >(
         () =>
-          "__T3CODE_ENV_PATH_START__\nC:\\Users\\testuser\\AppData\\Roaming\\npm\n__T3CODE_ENV_PATH_END__\n",
+          "__KAIRO_ENV_PATH_START__\nC:\\Users\\testuser\\AppData\\Roaming\\npm\n__KAIRO_ENV_PATH_END__\n",
       );
 
       expect(
@@ -432,7 +430,7 @@ describe("readEnvironmentFromWindowsShell", () => {
         ) => string
       >(
         () =>
-          "__T3CODE_ENV_FNM_DIR_START__\r\nC:\\Users\\testuser\\AppData\\Roaming\\fnm\r\n__T3CODE_ENV_FNM_DIR_END__\r\n",
+          "__KAIRO_ENV_FNM_DIR_START__\r\nC:\\Users\\testuser\\AppData\\Roaming\\fnm\r\n__KAIRO_ENV_FNM_DIR_END__\r\n",
       );
 
       expect(
@@ -468,7 +466,7 @@ describe("readEnvironmentFromWindowsShell", () => {
           args: ReadonlyArray<string>,
           options: { encoding: "utf8"; timeout: number },
         ) => string
-      >(() => "__T3CODE_ENV_PATH_START__\nC:\\Tools\n__T3CODE_ENV_PATH_END__\n");
+      >(() => "__KAIRO_ENV_PATH_START__\nC:\\Tools\n__KAIRO_ENV_PATH_END__\n");
 
       expect(
         yield* readEnvironmentFromWindowsShell(["PATH"], { loadProfile: true }, (...args) =>
@@ -498,7 +496,7 @@ describe("readEnvironmentFromWindowsShell", () => {
         if (file === "pwsh.exe") {
           throw new Error("spawn pwsh.exe ENOENT");
         }
-        return "__T3CODE_ENV_PATH_START__\nC:\\Tools\n__T3CODE_ENV_PATH_END__\n";
+        return "__KAIRO_ENV_PATH_START__\nC:\\Tools\n__KAIRO_ENV_PATH_END__\n";
       });
 
       expect(
@@ -1818,7 +1816,11 @@ describe("pathSetupCommand", () => {
   });
 
   it("writes the startup file fish and zsh read, under XDG_CONFIG_HOME or ZDOTDIR", () => {
-    const setup = { directory: "/opt/kairo/bin", home: "/home/theo", shell: "/usr/bin/fish" } as const;
+    const setup = {
+      directory: "/opt/kairo/bin",
+      home: "/home/theo",
+      shell: "/usr/bin/fish",
+    } as const;
     expect(pathSetup({ ...setup, platform: "linux", configHome: "/home/theo/cfg" })?.file).toBe(
       "/home/theo/cfg/fish/config.fish",
     );
