@@ -218,7 +218,17 @@ function setup() {
     sendInFlightRef: { current: false },
   };
   resources.refreshSelection.mockImplementation(async (ids) => (ids.includes(b) ? b : null));
-  return { a, b, draftId, input, store };
+  return {
+    a,
+    b,
+    draftId,
+    input,
+    store,
+    [Symbol.dispose]() {
+      useComposerDraftStore.setState(useComposerDraftStore.getInitialState(), true);
+      useComposerDraftStore.persist.clearStorage();
+    },
+  };
 }
 
 interface HarnessProps {
@@ -271,7 +281,8 @@ function RoutingProbe({ input, onPrepared }: HarnessProps) {
 }
 
 it("refreshes a stored automatic choice before sending an unsent draft", async () => {
-  const { a, b, draftId, input, store } = fanoutSetup();
+  using fixture = fanoutSetup();
+  const { a, b, draftId, input, store } = fixture;
   resources.refs = [{ name: "main", current: true, isDefault: true, worktreePath: null }];
   const selections = ["model-a", "model-b"].map((model) =>
     createModelSelection(ProviderInstanceId.make("codex"), model),
@@ -311,7 +322,8 @@ it("refreshes a stored automatic choice before sending an unsent draft", async (
 it.each(["manual", "attachments", "promoted"] as const)(
   "keeps the machine for %s drafts",
   async (kind) => {
-    const { a, draftId, input, store } = setup();
+    using fixture = setup();
+    const { a, draftId, input, store } = fixture;
     if (kind === "manual") store.setDraftThreadContext(draftId, { environmentSelection: "manual" });
     const guardedInput = {
       ...input,
@@ -333,7 +345,8 @@ it.each(["manual", "attachments", "promoted"] as const)(
 );
 
 it("does not reuse a stored choice when refreshed resources have no winner", async () => {
-  const { a, input } = setup();
+  using fixture = setup();
+  const { a, input } = fixture;
   resources.refreshSelection.mockResolvedValue(null);
   const onPrepared = vi.fn();
   await using screen = await render(<Harness input={input} onPrepared={onPrepared} />);
@@ -343,7 +356,8 @@ it("does not reuse a stored choice when refreshed resources have no winner", asy
 });
 
 it("abandons a refresh when the draft changes while resources are in flight", async () => {
-  const { a, b, draftId, input, store } = setup();
+  using fixture = setup();
+  const { a, b, draftId, input, store } = fixture;
   let resolve!: (environmentId: EnvironmentId) => void;
   resources.refreshSelection.mockReturnValue(
     new Promise<EnvironmentId>((done) => {
@@ -392,7 +406,8 @@ function fanoutSetup() {
 it.each([false, true])(
   "settles a cold destination workspace default after an automatic pick (explicit=%s)",
   async (explicit) => {
-    const { b, draftId, input, store } = fanoutSetup();
+    using fixture = fanoutSetup();
+    const { b, draftId, input, store } = fixture;
     store.setDraftThreadContext(draftId, { envMode: "local", environmentSelection: "auto" });
     resources.pickedEnvironmentId = b;
     const resolveFile = holdProjectFile();
@@ -417,7 +432,8 @@ it.each([
   { branch: "shared", expected: "shared" },
   { branch: "origin/release", expected: "origin/release" },
 ])("sends on a usable destination worktree base from $branch", async ({ branch, expected }) => {
-  const { a, b, draftId, input, store } = fanoutSetup();
+  using fixture = fanoutSetup();
+  const { a, b, draftId, input, store } = fixture;
   store.setDraftThreadContext(draftId, {
     envMode: "local",
     branch,
@@ -463,7 +479,8 @@ it.each([
 ] as const)(
   "handles a $selection branch pick during the base lookup",
   async ({ selection, ready }) => {
-    const { a, draftId, input, store } = fanoutSetup();
+    using fixture = fanoutSetup();
+    const { a, draftId, input, store } = fixture;
     const branch = selection === "auto" ? "main" : "feature";
     store.setDraftThreadContext(draftId, {
       branch: null,
@@ -495,7 +512,8 @@ it.each([
 );
 
 it("abandons Send when the draft closes during the destination workspace read", async () => {
-  const { a, draftId, input, store } = fanoutSetup();
+  using fixture = fanoutSetup();
+  const { a, draftId, input, store } = fixture;
   store.setDraftThreadContext(draftId, {
     environmentSelection: "auto",
     loadBalancedEnvironmentId: a,
@@ -517,7 +535,8 @@ it("abandons Send when the draft closes during the destination workspace read", 
 });
 
 it("drops the source branch when Send moves to a current checkout", async () => {
-  const { a, b, draftId, input, store } = fanoutSetup();
+  using fixture = fanoutSetup();
+  const { a, b, draftId, input, store } = fixture;
   store.setDraftThreadContext(draftId, {
     envMode: "worktree",
     branch: "source-only",
@@ -544,7 +563,8 @@ it("drops the source branch when Send moves to a current checkout", async () => 
 });
 
 it("keeps the selected models when the draft switches machine by hand", async () => {
-  const { a, b, draftId, input, store, selectionsOn, models } = fanoutSetup();
+  using fixture = fanoutSetup();
+  const { a, b, draftId, input, store, selectionsOn, models } = fixture;
   await using screen = await render(
     <Harness
       input={{ ...input, automaticEnvironment: false, draftThread: store.getDraftSession(draftId) }}
@@ -564,7 +584,8 @@ it("keeps the selected models when the draft switches machine by hand", async ()
 });
 
 it("keeps the selected models when automatic routing picks another machine", async () => {
-  const { b, draftId, input, store } = fanoutSetup();
+  using fixture = fanoutSetup();
+  const { b, draftId, input, store } = fixture;
   store.setDraftThreadContext(draftId, { environmentSelection: "auto" });
   resources.pickedEnvironmentId = b;
   await using screen = await render(
@@ -584,7 +605,8 @@ it.each([
     model: "sol",
   },
 ])("$name when the draft switches machine by hand", async ({ explicit, remoteDefault, model }) => {
-  const { b, draftId, input, store } = fanoutSetup();
+  using fixture = fanoutSetup();
+  const { b, draftId, input, store } = fixture;
   const codex = ProviderInstanceId.make("codex");
   resources.projects = resources.projects.map((project) =>
     project.environmentId === b && remoteDefault
@@ -607,7 +629,8 @@ it.each([
 });
 
 it("takes the destination's default workspace when the draft switches machine by hand", async () => {
-  const { b, draftId, input, store } = fanoutSetup();
+  using fixture = fanoutSetup();
+  const { b, draftId, input, store } = fixture;
   resources.projects = resources.projects.map((project) =>
     project.environmentId === b
       ? { ...project, defaultThreadEnvMode: "worktree" as const }
@@ -626,7 +649,8 @@ it("takes the destination's default workspace when the draft switches machine by
 });
 
 it("keeps a workspace the user picked when the draft switches machine by hand", async () => {
-  const { b, draftId, input, store } = fanoutSetup();
+  using fixture = fanoutSetup();
+  const { b, draftId, input, store } = fixture;
   resources.projects = resources.projects.map((project) =>
     project.environmentId === b
       ? { ...project, defaultThreadEnvMode: "worktree" as const }
@@ -651,7 +675,8 @@ it("keeps a workspace the user picked when the draft switches machine by hand", 
 it.each(["deleted", "moved"] as const)(
   "checks the destination again when the project was %s during the default read",
   async (change) => {
-    const { a, b, draftId, input, store } = fanoutSetup();
+    using fixture = fanoutSetup();
+    const { a, b, draftId, input, store } = fixture;
     const pending = Atom.make(AsyncResult.initial<ProjectReadFileResult, never>());
     const moved = projectFileAtom('{"defaultThreadEnvMode":"worktree"}');
     resources.getProjectFileQueryAtom.mockImplementation((_environmentId, root) =>
@@ -684,7 +709,8 @@ it.each(["deleted", "moved"] as const)(
 it.each(["leave the draft", "choose automatic routing", "switch to another machine"] as const)(
   "stops watching the destination when users %s before the default loads",
   async (action) => {
-    const { a, b, input } = fanoutSetup();
+    using fixture = fanoutSetup();
+    const { a, b, input } = fixture;
     const pending = Atom.make(AsyncResult.initial<ProjectReadFileResult, never>());
     const settled = projectFileAtom("{}");
     resources.getProjectFileQueryAtom.mockImplementation((environmentId) =>
