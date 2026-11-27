@@ -48,35 +48,40 @@ export function MobileArtifactRow(props: {
   // oxlint-disable-next-line kairo/no-unreasoned-state-sync -- Aborts an in-flight share when the row unmounts.
   useEffect(() => () => controllerRef.current?.abort(), []);
 
-  const share = useCallback(async () => {
-    if (isSharing) return;
+  const share = useCallback(() => {
+    if (controllerRef.current !== null) return;
     const controller = new AbortController();
     controllerRef.current = controller;
     setIsSharing(true);
-    try {
-      const url = await refreshUrl();
-      if (controller.signal.aborted) return;
-      if (url === null) throw new Error(gt("File unavailable. Refresh and try again."));
-      await downloadAndShareAttachment({
-        url,
-        attachment: {
-          name: props.artifact.fileName,
-          mimeType: ARTIFACT_MIME_TYPES[props.artifact.kind],
-        },
-        signal: controller.signal,
+    void refreshUrl()
+      .then((url) => {
+        if (controller.signal.aborted) return;
+        if (url === null) {
+          Alert.alert(gt("Could not open file"), gt("File unavailable. Refresh and try again."));
+          return;
+        }
+        return downloadAndShareAttachment({
+          url,
+          attachment: {
+            name: props.artifact.fileName,
+            mimeType: ARTIFACT_MIME_TYPES[props.artifact.kind],
+          },
+          signal: controller.signal,
+        });
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          Alert.alert(
+            gt("Could not open file"),
+            error instanceof Error ? error.message : gt("Try again."),
+          );
+        }
+      })
+      .finally(() => {
+        if (controllerRef.current === controller) controllerRef.current = null;
+        if (!controller.signal.aborted) setIsSharing(false);
       });
-    } catch (error) {
-      if (!controller.signal.aborted) {
-        Alert.alert(
-          gt("Could not open file"),
-          error instanceof Error ? error.message : gt("Try again."),
-        );
-      }
-    } finally {
-      if (controllerRef.current === controller) controllerRef.current = null;
-      if (!controller.signal.aborted) setIsSharing(false);
-    }
-  }, [gt, isSharing, props.artifact.fileName, props.artifact.kind, refreshUrl]);
+  }, [gt, props.artifact.fileName, props.artifact.kind, refreshUrl]);
 
   return (
     <View className="mx-2 flex-row items-center rounded-xl">
@@ -85,7 +90,7 @@ export function MobileArtifactRow(props: {
         accessibilityLabel={gt("Open {fileName}", { fileName: props.artifact.fileName })}
         className="min-h-[48px] min-w-0 flex-1 flex-row items-center gap-3 rounded-xl px-2 active:bg-subtle"
         disabled={isSharing}
-        onPress={() => void share()}
+        onPress={share}
       >
         <SymbolView
           name={

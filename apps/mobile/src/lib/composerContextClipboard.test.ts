@@ -10,6 +10,7 @@ import {
   collectComposerContextReferences,
   formatComposerContextReference,
 } from "@kairo/shared/composerContextReferences";
+import { hostedThreadLink } from "@kairo/shared/threadLinks";
 
 const mocks = vi.hoisted(() => ({
   execute: vi.fn(),
@@ -353,7 +354,10 @@ describe("mobile context clipboard imports", () => {
 
   it("pastes a thread link as a chip only where the destination's agent reads its machine", async () => {
     const text = [
-      "https://app.kairo.codes/threads/destination/local-thread",
+      hostedThreadLink({
+        environmentId: EnvironmentId.make("destination"),
+        threadId: ThreadId.make("local-thread"),
+      }),
       "<kairo-thread://v2/source/foreign-thread>",
     ].join(" ");
     const result = await importComposerContextClipboard(

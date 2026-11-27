@@ -32,6 +32,10 @@ vi.mock("../../connection/catalog", () => ({
 }));
 
 vi.mock("./cloud-drafts", () => ({ removeCloudEnvironments: {} }));
+vi.mock("./connectOnboarding", () => ({
+  clearConnectOnboardingRequest: vi.fn(),
+  requestConnectOnboarding: vi.fn(),
+}));
 vi.mock("../../state/use-composer-drafts", () => ({
   getComposerCloudAccountId: vi.fn(async () => null),
   restoreCloudComposerDrafts: vi.fn(async () => undefined),

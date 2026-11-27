@@ -18,6 +18,7 @@ vi.mock("../settings/appearance/AppearancePreferencesProvider", () => ({
 }));
 vi.mock("./preload-workspace-file", () => ({ preloadWorkspaceFileContents: () => {} }));
 vi.mock("./FileTreeBrowser", () => ({ FileTreeBrowser: () => null }));
+vi.mock("./ThreadArtifactsList", () => ({ ThreadArtifactsList: () => null }));
 vi.mock("./useFileTreeEntries", () => ({
   useFileTreeEntries: (input: { cwd: string | null; searchQuery: string }) => {
     queries.push({ cwd: input.cwd, searchQuery: input.searchQuery });
