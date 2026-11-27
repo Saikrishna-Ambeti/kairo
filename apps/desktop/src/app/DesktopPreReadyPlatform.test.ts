@@ -171,10 +171,7 @@ describe("DesktopPreReadyPlatform", () => {
         assert.include(identity.desktopEntry ?? "", "Exec=/Applications/current.AppImage %U");
         assert.include(identity.desktopEntry ?? "", "Name=Kairo (Beta)");
         assert.include(identity.desktopEntry ?? "", "MimeType=x-scheme-handler/kairo;");
-        assert.include(
-          identity.desktopEntry ?? "",
-          "Icon=/xdg/icons/com.kairo.Kairo.desktop.png",
-        );
+        assert.include(identity.desktopEntry ?? "", "Icon=/xdg/icons/com.kairo.Kairo.desktop.png");
         assert.equal(
           copyFileSyncMock.mock.calls.length,
           0,
@@ -247,7 +244,7 @@ describe("DesktopPreReadyPlatform", () => {
         const entry = writeFileSyncMock.mock.calls.find(
           ([path]) => path === "/xdg/applications/com.kairo.Kairo.desktop",
         )?.[1];
-        assert.include(entry, 'Exec="/opt/Kairo/kairo" %U');
+        assert.include(entry, "Exec=/opt/Kairo/kairo %U");
       }),
     ).pipe(Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())));
   });

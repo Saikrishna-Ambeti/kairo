@@ -401,9 +401,7 @@ export const make = Effect.gen(function* () {
     if (setup === undefined) return yield* fail("Kairo cannot add t3 to this shell's PATH.");
     const shadowedBy = yield* foreignFirstOnPath;
     if (Option.isSome(shadowedBy)) {
-      return yield* fail(
-        `Another t3 at ${shadowedBy.value} runs first; Kairo leaves it in place.`,
-      );
+      return yield* fail(`Another t3 at ${shadowedBy.value} runs first; Kairo leaves it in place.`);
     }
     if (!(yield* folderOnPath(installed.value)) && !(yield* hasLine(setup))) {
       yield* fs.makeDirectory(path.dirname(setup.path), { recursive: true }).pipe(
@@ -437,7 +435,7 @@ export const make = Effect.gen(function* () {
       // A t3 that is not ours in these folders, even off PATH, means the user has one already. On
       // Windows the app never writes there, so any t3 there is someone else's.
       for (const directory of userCandidates(environment.homeDirectory)) {
-        for (const name of windows ? ["t3.cmd", "kairo.exe"] : ["kairo"]) {
+        for (const name of windows ? ["kairo.cmd", "kairo.exe"] : ["kairo"]) {
           const other = path.join(directory, name);
           const present =
             (yield* exists(other)) || Option.isSome(yield* fs.readLink(other).pipe(Effect.option));

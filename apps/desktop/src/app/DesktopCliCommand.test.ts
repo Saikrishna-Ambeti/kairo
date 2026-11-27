@@ -149,7 +149,7 @@ it.layer(NodeServices.layer)("DesktopCliCommand", (it) => {
 
       // An app that ran before left its settings or launcher. Its user may have removed t3 or
       // chosen another, so first launch leaves it to Settings, where Install still works.
-      for (const left of ["userdata/desktop-settings.json", "bin/t3"]) {
+      for (const left of ["userdata/desktop-settings.json", "bin/kairo"]) {
         const upgradedHome = yield* fs.makeTempDirectoryScoped();
         const leftFile = path.join(upgradedHome, ".kairo", left);
         yield* fs.makeDirectory(path.dirname(leftFile), { recursive: true });
@@ -432,11 +432,14 @@ it.layer(NodeServices.layer)("DesktopCliCommand", (it) => {
       yield* command.uninstall;
       expect(registry.path).toBe(userPath);
 
-      // A fresh install beside a standalone t3.cmd (from `kairo install`), even off PATH, leaves
+      // A fresh install beside a standalone kairo.cmd (from `kairo install`), even off PATH, leaves
       // PATH alone.
       const besideHome = yield* fs.makeTempDirectoryScoped();
       yield* fs.makeDirectory(path.join(besideHome, ".local", "bin"), { recursive: true });
-      yield* fs.writeFileString(path.join(besideHome, ".local", "bin", "t3.cmd"), "@echo off\r\n");
+      yield* fs.writeFileString(
+        path.join(besideHome, ".local", "bin", "kairo.cmd"),
+        "@echo off\r\n",
+      );
       const beside = fakePowerShell("C:\\Tools");
       yield* (yield* commandIn({ home: besideHome, platform: "win32" }, beside.spawner))
         .installOnFirstLaunch;

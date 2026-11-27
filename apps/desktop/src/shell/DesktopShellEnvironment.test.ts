@@ -350,7 +350,7 @@ describe("DesktopShellEnvironment", () => {
         const source = [
           "const values = { PATH: '/fresh/bin:' + process.env.PATH, __MISE_DIFF: 'fresh-mise', JAVA_HOME: process.env.JAVA_HOME, SSL_CERT_FILE: process.env.SSL_CERT_FILE };",
           "for (const [name, value] of Object.entries(values)) {",
-          "  if (value !== undefined) process.stdout.write('__T3CODE_ENV_' + name + '_START__\\n' + value + '\\n__T3CODE_ENV_' + name + '_END__\\n');",
+          "  if (value !== undefined) process.stdout.write('__KAIRO_ENV_' + name + '_START__\\n' + value + '\\n__KAIRO_ENV_' + name + '_END__\\n');",
           "}",
         ].join("\n");
         let calls = 0;

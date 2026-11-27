@@ -177,16 +177,18 @@ describe("DesktopAppIdentity", () => {
   );
 
   it.effect.each([
-    { stage: "Beta", environment: {} },
+    { channel: "stable", stage: "Beta", environment: {} },
     {
+      channel: "nightly",
       stage: "Nightly",
       environment: { appVersion: "0.0.43-nightly.20260929.2428" },
     },
     {
-      stage: "Dev",
+      channel: "development",
+      stage: "Beta",
       environment: { env: { VITE_DEV_SERVER_URL: "http://localhost:5173" } },
     },
-  ])("uses a valid native User-Agent product name for $stage", ({ stage, environment }) => {
+  ])("uses a valid native User-Agent product name for $channel", ({ stage, environment }) => {
     const calls: ElectronAppCalls = {
       setAboutPanelOptions: [],
       setDockIcon: [],

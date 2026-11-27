@@ -170,7 +170,9 @@ describe("kairo pair", () => {
             }),
           );
 
-          const baseDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "kairo-pair-ipv6-test-"));
+          const baseDir = NodeFS.mkdtempSync(
+            NodePath.join(NodeOS.tmpdir(), "kairo-pair-ipv6-test-"),
+          );
           yield* persistServerRuntimeState({
             path: NodePath.join(baseDir, "userdata", "server-runtime.json"),
             state: yield* makePersistedServerRuntimeState({
@@ -251,7 +253,9 @@ describe("kairo pair", () => {
               );
             });
 
-            const baseDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "kairo-pair-ts-held-"));
+            const baseDir = NodeFS.mkdtempSync(
+              NodePath.join(NodeOS.tmpdir(), "kairo-pair-ts-held-"),
+            );
             yield* persistServerRuntimeState({
               path: NodePath.join(baseDir, "userdata", "server-runtime.json"),
               state: yield* makePersistedServerRuntimeState({
@@ -361,7 +365,9 @@ describe("kairo pair", () => {
   it.effect("refuses --tailscale before turning on Serve when the policy keeps clients local", () =>
     withDescriptorServer((origin) =>
       Effect.gen(function* () {
-        const baseDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "kairo-pair-policy-test-"));
+        const baseDir = NodeFS.mkdtempSync(
+          NodePath.join(NodeOS.tmpdir(), "kairo-pair-policy-test-"),
+        );
         const policyPath = NodePath.join(baseDir, "policy.json");
         NodeFS.writeFileSync(
           policyPath,
@@ -437,7 +443,9 @@ describe("kairo pair", () => {
   it.effect("does not fall back to the shared home from a linked worktree", () =>
     withDescriptorServer((origin) =>
       Effect.gen(function* () {
-        const root = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "kairo-pair-worktree-test-"));
+        const root = NodeFS.mkdtempSync(
+          NodePath.join(NodeOS.tmpdir(), "kairo-pair-worktree-test-"),
+        );
         const worktree = NodePath.join(root, "worktree");
         NodeFS.mkdirSync(worktree);
         NodeFS.writeFileSync(
@@ -500,7 +508,7 @@ describe("kairo pair", () => {
           if (Exit.isFailure(exit)) {
             assert.include(
               String(Cause.squash(exit.cause)),
-              `t3@0.0.45 pair --base-dir ${baseDir}`,
+              `kairo@0.0.45 pair --base-dir ${baseDir}`,
             );
           }
         }),
@@ -615,7 +623,10 @@ describe("kairo pair", () => {
             if (String(input) === "http://127.0.0.2:3773/.well-known/kairo/environment") {
               return Response.json(testDescriptor);
             }
-            assert.equal(String(input), "https://pair-test.tail.ts.net/.well-known/kairo/environment");
+            assert.equal(
+              String(input),
+              "https://pair-test.tail.ts.net/.well-known/kairo/environment",
+            );
             return new Response(null, { status: 503 });
           }),
           Effect.flip,
@@ -681,7 +692,10 @@ describe("kairo pair", () => {
             if (String(input) === "http://127.0.0.1:3773/.well-known/kairo/environment") {
               return Response.json(testDescriptor);
             }
-            assert.equal(String(input), "https://pair-test.tail.ts.net/.well-known/kairo/environment");
+            assert.equal(
+              String(input),
+              "https://pair-test.tail.ts.net/.well-known/kairo/environment",
+            );
             return new Response(null, { status: 503 });
           }),
           Effect.flip,
@@ -742,7 +756,9 @@ describe("auth session revoke", () => {
   ] as const)("$label", ({ recorded, lockHeld, server, outcome }) =>
     provideCliTestLayers(
       Effect.gen(function* () {
-        const baseDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "kairo-cli-revoke-test-"));
+        const baseDir = NodeFS.mkdtempSync(
+          NodePath.join(NodeOS.tmpdir(), "kairo-cli-revoke-test-"),
+        );
         const statePath = NodePath.join(baseDir, "userdata", "server-runtime.json");
         const issued = JSON.parse(
           yield* captureStdout(
@@ -911,7 +927,9 @@ describe("auth pairing create --base-url", () => {
     "rejects %s before issuing a token",
     (baseUrl) =>
       Effect.gen(function* () {
-        const baseDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "kairo-cli-base-url-test-"));
+        const baseDir = NodeFS.mkdtempSync(
+          NodePath.join(NodeOS.tmpdir(), "kairo-cli-base-url-test-"),
+        );
         const error = yield* runCli([
           "auth",
           "pairing",
@@ -943,7 +961,9 @@ describe("auth pairing create --base-url", () => {
     "prints a pair URL for %s",
     (baseUrl) =>
       Effect.gen(function* () {
-        const baseDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "kairo-cli-base-url-test-"));
+        const baseDir = NodeFS.mkdtempSync(
+          NodePath.join(NodeOS.tmpdir(), "kairo-cli-base-url-test-"),
+        );
         const output = yield* captureStdout(
           runCli([
             "auth",

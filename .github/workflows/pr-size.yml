@@ -308,9 +308,21 @@ jobs:
             );
 
             const issueNumber = context.payload.pull_request.number;
+            // Match the extensions counted by test-delta.cjs.
+            const testPaths = ["test", "spec"].flatMap((suffix) =>
+              ["[jt]s", "[jt]sx", "[cm][jt]s", "[cm][jt]sx"].map(
+                (extension) => `:(glob)**/*.${suffix}.${extension}`,
+              ),
+            );
             const diff = execFileSync(
               "git",
-              ["diff", "-U0", `${context.payload.pull_request.base.sha}...refs/remotes/pr-size/${issueNumber}`],
+              [
+                "diff",
+                "-U0",
+                `${context.payload.pull_request.base.sha}...refs/remotes/pr-size/${issueNumber}`,
+                "--",
+                ...testPaths,
+              ],
               { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 },
             );
             const delta = countTestDelta(diff);

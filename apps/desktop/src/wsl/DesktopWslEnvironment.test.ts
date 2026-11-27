@@ -120,10 +120,10 @@ describe.skipIf(posixShellRunner === null)("WSL runtime install script (executed
       [
         "set -eu",
         "work=$(mktemp -d)",
-        'stage="$work/stage/t3-0.0.0-linux-x64"',
+        'stage="$work/stage/kairo-0.0.0-linux-x64"',
         'mkdir -p "$stage/node_modules/node-pty/build/Release" "$work/home"',
-        `printf '%s' ${sh(serverEntry)} > "$stage/t3"`,
-        'chmod +x "$stage/t3"',
+        `printf '%s' ${sh(serverEntry)} > "$stage/kairo"`,
+        'chmod +x "$stage/kairo"',
         `printf '%s' 'pty-native-payload' > "$stage/node_modules/node-pty/build/Release/pty.node"`,
         `tar -czf "$work/wsl-runtime.tar.gz" -C "$work/stage" kairo-0.0.0-linux-x64`,
         `printf 'work:%s\\n' "$work"`,
@@ -138,7 +138,11 @@ describe.skipIf(posixShellRunner === null)("WSL runtime install script (executed
     const archiveSha = readField(result.stdout, "archiveSha");
     const runtimeId = `sha256-${archiveSha}`;
     // WSL does not inherit HOME; embed the fixture's override in the script.
-    const installScript = (archive = archivePath, sha = archiveSha, kairoHome: string | null = null) =>
+    const installScript = (
+      archive = archivePath,
+      sha = archiveSha,
+      kairoHome: string | null = null,
+    ) =>
       [
         `HOME=${sh(`${work}/home`)}`,
         "export HOME",
@@ -205,7 +209,9 @@ describe.skipIf(posixShellRunner === null)("WSL runtime install script (executed
     const kairoHome = `${fixture.work}/home/.config/t3 home`;
     const install = fixture.install(undefined, undefined, kairoHome);
     expect(install.status, install.stderr).toBe(0);
-    expect(parseWslRuntimeRoot(install.stdout)).toBe(`${kairoHome}/wsl-runtime/${fixture.runtimeId}`);
+    expect(parseWslRuntimeRoot(install.stdout)).toBe(
+      `${kairoHome}/wsl-runtime/${fixture.runtimeId}`,
+    );
     expect(runShell(`test ! -e ${sh(`${fixture.work}/home/.kairo`)}`).status).toBe(0);
 
     const probe = runShell(

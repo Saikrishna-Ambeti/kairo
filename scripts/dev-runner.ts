@@ -5,7 +5,7 @@ import * as NodeOS from "node:os";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NetService from "@kairo/shared/Net";
-import { resolveGitWorktreePath, resolveWorktreeT3Home } from "@kairo/shared/devHome";
+import { resolveGitWorktreePath, resolveWorktreeKairoHome } from "@kairo/shared/devHome";
 import * as HostProcess from "@kairo/shared/HostProcess";
 import { resolveSpawnCommand } from "@kairo/shared/shell";
 import * as Config from "effect/Config";
@@ -789,7 +789,7 @@ export const runDevRunnerWithInput = Effect.fn("dev-runner.runDevRunnerWithInput
   // A dev server started inside a worktree defaults to that worktree's own
   // (gitignored) `.kairo` — see @kairo/shared/devHome for why this must
   // outrank an ambient KAIRO_HOME. `--home-dir` still wins.
-  const worktreeHome = yield* resolveWorktreeT3Home(yield* HostProcess.WorkingDirectory);
+  const worktreeHome = yield* resolveWorktreeKairoHome(yield* HostProcess.WorkingDirectory);
   // Trim before choosing: `--home-dir ""` is not a selection, and treating it
   // as one would skip the worktree default and land on the shared home —
   // exactly the outcome this precedence exists to prevent.

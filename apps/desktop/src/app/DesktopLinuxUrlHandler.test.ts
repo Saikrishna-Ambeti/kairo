@@ -292,7 +292,7 @@ describe("DesktopLinuxUrlHandler", () => {
         environment: { desktopLauncherPath: Option.some("/opt/Kairo/kairo") },
       });
 
-      assert.include(recorded.files[0]?.content, 'Exec="/opt/Kairo/kairo" %U');
+      assert.include(recorded.files[0]?.content, "Exec=/opt/Kairo/kairo %U");
     });
   });
 
@@ -614,18 +614,21 @@ it.layer(NodeServices.layer)("DesktopLinuxUrlHandler theme icons", (it) => {
       const run: ThemeIconRun = { root: fixture.root, commands: [] };
 
       yield* registerWithRealFileSystem(run);
-      assert.deepEqual([...(yield* fileSystem.readDirectory(fixture.appsDir))].sort(), [
-        "com.kairo.Kairo.png",
-        "com.kairo.app.png",
-      ]);
-      for (const name of ["com.kairo.app", "com.kairo.Kairo"]) {
+      const lower = yield* fileSystem.stat(path.join(fixture.appsDir, "com.kairo.kairo.png"));
+      const upper = yield* fileSystem.stat(path.join(fixture.appsDir, "com.kairo.Kairo.png"));
+      const hasDistinctNames = Option.getOrThrow(lower.ino) !== Option.getOrThrow(upper.ino);
+      assert.deepEqual(
+        [...(yield* fileSystem.readDirectory(fixture.appsDir))].sort(),
+        hasDistinctNames ? ["com.kairo.Kairo.png", "com.kairo.kairo.png"] : ["com.kairo.kairo.png"],
+      );
+      for (const name of ["com.kairo.kairo", "com.kairo.Kairo"]) {
         const target = path.join(fixture.appsDir, `${name}.png`);
         assert.deepEqual([...(yield* fileSystem.readFile(target))], [...icon]);
         yield* fileSystem.utimes(target, fixture.pastSeconds, fixture.pastSeconds);
       }
 
       yield* registerWithRealFileSystem(run);
-      for (const name of ["com.kairo.app", "com.kairo.Kairo"]) {
+      for (const name of ["com.kairo.kairo", "com.kairo.Kairo"]) {
         const info = yield* fileSystem.stat(path.join(fixture.appsDir, `${name}.png`));
         assert.equal(Option.getOrThrow(info.mtime).getTime(), fixture.pastSeconds * 1000);
       }
@@ -640,11 +643,12 @@ it.layer(NodeServices.layer)("DesktopLinuxUrlHandler theme icons", (it) => {
       const path = yield* Path.Path;
       const fixture = yield* themeIconFixture(new Uint8Array([1, 2, 3]));
       yield* fixture.seedCache;
-      const lower = path.join(fixture.appsDir, "com.kairo.app.png");
+      const lower = path.join(fixture.appsDir, "com.kairo.kairo.png");
       const upper = path.join(fixture.appsDir, "com.kairo.Kairo.png");
       yield* fileSystem.writeFile(lower, new Uint8Array([3, 2, 1]));
-      yield* fileSystem.writeFile(upper, new Uint8Array([1, 2, 3]));
-      for (const target of [lower, upper]) {
+      const hasDistinctNames = !(yield* fileSystem.exists(upper));
+      if (hasDistinctNames) yield* fileSystem.writeFile(upper, new Uint8Array([1, 2, 3]));
+      for (const target of hasDistinctNames ? [lower, upper] : [lower]) {
         yield* fileSystem.utimes(target, fixture.pastSeconds, fixture.pastSeconds);
       }
       const run: ThemeIconRun = {
@@ -657,8 +661,11 @@ it.layer(NodeServices.layer)("DesktopLinuxUrlHandler theme icons", (it) => {
       yield* registerWithRealFileSystem(run);
 
       assert.deepEqual([...(yield* fileSystem.readFile(lower))], [1, 2, 3]);
-      const upperInfo = yield* fileSystem.stat(upper);
-      assert.equal(Option.getOrThrow(upperInfo.mtime).getTime(), fixture.pastSeconds * 1000);
+      assert.deepEqual([...(yield* fileSystem.readFile(upper))], [1, 2, 3]);
+      if (hasDistinctNames) {
+        const upperInfo = yield* fileSystem.stat(upper);
+        assert.equal(Option.getOrThrow(upperInfo.mtime).getTime(), fixture.pastSeconds * 1000);
+      }
       assert.deepEqual(
         run.commands.filter(({ command }) => command === "gtk-update-icon-cache"),
         [{ command: "gtk-update-icon-cache", args: ["-f", "-t", fixture.hicolorDir] }],
