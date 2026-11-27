@@ -1,3 +1,4 @@
+import { ensureLocalApi } from "../../localApi";
 import { ClerkFailed, ClerkLoaded, ClerkLoading, useAuth, useClerk } from "@clerk/react";
 import { type ProviderInstanceId, type ServerProvider } from "@kairo/contracts";
 import {
@@ -602,14 +603,17 @@ function ProviderSetupGate({
     setBusy("login-agent");
     setBusyProviderInstanceId(provider.instanceId);
     try {
-      const next = await serverApi.loginProvider({
-        provider: provider.driver,
-        instanceId: provider.instanceId,
-      });
+      const next = await serverApi.startProviderAuth({ instanceId: provider.instanceId });
+      const interaction = next.interaction;
+      if (interaction?.type === "browser" && !interaction.requiresConsent) {
+        const url = new URL(interaction.url);
+        if (url.protocol !== "https:" && url.protocol !== "http:") {
+          throw new Error("The provider returned an invalid sign-in link.");
+        }
+        await ensureLocalApi().shell.openExternal(url.href);
+      }
       const refreshed = await refreshProviders();
-      const refreshedProvider =
-        findOnboardingProvider(refreshed, provider.instanceId) ??
-        findOnboardingProvider(next.providers, provider.instanceId);
+      const refreshedProvider = findOnboardingProvider(refreshed, provider.instanceId);
       const outcome = resolveOnboardingAgentReadiness(refreshedProvider);
       toastManager.add(
         stackedThreadToast(

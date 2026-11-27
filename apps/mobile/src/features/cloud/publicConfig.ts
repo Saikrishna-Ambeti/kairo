@@ -110,3 +110,6 @@ export function resolveCloudClerkTokenOptions() {
   }
   return relayClerkTokenOptions(jwtTemplate);
 }
+
+export const resolveRelayClerkTokenOptions = resolveCloudClerkTokenOptions;
+export const hasCloudPublicConfig = hasCloudIdentityConfig;

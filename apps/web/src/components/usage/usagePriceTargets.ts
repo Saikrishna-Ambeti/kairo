@@ -1,22 +1,30 @@
-import type { EnvironmentId, ServerSettingsPatch, UsageModelPriceOverride } from "@kairo/contracts";
+import type {
+  EnvironmentId,
+  ServerSettingsPatch,
+  UsageModelPriceOverride,
+} from "@kairo/contracts";
+import { msg } from "gt-react";
+
+import { m } from "~/i18n/messages";
 
 export interface UsagePriceTarget {
   readonly environmentId: EnvironmentId;
   readonly label: string;
   readonly prices: Readonly<Record<string, UsageModelPriceOverride>> | null;
+  readonly aliases: Readonly<Record<string, string>> | null;
   readonly unavailable: string | null;
 }
 
-export interface UsagePriceChange {
-  readonly model: string;
-  readonly price: UsageModelPriceOverride | null;
-}
+/** `null` removes the model's custom price or mapping. */
+export type UsagePriceChange =
+  | { readonly model: string; readonly price: UsageModelPriceOverride | null }
+  | { readonly model: string; readonly alias: string | null };
 
 export type UsagePriceWriteResult =
   | { readonly status: "saved" }
   | { readonly status: "failed"; readonly error: string };
 
-/** Each destination settles independently; retry callers pass only the failed destinations. */
+/** Destinations settle independently; retries pass only failures. */
 export async function writeUsagePrices(input: {
   readonly targets: readonly UsagePriceTarget[];
   readonly changes: ReadonlyMap<EnvironmentId, readonly UsagePriceChange[]>;
@@ -29,11 +37,19 @@ export async function writeUsagePrices(input: {
   await Promise.all(
     input.targets.map(async (target) => {
       let result: UsagePriceWriteResult;
+      const changes = input.changes.get(target.environmentId) ?? [];
+      const prices = changes.flatMap((change) =>
+        "price" in change ? [[change.model, change.price] as const] : [],
+      );
+      const aliases = changes.flatMap((change) =>
+        "alias" in change ? [[change.model, change.alias] as const] : [],
+      );
       if (target.unavailable !== null) {
         result = { status: "failed", error: target.unavailable };
+      } else if (aliases.length > 0 && target.aliases === null) {
+        result = { status: "failed", error: m(msg("Update server to map models")) };
       } else {
         try {
-          const changes = input.changes.get(target.environmentId) ?? [];
           const saved =
             changes.length === 0
               ? { _tag: "Success" as const }
@@ -41,18 +57,21 @@ export async function writeUsagePrices(input: {
                   environmentId: target.environmentId,
                   input: {
                     patch: {
-                      usagePriceOverrides: Object.fromEntries(
-                        changes.map((change) => [change.model, change.price]),
-                      ),
+                      ...(prices.length > 0
+                        ? { usagePriceOverrides: Object.fromEntries(prices) }
+                        : {}),
+                      ...(aliases.length > 0
+                        ? { usageModelAliases: Object.fromEntries(aliases) }
+                        : {}),
                     },
                   },
                 });
           result =
             saved._tag === "Success"
               ? { status: "saved" }
-              : { status: "failed", error: "Could not save. Try again." };
+              : { status: "failed", error: m(msg("Could not save. Try again.")) };
         } catch {
-          result = { status: "failed", error: "Could not save. Try again." };
+          result = { status: "failed", error: m(msg("Could not save. Try again.")) };
         }
       }
       input.onResult(target.environmentId, result);

@@ -1,11 +1,16 @@
-import { EnvironmentId, ProjectId } from "@kairo/contracts";
+import { EnvironmentId, ProjectId, SourceControlProviderKind } from "@kairo/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import type { EnvironmentProject } from "./models.ts";
 import { chooseLoadBalancedEnvironment } from "../load-balancing.ts";
 import {
   buildProjectGroups,
+  deriveLogicalProjectKeyFromSettings,
+  pickableProjectGroups,
   derivePhysicalProjectKey,
+  resolveGroupDefaultProject,
+  resolveScratchProjectScopeKey,
+  sortProjectsByGroupOrder,
   type ProjectGroupingSettings,
 } from "./projectGrouping.ts";
 
@@ -75,14 +80,14 @@ describe("load balancing shared project machines", () => {
   });
 });
 const repositoryIdentity = {
-  canonicalKey: "github.com/kairo/kairo",
+  canonicalKey: "github.com/t3tools/kairo",
   locator: {
     source: "git-remote" as const,
     remoteName: "upstream",
-    remoteUrl: "https://github.com/kairo/kairo.git",
+    remoteUrl: "https://github.com/t3tools/kairo.git",
   },
-  provider: "github",
-  owner: "kairo",
+  provider: SourceControlProviderKind.make("github"),
+  owner: "t3tools",
   name: "kairo",
   displayName: "Kairo",
 };
@@ -117,6 +122,131 @@ function settings(
 }
 
 describe("buildProjectGroups", () => {
+  it.each(["repository", "repository_path", "separate"] as const)(
+    "keeps scratch project ownership separate by default in %s mode",
+    (mode) => {
+      const projects = [
+        makeProject("scratch-local", "/local/scratch", {
+          isScratch: true,
+          repositoryIdentity: null,
+        }),
+        makeProject("scratch-remote", "/remote/scratch", {
+          environmentId: EnvironmentId.make("remote"),
+          isScratch: true,
+          repositoryIdentity: null,
+        }),
+      ];
+      const groups = buildProjectGroups({ projects, settings: settings(mode) });
+      expect(groups.map((group) => group.key)).toEqual(projects.map(derivePhysicalProjectKey));
+      expect(groups.map((group) => group.memberProjectRefs)).toEqual(
+        projects.map((project) => [
+          { environmentId: project.environmentId, projectId: project.id },
+        ]),
+      );
+      expect(
+        buildProjectGroups({ projects, settings: settings(mode), groupScratchProjects: true }),
+      ).toHaveLength(1);
+    },
+  );
+
+  it.each(["repository", "repository_path", "separate"] as const)(
+    "migrates a pre-config %s scratch selection and retains it after the original host is removed",
+    (mode) => {
+      const local = makeProject("scratch-local", "/local/repo/scratch", {
+        repositoryIdentity: { ...repositoryIdentity, rootPath: "/local/repo" },
+      });
+      const remote = makeProject("scratch-remote", "/remote/scratch", {
+        environmentId: EnvironmentId.make("remote"),
+        repositoryIdentity: null,
+        isScratch: true,
+      });
+      const groupingSettings = settings(mode);
+      const selectedBeforeConfig = deriveLogicalProjectKeyFromSettings(local, groupingSettings);
+      const loaded = [{ ...local, isScratch: true as const }, remote];
+      const migrated = resolveScratchProjectScopeKey(
+        selectedBeforeConfig,
+        loaded,
+        groupingSettings,
+      );
+      const scratchKey = buildProjectGroups({
+        projects: loaded,
+        settings: groupingSettings,
+        groupScratchProjects: true,
+      })[0]!.key;
+      expect(migrated).toBe(scratchKey);
+      expect(resolveScratchProjectScopeKey(migrated, [remote], groupingSettings)).toBe(scratchKey);
+      expect(
+        buildProjectGroups({
+          projects: [remote],
+          settings: groupingSettings,
+          groupScratchProjects: true,
+        })[0]?.memberProjectRefs,
+      ).toEqual([{ environmentId: remote.environmentId, projectId: remote.id }]);
+    },
+  );
+
+  it("retains a repository filter that still belongs to an ordinary project", () => {
+    const scratch = makeProject("scratch", "/scratch", { isScratch: true });
+    const ordinary = makeProject("ordinary", "/ordinary");
+    const key = deriveLogicalProjectKeyFromSettings(ordinary, settings("repository"));
+    expect(resolveScratchProjectScopeKey(key, [scratch, ordinary])).toBe(key);
+  });
+
+  it.each(["repository", "repository_path", "separate"] as const)(
+    "coalesces scratch homes in %s mode without merging ordinary same-title projects",
+    (mode) => {
+      const remoteEnvironmentId = EnvironmentId.make("remote");
+      const projects = [
+        makeProject("scratch-local", "/local/scratch", {
+          title: "No project",
+          isScratch: true,
+          repositoryIdentity: null,
+        }),
+        makeProject("scratch-remote", "/remote/scratch", {
+          title: "No project",
+          environmentId: remoteEnvironmentId,
+          isScratch: true,
+        }),
+        makeProject("scratch-duplicate", "/remote/scratch/", {
+          title: "No project",
+          environmentId: remoteEnvironmentId,
+          isScratch: true,
+          repositoryIdentity: null,
+          updatedAt: "2026-07-02T00:00:00.000Z",
+        }),
+        makeProject("ordinary", "/ordinary", { title: "No project" }),
+        makeProject("reserved-collision", "/other", {
+          title: "No project",
+          repositoryIdentity: { ...repositoryIdentity, canonicalKey: "\0no-project" },
+        }),
+      ];
+      const groups = buildProjectGroups({
+        projects,
+        groupScratchProjects: true,
+        settings: settings(mode, { [derivePhysicalProjectKey(projects[0]!)]: "separate" }),
+        preferredEnvironmentId: remoteEnvironmentId,
+      });
+      expect(groups).toHaveLength(3);
+      const scratch = groups.find((group) => group.representative.isScratch)!;
+      expect(scratch.label).toBe("No project");
+      expect(scratch.representative.id).toBe(projects[2]?.id);
+      expect(scratch.members).toHaveLength(2);
+      expect(scratch.memberProjectRefs).toEqual(
+        projects.slice(0, 3).map((project) => ({
+          environmentId: project.environmentId,
+          projectId: project.id,
+        })),
+      );
+      expect(resolveScratchProjectScopeKey(derivePhysicalProjectKey(projects[1]!), projects)).toBe(
+        scratch.key,
+      );
+      expect(resolveScratchProjectScopeKey(derivePhysicalProjectKey(projects[3]!), projects)).toBe(
+        derivePhysicalProjectKey(projects[3]!),
+      );
+      expect(groups.filter((group) => !group.representative.isScratch)).toHaveLength(2);
+    },
+  );
+
   it("preserves every physical clone as a selectable member in repository modes", () => {
     const projects = [
       makeProject("kairo", "/work/kairo"),
@@ -136,39 +266,164 @@ describe("buildProjectGroups", () => {
     }
   });
 
-  it("uses a shared custom title as the repository group's label", () => {
-    const projects = [
-      makeProject("first", "/work/kairo", { title: "Custom project" }),
-      makeProject("second", "/work/kairo-2", { title: "Custom project" }),
-    ];
+  it("represents a repository group by its root checkout, even when it was added last", () => {
+    const remoteEnvironmentId = EnvironmentId.make("remote");
+    const local = { ...repositoryIdentity, rootPath: "/work/workspace" };
+    const remote = { ...repositoryIdentity, rootPath: "/srv/workspace" };
+    const archivedTool = makeProject("old-tool", "/work/workspace/_archive/old-tool", {
+      repositoryIdentity: local,
+    });
+    const app = makeProject("app-a", "/work/workspace/app-a", { repositoryIdentity: local });
+    const remoteApp = makeProject("remote-app", "/srv/workspace/app-a", {
+      environmentId: remoteEnvironmentId,
+      repositoryIdentity: remote,
+    });
+    const remoteRoot = makeProject("remote-root", "/srv/workspace", {
+      environmentId: remoteEnvironmentId,
+      repositoryIdentity: remote,
+    });
+    const root = makeProject("workspace", "/work/workspace", { repositoryIdentity: local });
+    const representativeOf = (
+      projects: ReadonlyArray<EnvironmentProject>,
+      preferredEnvironmentId: EnvironmentId | null = null,
+    ) =>
+      buildProjectGroups({ projects, settings: settings("repository"), preferredEnvironmentId })[0]
+        ?.representative.id;
 
-    expect(buildProjectGroups({ projects, settings: settings("repository") })[0]?.label).toBe(
-      "Custom project",
+    expect(representativeOf([archivedTool, app, root])).toBe("workspace");
+    expect(representativeOf([archivedTool, app, remoteApp, remoteRoot, root], environmentId)).toBe(
+      "workspace",
     );
+    expect(
+      representativeOf([archivedTool, app, remoteApp, remoteRoot, root], remoteEnvironmentId),
+    ).toBe("remote-root");
+    // A local root is not worth leaving the current environment for.
+    expect(representativeOf([archivedTool, root, remoteApp], remoteEnvironmentId)).toBe(
+      "remote-app",
+    );
+    expect(representativeOf([archivedTool, app])).toBe("old-tool");
+
+    // A new thread with no current or last-used project starts from the first project's group.
+    const all = [archivedTool, app, remoteApp, remoteRoot, root];
+    expect(resolveGroupDefaultProject(archivedTool, all, settings("repository")).id).toBe(
+      "workspace",
+    );
+    expect(resolveGroupDefaultProject(remoteApp, all, settings("repository")).id).toBe(
+      "remote-root",
+    );
+    expect(resolveGroupDefaultProject(archivedTool, all, settings("separate")).id).toBe("old-tool");
   });
 
-  it("keeps the repository label when shared titles match its repository name", () => {
-    const projects = [
-      makeProject("first", "/work/kairo", { title: "kairo" }),
-      makeProject("second", "/work/kairo-2", { title: "kairo" }),
-    ];
+  it("keeps a fork apart from its upstream checkout and labels it by its own remote", () => {
+    const fork = makeProject("fork", "/work/kairo-fork", {
+      repositoryIdentity: {
+        ...repositoryIdentity,
+        origin: {
+          canonicalKey: "github.com/julius/kairo-fork",
+          displayName: "julius/kairo-fork",
+        },
+      },
+    });
+    const forkWorktree = makeProject("fork-2", "/work/kairo-fork-2", {
+      repositoryIdentity: fork.repositoryIdentity,
+    });
+    const projects = [makeProject("kairo", "/work/kairo"), fork, forkWorktree];
 
-    expect(buildProjectGroups({ projects, settings: settings("repository") })[0]?.label).toBe(
-      "Kairo",
-    );
+    const groups = buildProjectGroups({ projects, settings: settings("repository") });
+    expect(groups.map((group) => group.key)).toEqual([
+      "github.com/t3tools/kairo",
+      "github.com/julius/kairo-fork",
+    ]);
+    expect(groups[1]?.members.map((member) => member.project.id)).toEqual(["fork", "fork-2"]);
+    expect(groups[1]?.label).toBe("julius/kairo-fork");
   });
 
-  it("keeps physical clones in separate groups when requested", () => {
-    const projects = [
-      makeProject("kairo", "/work/kairo"),
-      makeProject("kairo-2", "/work/kairo-2"),
-      makeProject("kairo-3", "/work/kairo-3"),
+  // regression: #15049 a rename to the repository name snapped back to the display path
+  it("labels a renamed group by its title even when it matches the repository name", () => {
+    const folderTitles = [
+      makeProject("kairo", "/work/kairo", { title: "kairo" }),
+      makeProject("kairo-2", "/work/kairo-2", { title: "kairo" }),
     ];
+    const renamed = folderTitles.map((project) => ({ ...project, hasCustomTitle: true }));
 
-    const groups = buildProjectGroups({ projects, settings: settings("separate") });
-    expect(groups).toHaveLength(3);
-    expect(groups.flatMap((group) => group.members)).toHaveLength(3);
-    expect(groups.map((group) => group.label)).toEqual(["kairo", "kairo-2", "kairo-3"]);
+    const label = (projects: ReadonlyArray<EnvironmentProject>) =>
+      buildProjectGroups({ projects, settings: settings("repository") })[0]?.label;
+    expect(label(folderTitles)).toBe("Kairo");
+    expect(label(renamed)).toBe("kairo");
+  });
+
+  it("labels a group by its repository when clones disagree on its casing", () => {
+    // A subfolder project, its repository root, and a clone whose remote URL is
+    // lowercased: no shared title or display name, but one repository.
+    const subfolder = makeProject("design-study", "/work/NewCo/reference/design-study");
+    const root = makeProject("NewCo", "/work/NewCo");
+    const lowercasedClone = makeProject("NewCo", "/remote/NewCo", {
+      environmentId: EnvironmentId.make("remote"),
+      repositoryIdentity: { ...repositoryIdentity, name: "KAIRO", displayName: "t3 code" },
+    });
+
+    const groups = buildProjectGroups({
+      projects: [subfolder, root, lowercasedClone],
+      settings: settings("repository"),
+      preferredEnvironmentId: environmentId,
+    });
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.label).toBe("Kairo");
+
+    // A subfolder group in repository_path mode keeps its own title.
+    const localIdentity = { ...repositoryIdentity, rootPath: "/work/kairo" };
+    const pathGroups = buildProjectGroups({
+      projects: [
+        makeProject("design", "/work/kairo/design", {
+          title: "Design docs",
+          hasCustomTitle: true,
+          repositoryIdentity: localIdentity,
+        }),
+        makeProject("design", "/remote/kairo/design", {
+          environmentId: EnvironmentId.make("remote"),
+          repositoryIdentity: {
+            ...repositoryIdentity,
+            rootPath: "/remote/kairo",
+            name: "KAIRO",
+            displayName: "t3 code",
+          },
+        }),
+        makeProject("kairo", "/work/kairo", { repositoryIdentity: localIdentity }),
+      ],
+      settings: settings("repository_path"),
+      preferredEnvironmentId: environmentId,
+    });
+    expect(pathGroups.map((group) => group.label)).toEqual(["Design docs", "kairo"]);
+  });
+
+  it.each([
+    ["/", ["/", "/app", "/tools"]],
+    ["D:\\", ["D:/", "D:/app", "D:/tools"]],
+  ] as const)("keeps folder groups apart in a repository checked out at %s", (rootPath, paths) => {
+    const identity = { ...repositoryIdentity, rootPath };
+    const groups = buildProjectGroups({
+      projects: paths.map((path, index) =>
+        makeProject(`project-${index}`, path, { repositoryIdentity: identity }),
+      ),
+      settings: settings("repository_path"),
+    });
+
+    const key = repositoryIdentity.canonicalKey;
+    expect(groups.map((group) => group.key)).toEqual([key, `${key}::app`, `${key}::tools`]);
+  });
+
+  it("keeps a POSIX folder name ending in a backslash as part of the repository root", () => {
+    const identity = { ...repositoryIdentity, rootPath: "/work/repo\\" };
+    const groups = buildProjectGroups({
+      projects: [
+        makeProject("app", "/work/repo\\/app", { repositoryIdentity: identity }),
+        makeProject("sibling", "/work/repo\\other", { repositoryIdentity: identity }),
+      ],
+      settings: settings("repository_path"),
+    });
+
+    const key = repositoryIdentity.canonicalKey;
+    expect(groups.map((group) => group.key)).toEqual([`${key}::app`, key]);
   });
 
   it("applies a physical-project override without dropping its siblings", () => {
@@ -209,28 +464,10 @@ describe("buildProjectGroups", () => {
     expect(groups[0]?.memberProjectRefs).toHaveLength(2);
   });
 
-  it("uses repository identity from a duplicate registration when the winner lacks it", () => {
-    const identified = makeProject("identified", "/work/kairo", {
-      updatedAt: "2026-07-01T00:00:00.000Z",
-    });
-    const freshUnidentified = makeProject("fresh", "/work/kairo/", {
-      repositoryIdentity: null,
-      updatedAt: "2026-07-02T00:00:00.000Z",
-    });
-    const sibling = makeProject("sibling", "/work/kairo-2");
-
-    const groups = buildProjectGroups({
-      projects: [identified, freshUnidentified, sibling],
-      settings: settings("repository"),
-    });
-    expect(groups).toHaveLength(1);
-    expect(groups[0]?.members.map((member) => member.project.id)).toEqual(["fresh", "sibling"]);
-  });
-
   it("uses the freshest winner's repository identity when stale duplicates disagree", () => {
     const staleIdentity = {
       ...repositoryIdentity,
-      canonicalKey: "github.com/kairo/old-repository",
+      canonicalKey: "github.com/t3tools/old-repository",
       name: "old-repository",
       displayName: "Old Repository",
     };
@@ -254,7 +491,7 @@ describe("buildProjectGroups", () => {
   it("uses the freshest identity-bearing duplicate when the winner lacks identity", () => {
     const staleIdentity = {
       ...repositoryIdentity,
-      canonicalKey: "github.com/kairo/old-repository",
+      canonicalKey: "github.com/t3tools/old-repository",
       name: "old-repository",
       displayName: "Old Repository",
     };
@@ -277,5 +514,62 @@ describe("buildProjectGroups", () => {
     });
     expect(groups).toHaveLength(1);
     expect(groups[0]?.members.map((member) => member.project.id)).toEqual(["winner", "sibling"]);
+  });
+});
+
+describe("project pins and archives", () => {
+  const at = "2026-07-02T00:00:00.000Z";
+  const remote = EnvironmentId.make("remote");
+  const group = (...projects: EnvironmentProject[]) =>
+    buildProjectGroups({ projects, settings: settings("repository") })[0]!;
+
+  it("keeps a project visible while its machines disagree", () => {
+    const local = makeProject("local", "/work/kairo");
+    const other = makeProject("remote", "/work/kairo", { environmentId: remote });
+    const partial = group({ ...local, pinnedAt: at, archivedAt: at }, other);
+    expect(partial).toMatchObject({ pinned: true, archived: false });
+    expect(group({ ...local, archivedAt: at }, { ...other, archivedAt: at }).archived).toBe(true);
+  });
+
+  it("offers pinned projects first and leaves archived ones out", () => {
+    const pickable = pickableProjectGroups([
+      { key: "a", pinned: false, archived: false },
+      { key: "b", pinned: true, archived: true },
+      { key: "c", pinned: true, archived: false },
+      { key: "d", pinned: false, archived: true },
+    ]);
+    expect(pickable.map((entry) => entry.key)).toEqual(["c", "a"]);
+  });
+});
+
+describe("sortProjectsByGroupOrder", () => {
+  const remote = EnvironmentId.make("remote");
+  const ref = (projectId: string, env = environmentId) => ({
+    environmentId: env,
+    projectId: ProjectId.make(projectId),
+  });
+  const project = (id: string, env: string = environmentId) => ({ id, environmentId: env });
+
+  it("tells the same project id on two environments apart", () => {
+    const sorted = sortProjectsByGroupOrder(
+      [project("shared"), project("shared", remote)],
+      [
+        { memberProjectRefs: [ref("shared", remote)], pinned: false, archived: false },
+        { memberProjectRefs: [ref("shared")], pinned: false, archived: false },
+      ],
+    );
+    expect(sorted.map((entry) => entry.environmentId)).toEqual([remote, environmentId]);
+  });
+
+  it("lists pinned projects first and archived ones last, like the sidebar's project menu", () => {
+    const sorted = sortProjectsByGroupOrder(
+      [project("archived"), project("recent"), project("pinned"), project("unlisted")],
+      [
+        { memberProjectRefs: [ref("archived")], pinned: false, archived: true },
+        { memberProjectRefs: [ref("recent")], pinned: false, archived: false },
+        { memberProjectRefs: [ref("pinned")], pinned: true, archived: false },
+      ],
+    );
+    expect(sorted.map((entry) => entry.id)).toEqual(["pinned", "recent", "archived", "unlisted"]);
   });
 });

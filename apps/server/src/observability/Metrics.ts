@@ -5,14 +5,11 @@ import * as Exit from "effect/Exit";
 import * as Metric from "effect/Metric";
 import { dual } from "effect/Function";
 
-import {
-  compactMetricAttributes,
-  normalizeModelMetricLabel,
-  outcomeFromExit,
-} from "./Attributes.ts";
+import { compactMetricAttributes, outcomeFromExit } from "./Attributes.ts";
 
 export const rpcRequestsTotal = Metric.counter("kairo_rpc_requests_total", {
   description: "Total RPC requests handled by the websocket RPC server.",
+  incremental: true,
 });
 
 export const rpcRequestDuration = Metric.timer("kairo_rpc_request_duration", {
@@ -20,46 +17,92 @@ export const rpcRequestDuration = Metric.timer("kairo_rpc_request_duration", {
 });
 
 export const orchestrationCommandsTotal = Metric.counter("kairo_orchestration_commands_total", {
-  description: "Total orchestration commands dispatched.",
+  description: "Total orchestration commands dispatched, by outcome.",
+  incremental: true,
 });
 
 export const orchestrationCommandDuration = Metric.timer("kairo_orchestration_command_duration", {
-  description: "Orchestration command dispatch duration.",
+  description: "Orchestration command handling duration, excluding thread dispatch lock wait.",
 });
 
-export const orchestrationCommandAckDuration = Metric.timer(
-  "kairo_orchestration_command_ack_duration",
+export const orchestrationEffectClaimsTotal = Metric.counter(
+  "kairo_orchestration_effect_claims_total",
   {
-    description:
-      "Time from orchestration command dispatch to the first committed domain event emitted for that command.",
+    description: "Total completed orchestration effect outbox claim attempts by result.",
+    incremental: true,
   },
 );
 
-export const orchestrationEventsProcessedTotal = Metric.counter(
-  "kairo_orchestration_events_processed_total",
+export const orchestrationEffectQueueWait = Metric.timer("kairo_orchestration_effect_queue_wait", {
+  description:
+    "Time from an orchestration effect's temporal availability until claim, including same-thread blocking.",
+});
+
+// A failed batch (transport errors and 408/429/500/502/503/504 after 3 retries) is dropped with
+// every push for the next 60 s, logged only at Debug. Incremental exports it as a monotonic counter.
+export const otlpExportAttemptFailuresTotal = Metric.counter(
+  "kairo_otlp_export_attempt_failures_total",
   {
-    description: "Total orchestration intent events processed by runtime reactors.",
+    description:
+      "Failed OTLP export attempts by signal and reason. Retries count too, so a dropped batch counts up to four.",
+    incremental: true,
   },
 );
 
 export const providerSessionsTotal = Metric.counter("kairo_provider_sessions_total", {
   description: "Total provider session lifecycle operations.",
+  incremental: true,
 });
 
 export const providerTurnsTotal = Metric.counter("kairo_provider_turns_total", {
   description: "Total provider turn lifecycle operations.",
+  incremental: true,
 });
 
 export const providerTurnDuration = Metric.timer("kairo_provider_turn_duration", {
-  description: "Provider turn request duration.",
+  description: "Time for the provider adapter to start a turn, not how long the turn runs.",
 });
 
-export const providerRuntimeEventsTotal = Metric.counter("kairo_provider_runtime_events_total", {
-  description: "Total canonical provider runtime events processed.",
+// OTLP carries the unit, and Prometheus names the series by it: a unitless gauge gains `_ratio`.
+export const serverResidentBytes = Metric.gauge("kairo_server_resident_bytes", {
+  description: "Resident memory of the server process.",
+  attributes: { unit: "By" },
+});
+
+export const serverHeapUsedBytes = Metric.gauge("kairo_server_heap_used_bytes", {
+  description: "JavaScript heap in use by the server process.",
+  attributes: { unit: "By" },
+});
+
+export const serverCpuUtilization = Metric.gauge("kairo_server_cpu_utilization", {
+  description: "CPU time the server used per second over the last sample; 1 is one full core.",
+});
+
+export const serverEventLoopUtilization = Metric.gauge("kairo_server_event_loop_utilization", {
+  description: "Share of the last sample the server's event loop spent busy.",
+});
+
+export const serverEventLoopDelayMax = Metric.gauge("kairo_server_event_loop_delay_max", {
+  description: "Longest event loop delay over the last sample.",
+  attributes: { unit: "ms" },
+});
+
+export const runsTotal = Metric.counter("kairo_runs_total", {
+  description: "Runs that finished, by outcome. A later rollback does not count again.",
+  incremental: true,
+});
+
+export const runDuration = Metric.timer("kairo_run_duration", {
+  description: "Wall time of a run, from when it started to its terminal status.",
+});
+
+export const runQueueWait = Metric.timer("kairo_run_queue_wait", {
+  description: "Time a run waited between being requested and starting.",
 });
 
 export const gitCommandsTotal = Metric.counter("kairo_git_commands_total", {
   description: "Total git commands executed by the server runtime.",
+  incremental: true,
 });
 
 export const gitCommandDuration = Metric.timer("kairo_git_command_duration", {
@@ -68,10 +111,36 @@ export const gitCommandDuration = Metric.timer("kairo_git_command_duration", {
 
 export const terminalSessionsTotal = Metric.counter("kairo_terminal_sessions_total", {
   description: "Total terminal sessions started.",
+  incremental: true,
 });
 
-export const terminalRestartsTotal = Metric.counter("kairo_terminal_restarts_total", {
-  description: "Total terminal restart requests handled.",
+export const webhookDeliveriesTotal = Metric.counter("kairo_webhook_deliveries_total", {
+  description: "Webhook requests handled, by outcome and source.",
+  incremental: true,
+});
+
+export const webhookDeliveryDuration = Metric.timer("kairo_webhook_delivery_duration", {
+  description: "Time to verify, log, and enqueue one webhook request.",
+});
+
+export const webhookHeldDelay = Metric.timer("kairo_webhook_held_delay", {
+  description:
+    "Time between the relay receiving a webhook request and the environment handling it.",
+});
+
+export const webhookRunsTotal = Metric.counter("kairo_webhook_runs_total", {
+  description: "Runs started from webhook deliveries, by outcome.",
+  incremental: true,
+});
+
+export const secretRequestsTotal = Metric.counter("kairo_secret_requests_total", {
+  description: "Secrets agents asked users for, by how each request ended.",
+  incremental: true,
+});
+
+export const secretRefsConsumedTotal = Metric.counter("kairo_secret_refs_consumed_total", {
+  description: "Secret refs tools tried to use, by result.",
+  incremental: true,
 });
 
 export const metricAttributes = (
@@ -95,16 +164,14 @@ export interface WithMetricsOptions {
   ) => Readonly<Record<string, unknown>>;
 }
 
-const withMetricsImpl = <A, E, R>(
-  effect: Effect.Effect<A, E, R>,
-  options: WithMetricsOptions,
-): Effect.Effect<A, E, R> =>
-  Effect.gen(function* () {
-    const startedAt = yield* Clock.currentTimeNanos;
-    const exit = yield* Effect.exit(effect);
-    const endedAt = yield* Clock.currentTimeNanos;
-    const elapsedNanos = endedAt > startedAt ? endedAt - startedAt : 0n;
-    const duration = Duration.nanos(elapsedNanos);
+const recordMetrics =
+  /* Instrumentation must not create its own span for every recorded operation. */
+  Effect.fnUntraced(function* (
+    options: WithMetricsOptions,
+    startedAt: bigint,
+    exit: Exit.Exit<unknown, unknown>,
+  ) {
+    const duration = Duration.nanos((yield* Clock.monotonicTimeNanos) - startedAt);
     const baseAttributes =
       typeof options.attributes === "function" ? options.attributes() : (options.attributes ?? {});
 
@@ -129,38 +196,31 @@ const withMetricsImpl = <A, E, R>(
         1,
       );
     }
-
-    if (Exit.isSuccess(exit)) {
-      return exit.value;
-    }
-    return yield* Effect.failCause(exit.cause);
   });
 
+// Monotonic timing ignores clock corrections; exit finalizers count interruptions.
+const withMetricsImpl = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+  options: WithMetricsOptions,
+): Effect.Effect<A, E, R> =>
+  Effect.flatMap(Clock.monotonicTimeNanos, (startedAt) =>
+    Effect.onExit(effect, (exit) => recordMetrics(options, startedAt, exit)),
+  );
+
 export const withMetrics: {
-  <A, E, R>(
+  (
     options: WithMetricsOptions,
-  ): (effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
+  ): <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
   <A, E, R>(effect: Effect.Effect<A, E, R>, options: WithMetricsOptions): Effect.Effect<A, E, R>;
 } = dual(2, withMetricsImpl);
 
-export const providerMetricAttributes = (
-  provider: string,
-  extra?: Readonly<Record<string, unknown>>,
-) =>
-  compactMetricAttributes({
-    provider,
-    ...extra,
+// Shaped as an `Effect.fn` combinator: the command is the instrumented function's argument.
+export const withCommandMetrics = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+  command: { readonly type: string },
+): Effect.Effect<A, E, R> =>
+  withMetrics(effect, {
+    counter: orchestrationCommandsTotal,
+    timer: orchestrationCommandDuration,
+    attributes: { commandType: command.type },
   });
-
-export const providerTurnMetricAttributes = (input: {
-  readonly provider: string;
-  readonly model: string | null | undefined;
-  readonly extra?: Readonly<Record<string, unknown>>;
-}) => {
-  const modelFamily = normalizeModelMetricLabel(input.model);
-  return compactMetricAttributes({
-    provider: input.provider,
-    ...(modelFamily ? { modelFamily } : {}),
-    ...input.extra,
-  });
-};

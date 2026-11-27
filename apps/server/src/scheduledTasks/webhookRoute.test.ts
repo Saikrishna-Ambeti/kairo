@@ -1,0 +1,364 @@
+import * as PlatformNodeCrypto from "@effect/platform-node/NodeCrypto";
+import { describe, expect, it } from "@effect/vitest";
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect's Crypto has no generateKeyPairSync.
+import * as NodeCrypto from "node:crypto";
+import * as Clock from "effect/Clock";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Etag from "effect/http/Etag";
+import * as HttpPlatform from "effect/http/HttpPlatform";
+import * as HttpRouter from "effect/http/HttpRouter";
+import * as HttpApi from "effect/http-api/HttpApi";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+
+import { RELAY_HOOK_DELIVERY_TYP, signRelayJwt } from "@kairo/shared/relayJwt";
+import {
+  EnvironmentHttpApi,
+  EnvironmentId,
+  ScheduledTaskWebhookDeliveryId,
+  ScheduledTaskError,
+} from "@kairo/contracts";
+import {
+  ScheduledTaskService,
+  type WebhookTriggerRequest,
+  type WebhookTriggerResult,
+} from "./ScheduledTaskService.ts";
+import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
+import { CLOUD_MINT_PUBLIC_KEY, RELAY_ISSUER_SECRET } from "../cloud/config.ts";
+import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
+import * as RelayDeliveryProof from "./RelayDeliveryProof.ts";
+import { WEBHOOK_MAX_BODY_BYTES } from "./webhookRoute.ts";
+import * as WebhookRoute from "./webhookRoute.ts";
+import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
+import * as Workflows from "../workflows/Workflows.ts";
+
+class WebhookTestApi extends HttpApi.make("environment").add(EnvironmentHttpApi.groups.webhooks) {}
+
+const environmentId = EnvironmentId.make("env-1");
+const relayIssuer = "https://relay.example.test";
+const mintKeys = NodeCrypto.generateKeyPairSync("ed25519", {
+  privateKeyEncoding: { format: "pem", type: "pkcs8" },
+  publicKeyEncoding: { format: "pem", type: "spki" },
+});
+const linkedSecrets: ReadonlyMap<string, string> = new Map([
+  [CLOUD_MINT_PUBLIC_KEY, mintKeys.publicKey],
+  [RELAY_ISSUER_SECRET, relayIssuer],
+]);
+
+const relayProof = Effect.fn("relayProof")(function* (claims: {
+  readonly deliveryId: string;
+  readonly receivedAt: string;
+  readonly hookId: string;
+  readonly privateKey?: string;
+}) {
+  const now = Math.floor((yield* Clock.currentTimeMillis) / 1_000);
+  return yield* signRelayJwt({
+    privateKey: claims.privateKey ?? mintKeys.privateKey,
+    typ: RELAY_HOOK_DELIVERY_TYP,
+    payload: {
+      iss: relayIssuer,
+      aud: `kairo-env:${environmentId}`,
+      sub: environmentId,
+      jti: `proof:${claims.deliveryId}`,
+      iat: now,
+      exp: now + 3_600,
+      environmentId,
+      deliveryId: claims.deliveryId,
+      receivedAt: claims.receivedAt,
+      hookId: claims.hookId,
+    },
+  }).pipe(Effect.provide(PlatformNodeCrypto.layerSignature));
+});
+
+const workflowDeliveries: Array<Parameters<Workflows.Workflows["Service"]["deliver"]>[0]> = [];
+const hooks = Layer.mock(Workflows.Workflows)({
+  deliver: (delivery) =>
+    Effect.sync(() => {
+      workflowDeliveries.push(delivery);
+      return delivery.token === "tok" ? Option.some({ runId: "run-1" }) : Option.none();
+    }).pipe(
+      Effect.filterOrFail(
+        () => delivery.token !== "busy",
+        () => new Workflows.WorkflowHookBusyError({ hook: "push" }),
+      ),
+    ),
+});
+
+const handlerFor = (
+  trigger: (
+    request: WebhookTriggerRequest,
+  ) => Effect.Effect<WebhookTriggerResult, ScheduledTaskError>,
+  secrets: ReadonlyMap<string, string> = linkedSecrets,
+) =>
+  HttpRouter.toWebHandler(
+    HttpApiBuilder.layer(WebhookTestApi).pipe(
+      Layer.provide(WebhookRoute.layer),
+      Layer.provide(RelayDeliveryProof.layer),
+      Layer.provide(Layer.mock(ScheduledTaskService)({ triggerWebhook: trigger })),
+      Layer.provide([hooks, ManagedPolicy.layerTest()]),
+      Layer.provide(
+        Layer.mock(ServerSecretStore.ServerSecretStore)({
+          get: (name) =>
+            Effect.succeed(
+              Option.map(Option.fromUndefinedOr(secrets.get(name)), (value) =>
+                new TextEncoder().encode(value),
+              ),
+            ),
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(ServerEnvironment.ServerEnvironment)({
+          getEnvironmentId: Effect.succeed(environmentId),
+        }),
+      ),
+      Layer.provide(
+        HttpPlatform.layer.pipe(
+          Layer.provideMerge(NodeServices.layer),
+          Layer.provideMerge(Etag.layerWeak),
+        ),
+      ),
+      Layer.provide([NodeServices.layer, PlatformNodeCrypto.layerSignature]),
+    ),
+    { disableLogger: true },
+  );
+
+const post = (
+  path: string,
+  body: string | Uint8Array<ArrayBuffer>,
+  headers: Record<string, string> = {},
+) => new Request(`http://env.local${path}`, { method: "POST", body, headers });
+
+describe("webhook route", () => {
+  it.live("a workflow's hook starts a run and never reaches the scheduled tasks", () =>
+    Effect.gen(function* () {
+      let tasks = 0;
+      const { handler, dispose } = handlerFor(() => {
+        tasks += 1;
+        return Effect.succeed({ _tag: "not_found" });
+      });
+      const send = (token: string) =>
+        Effect.promise(() =>
+          handler(post(`/api/hooks/wf-inbound.push/${token}?a=1`, "hello", { "X-Delivery": "d1" })),
+        );
+      const accepted = yield* send("tok");
+      expect(accepted.status).toBe(202);
+      expect(yield* Effect.promise(() => accepted.json())).toEqual({ runId: "run-1" });
+      expect((yield* send("wrong")).status).toBe(404);
+      const busy = yield* send("busy");
+      expect([busy.status, busy.headers.get("retry-after")]).toEqual([429, "60"]);
+      expect(yield* Effect.promise(() => busy.json())).toEqual({ error: "rate_limited" });
+      expect(tasks).toBe(0);
+      expect(workflowDeliveries[0]).toMatchObject({
+        hookId: "wf-inbound.push",
+        request: { method: "POST", query: "a=1", body: "hello", headers: { "x-delivery": "d1" } },
+      });
+      yield* Effect.promise(dispose);
+    }),
+  );
+
+  it.live("trusts the relay's delivery id and receive time only with its signed proof", () =>
+    Effect.gen(function* () {
+      const received: Array<WebhookTriggerRequest> = [];
+      const { handler, dispose } = handlerFor((request) => {
+        received.push(request);
+        return Effect.succeed({
+          _tag: "accepted",
+          deliveryId: ScheduledTaskWebhookDeliveryId.make("delivery:1"),
+          outcome: "accepted",
+        });
+      });
+      const send = (path: string, headers: Record<string, string>) =>
+        Effect.promise(() => handler(post(path, "{}", headers)));
+      const receivedAt = "2026-10-04T10:00:00.000Z";
+      const relayHeaders = {
+        "x-kairo-relay-delivery-id": "relay-1",
+        "x-kairo-relay-received-at": receivedAt,
+      };
+      const forged = NodeCrypto.generateKeyPairSync("ed25519", {
+        privateKeyEncoding: { format: "pem", type: "pkcs8" },
+        publicKeyEncoding: { format: "pem", type: "spki" },
+      });
+      const proof = yield* relayProof({ deliveryId: "relay-1", receivedAt, hookId: "id" });
+      const forgedProof = yield* relayProof({
+        deliveryId: "relay-1",
+        receivedAt,
+        hookId: "id",
+        privateKey: forged.privateKey,
+      });
+      yield* send("/api/hooks/id/tok", { ...relayHeaders, "x-kairo-relay-delivery": proof });
+      yield* send("/api/hooks/id/tok", relayHeaders);
+      yield* send("/api/hooks/id/tok", { ...relayHeaders, "x-kairo-relay-delivery": forgedProof });
+      yield* send("/api/hooks/id/tok", {
+        ...relayHeaders,
+        "x-kairo-relay-delivery-id": "relay-2",
+        "x-kairo-relay-delivery": proof,
+      });
+      yield* send("/api/hooks/other/tok", { ...relayHeaders, "x-kairo-relay-delivery": proof });
+      yield* Effect.promise(() => dispose());
+      expect(received.map((request) => request.relayDeliveryId)).toEqual([
+        "relay-1",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      ]);
+      expect(received[0]?.receivedAt).toBe(receivedAt);
+      expect(received.slice(1).every((request) => request.receivedAt === undefined)).toBe(true);
+    }),
+  );
+
+  it.live("trusts no relay headers on an environment not linked to Kairo Connect", () =>
+    Effect.gen(function* () {
+      const received: Array<WebhookTriggerRequest> = [];
+      const { handler, dispose } = handlerFor((request) => {
+        received.push(request);
+        return Effect.succeed({ _tag: "not_found" });
+      }, new Map());
+      const receivedAt = "2026-10-04T10:00:00.000Z";
+      const proof = yield* relayProof({ deliveryId: "relay-1", receivedAt, hookId: "id" });
+      yield* Effect.promise(() =>
+        handler(
+          post("/api/hooks/id/tok", "{}", {
+            "x-kairo-relay-delivery-id": "relay-1",
+            "x-kairo-relay-received-at": receivedAt,
+            "x-kairo-relay-delivery": proof,
+          }),
+        ),
+      );
+      yield* Effect.promise(() => dispose());
+      expect(received[0]?.relayDeliveryId).toBeUndefined();
+    }),
+  );
+
+  it("keeps a browser's session cookie out of the request a task reads", async () => {
+    const received: Array<WebhookTriggerRequest> = [];
+    const { handler, dispose } = handlerFor((request) => {
+      received.push(request);
+      return Effect.succeed({
+        _tag: "accepted",
+        deliveryId: ScheduledTaskWebhookDeliveryId.make("delivery:1"),
+        outcome: "accepted",
+      });
+    });
+    try {
+      const response = await handler(
+        new Request("http://env.local/api/hooks/id/tok", {
+          headers: { Cookie: "kairo_session=session-secret", "x-github-event": "push" },
+        }),
+      );
+      expect(response.status).toBe(202);
+      expect(received[0]?.headers).not.toHaveProperty("cookie");
+      expect(received[0]?.headers["x-github-event"]).toBe("push");
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("maps service outcomes to status codes and names each outcome for the relay", async () => {
+    const deliveryId = ScheduledTaskWebhookDeliveryId.make("delivery:1");
+    const cases: ReadonlyArray<[WebhookTriggerResult, number, string]> = [
+      [{ _tag: "accepted", deliveryId, outcome: "accepted" }, 202, "accepted"],
+      [{ _tag: "accepted", deliveryId, outcome: "duplicate" }, 202, "duplicate"],
+      [{ _tag: "accepted", deliveryId, outcome: "prompt_too_long" }, 202, "prompt_too_long"],
+      [{ _tag: "accepted", deliveryId, outcome: "filtered" }, 202, "filtered"],
+      [{ _tag: "not_found" }, 404, "not_found"],
+      [{ _tag: "rejected_signature" }, 401, "rejected_signature"],
+      [{ _tag: "disabled" }, 409, "disabled"],
+      [{ _tag: "blocked_by_policy" }, 403, "blocked_by_policy"],
+      [{ _tag: "rate_limited", outcome: "rate_limited" }, 429, "rate_limited"],
+      [{ _tag: "rate_limited", outcome: "queue_full" }, 429, "queue_full"],
+      [{ _tag: "expired" }, 410, "expired"],
+    ];
+    for (const [result, status, outcome] of cases) {
+      const { handler, dispose } = handlerFor(() => Effect.succeed(result));
+      try {
+        const response = await handler(post("/api/hooks/id/tok", "{}"));
+        expect(response.status).toBe(status);
+        expect(response.headers.get("x-kairo-hook-outcome")).toBe(outcome);
+        if (status === 429) expect(await response.json()).toEqual({ error: outcome });
+      } finally {
+        await dispose();
+      }
+    }
+  });
+
+  it("rejects oversized bodies and malformed paths before reaching the service", async () => {
+    let calls = 0;
+    const { handler, dispose } = handlerFor(() => {
+      calls += 1;
+      return Effect.succeed({ _tag: "not_found" });
+    });
+    try {
+      const big = new Uint8Array(WEBHOOK_MAX_BODY_BYTES + 1);
+      expect((await handler(post("/api/hooks/id/tok", big))).status).toBe(413);
+      expect((await handler(post("/api/hooks/id", "{}"))).status).toBe(404);
+      expect((await handler(post("/api/hooks/id/tok/extra", "{}"))).status).toBe(404);
+      expect((await handler(post("/api/hooks/%E0/tok", "{}"))).status).toBe(404);
+      const chunked = new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (let sent = 0; sent <= WEBHOOK_MAX_BODY_BYTES; sent += 64 * 1024) {
+            controller.enqueue(new Uint8Array(64 * 1024));
+          }
+          controller.close();
+        },
+      });
+      const streamed = await handler(
+        new Request("http://env.local/api/hooks/id/tok", {
+          method: "POST",
+          body: chunked,
+          // Node's fetch needs duplex for streamed bodies.
+          duplex: "half",
+        }),
+      );
+      expect(streamed.status).toBe(413);
+      expect(calls).toBe(0);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("refuses HEAD probes without triggering the hook", async () => {
+    let calls = 0;
+    const { handler, dispose } = handlerFor(() => {
+      calls += 1;
+      return Effect.succeed({
+        _tag: "accepted",
+        deliveryId: ScheduledTaskWebhookDeliveryId.make("delivery:1"),
+        outcome: "accepted",
+      });
+    });
+    try {
+      const response = await handler(
+        new Request("http://env.local/api/hooks/id/tok", { method: "HEAD" }),
+      );
+      expect(response.status).toBe(405);
+      expect(response.headers.get("allow")).toBe("GET, POST, PUT, PATCH");
+      expect(response.headers.get("x-kairo-hook-outcome")).toBe("method_not_allowed");
+      expect(calls).toBe(0);
+      const get = await handler(new Request("http://env.local/api/hooks/id/tok"));
+      expect(get.status).toBe(202);
+      expect(calls).toBe(1);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("hides service failures and defects behind a fixed 500", async () => {
+    const failures = [
+      Effect.fail(new ScheduledTaskError({ message: "database locked" })),
+      Effect.die(new Error("database exploded")),
+    ];
+    for (const failure of failures) {
+      const { handler, dispose } = handlerFor(() => failure);
+      try {
+        const response = await handler(post("/api/hooks/id/tok", "{}"));
+        expect(response.status).toBe(500);
+        expect(await response.json()).toEqual({ error: "internal_error" });
+      } finally {
+        await dispose();
+      }
+    }
+  });
+});

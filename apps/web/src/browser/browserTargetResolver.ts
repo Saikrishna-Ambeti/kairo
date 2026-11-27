@@ -6,14 +6,13 @@ import type {
 import { isLoopbackHost, normalizePreviewUrl } from "@kairo/shared/preview";
 import { isLocalLoopbackHost, isPrivateNetworkHost } from "@kairo/shared/hostClassification";
 
+import type { ConnectionTarget } from "@kairo/client-runtime/connection";
+
+import { isDesktopLocalConnectionTarget } from "~/connection/desktopLocal";
+import { isElectron } from "~/env";
 import { readPreparedConnection } from "~/state/session";
 
-export {
-  normalizeHostname,
-  isLocalLoopbackHost,
-  isPrivateNetworkHost,
-  isPublicFaviconHost,
-} from "@kairo/shared/hostClassification";
+export { normalizeHostname, isLocalLoopbackHost } from "@kairo/shared/hostClassification";
 
 const readEnvironmentUrl = (environmentId: EnvironmentId): URL => {
   const connection = readPreparedConnection(environmentId);
@@ -36,8 +35,7 @@ const resolveEnvironmentPortTarget = (
   const protocol = target.protocol ?? "http";
   const path = target.path?.startsWith("/") ? target.path : `/${target.path ?? ""}`;
   const normalizedEnvironmentHost = environmentUrl.hostname.replace(/^\[|\]$/g, "");
-  // Local loopback environments should advertise `localhost` so Chromium
-  // dual-stack lookup can reach a Vite server bound only to ::1 or 127.0.0.1.
+  // localhost lets Chromium reach loopback servers bound to either IPv4 or IPv6.
   const resolvedHost = isLocalLoopbackHost(normalizedEnvironmentHost)
     ? "localhost"
     : normalizedEnvironmentHost.includes(":")
@@ -60,26 +58,26 @@ const resolveEnvironmentPortTarget = (
   };
 };
 
-export function resolveBrowserNavigationTarget(
-  environmentId: EnvironmentId,
-  target: BrowserNavigationTarget,
-): PreviewUrlResolution {
-  if (target.kind === "url") {
-    return {
-      requestedUrl: target.url,
-      resolvedUrl: target.url,
-      resolutionKind: "direct",
-      environmentId,
-    };
-  }
-  return resolveEnvironmentPortTarget(environmentId, target, readEnvironmentUrl(environmentId));
-}
+// Loopback servers on the desktop's own primary and WSL backends answer on this machine's localhost.
+const reachesEnvironmentLoopback = (target: ConnectionTarget): boolean =>
+  isElectron &&
+  (target._tag === "PrimaryConnectionTarget" || isDesktopLocalConnectionTarget(target));
 
-export function resolveDiscoveredServerUrl(environmentId: EnvironmentId, rawUrl: string): string {
+/** Desktop carries every other environment's loopback traffic through the preview tunnel. */
+export const tunnelsEnvironmentLoopback = (target: ConnectionTarget | undefined): boolean =>
+  isElectron && !(target !== undefined && reachesEnvironmentLoopback(target));
+
+const resolveLoopbackUrl = (
+  environmentId: EnvironmentId,
+  rawUrl: string,
+  tunnelled: boolean,
+): string => {
   try {
     const normalizedUrl = normalizePreviewUrl(rawUrl);
     const parsed = new URL(normalizedUrl);
-    if (!isLoopbackHost(parsed.hostname)) return normalizedUrl;
+    if (tunnelled || !isLoopbackHost(parsed.hostname)) return normalizedUrl;
+    const target = readPreparedConnection(environmentId)?.target;
+    if (target && reachesEnvironmentLoopback(target)) return normalizedUrl;
     return resolveEnvironmentPortTarget(
       environmentId,
       {
@@ -95,4 +93,12 @@ export function resolveDiscoveredServerUrl(environmentId: EnvironmentId, rawUrl:
   } catch {
     return rawUrl;
   }
-}
+};
+
+/** The URL an in-app tab loads. A desktop webview keeps localhost; its partition reaches the environment. */
+export const resolveDiscoveredServerUrl = (environmentId: EnvironmentId, rawUrl: string): string =>
+  resolveLoopbackUrl(environmentId, rawUrl, isElectron);
+
+/** The URL for the system browser, which has no tunnel and needs an address it can reach itself. */
+export const resolveExternalServerUrl = (environmentId: EnvironmentId, rawUrl: string): string =>
+  resolveLoopbackUrl(environmentId, rawUrl, false);

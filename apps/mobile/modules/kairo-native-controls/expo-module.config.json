@@ -1,12 +1,20 @@
 {
   "platforms": ["apple", "android"],
   "apple": {
-    "modules": ["KairoNativeControlsModule", "KairoKeyboardCommandsModule"]
+    "modules": ["KairoNativeControlsModule", "KairoKeyboardCommandsModule"],
+    "appDelegateSubscribers": [
+      "KairoWorkspaceOrientationSubscriber",
+      "KairoMenuDismissTouchGateSubscriber",
+      "KairoBackgroundGraceSubscriber"
+    ]
   },
   "android": {
     "modules": [
       "expo.modules.kaironativecontrols.KairoNativeControlsModule",
-      "expo.modules.kaironativecontrols.KairoKeyboardCommandsModule"
+      "expo.modules.kaironativecontrols.KairoWorkspaceNavigationModule",
+      "expo.modules.kaironativecontrols.KairoKeyboardCommandsModule",
+      "expo.modules.kaironativecontrols.KairoFoldPostureModule",
+      "expo.modules.kaironativecontrols.KairoSecretInputModule"
     ]
   }
 }

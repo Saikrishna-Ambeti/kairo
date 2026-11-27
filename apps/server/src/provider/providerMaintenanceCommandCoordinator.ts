@@ -1,6 +1,14 @@
+// @effect-diagnostics nodeBuiltinImport:off - Update leases coordinate Node server processes.
+import * as NodeCrypto from "node:crypto";
+import * as NodeFSP from "node:fs/promises";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
+import * as KeyedLock from "@kairo/shared/KeyedLock";
+import { lock } from "proper-lockfile";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
-import * as Semaphore from "effect/Semaphore";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 
 export interface ProviderMaintenanceCommandCoordinatorShape<E> {
   readonly withCommandLock: <A, R>(input: {
@@ -11,11 +19,64 @@ export interface ProviderMaintenanceCommandCoordinatorShape<E> {
   }) => Effect.Effect<A, E, R>;
 }
 
+class MachineLockError extends Schema.TaggedError<MachineLockError>()("MachineLockError", {
+  held: Schema.Boolean,
+  cause: Schema.Defect(),
+}) {}
+
+const lockDirectory = () => NodePath.join(NodeOS.tmpdir(), "kairo-provider-updates");
+
+/** @internal */
+export const machineLockFile = (lockKey: string) =>
+  NodePath.join(
+    lockDirectory(),
+    NodeCrypto.createHash("sha256").update(lockKey).digest("hex").slice(0, 32),
+  );
+
+// Other T3 servers on this machine can run the same installation's updater; one replacing its own
+// files makes the other's spawn or capability check fail. Without a usable lock directory, run anyway.
+const withMachineLock = <A, E, R>(
+  lockKey: string,
+  run: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> => {
+  const directory = lockDirectory();
+  const file = machineLockFile(lockKey);
+  const acquire = Effect.acquireRelease(
+    Effect.tryPromise({
+      try: async () => {
+        await NodeFSP.mkdir(directory, { recursive: true });
+        return await lock(file, {
+          realpath: false,
+          stale: 60_000,
+          update: 10_000,
+          onCompromised: () => {},
+        });
+      },
+      catch: (cause) =>
+        new MachineLockError({
+          held: (cause as { code?: unknown } | null)?.code === "ELOCKED",
+          cause,
+        }),
+    }),
+    // A compromised lease rejects on release; the update has already finished by then.
+    (release) => Effect.promise(() => release().catch(() => undefined)),
+  ).pipe(
+    Effect.retry({ while: (error) => error.held, schedule: Schedule.spaced("1 second") }),
+    Effect.catch((error) =>
+      Effect.logWarning("Could not lock provider update across servers", {
+        lockKey,
+        cause: String(error.cause),
+      }),
+    ),
+  );
+  return Effect.scoped(acquire.pipe(Effect.andThen(run)));
+};
+
 export const makeProviderMaintenanceCommandCoordinator = Effect.fn(
   "makeProviderMaintenanceCommandCoordinator",
 )(function* <E>(input: { readonly makeAlreadyRunningError: (targetKey: string) => E }) {
   const runningTargetsRef = yield* Ref.make<ReadonlySet<string>>(new Set());
-  const locksRef = yield* Ref.make<ReadonlyMap<string, Semaphore.Semaphore>>(new Map());
+  const locks = yield* KeyedLock.make<string>();
 
   const acquireTarget = Effect.fn("acquireTarget")(function* (targetKey: string) {
     return yield* Ref.modify(runningTargetsRef, (runningTargets) => {
@@ -35,43 +96,22 @@ export const makeProviderMaintenanceCommandCoordinator = Effect.fn(
       return next;
     });
 
-  const getLock = Effect.fn("getProviderMaintenanceCommandLock")(function* (lockKey: string) {
-    const existing = (yield* Ref.get(locksRef)).get(lockKey);
-    if (existing) {
-      return existing;
-    }
-
-    const lock = yield* Semaphore.make(1);
-    return yield* Ref.modify(locksRef, (locks) => {
-      const current = locks.get(lockKey);
-      if (current) {
-        return [current, locks] as const;
-      }
-      const next = new Map(locks);
-      next.set(lockKey, lock);
-      return [lock, next] as const;
-    });
-  });
-
-  const withCommandLock: ProviderMaintenanceCommandCoordinatorShape<E>["withCommandLock"] = ({
-    targetKey,
-    lockKey,
-    onQueued,
-    run,
-  }) =>
-    Effect.gen(function* () {
+  const withCommandLock: ProviderMaintenanceCommandCoordinatorShape<E>["withCommandLock"] =
+    Effect.fn("providerMaintenanceCommandCoordinator.withCommandLock")(function* ({
+      targetKey,
+      lockKey,
+      onQueued,
+      run,
+    }) {
       const acquired = yield* acquireTarget(targetKey);
       if (!acquired) {
         return yield* Effect.fail(input.makeAlreadyRunningError(targetKey));
       }
 
-      return yield* Effect.gen(function* () {
-        const lock = yield* getLock(lockKey);
-        if (onQueued) {
-          yield* onQueued;
-        }
-        return yield* lock.withPermits(1)(run);
-      }).pipe(Effect.ensuring(releaseTarget(targetKey)));
+      return yield* (onQueued ?? Effect.void).pipe(
+        Effect.andThen(locks.withLock(lockKey, withMachineLock(lockKey, run))),
+        Effect.ensuring(releaseTarget(targetKey)),
+      );
     });
 
   return {

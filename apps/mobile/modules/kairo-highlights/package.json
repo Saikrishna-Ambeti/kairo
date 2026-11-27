@@ -1,0 +1,9 @@
+{
+  "name": "@kairo/mobile-highlights-native",
+  "version": "0.0.0",
+  "private": true,
+  "types": "./src/KairoHighlights.nitro.ts",
+  "peerDependencies": {
+    "react-native-nitro-modules": "*"
+  }
+}

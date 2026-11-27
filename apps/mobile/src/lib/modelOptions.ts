@@ -1,31 +1,78 @@
+import {
+  normalizeProviderAccentColor,
+  resolveProviderInstanceDisplayName,
+  shouldShowInstanceBadge,
+} from "@kairo/client-runtime/state/provider-instance-display";
+import { msg } from "gt-react-native";
+import { m } from "../i18n/messages";
+
 import type {
   ModelCapabilities,
   ModelSelection,
+  ProjectId,
+  RuntimeMode,
   ServerConfig as KairoServerConfig,
+} from "@kairo/contracts";
+import {
+  isManagedDriverAllowed,
+  isProviderDriverKind,
+  resolveProjectProviderInstanceEnabled,
 } from "@kairo/contracts";
 import {
   buildExplicitProviderOptionSelectionsFromDescriptors,
   getProviderOptionDescriptors,
 } from "@kairo/shared/model";
+import { resolveModelShortName } from "@kairo/client-runtime/provider-clients";
+import { resolveProvidersForCwd } from "@kairo/client-runtime/providerSkills";
 
+/** The contracts `disallowedProviderMessage` English, as translatable sentences. */
+function disallowedProviderText(organization: string | undefined, label: string): string {
+  return organization === undefined
+    ? m(msg("Your organization policy does not allow the {label} provider.", { label }))
+    : m(
+        msg("{organization}''s policy does not allow the {label} provider.", {
+          organization,
+          label,
+        }),
+      );
+}
 export type ModelOption = {
   readonly key: string;
   readonly label: string;
+  readonly shortName?: string;
   readonly subtitle: string;
   readonly providerKey: string;
   readonly providerLabel: string;
   readonly providerDriver: string;
+  readonly supportedRuntimeModes?: ReadonlyArray<RuntimeMode>;
+  readonly providerIconUrl?: string | undefined;
+  readonly providerBadge?: {
+    readonly displayName: string;
+    readonly accentColor?: string;
+    readonly showBadge: boolean;
+  };
   readonly isDefault: boolean;
   readonly isLegacy: boolean;
   readonly isUnavailable?: boolean;
+  readonly isHidden?: boolean;
+  readonly canHide?: boolean;
   readonly capabilities: ModelCapabilities | null;
   readonly selection: ModelSelection;
+  readonly providerUpdateRequired?: ProviderUpdateRequired;
+  readonly providerSubProviders?: KairoServerConfig["providers"][number]["subProviders"];
 };
+
+type ProviderUpdateRequired = Pick<
+  KairoServerConfig["providers"][number],
+  "driver" | "updateRequiredModels" | "versionAdvisory"
+>;
 
 export type ProviderGroup = {
   readonly providerKey: string;
   readonly providerLabel: string;
   readonly models: ReadonlyArray<ModelOption>;
+  readonly updateRequired?: ProviderUpdateRequired;
+  readonly subProviders?: ModelOption["providerSubProviders"];
 };
 
 function providerDisplayLabel(provider: {
@@ -36,7 +83,70 @@ function providerDisplayLabel(provider: {
   if (provider.displayName) return provider.displayName;
   if (provider.driver === "codex") return "Codex";
   if (provider.driver === "claudeAgent") return "Claude";
+  if (provider.driver === "pi") return "Pi";
   return provider.instanceId;
+}
+
+function isProviderEnabledForProject(
+  config: KairoServerConfig | null | undefined,
+  provider:
+    | { readonly instanceId: ModelSelection["instanceId"]; readonly enabled: boolean }
+    | undefined,
+  projectId: ProjectId | null,
+): boolean {
+  if (!provider) {
+    return false;
+  }
+  return config?.settings
+    ? resolveProjectProviderInstanceEnabled(config.settings, projectId, provider.instanceId)
+    : provider.enabled;
+}
+
+function isProjectDisabledOverride(
+  config: KairoServerConfig | null | undefined,
+  instanceId: ModelSelection["instanceId"],
+  projectId: ProjectId | null,
+): boolean {
+  if (!projectId || !config?.settings) {
+    return false;
+  }
+  return (
+    config.settings.projectSettingsOverrides[projectId]?.providerInstances?.[instanceId]
+      ?.enabled === false
+  );
+}
+
+function isDisabledForProject(
+  config: KairoServerConfig | null | undefined,
+  provider:
+    | { readonly instanceId: ModelSelection["instanceId"]; readonly enabled: boolean }
+    | undefined,
+  instanceId: ModelSelection["instanceId"],
+  projectId: ProjectId | null,
+): boolean {
+  if (isProjectDisabledOverride(config, instanceId, projectId)) {
+    return true;
+  }
+  return provider !== undefined && !isProviderEnabledForProject(config, provider, projectId);
+}
+
+function selectionDriver(
+  config: KairoServerConfig | null | undefined,
+  instanceId: ModelSelection["instanceId"],
+): string | undefined {
+  return (
+    config?.providers.find((candidate) => candidate.instanceId === instanceId)?.driver ??
+    config?.settings?.providerInstances[instanceId]?.driver
+  );
+}
+
+/** Whether the environment's managed policy leaves this driver out; the server refuses its turns. */
+function isDriverDisallowed(config: KairoServerConfig | null | undefined, driver: string | undefined) {
+  return (
+    driver !== undefined &&
+    isProviderDriverKind(driver) &&
+    !isManagedDriverAllowed(config?.managedPolicy, driver)
+  );
 }
 
 function normalizeSelectionOptions(
@@ -45,6 +155,9 @@ function normalizeSelectionOptions(
 ): ModelSelection {
   if (!capabilities) {
     return selection;
+  }
+  if (!selection.options?.length) {
+    return { instanceId: selection.instanceId, model: selection.model };
   }
   const options = buildExplicitProviderOptionSelectionsFromDescriptors(
     getProviderOptionDescriptors({
@@ -61,10 +174,21 @@ function normalizeSelectionOptions(
       };
 }
 
-/** Whether a known Antigravity selection needs setup or a different model. */
+/** The config as a project at `cwd` sees it, with that project's own provider models. */
+export function serverConfigForCwd<C extends KairoServerConfig | null | undefined>(
+  config: C,
+  cwd: string | null,
+): C {
+  if (!config) return config;
+  const providers = resolveProvidersForCwd(config.providers, cwd);
+  return providers === config.providers ? config : { ...config, providers };
+}
+
+/** Require explicit projectId or null so omissions cannot bypass project provider disablement. */
 export function isModelSelectionUnavailable(
   config: KairoServerConfig | null | undefined,
   selection: ModelSelection | null | undefined,
+  projectId: ProjectId | null,
 ): boolean {
   if (!config || !selection) {
     return false;
@@ -72,12 +196,17 @@ export function isModelSelectionUnavailable(
   const provider = config.providers.find(
     (candidate) => candidate.instanceId === selection.instanceId,
   );
+  if (isDisabledForProject(config, provider, selection.instanceId, projectId)) {
+    return true;
+  }
   const driver =
     provider?.driver ?? config.settings?.providerInstances[selection.instanceId]?.driver;
+  if (isDriverDisallowed(config, driver)) {
+    return true;
+  }
   return (
     driver === "antigravity" &&
     (!provider ||
-      !provider.enabled ||
       !provider.installed ||
       provider.auth.status === "unauthenticated" ||
       provider.availability === "unavailable" ||
@@ -85,14 +214,51 @@ export function isModelSelectionUnavailable(
   );
 }
 
-/**
- * Keep Antigravity selections when setup or catalog changes make them
- * unavailable. Other providers fall through to the server default when they
- * are disabled, missing, or signed out. Without config, keep stored selections.
- */
+export function describeUnavailableModelSelection(
+  config: KairoServerConfig | null | undefined,
+  selection: ModelSelection,
+  projectId: ProjectId | null,
+): { readonly title: string; readonly detail: string } {
+  const provider = config?.providers.find(
+    (candidate) => candidate.instanceId === selection.instanceId,
+  );
+  const driver = selectionDriver(config, selection.instanceId);
+  if (isDriverDisallowed(config, driver)) {
+    const label = providerDisplayLabel({
+      driver: driver ?? selection.instanceId,
+      displayName:
+        provider?.displayName ??
+        config?.settings?.providerInstances[selection.instanceId]?.displayName,
+      instanceId: selection.instanceId,
+    });
+    return {
+      title: m(msg("Provider not allowed")),
+      detail: m(
+        msg("{message} Choose another model.", {
+          message: disallowedProviderText(config?.managedPolicy?.organization, label),
+        }),
+      ),
+    };
+  }
+  return isDisabledForProject(config, provider, selection.instanceId, projectId)
+    ? {
+        title: m(msg("Model turned off for this project")),
+        detail: m(msg("Turn it back on from web or desktop, or choose another model.")),
+      }
+    : {
+        title: m(msg("{provider} model unavailable", { provider: "Antigravity" })),
+        detail: m(
+          msg("Set up {provider} on web or desktop, or choose another model.", {
+            provider: "Antigravity",
+          }),
+        ),
+      };
+}
+
 export function resolveSelectableModelSelection(
   config: KairoServerConfig | null | undefined,
   selection: ModelSelection | null,
+  projectId: ProjectId | null,
 ): ModelSelection | null {
   if (!selection || !config) {
     return selection;
@@ -103,26 +269,22 @@ export function resolveSelectableModelSelection(
   const driver =
     provider?.driver ?? config.settings?.providerInstances[selection.instanceId]?.driver;
   if (driver === "antigravity") {
-    return selection;
+    return isProjectDisabledOverride(config, selection.instanceId, projectId) ? null : selection;
   }
   return provider &&
-    provider.enabled &&
+    isProviderEnabledForProject(config, provider, projectId) &&
     provider.installed &&
     provider.auth.status !== "unauthenticated"
     ? selection
     : null;
 }
 
-/**
- * Reject legacy models for implicit defaults, except Antigravity selections,
- * which must not silently change after a catalog update. Explicit picks in
- * the settings sheet are unaffected.
- */
 export function resolveDefaultableModelSelection(
   config: KairoServerConfig | null | undefined,
   selection: ModelSelection | null,
+  projectId: ProjectId | null,
 ): ModelSelection | null {
-  const usable = resolveSelectableModelSelection(config, selection);
+  const usable = resolveSelectableModelSelection(config, selection, projectId);
   if (!usable || !config) {
     return usable;
   }
@@ -147,15 +309,87 @@ export function resolveNewTaskModelSelection(input: {
   );
 }
 
+// Rows built after a pick on another instance carry no options for the thread's own model.
+export function withStoredThreadModelOptions(
+  selection: ModelSelection,
+  stored: ModelSelection,
+): ModelSelection {
+  if (
+    (selection.options?.length ?? 0) > 0 ||
+    !stored.options?.length ||
+    selection.instanceId !== stored.instanceId ||
+    selection.model !== stored.model
+  ) {
+    return selection;
+  }
+  return { ...selection, options: stored.options };
+}
+
 export function buildModelOptions(
   config: KairoServerConfig | null | undefined,
   fallbackModelSelection: ModelSelection | null,
+  providerInstanceId: ModelSelection["instanceId"] | undefined,
+  projectId: ProjectId | null,
+  includeHidden = false,
 ): ReadonlyArray<ModelOption> {
   const options = new Map<string, ModelOption>();
+  const lockedProvider = config?.providers.find(
+    (provider) => provider.instanceId === providerInstanceId,
+  );
+  const matchesLockedProvider = (provider: KairoServerConfig["providers"][number]) => {
+    if (providerInstanceId === undefined || provider.instanceId === providerInstanceId) return true;
+    if (!lockedProvider || provider.driver !== lockedProvider.driver) return false;
+    const groupKey = lockedProvider.continuation?.groupKey;
+    if (groupKey) return provider.continuation?.groupKey === groupKey;
+    return provider.driver !== "antigravity";
+  };
+  const registryAgentId = (instanceId: ModelSelection["instanceId"]) => {
+    const configValue = config?.settings?.providerInstances[instanceId]?.config;
+    if (configValue === null || typeof configValue !== "object") return undefined;
+    const agentId = "agentId" in configValue ? configValue.agentId : undefined;
+    return "source" in configValue && configValue.source === "local"
+      ? undefined
+      : typeof agentId === "string"
+        ? agentId.trim() || undefined
+        : undefined;
+  };
+  const badgeEntries = (config?.providers ?? []).map((provider) => ({
+    driverKind: provider.driver,
+    enabled: provider.enabled,
+    acpRegistryAgentId: registryAgentId(provider.instanceId),
+  }));
+  const providerBadgeFor = (instanceId: ModelSelection["instanceId"]) => {
+    const snapshot = config?.providers.find((provider) => provider.instanceId === instanceId);
+    const instance = config?.settings?.providerInstances[instanceId];
+    const driver = snapshot?.driver ?? instance?.driver;
+    if (!driver) return undefined;
+    const accentColor = normalizeProviderAccentColor(
+      snapshot?.accentColor ?? instance?.accentColor,
+    );
+    return {
+      displayName: resolveProviderInstanceDisplayName({
+        instanceId,
+        driver,
+        displayName: snapshot?.displayName ?? instance?.displayName,
+      }),
+      ...(accentColor ? { accentColor } : {}),
+      showBadge: shouldShowInstanceBadge(
+        {
+          driverKind: driver,
+          accentColor,
+          acpRegistryAgentId: registryAgentId(instanceId),
+          enabled: snapshot?.enabled ?? instance?.enabled ?? false,
+        },
+        badgeEntries,
+      ),
+    };
+  };
 
   for (const provider of config?.providers ?? []) {
     if (
-      !provider.enabled ||
+      !matchesLockedProvider(provider) ||
+      isDriverDisallowed(config, provider.driver) ||
+      !isProviderEnabledForProject(config, provider, projectId) ||
       !provider.installed ||
       provider.auth.status === "unauthenticated" ||
       (provider.driver === "antigravity" && provider.availability === "unavailable")
@@ -164,17 +398,44 @@ export function buildModelOptions(
     }
 
     const providerLabel = providerDisplayLabel(provider);
-    for (const model of provider.models) {
+    const providerBadge = providerBadgeFor(provider.instanceId);
+    const updateRequired = provider.updateRequiredModels?.length
+      ? {
+          driver: provider.driver,
+          updateRequiredModels: provider.updateRequiredModels,
+          ...(provider.versionAdvisory ? { versionAdvisory: provider.versionAdvisory } : {}),
+        }
+      : undefined;
+    const preferences = config?.settings?.providerModelPreferences?.[provider.instanceId];
+    const hiddenModels = new Set(preferences?.hiddenModels ?? []);
+    const order = new Map((preferences?.modelOrder ?? []).map((slug, index) => [slug, index]));
+    const models = provider.models.filter(
+      (model) => includeHidden || model.isCustom || !hiddenModels.has(model.slug),
+    );
+    if (order.size > 0)
+      models.sort((a, b) => (order.get(a.slug) ?? Infinity) - (order.get(b.slug) ?? Infinity));
+    for (const model of models) {
       const key = `${provider.instanceId}:${model.slug}`;
+      const shortName = resolveModelShortName(model, provider.driver);
       options.set(key, {
         key,
         label: model.name,
+        ...(shortName ? { shortName } : {}),
         subtitle: model.subProvider ?? "",
         providerKey: provider.instanceId,
         providerLabel,
         providerDriver: provider.driver,
+        providerBadge,
+        ...(provider.supportedRuntimeModes === undefined
+          ? {}
+          : { supportedRuntimeModes: provider.supportedRuntimeModes }),
+        ...(provider.iconUrl ? { providerIconUrl: provider.iconUrl } : {}),
+        isHidden: !model.isCustom && hiddenModels.has(model.slug),
+        canHide: !model.isCustom,
         isDefault: model.isDefault === true,
         isLegacy: model.isLegacy === true,
+        ...(updateRequired ? { providerUpdateRequired: updateRequired } : {}),
+        ...(provider.subProviders?.length ? { providerSubProviders: provider.subProviders } : {}),
         capabilities: model.capabilities,
         selection: normalizeSelectionOptions(
           {
@@ -187,7 +448,17 @@ export function buildModelOptions(
     }
   }
 
-  if (fallbackModelSelection) {
+  if (
+    fallbackModelSelection &&
+    (providerInstanceId === undefined ||
+      fallbackModelSelection.instanceId === providerInstanceId) &&
+    (!config?.settings?.providerModelPreferences?.[
+      fallbackModelSelection.instanceId
+    ]?.hiddenModels.includes(fallbackModelSelection.model) ||
+      config?.providers
+        .find((provider) => provider.instanceId === fallbackModelSelection.instanceId)
+        ?.models.find((model) => model.slug === fallbackModelSelection.model)?.isCustom)
+  ) {
     const key = `${fallbackModelSelection.instanceId}:${fallbackModelSelection.model}`;
     const existing = options.get(key);
     if (existing) {
@@ -213,16 +484,23 @@ export function buildModelOptions(
         displayName: provider?.displayName ?? instanceConfig?.displayName,
         instanceId: fallbackModelSelection.instanceId,
       });
+      const shortName = model
+        ? resolveModelShortName(model, isProviderDriverKind(providerDriver) ? providerDriver : null)
+        : undefined;
       options.set(key, {
         key,
         label: model?.name ?? fallbackModelSelection.model,
+        ...(shortName ? { shortName } : {}),
         subtitle: model?.subProvider ?? "",
         providerKey: fallbackModelSelection.instanceId,
         providerLabel,
         providerDriver,
+        providerBadge: providerBadgeFor(fallbackModelSelection.instanceId),
         isDefault: false,
         isLegacy: model?.isLegacy === true,
-        ...(isModelSelectionUnavailable(config, fallbackModelSelection)
+        ...(isModelSelectionUnavailable(config, fallbackModelSelection, projectId) ||
+        (provider !== undefined && !isProviderEnabledForProject(config, provider, projectId)) ||
+        provider?.updateRequiredModels?.some((gated) => gated.slug === fallbackModelSelection.model)
           ? { isUnavailable: true }
           : {}),
         capabilities: model?.capabilities ?? null,
@@ -235,15 +513,27 @@ export function buildModelOptions(
 }
 
 export function groupByProvider(options: ReadonlyArray<ModelOption>): ReadonlyArray<ProviderGroup> {
-  const groups = new Map<string, { providerLabel: string; models: ModelOption[] }>();
+  const groups = new Map<
+    string,
+    {
+      providerLabel: string;
+      models: ModelOption[];
+      updateRequired: ProviderUpdateRequired | undefined;
+      subProviders: ModelOption["providerSubProviders"];
+    }
+  >();
   for (const option of options) {
     const existing = groups.get(option.providerKey);
     if (existing) {
       existing.models.push(option);
+      existing.updateRequired ??= option.providerUpdateRequired;
+      existing.subProviders ??= option.providerSubProviders;
     } else {
       groups.set(option.providerKey, {
         providerLabel: option.providerLabel,
         models: [option],
+        updateRequired: option.providerUpdateRequired,
+        subProviders: option.providerSubProviders,
       });
     }
   }
@@ -252,5 +542,7 @@ export function groupByProvider(options: ReadonlyArray<ModelOption>): ReadonlyAr
     providerKey,
     providerLabel: group.providerLabel,
     models: group.models,
+    ...(group.updateRequired ? { updateRequired: group.updateRequired } : {}),
+    ...(group.subProviders ? { subProviders: group.subProviders } : {}),
   }));
 }

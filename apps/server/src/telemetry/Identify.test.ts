@@ -1,13 +1,19 @@
-import * as NodeCrypto from "node:crypto";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
+import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
+import * as Hex from "effect/encoding/Hex";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Path from "effect/Path";
+import * as PlatformError from "effect/PlatformError";
 import * as References from "effect/References";
 
+import * as HostProcess from "@kairo/shared/HostProcess";
+import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
+import { CLOUD_LINKED_USER_ID } from "../cloud/config.ts";
 import * as ServerConfig from "../config.ts";
 import * as Identify from "./Identify.ts";
 
@@ -16,8 +22,12 @@ interface CapturedLog {
   readonly annotations: Readonly<Record<string, unknown>>;
 }
 
-const sha256 = (value: string) =>
-  NodeCrypto.createHash("sha256").update(value, "utf8").digest("hex");
+const sha256 = Effect.fn("test.sha256")(function* (value: string) {
+  const digest = yield* Digest.Digest;
+  return Hex.encode(
+    yield* digest.digest(Digest.sha256, new TextEncoder().encode(value)).pipe(Effect.orDie),
+  );
+});
 
 const makeCaptureLogger = (logs: CapturedLog[]) =>
   Logger.make(({ fiber, message }) => {
@@ -27,126 +37,122 @@ const makeCaptureLogger = (logs: CapturedLog[]) =>
     });
   });
 
-const findIdentityLog = (
-  logs: ReadonlyArray<CapturedLog>,
-  source: Identify.TelemetryIdentitySource,
-  errorTag: string,
-) => logs.find((log) => log.annotations.source === source && log.annotations.errorTag === errorTag);
+const findIdentityLog = (logs: ReadonlyArray<CapturedLog>, errorTag: string) =>
+  logs.find((log) => log.annotations.errorTag === errorTag);
 
-it.layer(NodeServices.layer)("telemetry identity", (it) => {
-  it.effect("uses the persisted anonymous id when provider identities are absent", () =>
+const layerIdentity = (prefix: string, logs?: CapturedLog[]) =>
+  Layer.provideMerge(
+    ServerSecretStore.layer,
+    ServerConfig.layerTest(process.cwd(), { prefix }),
+  ).pipe(
+    Layer.merge(
+      logs === undefined
+        ? Layer.empty
+        : Logger.layer([makeCaptureLogger(logs)], { mergeWithExisting: false }),
+    ),
+  );
+
+const writeHomeFile = Effect.fn("test.writeHomeFile")(function* (
+  homeDirectory: string,
+  relativePath: string,
+  contents: string,
+) {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const filePath = path.join(homeDirectory, relativePath);
+  yield* fileSystem.makeDirectory(path.dirname(filePath), { recursive: true });
+  yield* fileSystem.writeFileString(filePath, contents);
+  return filePath;
+});
+
+it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("telemetry identity", (it) => {
+  it.effect("uses the install id as distinct_id and ignores provider sign-in files", () =>
     Effect.gen(function* () {
       const config = yield* ServerConfig.ServerConfig;
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const anonymousId = "persisted-anonymous-id";
+      const homeDirectory = path.join(config.baseDir, "home");
+      yield* fileSystem.writeFileString(config.anonymousIdPath, "persisted-anonymous-id");
+      yield* writeHomeFile(homeDirectory, ".codex/auth.json", `{"tokens":{"account_id":"ws-1"}}`);
+      yield* writeHomeFile(homeDirectory, ".claude.json", `{"userID":"claude-machine"}`);
+      const installId = yield* sha256("persisted-anonymous-id");
 
-      yield* fileSystem.writeFileString(config.anonymousIdPath, anonymousId);
-
-      const identifier = yield* Identify.getTelemetryIdentifierForHome(
-        path.join(config.baseDir, "home"),
+      assert.deepEqual(
+        yield* Identify.getTelemetryIdentity.pipe(
+          Effect.provideService(HostProcess.HomeDirectory, homeDirectory),
+        ),
+        { distinctId: installId, installId },
       );
-
-      assert.equal(identifier, sha256(anonymousId));
-    }).pipe(
-      Effect.provide(
-        ServerConfig.layerTest(process.cwd(), {
-          prefix: "kairo-telemetry-identify-anonymous-",
-        }),
-      ),
-    ),
+    }).pipe(Effect.provide(layerIdentity("kairo-telemetry-identify-install-"))),
   );
 
-  it.effect("logs structured decode context and falls back from malformed Codex auth", () => {
-    const logs: CapturedLog[] = [];
-    const logger = makeCaptureLogger(logs);
-
-    return Effect.gen(function* () {
+  it.effect("leaves no torn anonymous id behind when its write fails midway", () =>
+    Effect.gen(function* () {
       const config = yield* ServerConfig.ServerConfig;
       const fileSystem = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const homeDirectory = path.join(config.baseDir, "home");
-      const codexAuthPath = path.join(homeDirectory, ".codex", "auth.json");
-      const anonymousId = "decode-fallback-anonymous-id";
-      const privateAccessToken = "private-codex-access-token";
+      const tornWrites = FileSystem.FileSystem.of({
+        ...fileSystem,
+        open: (filePath, options) =>
+          fileSystem.open(filePath, options).pipe(
+            Effect.map((file): FileSystem.File =>
+              Object.assign(Object.create(file), {
+                writeAll: (buffer: Uint8Array) =>
+                  file.writeAll(buffer.subarray(0, Math.floor(buffer.length / 2))).pipe(
+                    Effect.andThen(
+                      Effect.fail(
+                        PlatformError.systemError({
+                          _tag: "WriteZero",
+                          module: "FileSystem",
+                          method: "writeAll",
+                          pathOrDescriptor: filePath,
+                        }),
+                      ),
+                    ),
+                  ),
+              }),
+            ),
+          ),
+      });
 
-      yield* fileSystem.makeDirectory(path.dirname(codexAuthPath), { recursive: true });
-      yield* fileSystem.writeFileString(
-        codexAuthPath,
-        `{"tokens":{"access_token":"${privateAccessToken}"}}`,
+      const identity = yield* Identify.getTelemetryIdentity.pipe(
+        Effect.provideService(FileSystem.FileSystem, tornWrites),
       );
-      yield* fileSystem.writeFileString(config.anonymousIdPath, anonymousId);
 
-      const identifier = yield* Identify.getTelemetryIdentifierForHome(homeDirectory);
-
-      assert.equal(identifier, sha256(anonymousId));
-      const decodeLog = findIdentityLog(logs, "codex", "TelemetryIdentityDecodeError");
-      assert.isDefined(decodeLog);
-      assert.equal(
-        decodeLog?.message,
-        `Failed to decode codex telemetry identity at '${codexAuthPath}'.`,
-      );
-
-      assert.equal(decodeLog?.annotations.filePath, codexAuthPath);
-      assert.equal(decodeLog?.annotations.causeKind, "schema");
-      assert.notProperty(decodeLog?.annotations ?? {}, "cause");
-      const errorStack = decodeLog?.annotations.errorStack;
-      assert.isString(errorStack);
-      assert.include(errorStack, "Failed to decode codex telemetry identity");
-      const annotations = Object.values(decodeLog?.annotations ?? {})
-        .map(String)
-        .join("\n");
-      assert.notInclude(annotations, privateAccessToken);
-    }).pipe(
-      Effect.provide(
-        Layer.merge(
-          ServerConfig.layerTest(process.cwd(), {
-            prefix: "kairo-telemetry-identify-decode-",
-          }),
-          Logger.layer([logger], { mergeWithExisting: false }),
-        ),
-      ),
-    );
-  });
+      assert.deepEqual(identity, { distinctId: null, installId: null });
+      assert.isFalse(yield* fileSystem.exists(config.anonymousIdPath));
+    }).pipe(Effect.provide(layerIdentity("kairo-telemetry-identify-torn-"))),
+  );
 
   it.effect("does not overwrite the anonymous id path after a non-NotFound read failure", () => {
     const logs: CapturedLog[] = [];
-    const logger = makeCaptureLogger(logs);
 
     return Effect.gen(function* () {
       const config = yield* ServerConfig.ServerConfig;
       const fileSystem = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const homeDirectory = path.join(config.baseDir, "home");
-
       yield* fileSystem.makeDirectory(config.anonymousIdPath);
 
-      const identifier = yield* Identify.getTelemetryIdentifierForHome(homeDirectory);
-
-      assert.isNull(identifier);
+      const identity = yield* Identify.getTelemetryIdentity;
+      assert.deepEqual(identity, { distinctId: null, installId: null });
       assert.deepEqual(yield* fileSystem.readDirectory(config.anonymousIdPath), []);
 
-      const readLog = findIdentityLog(logs, "anonymous", "TelemetryIdentityReadError");
-      assert.isDefined(readLog);
+      const readLog = findIdentityLog(logs, "TelemetryIdentityReadError");
       assert.equal(readLog?.annotations.filePath, config.anonymousIdPath);
-      assert.equal(readLog?.annotations.causeKind, "platform");
       assert.notEqual(readLog?.annotations.platformReason, "NotFound");
       assert.notProperty(readLog?.annotations ?? {}, "cause");
-      const errorStack = readLog?.annotations.errorStack;
-      assert.isString(errorStack);
-      assert.include(errorStack, "Failed to read anonymous telemetry identity");
-      assert.isUndefined(
-        findIdentityLog(logs, "anonymous", "TelemetryAnonymousIdPersistenceError"),
-      );
-    }).pipe(
-      Effect.provide(
-        Layer.merge(
-          ServerConfig.layerTest(process.cwd(), {
-            prefix: "kairo-telemetry-identify-read-",
-          }),
-          Logger.layer([logger], { mergeWithExisting: false }),
-        ),
-      ),
-    );
+      assert.isUndefined(findIdentityLog(logs, "TelemetryAnonymousIdPersistenceError"));
+    }).pipe(Effect.provide(layerIdentity("kairo-telemetry-identify-read-", logs)));
   });
+
+  it.effect("reads only the linked Connect account as an owner", () =>
+    Effect.gen(function* () {
+      const secrets = yield* ServerSecretStore.ServerSecretStore;
+      assert.deepEqual(yield* Identify.getServerOwners, []);
+
+      yield* secrets.set(CLOUD_LINKED_USER_ID, new TextEncoder().encode("user_connect"));
+
+      assert.deepEqual(yield* Identify.getServerOwners, [
+        { source: "connect", ownerId: yield* sha256("user_connect") },
+      ]);
+    }).pipe(Effect.provide(layerIdentity("kairo-telemetry-identify-owners-"))),
+  );
 });

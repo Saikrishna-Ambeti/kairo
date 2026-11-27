@@ -1,5 +1,6 @@
 import {
-  AuthAdministrativeScopes,
+  AuthAccessWriteScope,
+  AuthRevokePairingLinkInput,
   AuthSessionId,
   AuthStandardClientScopes,
 } from "@kairo/contracts";
@@ -8,47 +9,56 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as References from "effect/References";
-import { Argument, Command, Flag, GlobalFlag } from "effect/unstable/cli";
+import * as Schema from "effect/Schema";
+import { Argument, Command, Flag, GlobalFlag } from "effect/cli";
 
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 
 import {
+  formatConnectDeviceList,
   formatIssuedPairingCredential,
   formatIssuedSession,
   formatPairingCredentialList,
   formatSessionList,
 } from "../cliAuthFormat.ts";
 import * as ServerConfig from "../config.ts";
+import { authScopesFlag } from "./authScopes.ts";
 import {
   authLocationFlags,
   type CliAuthLocationFlags,
   DurationFromString,
   resolveCliAuthConfig,
 } from "./config.ts";
+import * as RunningServer from "./runningServer.ts";
 
-const runWithEnvironmentAuth = <A, E>(
+const runWithEnvironmentAuth = Effect.fn("auth.runWithEnvironmentAuth")(function* <A, E, R>(
   flags: CliAuthLocationFlags,
-  run: (environmentAuth: EnvironmentAuth.EnvironmentAuth["Service"]) => Effect.Effect<A, E>,
+  run: (environmentAuth: EnvironmentAuth.EnvironmentAuth["Service"]) => Effect.Effect<A, E, R>,
   options?: {
     readonly quietLogs?: boolean;
   },
-) =>
-  Effect.gen(function* () {
-    const logLevel = yield* GlobalFlag.LogLevel;
-    const config = yield* resolveCliAuthConfig(flags, logLevel);
-    const minimumLogLevel = options?.quietLogs ? "Error" : config.logLevel;
-    return yield* Effect.gen(function* () {
-      const environmentAuth = yield* EnvironmentAuth.EnvironmentAuth;
-      return yield* run(environmentAuth);
-    }).pipe(
-      Effect.provide(
-        Layer.mergeAll(EnvironmentAuth.runtimeLayer).pipe(
-          Layer.provide(ServerConfig.layer(config)),
-          Layer.provide(Layer.succeed(References.MinimumLogLevel, minimumLogLevel)),
-        ),
+) {
+  const logLevel = yield* GlobalFlag.LogLevel;
+  const config = yield* resolveCliAuthConfig(flags, logLevel, options);
+  const minimumLogLevel = options?.quietLogs ? "Error" : config.logLevel;
+  return yield* Effect.gen(function* () {
+    const environmentAuth = yield* EnvironmentAuth.EnvironmentAuth;
+    return yield* run(environmentAuth);
+  }).pipe(
+    Effect.provide(
+      EnvironmentAuth.layerRuntime.pipe(
+        Layer.provideMerge(ServerConfig.layer(config)),
+        Layer.provide(Layer.succeed(References.MinimumLogLevel, minimumLogLevel)),
       ),
-    );
-  });
+    ),
+  );
+});
+
+/** Access changes go through a running server, which applies them to its open connections. */
+const changeAccess = <A, E, R, E2, R2>(change: {
+  readonly viaServer: (client: RunningServer.ServerClient) => Effect.Effect<A, E, R>;
+  readonly locally: Effect.Effect<A, E2, R2>;
+}) => RunningServer.changeState({ scopes: [AuthAccessWriteScope], ...change });
 
 const ttlFlag = Flag.String("ttl").pipe(
   Flag.withSchema(DurationFromString),
@@ -72,6 +82,15 @@ const subjectFlag = Flag.String("subject").pipe(
 );
 
 const baseUrlFlag = Flag.String("base-url").pipe(
+  Flag.withSchema(
+    Schema.URLFromString.pipe(
+      Schema.check(
+        Schema.makeFilter((url) => url.protocol === "http:" || url.protocol === "https:", {
+          expected: "an http:// or https:// URL",
+        }),
+      ),
+    ),
+  ),
   Flag.withDescription("Optional public base URL used to print a ready `/pair#token=...` link."),
   Flag.optional,
 );
@@ -83,6 +102,7 @@ const tokenOnlyFlag = Flag.Boolean("token-only").pipe(
 
 const pairingCreateCommand = Command.make("create", {
   ...authLocationFlags,
+  scopes: authScopesFlag(AuthStandardClientScopes),
   ttl: ttlFlag,
   label: labelFlag,
   baseUrl: baseUrlFlag,
@@ -95,14 +115,14 @@ const pairingCreateCommand = Command.make("create", {
       (environmentAuth) =>
         Effect.gen(function* () {
           const issued = yield* environmentAuth.createPairingLink({
-            scopes: AuthStandardClientScopes,
+            scopes: flags.scopes,
             subject: "one-time-token",
             ...(Option.isSome(flags.ttl) ? { ttl: flags.ttl.value } : {}),
             ...(Option.isSome(flags.label) ? { label: flags.label.value } : {}),
           });
           const output = formatIssuedPairingCredential(issued, {
             json: flags.json,
-            ...(Option.isSome(flags.baseUrl) ? { baseUrl: flags.baseUrl.value } : {}),
+            ...(Option.isSome(flags.baseUrl) ? { baseUrl: flags.baseUrl.value.href } : {}),
           });
           yield* Console.log(output);
         }),
@@ -137,13 +157,23 @@ const pairingListCommand = Command.make("list", {
 
 const pairingRevokeCommand = Command.make("revoke", {
   ...authLocationFlags,
-  id: Argument.String("id").pipe(Argument.withDescription("Pairing credential id to revoke.")),
+  id: Argument.String("id").pipe(
+    Argument.withDescription("Pairing credential id to revoke."),
+    // Same schema the server applies, so both paths revoke the same id.
+    Argument.withSchema(AuthRevokePairingLinkInput.fields.id),
+  ),
 }).pipe(
   Command.withDescription("Revoke an active client pairing token."),
   Command.withHandler((flags) =>
     runWithEnvironmentAuth(flags, (environmentAuth) =>
       Effect.gen(function* () {
-        const revoked = yield* environmentAuth.revokePairingLink(flags.id);
+        const revoked = yield* changeAccess({
+          viaServer: (client) =>
+            client.auth
+              .revokePairingLink({ headers: {}, payload: { id: flags.id } })
+              .pipe(Effect.map((result) => result.revoked)),
+          locally: environmentAuth.revokePairingLink(flags.id),
+        });
         yield* Console.log(
           revoked
             ? `Revoked pairing credential ${flags.id}.\n`
@@ -159,8 +189,110 @@ const pairingCommand = Command.make("pairing").pipe(
   Command.withSubcommands([pairingCreateCommand, pairingListCommand, pairingRevokeCommand]),
 );
 
+const connectDeviceListCommand = Command.make("list", {
+  ...authLocationFlags,
+  json: jsonFlag,
+}).pipe(
+  Command.withDescription(
+    "List Kairo Connect devices waiting for approval and those already trusted.",
+  ),
+  Command.withHandler((flags) =>
+    runWithEnvironmentAuth(
+      flags,
+      (environmentAuth) =>
+        Effect.gen(function* () {
+          const waiting = (yield* environmentAuth.listPairingLinks()).flatMap((link) =>
+            link.connectDeviceRequest ? [link.connectDeviceRequest] : [],
+          );
+          const trusted = yield* environmentAuth.listConnectDevices();
+          yield* Console.log(formatConnectDeviceList({ waiting, trusted }, { json: flags.json }));
+        }),
+      { quietLogs: flags.json },
+    ),
+  ),
+);
+
+const verificationCodeArgument = Argument.String("code").pipe(
+  Argument.withDescription("The code the device shows, such as `K7QM-2XFD`."),
+);
+
+const connectDeviceApproveCommand = Command.make("approve", {
+  ...authLocationFlags,
+  code: verificationCodeArgument,
+}).pipe(
+  Command.withDescription("Approve the waiting Kairo Connect device that shows this code."),
+  Command.withHandler((flags) =>
+    runWithEnvironmentAuth(flags, (environmentAuth) =>
+      Effect.gen(function* () {
+        const [pairingLinkId, ...others] = yield* environmentAuth.connectRequestsShowingCode(
+          flags.code,
+        );
+        // Two waiting devices that share a code are ambiguous; approve neither.
+        const approved =
+          pairingLinkId !== undefined &&
+          others.length === 0 &&
+          (yield* changeAccess({
+            viaServer: (client) =>
+              client.auth
+                .approveConnectDevice({ headers: {}, payload: { pairingLinkId } })
+                .pipe(Effect.map((result) => result.approved)),
+            locally: environmentAuth.approveConnectDevice(pairingLinkId),
+          }));
+        yield* Console.log(
+          approved
+            ? `Approved ${flags.code}. The device connects on its next try.\n`
+            : `No device waiting for approval shows ${flags.code}.\n`,
+        );
+      }),
+    ),
+  ),
+);
+
+const connectDeviceRevokeCommand = Command.make("revoke", {
+  ...authLocationFlags,
+  code: verificationCodeArgument,
+}).pipe(
+  Command.withDescription("Stop trusting a Kairo Connect device and end its sessions."),
+  Command.withHandler((flags) =>
+    runWithEnvironmentAuth(flags, (environmentAuth) =>
+      Effect.gen(function* () {
+        const [device, ...others] = yield* environmentAuth.connectDevicesShowingCode(flags.code);
+        if (device === undefined) {
+          return yield* Console.log(`No trusted device shows ${flags.code}.\n`);
+        }
+        if (others.length > 0) {
+          return yield* Console.log(
+            `More than one trusted device shows ${flags.code}; revoke it from a client.\n`,
+          );
+        }
+        const { proofKeyThumbprint } = device;
+        yield* changeAccess({
+          viaServer: (client) =>
+            client.auth
+              .revokeConnectDevice({ headers: {}, payload: { proofKeyThumbprint } })
+              .pipe(Effect.map((result) => result.revoked)),
+          locally: environmentAuth.revokeConnectDevice(proofKeyThumbprint),
+        });
+        yield* Console.log(
+          `Revoked ${flags.code}. If approval for new devices is off, it can connect again on its own.\n`,
+        );
+      }),
+    ),
+  ),
+);
+
+const connectDeviceCommand = Command.make("connect-device").pipe(
+  Command.withDescription("Approve and revoke devices that reach this host through Kairo Connect."),
+  Command.withSubcommands([
+    connectDeviceListCommand,
+    connectDeviceApproveCommand,
+    connectDeviceRevokeCommand,
+  ]),
+);
+
 const sessionIssueCommand = Command.make("issue", {
   ...authLocationFlags,
+  scopes: authScopesFlag(AuthStandardClientScopes),
   ttl: ttlFlag,
   label: labelFlag,
   subject: subjectFlag,
@@ -174,7 +306,7 @@ const sessionIssueCommand = Command.make("issue", {
       (environmentAuth) =>
         Effect.gen(function* () {
           const issued = yield* environmentAuth.issueSession({
-            scopes: AuthAdministrativeScopes,
+            scopes: flags.scopes,
             ...(Option.isSome(flags.ttl) ? { ttl: flags.ttl.value } : {}),
             ...(Option.isSome(flags.label) ? { label: flags.label.value } : {}),
             ...(Option.isSome(flags.subject) ? { subject: flags.subject.value } : {}),
@@ -220,11 +352,19 @@ const sessionRevokeCommand = Command.make("revoke", {
     Argument.withSchema(AuthSessionId),
   ),
 }).pipe(
-  Command.withDescription("Revoke an active session."),
+  Command.withDescription(
+    "Revoke an active session. A Kairo Connect device's session takes the device's trust and other sessions with it; if approval for new devices is off, the device can connect again on its own.",
+  ),
   Command.withHandler((flags) =>
     runWithEnvironmentAuth(flags, (environmentAuth) =>
       Effect.gen(function* () {
-        const revoked = yield* environmentAuth.revokeSession(flags.sessionId);
+        const revoked = yield* changeAccess({
+          viaServer: (client) =>
+            client.auth
+              .revokeClient({ headers: {}, payload: { sessionId: flags.sessionId } })
+              .pipe(Effect.map((result) => result.revoked)),
+          locally: environmentAuth.revokeClient(flags.sessionId),
+        });
         yield* Console.log(
           revoked
             ? `Revoked session ${flags.sessionId}.\n`
@@ -242,5 +382,5 @@ const sessionCommand = Command.make("session").pipe(
 
 export const authCommand = Command.make("auth").pipe(
   Command.withDescription("Manage the local auth control plane for headless deployments."),
-  Command.withSubcommands([pairingCommand, sessionCommand]),
+  Command.withSubcommands([pairingCommand, sessionCommand, connectDeviceCommand]),
 );

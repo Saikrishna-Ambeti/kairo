@@ -16,9 +16,9 @@ import {
   View,
 } from "react-native";
 
-import { AndroidScreenHeader } from "../../components/AndroidScreenHeader";
-import { AppText as Text, AppTextInput as TextInput } from "../../components/AppText";
-import { ControlPillMenu } from "../../components/ControlPill";
+import { AndroidScreenHeader } from "../../components/ui/AndroidScreenHeader";
+import { AppText as Text, AppTextInput as TextInput } from "../../components/ui/AppText";
+import { ControlPillMenu } from "../../components/ui/ControlPill";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { useEnvironments } from "../../state/environments";
 import { useEnvironmentQuery } from "../../state/query";

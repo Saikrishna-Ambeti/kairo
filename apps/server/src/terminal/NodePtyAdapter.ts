@@ -7,9 +7,9 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import { HostProcessArchitecture, HostProcessPlatform } from "@kairo/shared/hostProcess";
+import * as HostProcess from "@kairo/shared/HostProcess";
 
-import * as PtyAdapter from "./PtyAdapter.ts";
+import * as PtyAdapter from "@kairo/shared/PtyAdapter";
 
 export class NodePtyModuleLoadError extends Schema.TaggedError<NodePtyModuleLoadError>()(
   "NodePtyModuleLoadError",
@@ -24,18 +24,23 @@ export class NodePtyModuleLoadError extends Schema.TaggedError<NodePtyModuleLoad
   }
 }
 
+class NodePtyCancelError extends Schema.TaggedError<NodePtyCancelError>()("NodePtyCancelError", {
+  terminalPid: Schema.Number,
+  cause: Schema.Defect(),
+}) {
+  override get message(): string {
+    return `Failed to cancel Windows terminal startup for ${this.terminalPid}.`;
+  }
+}
+
 type NodePtyModuleLoader = () => Promise<typeof import("node-pty")>;
 
-// node-pty stays external to the CLI bundle because it dlopens a native
-// addon. Inside a Node single-executable, `import()` cannot load files from
-// disk (only built-ins resolve), while `require` always reads the real
-// filesystem, so both the module and its spawn-helper resolve through it.
+// node-pty's native addon stays external; single-executables need require to resolve disk modules and spawn helpers.
 const requireForNodePty = NodeModule.createRequire(import.meta.url);
 
 const loadNodePty: NodePtyModuleLoader = () =>
   Promise.resolve().then(() => requireForNodePty("node-pty") as typeof import("node-pty"));
 
-/** Injectable so tests can substitute a fake module; `require` bypasses module mocks. */
 export const NodePtyModuleLoaderRef = Context.Reference<NodePtyModuleLoader>(
   "server/terminal/NodePtyModuleLoader",
   { defaultValue: () => loadNodePty },
@@ -46,8 +51,8 @@ let didEnsureSpawnHelperExecutable = false;
 const resolveNodePtySpawnHelperPath = Effect.gen(function* () {
   const path = yield* Path.Path;
   const fs = yield* FileSystem.FileSystem;
-  const platform = yield* HostProcessPlatform;
-  const architecture = yield* HostProcessArchitecture;
+  const platform = yield* HostProcess.Platform;
+  const architecture = yield* HostProcess.Architecture;
 
   const packageJsonPath = requireForNodePty.resolve("node-pty/package.json");
   const packageDir = path.dirname(packageJsonPath);
@@ -67,31 +72,20 @@ const resolveNodePtySpawnHelperPath = Effect.gen(function* () {
 
 const ensureNodePtySpawnHelperExecutable = Effect.fn(function* () {
   const fs = yield* FileSystem.FileSystem;
-  const platform = yield* HostProcessPlatform;
+  const platform = yield* HostProcess.Platform;
   if (platform === "win32") return;
   if (didEnsureSpawnHelperExecutable) return;
 
   const helperPath = yield* resolveNodePtySpawnHelperPath;
-  if (!helperPath) return;
-  didEnsureSpawnHelperExecutable = true;
-
-  if (!(yield* fs.exists(helperPath))) {
-    return;
+  if (helperPath && (yield* fs.exists(helperPath))) {
+    yield* fs.chmod(helperPath, 0o755).pipe(Effect.orElseSucceed(() => undefined));
   }
-
-  // Best-effort: avoid FileSystem.stat in packaged mode where some fs metadata can be missing.
-  yield* fs.chmod(helperPath, 0o755).pipe(Effect.orElseSucceed(() => undefined));
+  // Set only after the repair finishes, so a check cut off by the spawn deadline runs again.
+  didEnsureSpawnHelperExecutable = true;
 });
 
-/**
- * Waits for Windows process creation so the manager receives a valid PID.
- * node-pty defers creation to avoid blocking on named pipes:
- * https://github.com/microsoft/node-pty/pull/885
- * T3 adopted that behavior when upgrading from 1.1.0 to 1.2.0-beta.15:
- * https://github.com/Saikrishna-Ambeti/kairo/pull/13748
- * Its public API has no readiness event. The private ready_datapipe handler sets
- * pid before our listener runs.
- */
+// node-pty has no public readiness event; ready_datapipe sets pid before our listener.
+// Deferred pipe creation: https://github.com/microsoft/node-pty/pull/885
 const waitForWindowsPid = (
   process: import("node-pty").IPty,
   trackedProcess: NodePtyProcess,
@@ -144,24 +138,23 @@ const waitForWindowsPid = (
     return Effect.sync(cleanup);
   });
 
-/**
- * Cancels Windows startup without waiting for the first output, unlike public kill().
- * The private agent can cancel the pending connection before a child exists.
- * Cleanup failures are logged without replacing the startup failure.
- */
+// The private agent cancels pending connections before a child exists; public kill waits for first output.
 const killStartingWindowsPty = (process: import("node-pty").IPty) =>
-  Effect.try(() => {
-    if (
-      "_agent" in process &&
-      typeof process._agent === "object" &&
-      process._agent !== null &&
-      "kill" in process._agent &&
-      typeof process._agent.kill === "function"
-    ) {
-      process._agent.kill();
-    } else {
-      process.kill();
-    }
+  Effect.try({
+    try: () => {
+      if (
+        "_agent" in process &&
+        typeof process._agent === "object" &&
+        process._agent !== null &&
+        "kill" in process._agent &&
+        typeof process._agent.kill === "function"
+      ) {
+        process._agent.kill();
+      } else {
+        process.kill();
+      }
+    },
+    catch: (cause) => new NodePtyCancelError({ terminalPid: process.pid, cause }),
   }).pipe(
     Effect.catch((error) =>
       Effect.logWarning("failed to cancel Windows terminal startup", {
@@ -181,7 +174,6 @@ class NodePtyProcess implements PtyAdapter.PtyProcess {
   constructor(process: import("node-pty").IPty, platform: NodeJS.Platform) {
     this.process = process;
     this.platform = platform;
-    // Retain exits while Windows readiness and the manager hand off the process.
     this.exitSubscription = process.onExit((event) => {
       if (this.exitEvent) return;
       this.exitEvent = { exitCode: event.exitCode, signal: event.signal ?? null };
@@ -195,7 +187,7 @@ class NodePtyProcess implements PtyAdapter.PtyProcess {
     return this.process.pid;
   }
 
-  write(data: string): void {
+  write(data: string | Buffer): void {
     this.process.write(data);
   }
 
@@ -232,12 +224,12 @@ class NodePtyProcess implements PtyAdapter.PtyProcess {
   }
 }
 
-export const make = Effect.fn("NodePtyAdapter.make")(function* () {
+const make = Effect.fn("NodePtyAdapter.make")(function* () {
   const loadNodePtyModule = yield* NodePtyModuleLoaderRef;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const platform = yield* HostProcessPlatform;
-  const architecture = yield* HostProcessArchitecture;
+  const platform = yield* HostProcess.Platform;
+  const architecture = yield* HostProcess.Architecture;
 
   const nodePty = yield* Effect.tryPromise({
     try: loadNodePtyModule,
@@ -249,22 +241,21 @@ export const make = Effect.fn("NodePtyAdapter.make")(function* () {
       }),
   }).pipe(Effect.orDie);
 
-  const ensureNodePtySpawnHelperExecutableCached = yield* Effect.cached(
-    ensureNodePtySpawnHelperExecutable().pipe(
-      Effect.provideService(FileSystem.FileSystem, fs),
-      Effect.provideService(Path.Path, path),
-      Effect.provideService(HostProcessPlatform, platform),
-      Effect.provideService(HostProcessArchitecture, architecture),
-      Effect.orElseSucceed(() => undefined),
-    ),
+  const ensureSpawnHelperExecutable = ensureNodePtySpawnHelperExecutable().pipe(
+    Effect.provideService(FileSystem.FileSystem, fs),
+    Effect.provideService(Path.Path, path),
+    Effect.provideService(HostProcess.Platform, platform),
+    Effect.provideService(HostProcess.Architecture, architecture),
+    Effect.orElseSucceed(() => undefined),
+    // Terminal startup runs uninterruptibly; a stalled helper check must not hold its locks.
+    Effect.interruptible,
+    Effect.timeoutOrElse({ duration: "5 seconds", orElse: () => Effect.void }),
   );
 
   return PtyAdapter.PtyAdapter.of({
     spawn: Effect.fn("NodePtyAdapter.spawn")(function* (input) {
-      yield* ensureNodePtySpawnHelperExecutableCached;
-      // node-pty only writes `name` into the child's TERM on the Unix path;
-      // the ConPTY path leaves the environment untouched, so Windows children
-      // inherit a missing or 16-color TERM unless it is set here.
+      yield* ensureSpawnHelperExecutable;
+      // ConPTY ignores node-pty's name option for TERM; set it explicitly to avoid missing/16-color values.
       const env =
         platform === "win32" && input.env["TERM"] === undefined
           ? { ...input.env, TERM: "xterm-256color" }

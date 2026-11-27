@@ -1,14 +1,18 @@
+import { AuthDiagnosticsReadScope } from "@kairo/contracts";
+import { AuthEnvironmentMaintainScope } from "@kairo/contracts";
 import type {
   EnvironmentId,
   ResourceTelemetryHistoryInput,
   ResourceTelemetrySnapshot,
 } from "@kairo/contracts";
 import * as Cause from "effect/Cause";
-import { useCallback } from "react";
+import { msg, useMessages } from "gt-react";
 
+import { m } from "../i18n/messages";
 import { usePrimaryEnvironment } from "../state/environments";
 import { useEnvironmentQuery } from "../state/query";
 import { serverEnvironment } from "../state/server";
+import { readEnvironmentScope, useEnvironmentScope } from "../state/session";
 import { useAtomCommand } from "../state/use-atom-command";
 
 export interface ResourceTelemetryState {
@@ -27,26 +31,38 @@ export function useResourceTelemetry(
     targetEnvironmentId === undefined
       ? (primaryEnvironment?.environmentId ?? null)
       : targetEnvironmentId;
+  const canReadDiagnostics = useEnvironmentScope(environmentId, AuthDiagnosticsReadScope);
+  const resolve = useMessages();
   const query = useEnvironmentQuery(
-    environmentId === null
+    environmentId === null || !canReadDiagnostics
       ? null
       : serverEnvironment.resourceTelemetry({ environmentId, input: {} }),
+    resolve,
   );
   const retryCommand = useAtomCommand(serverEnvironment.retryResourceTelemetry, {
     reportFailure: false,
   });
-  const retry = useCallback(async () => {
+  const retry = async () => {
     if (environmentId === null) {
-      throw new Error("No environment is selected.");
+      throw new Error(m(msg("No environment is selected.")));
+    }
+    if (
+      !readEnvironmentScope(environmentId, AuthEnvironmentMaintainScope) ||
+      !readEnvironmentScope(environmentId, AuthDiagnosticsReadScope)
+    ) {
+      throw new Error(m(msg("This connection cannot restart the resource monitor.")));
     }
     const result = await retryCommand({ environmentId, input: {} });
     if (result._tag === "Failure") {
       throw Cause.squash(result.cause);
     }
+    query.refresh();
     return result.value.snapshot;
-  }, [environmentId, retryCommand]);
+  };
 
-  return { ...query, retry };
+  // The live subscription keeps waiting for updates after its first snapshot.
+  const isPending = query.isPending && query.data === null && query.error === null;
+  return { ...query, isPending, retry };
 }
 
 export function useResourceTelemetryHistory(
@@ -58,9 +74,12 @@ export function useResourceTelemetryHistory(
     targetEnvironmentId === undefined
       ? (primaryEnvironment?.environmentId ?? null)
       : targetEnvironmentId;
+  const canReadDiagnostics = useEnvironmentScope(environmentId, AuthDiagnosticsReadScope);
+  const resolve = useMessages();
   return useEnvironmentQuery(
-    environmentId === null
+    environmentId === null || !canReadDiagnostics
       ? null
       : serverEnvironment.resourceTelemetryHistory({ environmentId, input }),
+    resolve,
   );
 }

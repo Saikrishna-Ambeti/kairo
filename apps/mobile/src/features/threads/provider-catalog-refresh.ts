@@ -1,16 +1,19 @@
 import type { EnvironmentId } from "@kairo/contracts";
+import { errorDisplayMessage } from "@kairo/client-runtime/errors";
 import type { AtomCommandResult } from "@kairo/client-runtime/state/runtime";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@kairo/client-runtime/state/runtime";
+import { msg } from "gt-react-native";
+
+import { m } from "../../i18n/messages";
 
 type RefreshProvidersTarget = {
   readonly environmentId: EnvironmentId;
   readonly input: { readonly refreshModels: true };
 };
 
-/** Pull-to-refresh in the model picker shares any pending discovery. */
 export function createProviderCatalogRefreshRunner<Result>(
   refreshProviders: (target: RefreshProvidersTarget) => Promise<Result>,
 ) {
@@ -30,5 +33,5 @@ export function providerCatalogRefreshError(
 ): string | null {
   if (result._tag !== "Failure" || isAtomCommandInterrupted(result)) return null;
   const error = squashAtomCommandFailure(result);
-  return error instanceof Error ? error.message : "Provider discovery failed.";
+  return errorDisplayMessage(error, m) ?? m(msg("Provider discovery failed."));
 }

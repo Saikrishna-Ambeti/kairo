@@ -1,12 +1,20 @@
-import { findErrorTraceId } from "@kairo/client-runtime/errors";
 import {
+  errorDisplayMessage,
+  findErrorTraceId,
+  thrownErrorMessage,
+} from "@kairo/client-runtime/errors";
+import {
+  connectionErrorText,
+  type ConnectionTarget,
   type EnvironmentConnectionPresentation,
   RelayConnectionRegistration,
   RelayConnectionTarget,
   orchestrationProtocolCompatibilityError,
 } from "@kairo/client-runtime/connection";
+import { relayOfflineReasonMessage } from "@kairo/client-runtime/relay";
 import {
   isAtomCommandInterrupted,
+  settlePromise,
   squashAtomCommandFailure,
 } from "@kairo/client-runtime/state/runtime";
 import {
@@ -19,12 +27,14 @@ import type {
   RelayEnvironmentStatusResponse,
 } from "@kairo/contracts/relay";
 import * as Option from "effect/Option";
-import { type ReactNode, useCallback, useEffect, useEffectEvent, useState } from "react";
+import { T, useGT, useMessages } from "gt-react";
+import { type ReactNode, useEffect, useEffectEvent, useState } from "react";
 
 import { environmentCatalog } from "~/connection/catalog";
+import { isDesktopLocalConnectionTarget } from "~/connection/desktopLocal";
 import { cn } from "~/lib/utils";
 import { relayEnvironmentDiscovery } from "~/state/relay";
-import { useRelayEnvironmentDiscovery } from "~/state/environments";
+import { useRelayEnvironmentDiscovery, useRetainedRelayEnvironments } from "~/state/environments";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { ConnectionStatusDot } from "../ConnectionStatusDot";
 import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
@@ -34,6 +44,7 @@ import { Button } from "../ui/button";
 import { Skeleton } from "../ui/skeleton";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
+import { SharedTooltipTrigger } from "../ui/shared-tooltip";
 import { presentSavedCloudEnvironmentConnection } from "./cloudEnvironmentConnectionPresentation";
 
 const EMPTY_DISCOVERY_REFRESH_INTERVAL_MS = 5_000;
@@ -47,9 +58,10 @@ function discoveredCompatibilityError(
 
 export interface SavedCloudEnvironmentConnection {
   readonly environmentId: EnvironmentId;
+  readonly entry: { readonly target: ConnectionTarget };
   readonly connection: EnvironmentConnectionPresentation;
-  /** Present once connected; carries the user's icon override. */
-  readonly serverConfig?: ServerConfig | null;
+  readonly relayManaged: boolean;
+  readonly serverConfig?: Pick<ServerConfig, "environment"> | null;
 }
 
 function RemoteEnvironmentRowsSkeleton() {
@@ -66,13 +78,6 @@ function RemoteEnvironmentRowsSkeleton() {
   );
 }
 
-/**
- * The user's Kairo Connect environments from relay discovery, each with a
- * Connect button. The primary environment is always excluded; already-saved
- * environments are hidden unless `showSavedEnvironments` renders them with
- * their live connection state (used by onboarding, where the full device mesh
- * should be visible).
- */
 export function CloudEnvironmentConnectRows({
   primaryEnvironmentId,
   savedEnvironments,
@@ -81,7 +86,10 @@ export function CloudEnvironmentConnectRows({
   empty = null,
   selection,
   onDiscoveryReady,
+  only,
 }: {
+  /** Show this machine's row alone, for a view that picks one machine at a time. */
+  readonly only?: EnvironmentId;
   readonly primaryEnvironmentId: EnvironmentId | null;
   readonly savedEnvironments: ReadonlyArray<SavedCloudEnvironmentConnection>;
   readonly showSavedEnvironments?: boolean;
@@ -94,7 +102,12 @@ export function CloudEnvironmentConnectRows({
     readonly onChange: (environmentId: EnvironmentId, selected: boolean) => void;
   };
 }) {
+  const gt = useGT();
+  const m = useMessages();
   const environmentsState = useRelayEnvironmentDiscovery();
+  const retainedEnvironments = useRetainedRelayEnvironments();
+  // A single row is a machine the user picked: it stays through a refresh, as it does on the map.
+  const discovered = only === undefined ? environmentsState.environments : retainedEnvironments;
   const registerEnvironment = useAtomCommand(environmentCatalog.register, {
     reportFailure: false,
   });
@@ -105,27 +118,39 @@ export function CloudEnvironmentConnectRows({
     if (environmentsState.refreshing || environmentsState.offline) return;
     await refreshRelayEnvironments();
   });
-  const connectRelayEnvironment = useCallback(
-    (environment: RelayClientEnvironmentRecord) =>
-      registerEnvironment(
-        new RelayConnectionRegistration({
-          target: new RelayConnectionTarget({
-            environmentId: environment.environmentId,
-            label: environment.label,
-          }),
+  const connectRelayEnvironment = (environment: RelayClientEnvironmentRecord) =>
+    registerEnvironment(
+      new RelayConnectionRegistration({
+        target: new RelayConnectionTarget({
+          environmentId: environment.environmentId,
+          label: environment.label,
         }),
-      ),
-    [registerEnvironment],
-  );
+      }),
+    );
   const [connectingEnvironmentIds, setConnectingEnvironmentIds] = useState<
     ReadonlySet<EnvironmentId>
   >(new Set());
   const savedById = new Map(
-    savedEnvironments.map((environment) => [environment.environmentId, environment]),
+    savedEnvironments
+      .filter((environment) => environment.relayManaged)
+      .map((environment) => [environment.environmentId, environment]),
+  );
+  const savedWithoutRelay = new Set(
+    savedEnvironments
+      .filter((environment) => !environment.relayManaged)
+      .map((environment) => environment.environmentId),
+  );
+  const desktopLocalIds = new Set(
+    savedEnvironments
+      .filter((environment) => isDesktopLocalConnectionTarget(environment.entry.target))
+      .map((environment) => environment.environmentId),
   );
 
+  // oxlint-disable-next-line kairo/no-unreasoned-state-sync -- fetches relay discovery when its inputs change, unless hidden polling covers it, and reports readiness
   useEffect(() => {
     let active = true;
+    // A single row belongs to a view that already listed the machines; listing again empties it.
+    if (only !== undefined) return;
     if (onDiscoveryReady || !refreshWhileEmpty || document.visibilityState === "visible") {
       void refreshRelayEnvironments().then(() => {
         if (active) onDiscoveryReady?.();
@@ -134,7 +159,7 @@ export function CloudEnvironmentConnectRows({
     return () => {
       active = false;
     };
-  }, [refreshRelayEnvironments, refreshWhileEmpty, onDiscoveryReady]);
+  }, [refreshRelayEnvironments, refreshWhileEmpty, onDiscoveryReady, only]);
 
   const connectEnvironment = async (environment: RelayClientEnvironmentRecord) => {
     if (
@@ -153,8 +178,16 @@ export function CloudEnvironmentConnectRows({
     if (result._tag === "Success") {
       toastManager.add({
         type: "success",
-        title: "Environment added",
-        description: `Connecting to ${environment.label} through Kairo Connect.`,
+        title: savedWithoutRelay.has(environment.environmentId)
+          ? gt("Kairo Connect route added")
+          : gt("Environment added"),
+        description: savedWithoutRelay.has(environment.environmentId)
+          ? gt("{environment} falls back to Kairo Connect when its other routes are unreachable.", {
+              environment: environment.label,
+            })
+          : gt("Connecting to {environment} through Kairo Connect.", {
+              environment: environment.label,
+            }),
       });
       return true;
     }
@@ -163,17 +196,17 @@ export function CloudEnvironmentConnectRows({
     }
     const cause = squashAtomCommandFailure(result);
     const message =
-      cause instanceof Error ? cause.message : "Could not connect the Kairo Connect environment.";
+      thrownErrorMessage(cause, m) ?? gt("Could not connect the Kairo Connect environment.");
     const traceId = findErrorTraceId(cause);
     console.error("[kairo-connect] Could not connect environment", { message, traceId, cause });
     toastManager.add({
       type: "error",
-      title: "Could not connect environment",
+      title: gt("Could not connect environment"),
       description: message,
       data: traceId
         ? {
             secondaryActionProps: {
-              children: "Copy trace ID",
+              children: gt("Copy trace ID"),
               onClick: () => void navigator.clipboard?.writeText(traceId),
             },
           }
@@ -182,43 +215,54 @@ export function CloudEnvironmentConnectRows({
     return false;
   };
 
-  const visibleEnvironments = [...environmentsState.environments.values()].filter(
-    ({ environment }) =>
-      environment.environmentId !== primaryEnvironmentId &&
-      (showSavedEnvironments || !savedById.has(environment.environmentId)),
+  // Omit machines saved over other routes; onboarding selection must not add a Kairo Connect route.
+  const isVisibleEnvironment = (environmentId: EnvironmentId) =>
+    (only === undefined || environmentId === only) &&
+    environmentId !== primaryEnvironmentId &&
+    !desktopLocalIds.has(environmentId) &&
+    (showSavedEnvironments || !savedById.has(environmentId)) &&
+    !(selection && savedWithoutRelay.has(environmentId));
+  const visibleEnvironments = [...discovered.values()].filter(({ environment }) =>
+    isVisibleEnvironment(environment.environmentId),
   );
-  const selectNewComputers = useEffectEvent(() => {
-    const seen = selection?.autoSelectedComputers;
-    if (!selection || !seen) return;
-    for (const { environment, status, availability } of visibleEnvironments) {
-      const id = environment.environmentId;
-      if (availability === "checking") continue;
-      if (
-        discoveredCompatibilityError(status) !== null ||
-        savedById.get(id)?.connection.phase === "unsupported"
-      ) {
+  const selectNewComputers = useEffectEvent(
+    (environments: typeof environmentsState.environments) => {
+      const seen = selection?.autoSelectedComputers;
+      if (!selection || !seen) return;
+      for (const { environment, status, availability } of environments.values()) {
+        if (!isVisibleEnvironment(environment.environmentId)) continue;
+        const id = environment.environmentId;
+        if (availability === "checking") continue;
+        if (
+          discoveredCompatibilityError(status) !== null ||
+          savedById.get(id)?.connection.phase === "unsupported"
+        ) {
+          seen.add(id);
+          if (selection.selectedIds.has(id)) selection.onChange(id, false);
+          continue;
+        }
+        if (seen.has(id)) continue;
         seen.add(id);
-        if (selection.selectedIds.has(id)) selection.onChange(id, false);
-        continue;
+        selection.onChange(id, true);
+        if (!savedById.has(id)) {
+          void connectEnvironment(environment).then((connected) => {
+            if (!connected) selection.onChange(id, false);
+          });
+        }
       }
-      if (seen.has(id)) continue;
-      seen.add(id);
-      selection.onChange(id, true);
-      if (!savedById.has(id)) {
-        void connectEnvironment(environment).then((connected) => {
-          if (!connected) selection.onChange(id, false);
-        });
-      }
-    }
-  });
+    },
+  );
+  // oxlint-disable-next-line kairo/no-unreasoned-state-sync -- auto-selects newly discovered machines from the discovery store and starts their relay connections
   useEffect(() => {
-    selectNewComputers();
+    // oxlint-disable-next-line react/set-state-in-effect -- Discovery results arrive from an external store and auto-selection starts relay connections, which mark themselves connecting.
+    selectNewComputers(environmentsState.environments);
   }, [environmentsState.environments]);
 
   // Discovery clears its list on refresh, so poll only until a machine appears.
   const shouldRefreshWhileEmpty =
     refreshWhileEmpty && visibleEnvironments.length === 0 && !environmentsState.offline;
 
+  // oxlint-disable-next-line kairo/no-unreasoned-state-sync -- polls relay discovery on a timer, focus and visibility change while no machine is found
   useEffect(() => {
     if (!shouldRefreshWhileEmpty) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -235,12 +279,9 @@ export function CloudEnvironmentConnectRows({
       if (disposed || pending || !visible()) return;
       clearTimeout(timer);
       pending = true;
-      try {
-        await refreshDiscoveryWhenIdle();
-      } finally {
-        pending = false;
-        schedule();
-      }
+      await settlePromise(() => refreshDiscoveryWhenIdle());
+      pending = false;
+      schedule();
     };
     const onFocus = () => void refresh();
     const onVisibilityChange = () => {
@@ -259,7 +300,7 @@ export function CloudEnvironmentConnectRows({
     };
   }, [shouldRefreshWhileEmpty]);
 
-  const standalone = showSavedEnvironments || savedEnvironments.length === 0;
+  const standalone = showSavedEnvironments || savedEnvironments.length === desktopLocalIds.size;
 
   if (
     !refreshWhileEmpty &&
@@ -272,16 +313,14 @@ export function CloudEnvironmentConnectRows({
   }
 
   if (standalone && visibleEnvironments.length === 0) {
-    // A failed or offline discovery is not "no environments" — misreporting it
-    // as empty would read as the user's devices having disappeared.
     const discoveryProblem = environmentsState.offline
-      ? "You appear to be offline."
-      : (Option.getOrNull(environmentsState.error)?.message ?? null);
+      ? gt("You appear to be offline.")
+      : thrownErrorMessage(Option.getOrNull(environmentsState.error), m);
     if (discoveryProblem !== null && !environmentsState.refreshing) {
       return (
         <div className={ITEM_ROW_CLASSNAME}>
           <p className="text-sm font-medium text-destructive">
-            Could not load Kairo Connect environments
+            <T>Could not load Kairo Connect environments</T>
           </p>
           <p className="mt-1 text-xs text-muted-foreground">{discoveryProblem}</p>
           <Button
@@ -290,7 +329,7 @@ export function CloudEnvironmentConnectRows({
             className="mt-3"
             onClick={() => void refreshRelayEnvironments()}
           >
-            Try again
+            <T>Try again</T>
           </Button>
         </div>
       );
@@ -304,20 +343,26 @@ export function CloudEnvironmentConnectRows({
     const unsupported =
       compatibilityError !== null || savedEnvironment?.connection.phase === "unsupported";
     const unsupportedDetail =
-      compatibilityError?.message ?? savedEnvironment?.connection.error ?? null;
+      thrownErrorMessage(compatibilityError, m) ??
+      (savedEnvironment ? connectionErrorText(savedEnvironment.connection, m) : null);
     const savedConnection = unsupported
-      ? presentSavedCloudEnvironmentConnection({
-          phase: "unsupported",
-          error: unsupportedDetail,
-          traceId: null,
-        })
+      ? presentSavedCloudEnvironmentConnection(
+          {
+            phase: "unsupported",
+            error: unsupportedDetail,
+            traceId: null,
+          },
+          m,
+        )
       : savedEnvironment
-        ? presentSavedCloudEnvironmentConnection(savedEnvironment.connection)
+        ? presentSavedCloudEnvironmentConnection(savedEnvironment.connection, m)
         : null;
-    // A connected machine's own config (with the user's icon pick) wins. Before
-    // that, the relay's health probe already carries the server's descriptor, so
-    // a machine can wear its detected glyph before this device ever connects.
-    const descriptor = status === undefined ? undefined : Option.getOrNull(status)?.descriptor;
+    const relayStatus = status === undefined ? null : Option.getOrNull(status);
+    const descriptor = relayStatus?.descriptor;
+    const offlineReason =
+      availability === "offline" && relayStatus !== null
+        ? relayOfflineReasonMessage(relayStatus, m)
+        : null;
     const machineKind = resolveEnvironmentMachineKind(
       savedEnvironment?.serverConfig ??
         (descriptor === undefined ? null : { environment: descriptor }),
@@ -337,19 +382,24 @@ export function CloudEnvironmentConnectRows({
           : availability === "checking"
             ? "bg-warning"
             : "bg-muted-foreground/35";
+    const notAdded = savedWithoutRelay.has(environment.environmentId)
+      ? gt("Saved without Kairo Connect")
+      : gt("Not added");
     const statusText =
       unsupported && !savedEnvironment
-        ? "Kairo Connect · Not added · Client not supported"
-        : savedConnection
-          ? savedConnection.statusText
-          : availability === "online"
-            ? "Kairo Connect · Not added · Relay online"
-            : availability === "offline"
-              ? "Kairo Connect · Not added · Relay offline"
-              : availability === "checking"
-                ? "Kairo Connect · Not added · Checking relay status…"
-                : (Option.getOrNull(error)?.message ??
-                  "Kairo Connect · Not added · Relay status unavailable");
+        ? `Kairo Connect · ${notAdded} · ${gt("Client not supported")}`
+        : offlineReason !== null
+          ? offlineReason
+          : savedConnection
+            ? savedConnection.statusText
+            : availability === "online"
+              ? `Kairo Connect · ${notAdded} · ${gt("Relay online")}`
+              : availability === "offline"
+                ? `Kairo Connect · ${notAdded} · ${gt("Relay offline")}`
+                : availability === "checking"
+                  ? `Kairo Connect · ${notAdded} · ${gt("Checking relay status…")}`
+                  : (errorDisplayMessage(Option.getOrNull(error), m) ??
+                    `Kairo Connect · ${notAdded} · ${gt("Relay status unavailable")}`);
     if (selection) {
       return (
         <label
@@ -373,7 +423,14 @@ export function CloudEnvironmentConnectRows({
             kind={machineKind}
             className="size-4 shrink-0 text-muted-foreground"
           />
-          <span className="min-w-0 flex-1 truncate text-sm font-medium">{environment.label}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium">{environment.label}</span>
+            {unsupportedDetail !== null ? (
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                {unsupportedDetail}
+              </span>
+            ) : null}
+          </span>
           <Tooltip>
             <TooltipTrigger
               render={<span tabIndex={0} />}
@@ -383,15 +440,15 @@ export function CloudEnvironmentConnectRows({
               )}
             >
               {connectingEnvironmentIds.has(environment.environmentId)
-                ? "Connecting…"
+                ? gt("Connecting…")
                 : (savedConnection?.buttonLabel ??
                   (availability === "online"
-                    ? "Available"
+                    ? gt("Available")
                     : availability === "offline"
-                      ? "Offline"
+                      ? gt("Offline")
                       : availability === "error"
-                        ? "Unavailable"
-                        : "Checking…"))}
+                        ? gt("Unavailable")
+                        : gt("Checking…")))}
             </TooltipTrigger>
             <TooltipPopup>{unsupportedDetail ?? statusText}</TooltipPopup>
           </Tooltip>
@@ -414,15 +471,18 @@ export function CloudEnvironmentConnectRows({
                 tooltipText={
                   unsupportedDetail !== null
                     ? unsupportedDetail
-                    : savedConnection
-                      ? savedConnection.statusText
-                      : availability === "online"
-                        ? "Relay online"
-                        : availability === "offline"
-                          ? "Relay offline"
-                          : availability === "checking"
-                            ? "Checking relay status"
-                            : (Option.getOrNull(error)?.message ?? "Relay status unavailable")
+                    : offlineReason !== null
+                      ? offlineReason
+                      : savedConnection
+                        ? savedConnection.statusText
+                        : availability === "online"
+                          ? gt("Relay online")
+                          : availability === "offline"
+                            ? gt("Relay offline")
+                            : availability === "checking"
+                              ? gt("Checking relay status")
+                              : (errorDisplayMessage(Option.getOrNull(error), m) ??
+                                gt("Relay status unavailable"))
                 }
               />
               <EnvironmentMachineIcon
@@ -436,7 +496,9 @@ export function CloudEnvironmentConnectRows({
               className={cn(
                 "mt-1 truncate text-xs",
                 savedConnection?.tone === "error" ||
-                  (savedConnection?.tone === "connecting" && savedEnvironment?.connection.error) ||
+                  (savedConnection?.tone === "connecting" &&
+                    savedEnvironment?.connection.error &&
+                    !savedEnvironment.connection.awaitingApproval) ||
                   (savedConnection === null && availability === "error")
                   ? "text-destructive"
                   : "text-muted-foreground",
@@ -446,14 +508,14 @@ export function CloudEnvironmentConnectRows({
             </p>
           </div>
           {unsupported && !savedEnvironment ? (
-            <Tooltip>
-              <TooltipTrigger render={<span className="inline-flex" tabIndex={0} />}>
-                <Button size="sm" disabled>
-                  Add
-                </Button>
-              </TooltipTrigger>
-              <TooltipPopup>{unsupportedDetail ?? "Client not supported"}</TooltipPopup>
-            </Tooltip>
+            <SharedTooltipTrigger
+              render={<span className="inline-flex" tabIndex={0} />}
+              label={unsupportedDetail ?? gt("Client not supported")}
+            >
+              <Button size="sm" disabled>
+                <T context="verb, adds an environment">Add</T>
+              </Button>
+            </SharedTooltipTrigger>
           ) : savedConnection ? (
             <Button size="sm" variant="outline" disabled>
               {savedConnection.buttonLabel}
@@ -464,7 +526,11 @@ export function CloudEnvironmentConnectRows({
               disabled={connectingEnvironmentIds.size > 0}
               onClick={() => void connectEnvironment(environment)}
             >
-              {connectingEnvironmentIds.has(environment.environmentId) ? "Adding…" : "Add"}
+              {connectingEnvironmentIds.has(environment.environmentId)
+                ? gt("Adding…")
+                : savedWithoutRelay.has(environment.environmentId)
+                  ? gt("Add route")
+                  : gt("Add", { $context: "verb, adds an environment" })}
             </Button>
           )}
         </div>

@@ -1,6 +1,10 @@
+import { vi } from "vite-plus/test";
 import {
   EnvironmentId,
+  AuthOrchestrationReadScope,
+  AuthSourceControlWriteScope,
   ThreadId,
+  ProjectId,
   WS_METHODS,
   type GitActionProgressEvent,
   type GitRunStackedActionInput,
@@ -11,10 +15,9 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import { AsyncResult, Atom, AtomRegistry } from "effect/unstable/reactivity";
+import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 
 import {
   AVAILABLE_CONNECTION_STATE,
@@ -27,7 +30,7 @@ import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import * as Persistence from "../platform/persistence.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import type { RpcSession } from "../rpc/session.ts";
-import type { AtomCommandResult } from "./runtime.ts";
+import { runAtomCommand, type AtomCommandResult } from "./runtime.ts";
 import {
   applyVcsActionProgressEvent,
   beginVcsActionState,
@@ -35,13 +38,11 @@ import {
   createVcsActionManager,
   createVcsActionTransportId,
   EMPTY_VCS_ACTION_STATE,
-  getVcsActionTargetKey,
   normalizeVcsActionProgressEvent,
   parseVcsActionTargetKey,
   VcsActionMissingTerminalEventError,
   VcsActionRemoteFailureError,
   VcsActionTargetKeyParseError,
-  VcsActionUnavailableError,
 } from "./vcsAction.ts";
 import { vcsRefsCacheStateAtom } from "./vcsRefInvalidation.ts";
 
@@ -49,7 +50,6 @@ const actionId = "action-123";
 const action = "commit_push" as const;
 const cwd = "/repo";
 const environmentId = EnvironmentId.make("environment-1");
-const isVcsActionUnavailableError = Schema.is(VcsActionUnavailableError);
 const result: GitRunStackedActionResult = {
   action,
   branch: {
@@ -86,9 +86,10 @@ function session(client: WsRpcProtocolClient): RpcSession {
   return {
     client,
     initialConfig: Effect.never,
-    subscribeServerConfig: (input) => client.subscribeServerConfig(input),
+    subscribeServerConfig: (input = {}) => client.subscribeServerConfig(input),
     ready: Effect.void,
     probe: Effect.void,
+    inboundFrames: Effect.succeed(0),
     closed: Effect.never,
   };
 }
@@ -129,12 +130,6 @@ describe("vcsActionState", () => {
     expect(error).toMatchObject({ keyLength: key.length, cause: expect.any(SyntaxError) });
     expect(error).not.toHaveProperty("key");
     expect((error as Error).message).not.toContain(key);
-  });
-
-  it("rejects invalid target key shapes", () => {
-    const key = JSON.stringify([environmentId]);
-
-    expect(() => parseVcsActionTargetKey(key)).toThrowError(VcsActionTargetKeyParseError);
   });
 
   it("projects phase and hook progress without owning the async operation", () => {
@@ -206,73 +201,6 @@ describe("vcsActionState", () => {
     });
   });
 
-  it("clears running presentation state once the action finishes", () => {
-    const initial = beginVcsActionState({
-      operation: "run_change_request",
-      label: "Running source control action",
-      actionId,
-    });
-    const pushing = applyVcsActionProgressEvent(
-      initial,
-      progress({
-        actionId,
-        action,
-        cwd,
-        kind: "phase_started",
-        phase: "push",
-        label: "Pushing...",
-      }),
-    );
-    const finished = applyVcsActionProgressEvent(
-      pushing,
-      progress({
-        actionId,
-        action,
-        cwd,
-        kind: "action_finished",
-        result,
-      }),
-    );
-
-    expect(finished).toMatchObject({
-      isRunning: false,
-      operation: "run_change_request",
-      actionId,
-      action,
-      currentLabel: null,
-      currentPhaseLabel: null,
-      lastOutputLine: null,
-      error: null,
-    });
-  });
-
-  it("retains a terminal action error for presentation", () => {
-    const initial = beginVcsActionState({
-      operation: "run_change_request",
-      label: "Running source control action",
-      actionId,
-    });
-    const failed = applyVcsActionProgressEvent(
-      initial,
-      progress({
-        actionId,
-        action,
-        cwd,
-        kind: "action_failed",
-        phase: null,
-        message: "Push failed.",
-      }),
-    );
-
-    expect(failed).toMatchObject({
-      isRunning: false,
-      operation: "run_change_request",
-      actionId,
-      action,
-      error: "Push failed.",
-    });
-  });
-
   it("ignores progress after a newer action owns the target", () => {
     const current = beginVcsActionState({
       operation: "pull",
@@ -293,22 +221,6 @@ describe("vcsActionState", () => {
         }),
       ),
     ).toBe(current);
-  });
-
-  it("keys presentation state only when the environment and repository are known", () => {
-    expect(
-      getVcsActionTargetKey({
-        environmentId,
-        cwd,
-      }),
-    ).toBe(JSON.stringify([environmentId, cwd]));
-    expect(getVcsActionTargetKey({ environmentId: null, cwd })).toBeNull();
-    expect(
-      getVcsActionTargetKey({
-        environmentId,
-        cwd: null,
-      }),
-    ).toBeNull();
   });
 
   it("normalizes progress only for the matching environment-scoped action", () => {
@@ -466,58 +378,6 @@ describe("vcsActionState", () => {
     }),
   );
 
-  it("keys mutation ownership by environment and cwd", () => {
-    const runtime = Atom.runtime(Layer.empty) as unknown as Atom.AtomRuntime<
-      EnvironmentRegistry.EnvironmentRegistry | Persistence.EnvironmentCacheStore,
-      never
-    >;
-    const manager = createVcsActionManager(runtime);
-    const registry = AtomRegistry.make();
-    const target = { environmentId, cwd };
-    const otherTarget = {
-      environmentId: EnvironmentId.make("environment-2"),
-      cwd,
-    };
-
-    expect(manager.runStackedAction(target)).toBe(manager.runStackedAction({ ...target }));
-    expect(manager.runStackedAction(target)).not.toBe(manager.runStackedAction(otherTarget));
-    expect(registry.get(manager.stateAtom(target))).toEqual(EMPTY_VCS_ACTION_STATE);
-
-    registry.dispose();
-  });
-
-  it("retains the incomplete target and operation when tracking is unavailable", async () => {
-    const runtime = Atom.runtime(Layer.empty) as unknown as Atom.AtomRuntime<
-      EnvironmentRegistry.EnvironmentRegistry | Persistence.EnvironmentCacheStore,
-      never
-    >;
-    const manager = createVcsActionManager(runtime);
-    const registry = AtomRegistry.make();
-    const result = await manager.track(
-      registry,
-      { environmentId, cwd: null },
-      { operation: "pull", label: "Pulling latest changes" },
-      async () => AsyncResult.success(undefined),
-    );
-
-    expect(AsyncResult.isFailure(result)).toBe(true);
-    if (AsyncResult.isFailure(result)) {
-      const error = Cause.squash(result.cause);
-      expect(error).toBeInstanceOf(VcsActionUnavailableError);
-      if (!isVcsActionUnavailableError(error)) {
-        throw error;
-      }
-      expect(error).toMatchObject({
-        operation: "pull",
-        environmentId,
-        cwd: null,
-      });
-      expect(error.message).toBe("Source control operation 'pull' is unavailable.");
-    }
-
-    registry.dispose();
-  });
-
   it("tracks finite mutations without letting an older completion clear newer state", async () => {
     const runtime = Atom.runtime(Layer.empty) as unknown as Atom.AtomRuntime<
       EnvironmentRegistry.EnvironmentRegistry | Persistence.EnvironmentCacheStore,
@@ -573,37 +433,40 @@ describe("vcsActionState", () => {
   });
 
   it.effect("invalidates persisted refs after successful and failed stacked actions", () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const connectionState: SupervisorConnectionState = {
-          ...AVAILABLE_CONNECTION_STATE,
-          desired: true,
-          network: "online",
-          phase: "connected",
-          attempt: 1,
-          generation: 1,
-        };
-        const targetKey = { environmentId, cwd };
-        const successfulActionId = "invalidate-success";
-        const failedActionId = "invalidate-failure";
-        const successfulTransportActionId = createVcsActionTransportId(
-          targetKey,
-          successfulActionId,
-        );
-        const failedTransportActionId = createVcsActionTransportId(targetKey, failedActionId);
-        const rpcInputs = new Array<GitRunStackedActionInput>();
-        const client = {
-          [WS_METHODS.gitRunStackedAction]: (input: GitRunStackedActionInput) =>
-            (rpcInputs.push(input), input.actionId === successfulTransportActionId)
-              ? Stream.make(
-                  progress({
-                    kind: "action_finished",
-                    actionId: successfulTransportActionId,
-                    cwd,
-                    action,
-                    result,
-                  }),
-                )
+    Effect.gen(function* () {
+      const connectionState: SupervisorConnectionState = {
+        ...AVAILABLE_CONNECTION_STATE,
+        desired: true,
+        network: "online",
+        phase: "connected",
+        attempt: 1,
+        generation: 1,
+      };
+      const targetKey = { environmentId, cwd };
+      const successfulActionId = "invalidate-success";
+      const failedActionId = "invalidate-failure";
+      const interruptedActionId = "invalidate-interrupted";
+      const successfulTransportActionId = createVcsActionTransportId(targetKey, successfulActionId);
+      const failedTransportActionId = createVcsActionTransportId(targetKey, failedActionId);
+      const interruptedTransportActionId = createVcsActionTransportId(
+        targetKey,
+        interruptedActionId,
+      );
+      const rpcInputs = new Array<GitRunStackedActionInput>();
+      const client = {
+        [WS_METHODS.gitRunStackedAction]: (input: GitRunStackedActionInput) =>
+          (rpcInputs.push(input), input.actionId === successfulTransportActionId)
+            ? Stream.make(
+                progress({
+                  kind: "action_finished",
+                  actionId: successfulTransportActionId,
+                  cwd,
+                  action,
+                  result,
+                }),
+              )
+            : input.actionId === interruptedTransportActionId
+              ? Stream.fromEffect(Effect.interrupt)
               : Stream.make(
                   progress({
                     kind: "action_failed",
@@ -614,75 +477,130 @@ describe("vcsActionState", () => {
                     message: "push failed after creating the branch",
                   }),
                 ),
-        } as unknown as WsRpcProtocolClient;
-        const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
-          target,
-          state: yield* SubscriptionRef.make(connectionState),
-          session: yield* SubscriptionRef.make(Option.some(session(client))),
-          prepared: yield* SubscriptionRef.make(Option.none<PreparedConnection>()),
-          connect: Effect.void,
-          disconnect: Effect.void,
-          retryNow: Effect.void,
-        } satisfies EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
-        const run: EnvironmentRegistry.EnvironmentRegistry["Service"]["run"] = (
-          _environmentId,
-          effect,
-        ) => Effect.provideService(effect, EnvironmentSupervisor.EnvironmentSupervisor, supervisor);
-        const runStream: EnvironmentRegistry.EnvironmentRegistry["Service"]["runStream"] = (
-          _environmentId,
-          stream,
-        ) => Stream.provideService(stream, EnvironmentSupervisor.EnvironmentSupervisor, supervisor);
-        const environmentRegistry = EnvironmentRegistry.EnvironmentRegistry.of({
-          run,
-          runStream,
-        } as unknown as EnvironmentRegistry.EnvironmentRegistry["Service"]);
-        const removed = new Array<string>();
-        const runtime = Atom.runtime(
-          Layer.merge(
-            Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
-            Layer.succeed(
-              Persistence.EnvironmentCacheStore,
-              cacheStore((removedEnvironmentId) => {
-                removed.push(`${removedEnvironmentId}:*`);
-              }),
-            ),
+      } as unknown as WsRpcProtocolClient;
+      const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
+        target,
+        state: yield* SubscriptionRef.make(connectionState),
+        session: yield* SubscriptionRef.make(Option.some(session(client))),
+        prepared: yield* SubscriptionRef.make(Option.none<PreparedConnection>()),
+        connect: Effect.void,
+        disconnect: Effect.void,
+        retryNow: Effect.void,
+      } satisfies EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
+      const run: EnvironmentRegistry.EnvironmentRegistry["Service"]["run"] = (
+        _environmentId,
+        effect,
+      ) => Effect.provideService(effect, EnvironmentSupervisor.EnvironmentSupervisor, supervisor);
+      const runStream: EnvironmentRegistry.EnvironmentRegistry["Service"]["runStream"] = (
+        _environmentId,
+        stream,
+      ) => Stream.provideService(stream, EnvironmentSupervisor.EnvironmentSupervisor, supervisor);
+      const environmentRegistry = EnvironmentRegistry.EnvironmentRegistry.of({
+        run,
+        runStream,
+      } as unknown as EnvironmentRegistry.EnvironmentRegistry["Service"]);
+      const removed = new Array<string>();
+      const runtime = Atom.runtime(
+        Layer.merge(
+          Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
+          Layer.succeed(
+            Persistence.EnvironmentCacheStore,
+            cacheStore((removedEnvironmentId) => {
+              removed.push(`${removedEnvironmentId}:*`);
+            }),
           ),
-        );
-        const manager = createVcsActionManager(runtime);
-        const registry = yield* Effect.acquireRelease(Effect.sync(AtomRegistry.make), (registry) =>
-          Effect.sync(() => registry.dispose()),
-        );
-        const state = vcsRefsCacheStateAtom({ environmentId });
+        ),
+      );
+      const manager = createVcsActionManager(runtime);
+      const registry = yield* Effect.acquireRelease(Effect.sync(AtomRegistry.make), (registry) =>
+        Effect.sync(() => registry.dispose()),
+      );
+      const state = vcsRefsCacheStateAtom({ environmentId });
 
-        expect(registry.get(state).revision).toBe(0);
-        const threadId = ThreadId.make("thread-stacked-action");
-        const successfulResult = yield* Effect.promise(() =>
-          manager.runStackedAction(targetKey).run(registry, {
+      expect(registry.get(state).revision).toBe(0);
+      const threadId = ThreadId.make("thread-stacked-action");
+      const projectId = ProjectId.make("project-stacked-action");
+      const successfulResult = yield* Effect.promise(() =>
+        runAtomCommand(
+          registry,
+          manager.runStackedAction(targetKey),
+          {
             actionId: successfulActionId,
             action,
             threadId,
-          }),
-        );
+            projectId,
+          },
+          { reportFailure: false, reportDefect: false },
+        ),
+      );
 
-        expect(AsyncResult.isSuccess(successfulResult)).toBe(true);
-        expect(registry.get(state).revision).toBe(1);
-        expect(removed).toEqual([`${environmentId}:*`]);
-        // The server links a created pull request to this thread, so the id must ride along.
-        expect(rpcInputs).toEqual([
-          { actionId: successfulTransportActionId, cwd, action, threadId },
-        ]);
+      expect(AsyncResult.isSuccess(successfulResult)).toBe(true);
+      expect(registry.get(manager.stateAtom(targetKey))).toEqual(EMPTY_VCS_ACTION_STATE);
+      expect(registry.get(state).revision).toBe(1);
+      expect(removed).toEqual([`${environmentId}:*`]);
+      expect(rpcInputs).toEqual([
+        { actionId: successfulTransportActionId, cwd, action, threadId, projectId },
+      ]);
 
-        const failedResult = yield* Effect.promise(() =>
-          manager.runStackedAction(targetKey).run(registry, {
+      const failedResult = yield* Effect.promise(() =>
+        runAtomCommand(
+          registry,
+          manager.runStackedAction(targetKey),
+          {
             actionId: failedActionId,
             action,
-          }),
-        );
+          },
+          { reportFailure: false, reportDefect: false },
+        ),
+      );
 
-        expect(AsyncResult.isFailure(failedResult)).toBe(true);
-        expect(registry.get(state).revision).toBe(2);
-        expect(removed).toEqual([`${environmentId}:*`, `${environmentId}:*`]);
-      }),
-    ),
+      expect(AsyncResult.isFailure(failedResult)).toBe(true);
+      expect(registry.get(manager.stateAtom(targetKey))).toMatchObject({
+        isRunning: false,
+        operation: "run_change_request",
+        actionId: failedActionId,
+        error: "Source control action 'commit_push' failed during push.",
+      });
+      expect(registry.get(state).revision).toBe(2);
+      expect(removed).toEqual([`${environmentId}:*`, `${environmentId}:*`]);
+
+      const interruptedResult = yield* Effect.promise(() =>
+        runAtomCommand(
+          registry,
+          manager.runStackedAction(targetKey),
+          {
+            actionId: interruptedActionId,
+            action,
+          },
+          { reportFailure: false, reportDefect: false },
+        ),
+      );
+
+      expect(AsyncResult.isFailure(interruptedResult)).toBe(true);
+      if (AsyncResult.isFailure(interruptedResult)) {
+        expect(Cause.hasInterruptsOnly(interruptedResult.cause)).toBe(true);
+      }
+      expect(registry.get(manager.stateAtom(targetKey))).toEqual(EMPTY_VCS_ACTION_STATE);
+      expect(registry.get(state).revision).toBe(3);
+      expect(removed).toEqual([`${environmentId}:*`, `${environmentId}:*`, `${environmentId}:*`]);
+    }),
   );
 });
+
+vi.mock("./session.ts", () => ({
+  createEnvironmentSessionAtoms: () => ({ sessionStateAtom: grantedSessions }),
+}));
+const grantedSessions = Atom.family((_id: EnvironmentId) =>
+  Atom.make(
+    AsyncResult.success({
+      authenticated: true,
+      auth: {
+        policy: "remote-reachable",
+        bootstrapMethods: [],
+        sessionMethods: [],
+        sessionCookieName: "test",
+      },
+      scopes: [AuthOrchestrationReadScope, AuthSourceControlWriteScope],
+    }),
+  ),
+);

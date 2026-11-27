@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 
-import migrateBranchPullRequest from "./048_ProjectionThreadBranchPullRequest.ts";
-import migrateActiveOrderKey from "./049_ProjectionThreadsActiveOrderKey.ts";
+import migrateBranchPullRequest from "./051_ProjectionThreadBranchPullRequest.ts";
+import migrateActiveOrderKey from "./052_ProjectionThreadsActiveOrderKey.ts";
 
 // Earlier Kairo builds recorded artifact migrations at IDs 51 and 52, skipping
 // the projection columns now assigned those IDs. Replay their idempotent migrations

@@ -1,4 +1,4 @@
-import { HostProcessArchitecture, HostProcessPlatform } from "@kairo/shared/hostProcess";
+import { HostProcessArchitecture, HostProcessPlatform } from "@kairo/shared/HostProcess";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";

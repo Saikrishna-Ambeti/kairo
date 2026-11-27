@@ -1,207 +1,101 @@
 # Remote access
 
-Connect a phone, browser, or another desktop app to Kairo running on a different
-machine. That machine must stay running and reachable while you work.
+Drive Kairo from your phone, browser (`app.kairo.codes`), or another desktop app while your agents run on a host computer or server. The host must stay awake and running while you work.
 
-## Kairo Connect
+## Kairo Connect (recommended)
 
-Kairo Connect makes an environment available to your other devices without setting
-up router forwarding. In the desktop app on the host, open **Settings →
-Connections**, sign in, and enable **Kairo Connect** for that environment.
+Kairo Connect links your host to your other devices without router port-forwarding.
 
-For a command-line host, run:
+- **Desktop host**: Open **Settings → Sharing & access**, sign in, and turn on **Kairo Connect** (note: closing the desktop app's last window stops its local server—use the [background service](./background-service.md) for unattended access).
+- **CLI / headless host**: Run `kairo up` (or `kairo connect` / `kairo up --connect --lan --yes` for non-interactive scripts) and complete the printed sign-in link on any device. Check status with `t3 status [--json]`.
+- **Other devices**: Sign in to the same Kairo Connect account and pick the environment.
 
-```bash
-kairo connect
-```
+### Approve new devices
 
-Follow the sign-in instructions. Setup offers a
-[background service](./background-service.md); if you decline it, start the
-server with `kairo serve`. Saving your sign-in alone does not make the machine
-reachable.
+By default, any device signed into your Kairo Connect account can connect. Turn on **Require approval for new devices** in **Settings → Sharing & access** on the host so new devices must present a short code (valid 10 minutes) that you approve from an existing device or via `t3 auth connect-device approve <code>`. Revoke devices anytime in **Settings → Sharing & access** or `t3 auth connect-device revoke <code>`.
 
-On your other device, sign in to the same Kairo Connect account and choose the
-environment. Over SSH, the CLI prints a browser link and a short code. Open the
-link on any device, confirm the code matches, and approve. The CLI continues on
-its own, so you do not need to forward an OAuth callback port.
+### More machines with T3 Chat
 
-Kairo Connect renews access credentials when needed without disconnecting a healthy
-connection. Pull request diffs and provider settings keep working after the
-previous credential expires. A failed renewal affects that request; it does not
-disconnect an otherwise healthy conversation.
+Free Kairo Connect accounts can link up to **3 host machines** (phones and browsers don't count). Link a paid T3 Chat account from your account menu → **T3 Chat → Link T3 Chat** to raise the limit to **10** (Pro) or **100** (Premier).
 
 ## Pair over a LAN or private network
 
-Use direct pairing when the other device can reach the host's network address.
+- **Desktop host**: Enable **Settings → Sharing & access → Network access** (restarts desktop) and create a one-time pairing link.
+- **CLI host**: Run `kairo up --lan` (background service) or `kairo serve --lan` (foreground), then run `kairo pair` to generate a QR code / pairing URL (`kairo://pair` opens directly in the desktop app).
+- **Hosted web app (`app.kairo.codes`)**: Requires an HTTPS endpoint (Kairo Connect or Tailscale HTTPS). For plain HTTP on a LAN, open the direct pairing URL in a local browser or pair from the desktop/mobile app. For custom CAs on Android, install the CA certificate in Android security settings.
+- **Session lifetime**: Paired devices stay signed in while active; sessions unused for 30 days must re-pair.
 
-On a desktop host, open **Settings → Connections**, enable **Network access**,
-then create a pairing link using an address the other device can reach. Changing
-network access restarts the desktop app. You can turn it off in the same place.
+### Reach one machine several ways
 
-For a command-line host, replace `<private-ip>` with the host's LAN or tailnet
-address:
-
-```bash
-kairo serve --host <private-ip>
-```
-
-If a server is already running, generate a fresh link without restarting it:
-
-```bash
-kairo pair
-```
-
-Scan the QR code on your phone or paste the pairing URL into **Add environment**
-in the receiving app. Connection settings are under **Settings → Connections**
-on web and desktop and **Settings → Environments** on mobile. A loopback address
-such as `127.0.0.1` reaches only the device opening the link.
-
-Pairing authorizes that device for future connections. Use a fresh one-time link
-for each new device; you do not need the original token to reconnect. Links
-created in Settings can only be copied from the client that created them while
-its Connections page stays open. If you leave or reload that page, create
-another link to share.
-
-### Balance new threads across machines
-
-Auto balance is off by default. On web and desktop, enable it in
-**Settings → Connections → Load balancing** to automatically choose a machine for
-new threads in projects grouped across connected environments. The section
-appears once two or more machines are switched on.
-Each machine starts at **Normal**. Choose **Prefer** to favor it when it has CPU and
-memory available, **Less often** to reduce its share, or **Manual only** to exclude
-it from automatic selection. These are preferences, not fixed traffic percentages.
-Preferences are saved separately in each client.
-
-The composer checks eligible machines when choosing a draft's environment, then keeps
-that choice stable. Choose **Auto balance** again to check current resources, or choose
-a specific machine to override it. Choosing a branch or worktree also keeps the draft
-on that machine. Existing threads stay where they started. If resource checks are
-unavailable or all eligible machines are full, choose a machine manually to continue.
-Mobile keeps its manual environment selection.
+A host can have multiple routes (LAN, Tailscale, VPN, public URL, SSH, Kairo Connect). Kairo automatically learns LAN and Tailscale routes when network access is enabled, connects over the fastest working route, and switches back to higher-priority routes when you return home. Reorder or add routes in **Settings → Environments** (**Add route**).
 
 ### Tailscale HTTPS
 
-Join both devices to the same tailnet. In the desktop app, enable **Tailscale
-HTTPS** in **Settings → Connections**. Turn it off there to remove that route.
+Join both devices to a tailnet with [MagicDNS and HTTPS certificates](https://tailscale.com/docs/how-to/set-up-https-certificates) enabled (on Linux, grant [operator permission](https://tailscale.com/docs/reference/troubleshooting/linux/linux-operator-permission)).
 
-To start a command-line server with Tailscale HTTPS:
+- **Desktop**: Enable **Settings → Sharing & access → Tailscale HTTPS**.
+- **CLI**: Run `kairo serve --tailscale-serve` or `kairo pair --tailscale` (use `--tailscale-serve-port` if 443 is taken; remove with `tailscale serve --https=443 --set-path=/ off`).
 
-```bash
-kairo serve --tailscale-serve
-```
+### Balance new threads across machines
 
-For an already-running server:
-
-```bash
-kairo pair --tailscale
-```
-
-The pairing link uses an address such as `https://machine.tailnet.ts.net/`.
-The mapping created by `pair --tailscale` persists across restarts. Remove its
-default-port mapping with:
-
-```bash
-tailscale serve --https=443 off
-```
-
-If that port is already in use, choose another with
-`--tailscale-serve-port`. See `kairo pair --help` for other pairing options.
-
-### Hosted web app
-
-[app.kairo.codes](https://app.kairo.codes) needs an HTTPS endpoint. It connects directly
-to your server; a hosted pairing link does not make an unreachable backend
-reachable or convert HTTP to HTTPS.
-
-For a plain HTTP LAN endpoint, use the direct pairing URL in a browser that can
-open it, or pair from the desktop app. On mobile, an IP address entered without a
-scheme uses HTTP, so include `https://` when your server uses HTTPS.
+On web and desktop with 2+ connected machines, enable **Settings → Environments → Load balancing** (per client) to auto-select a host for new threads in shared projects. Set each machine to **Prefer**, **Normal**, **Less often**, or **Manual only**.
 
 ## Desktop-managed SSH
 
-In the desktop app, open **Settings → Connections → Add environment**, choose
-**SSH**, and enter a host or SSH alias such as `user@example.com`. Kairo starts
-or reuses a server there and opens the port forward for you. Projects, provider
-credentials, and agent work stay on the remote machine.
+In the desktop app, open **Settings → Environments → Add environment → SSH** and enter a host or SSH alias (e.g. `user@example.com`). Kairo downloads its runtime to `~/.kairo/runtime` on the Linux or Apple Silicon macOS host, starts or reuses a server, and manages port forwarding automatically.
 
-The remote host must be Linux or an Apple Silicon Mac with `curl` or `wget`,
-`tar`, `sha256sum` or `shasum`, and [provider setup](./install.md#providers).
-The first launch downloads Kairo's server to `~/.kairo/runtime` on the host, so
-it takes longer than later ones.
-Provider CLIs must be on the `PATH` of a non-interactive login shell there;
-check with:
+- Provider CLIs must be on a non-interactive login shell's `PATH` (check with `ssh user@example.com 'sh -lc "command -v claude codex"'`).
+- For 2FA/Duo hosts on macOS/Linux, enable SSH `ControlMaster` in `~/.ssh/config` and open a terminal SSH session first.
+- Revoke unused SSH sessions in **Settings → Sharing & access** or `t3 auth session revoke <id>`.
 
-```bash
-ssh user@example.com 'sh -lc "command -v claude codex"'
+## Browser on a remote environment
+
+Browser tabs belong to the host environment so you and your agents share them from any device.
+
+- **Streaming & local loading**: Web and mobile stream tabs from the host. In the desktop app, tabs you open for a remote environment load locally while routing `localhost` requests to the host over the **preview tunnel** (so element picker and annotations work locally).
+- **Port forwarding (desktop)**: Forward any remote host port to your local `localhost` via the thread's **Servers** list or **Forwarded ports** in the command palette (`Cmd/Ctrl-click` forwards and opens in your browser).
+- **Open on this device (mobile)**: Tap **Open on this device** on a streamed `localhost` tab or long-press a `localhost` link in chat for native touch scrolling.
+- **Disable preview tunnel**: Turn off **Settings → Sharing & access → Preview tunnel** on the host (or via [managed policy](./managed-policy.md#other-capabilities)) to disable port forwarding and **Open on this device** (streamed tabs continue working).
+- **Take control**: Click **Take control** before typing into an agent's tab, and release control when done.
+- **Local servers**: Kairo lists listening ports from your terminals and agents as `http://localhost:<port>` (set a script's **Preview URL** for HTTPS or subpaths). Disable discovery with `KAIRO_PORT_DISCOVERY=0`.
+
+### Browser host setup
+
+The first server browser tab downloads ~120 MB headless Chromium (shared with [HTML renders](./html-renders.md)). On Ubuntu 23.10+ or minimal Linux containers, run the one-time setup command on the host:
+
+```sh
+sudo kairo browser setup
 ```
 
-If SSH reconnecting fails after an app update, retry the launch once. Removing
-the connection stops a server that Kairo launched; a server that was already
-running is left alone.
+This installs an AppArmor profile for Chrome's sandbox plus missing libraries and fonts. Never run the T3 server as root (Chrome's sandbox rejects root); if sandboxing is impossible on your host, set `KAIRO_SERVER_BROWSER_SANDBOX=0` in the server environment and restart.
 
-For Antigravity's Google callback on a remote host, see
-[remote sign-in](./providers-antigravity.md#sign-in-from-a-remote-device).
+## Link another environment
+
+Link two Kairo machines (beta) so agents on one can launch, message, delegate to, and manage threads on the other.
+
+1. Enable **Settings → Labs → Linked environments** on **both** machines (or `"linkedEnvironmentsEnabled": true` in `userdata/settings.json`).
+2. On the source machine, open **Settings → Environments → Linked environments → Link** (or drag from one machine's `+` to another on the Environments map, or run `t3 environment link <address> --pairing-code <code> --access <mode>`). Use **Link several…** or `--from <file>` for batch linking.
+3. Links are one-way (tick **Also link … back** for two-way) and do not chain. Links expire after 30 days of inactivity and can be revoked in **Settings → Sharing & access** or **Forget**.
+
+- **Access boundary**: Agents never get more permissions on the target than the link's access level or their own thread mode. Below Full access, linked agents can only modify threads they started and skip project setup scripts.
+- **Delegation**: Agents can target a linked machine with `delegate_task`, or ask you to link an unlinked machine via an in-thread approval card.
+
+### Read a linked machine's threads
+
+Open a delegated task or thread link on a linked machine to follow it live (read-only) in the right panel without pairing your client directly. Click **Connect to interact** to pair and take action (one-click if the link has Full access and you can manage access). Files, images, and HTML renders stay on the remote machine until you connect directly.
 
 ## Manage or revoke access
 
-On the host, **Settings → Connections** lets authorized administrators create
-pairing links and revoke client sessions. Revoking an unused link prevents new
-pairings; revoke a device's session to remove its existing access. Command-line
-management is available through `kairo auth --help`.
+Manage pairing links and active client sessions in **Settings → Sharing & access** or via `t3 auth --help`.
 
-A session with an open connection stays listed after its access credential
-expires.
+- **Scoped tokens**: Pass `--scope <scope>` (repeatable) to `kairo pair`, `t3 auth pairing create`, or `t3 auth session issue` to restrict permissions (e.g. `orchestration:read`, `source-control:write`, `filesystem:read`, `filesystem:write`, `terminal:operate`, `relay:configure`). Re-pair with a fresh link to change an existing client's scopes.
+- **Deregister from Kairo Connect**: Open your account menu → **Kairo Connect → Deregister** (or `kairo connect unlink` / `kairo connect logout` on CLI hosts). Idle tunnels are automatically cleaned up after 5–10 minutes offline and recreated on reconnect (hosts on older versions offline for 7+ days need an update first).
+- Treat pairing URLs and codes as passwords—never paste them into logs or screenshots.
 
-To remove an environment from Kairo Connect, open your account menu's **Kairo Connect**
-page, or **Settings → Kairo Connect** on mobile, and choose **Deregister**. This
-revokes its cloud access and frees its host space even when the environment is
-offline or has been wiped. Removing an environment from a device's connection
-settings only forgets it on that device; it stays registered to your account.
+## Desktop app as a remote only
 
-When idle tunnel cleanup is enabled, Kairo Connect removes a linked environment's
-tunnel after it stays offline for several minutes. The environment stays linked
-and keeps the same address. When the host starts again or wakes, Kairo Connect
-creates a replacement tunnel on its own. You do not need to pair again. Cleanup
-usually runs five to ten minutes after the tunnel goes down.
+Switch off **Settings → Environments → Local environment** in the desktop app to run with no local server, WSL backend, or incoming connections while continuing to drive remote hosts (if a local background service uses the same T3 home, **Open in** still works locally).
 
-On a command-line host, `kairo connect unlink` disables exposure while retaining
-your login; `kairo connect logout` also clears that login. Background-service
-[removal](./background-service.md#manage-the-service) is separate.
+## Troubleshooting
 
-Treat pairing URLs and authorization codes as passwords. Do not include them in
-screenshots, logs, or bug reports.
-
-## Kairo Connect troubleshooting
-
-Run `kairo connect status` on the host to inspect saved authorization and link
-configuration. It is not a live reachability check. If the environment appears
-offline, run `kairo service status` and read the displayed log. If it disappears
-when SSH closes, see [background-service troubleshooting](./background-service.md#troubleshooting).
-
-| Error                                                     | Recovery                                                                                                                                             |
-| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `environment_link_limit_exceeded` or managed tunnel limit | Deregister an unused environment, then restart Kairo on the host.                                                                                    |
-| `auth_invalid` or `invalid_bearer`                        | Run `kairo connect login`. If credentials were revoked, run `kairo connect logout`, then `kairo connect` again. Restart the server after signing in. |
-| Expired or invalid link proof                             | Check the host's date and time, update Kairo, then restart it.                                                                                       |
-| HTTP 403 without a recognized error                       | Check relay access, proxies, and firewall rules. Keep any Cloudflare Ray ID for a bug report.                                                        |
-| HTTP 408, 429, or 5xx                                     | Check network and relay availability. Startup retries temporary failures for up to ten minutes.                                                      |
-
-After fixing a permanent rejection, restart the host's server. On Linux, use
-`systemctl --user restart kairo.service` for the background service. For a
-foreground server, stop it and run `kairo serve` again with your usual options.
-Include the diagnostic message and trace ID when reporting a persistent failure.
-
-For a connection that still fails after linking, check the date and time on both
-devices. For server version warnings, follow [Updating Kairo](./updating.md).
-
-## Using the Desktop App as a Remote Only
-
-If a computer should only drive work running elsewhere, turn off its local environment. In the
-desktop app, open **Settings → Connections** and switch off **Local
-environment**. Kairo restarts without a local server: no local agents or terminals run, WSL
-backends stay off, and other devices can no longer connect to this computer. Your projects,
-history, and saved connections are kept, and you keep working through pairing, Kairo Connect, or SSH.
-
-Switch **Local environment** back on in the same place to restart with your previous local
-settings.
+See [Kairo Connect troubleshooting](./kairo-connect-troubleshooting.md) for step-by-step connection diagnostics, and [Outside agents](./outside-agents.md) for MCP connections.

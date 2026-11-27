@@ -1,10 +1,11 @@
+import { pipe } from "effect/Function";
 import {
   fileBasename,
-  formatFilePathPosition,
-  splitFilePathPosition,
   stripSlashPrefixedWindowsDrive,
-} from "@kairo/client-runtime/markdown-links";
-import { isWindowsAbsolutePath } from "@kairo/shared/path";
+  isHostPath,
+  isWindowsAbsolutePath,
+} from "@kairo/shared/path";
+import { formatFilePathPosition, splitFilePathPosition } from "@kairo/shared/fileLinks";
 
 function normalizePathSeparators(path: string): string {
   return path.replaceAll("\\", "/");
@@ -27,8 +28,10 @@ export function formatWorkspaceRelativePath(
 
   let displayPath = normalizedPath;
   if (workspaceRoot) {
-    const normalizedWorkspaceRoot = stripSlashPrefixedWindowsDrive(
-      normalizePathSeparators(trimTrailingPathSeparators(workspaceRoot)),
+    const normalizedWorkspaceRoot = pipe(
+      trimTrailingPathSeparators(workspaceRoot),
+      normalizePathSeparators,
+      stripSlashPrefixedWindowsDrive,
     );
     const workspaceLabel = fileBasename(normalizedWorkspaceRoot);
     const caseInsensitive = isWindowsAbsolutePath(stripSlashPrefixedWindowsDrive(workspaceRoot));
@@ -44,7 +47,7 @@ export function formatWorkspaceRelativePath(
     } else if (pathForCompare.startsWith(workspaceWithSeparator)) {
       const relativeSuffix = normalizedPath.slice(normalizedWorkspaceRoot.length + 1);
       displayPath = `${workspaceLabel}/${relativeSuffix}`;
-    } else if (!normalizedPath.startsWith("/")) {
+    } else if (!isHostPath(normalizedPath)) {
       const relativePath = stripRelativePrefixes(normalizedPath);
       displayPath = pathForCompare.startsWith(workspaceLabelWithSeparator)
         ? normalizedPath

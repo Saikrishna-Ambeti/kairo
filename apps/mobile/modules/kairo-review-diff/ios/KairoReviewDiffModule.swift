@@ -5,6 +5,14 @@ public class KairoReviewDiffModule: Module {
     Name("KairoReviewDiffSurface")
 
     View(KairoReviewDiffView.self) {
+      Prop("contentInsetTop") { (view: KairoReviewDiffView, value: Double) in
+        view.setContentInsetTop(CGFloat(value))
+      }
+
+      Prop("contentInsetBottom") { (view: KairoReviewDiffView, value: Double) in
+        view.setContentInsetBottom(CGFloat(value))
+      }
+
       Prop("tokensResetKey") { (view: KairoReviewDiffView, tokensResetKey: String) in
         view.setTokensResetKey(tokensResetKey)
       }
@@ -53,6 +61,22 @@ public class KairoReviewDiffModule: Module {
         view.setInitialRowIndex(initialRowIndex)
       }
 
+      Prop("initialFileId") { (view: KairoReviewDiffView, fileId: String) in
+        view.setInitialFileId(fileId)
+      }
+
+      Prop("scrollEnabled") { (view: KairoReviewDiffView, enabled: Bool) in
+        view.setScrollEnabled(enabled)
+      }
+
+      Prop("bounces") { (view: KairoReviewDiffView, bounces: Bool) in
+        view.setBounces(bounces)
+      }
+
+      Prop("refreshEnabled") { (view: KairoReviewDiffView, enabled: Bool) in
+        view.setRefreshEnabled(enabled)
+      }
+
       Prop("refreshing") { (view: KairoReviewDiffView, refreshing: Bool) in
         view.setRefreshing(refreshing)
       }
@@ -64,6 +88,7 @@ public class KairoReviewDiffModule: Module {
         "onToggleViewedFile",
         "onPressLine",
         "onToggleComment",
+        "onPressNotice",
         "onPullToRefresh"
       )
 
@@ -78,7 +103,8 @@ public class KairoReviewDiffModule: Module {
       // Large, frequently changing JSON values cannot be regular Fabric props. Expo's
       // prop adapter compares strings on the main thread before invoking a setter, which
       // makes a syntax-token patch capable of blocking a frame by itself.
-      AsyncFunction("setRowsJson") { (view: KairoReviewDiffView, rowsJson: String) in
+      AsyncFunction("setRowsJson") { (view: KairoReviewDiffView, rowsJson: String, contentResetKey: String) in
+        view.setContentResetKey(contentResetKey)
         view.setRowsJson(rowsJson)
       }
 
@@ -86,8 +112,10 @@ public class KairoReviewDiffModule: Module {
         view.setTokensJson(tokensJson)
       }
 
-      AsyncFunction("setTokensPatchJson") { (view: KairoReviewDiffView, tokensPatchJson: String) in
-        view.setTokensPatchJson(tokensPatchJson)
+      AsyncFunction("setTokensPatchJson") { (view: KairoReviewDiffView, tokensPatchJson: String, promise: Promise) in
+        view.setTokensPatchJson(tokensPatchJson) { accepted in
+          promise.resolve(accepted)
+        }
       }
     }
   }

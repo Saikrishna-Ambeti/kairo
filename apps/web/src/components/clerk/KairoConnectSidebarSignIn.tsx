@@ -58,7 +58,7 @@ function ConfiguredKairoConnectSidebarSignIn({
   readonly managedRelayEnabled: boolean;
 }) {
   const { isLoaded, isSignedIn } = useAuth();
-  const { authPrompt, openAuthPrompt } = useKairoConnectAuthPrompt();
+  const { openAuthPrompt } = useKairoConnectAuthPrompt();
 
   if (!isLoaded || isSignedIn) return null;
 
@@ -72,7 +72,6 @@ function ConfiguredKairoConnectSidebarSignIn({
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>
-      {authPrompt}
     </>
   );
 }

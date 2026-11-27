@@ -1,49 +1,37 @@
-import { type EnvironmentShellSummary } from "@kairo/client-runtime/state/shell";
-import { type NetworkStatus } from "@kairo/client-runtime/connection";
-import { type EnvironmentConnectionPhase } from "@kairo/client-runtime/connection";
+import {
+  EMPTY_SHELL_STATE,
+  type EnvironmentShellState,
+  type EnvironmentShellSummary,
+} from "@kairo/client-runtime/state/shell";
+import type { MarkedText } from "@kairo/client-runtime/errors";
 import type { EnvironmentId, ServerConfig } from "@kairo/contracts";
 
-import type { EnvironmentPresentation } from "./environments";
+import {
+  type EnvironmentConnectionPhase,
+  type NetworkStatus,
+} from "@kairo/client-runtime/connection";
 
-export interface WorkspaceEnvironment {
-  readonly environmentId: EnvironmentId;
-  readonly environmentLabel: string;
-  readonly displayUrl: string;
-  readonly isRelayManaged: boolean;
-  readonly isEnabled: boolean;
-  readonly connectionState: EnvironmentConnectionPhase;
-  readonly connectionError: string | null;
-  readonly connectionErrorTraceId: string | null;
-}
+import type { EnvironmentConnectionSummary as WorkspaceEnvironment } from "@kairo/client-runtime/state/presentation";
 
-export interface WorkspaceState {
+export type { EnvironmentConnectionSummary as WorkspaceEnvironment } from "@kairo/client-runtime/state/presentation";
+
+export interface WorkspaceConnectionState {
   readonly isLoadingConnections: boolean;
   readonly hasConnections: boolean;
-  readonly hasLoadedShellSnapshot: boolean;
-  readonly hasPendingShellSnapshot: boolean;
   readonly hasReadyEnvironment: boolean;
   readonly hasConnectingEnvironment: boolean;
   readonly connectingEnvironments: ReadonlyArray<WorkspaceEnvironment>;
   readonly connectionState: EnvironmentConnectionPhase;
   readonly connectionError: string | null;
-  readonly shellSnapshotError: string | null;
-  readonly latestCachedSnapshotReceivedAt: string | null;
+  readonly i18nConnectionError?: MarkedText;
   readonly networkStatus: NetworkStatus;
 }
 
-export function projectWorkspaceEnvironment(
-  environment: EnvironmentPresentation,
-): WorkspaceEnvironment {
-  return {
-    environmentId: environment.environmentId,
-    environmentLabel: environment.label,
-    displayUrl: environment.displayUrl ?? "",
-    isRelayManaged: environment.relayManaged,
-    isEnabled: environment.entry.enabled,
-    connectionState: environment.connection.phase,
-    connectionError: environment.connection.error,
-    connectionErrorTraceId: environment.connection.traceId,
-  };
+export interface WorkspaceState extends WorkspaceConnectionState {
+  readonly hasLoadedShellSnapshot: boolean;
+  readonly hasPendingShellSnapshot: boolean;
+  readonly hasSyncingConnectedEnvironment: boolean;
+  readonly shellSnapshotError: string | null;
 }
 
 function overallConnectionState(
@@ -77,15 +65,15 @@ function overallConnectionState(
   return "available";
 }
 
-export function projectWorkspaceState(input: {
+export function projectWorkspaceConnectionState(input: {
   readonly isReady: boolean;
   readonly networkStatus: NetworkStatus;
   readonly environments: ReadonlyArray<WorkspaceEnvironment>;
-  readonly shellSummary: EnvironmentShellSummary;
-}): WorkspaceState {
-  // Switched-off environments still count as saved connections, but they do
-  // not drive the overall connection state or surface their last error.
+}): WorkspaceConnectionState {
   const activeEnvironments = input.environments.filter((environment) => environment.isEnabled);
+  const failedEnvironment = activeEnvironments.find(
+    (environment) => environment.connectionError !== null,
+  );
   const connectingEnvironments = activeEnvironments.filter(
     (environment) =>
       environment.connectionState === "connecting" ||
@@ -95,21 +83,47 @@ export function projectWorkspaceState(input: {
   return {
     isLoadingConnections: !input.isReady,
     hasConnections: input.environments.length > 0,
-    hasLoadedShellSnapshot: input.shellSummary.hasSnapshot,
-    hasPendingShellSnapshot: input.shellSummary.hasSynchronizingShell,
     hasReadyEnvironment:
       input.networkStatus !== "offline" &&
       activeEnvironments.some((environment) => environment.connectionState === "connected"),
     hasConnectingEnvironment: connectingEnvironments.length > 0,
     connectingEnvironments,
     connectionState: overallConnectionState(activeEnvironments, input.networkStatus),
-    connectionError:
-      activeEnvironments.find((environment) => environment.connectionError !== null)
-        ?.connectionError ?? null,
-    shellSnapshotError: input.shellSummary.firstError,
-    latestCachedSnapshotReceivedAt: input.shellSummary.latestSnapshotUpdatedAt,
+    connectionError: failedEnvironment?.connectionError ?? null,
+    ...(failedEnvironment?.i18nConnectionError !== undefined
+      ? { i18nConnectionError: failedEnvironment.i18nConnectionError }
+      : {}),
     networkStatus: input.networkStatus,
   };
+}
+
+export function projectWorkspaceState(input: {
+  readonly isReady: boolean;
+  readonly networkStatus: NetworkStatus;
+  readonly environments: ReadonlyArray<WorkspaceEnvironment>;
+  readonly shellSummary: EnvironmentShellSummary;
+  readonly hasSyncingConnectedEnvironment: boolean;
+}): WorkspaceState {
+  return {
+    ...projectWorkspaceConnectionState(input),
+    hasLoadedShellSnapshot: input.shellSummary.hasSnapshot,
+    hasPendingShellSnapshot: input.shellSummary.hasSynchronizingShell,
+    hasSyncingConnectedEnvironment: input.hasSyncingConnectedEnvironment,
+    shellSnapshotError: input.shellSummary.firstError,
+  };
+}
+
+// The atom starts at EMPTY_SHELL_STATE itself; any state after the cache read is a new object.
+export function isEnvironmentShellPending(state: EnvironmentShellState): boolean {
+  return state === EMPTY_SHELL_STATE || state.status === "synchronizing";
+}
+
+// Reconnecting environments keep their last failure, so an error alone does not end the wait.
+export function isWorkspaceCatalogPending(state: WorkspaceState): boolean {
+  return (
+    state.networkStatus !== "offline" &&
+    (state.hasConnectingEnvironment || state.hasSyncingConnectedEnvironment)
+  );
 }
 
 export type ServerConfigByEnvironmentId = ReadonlyMap<EnvironmentId, ServerConfig>;

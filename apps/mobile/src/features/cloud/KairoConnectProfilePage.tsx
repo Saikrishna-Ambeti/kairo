@@ -1,3 +1,5 @@
+import { errorDisplayMessage } from "@kairo/client-runtime/errors";
+import { msg, T, useGT, useMessages } from "gt-react-native";
 import { findErrorTraceId } from "@kairo/client-runtime/errors";
 import {
   isAtomCommandInterrupted,
@@ -7,20 +9,16 @@ import type { MenuAction } from "@react-native-menu/menu";
 import type { EnvironmentId } from "@kairo/contracts";
 import type { RelayClientEnvironmentRecord } from "@kairo/contracts/relay";
 import { type ReactNode, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
+import { RefreshControl } from "../../components/ui/RefreshControl";
 
-import { SymbolView } from "../../components/AppSymbol";
-import { showConfirmDialog } from "../../components/ConfirmDialogHost";
-import { ControlPillMenu } from "../../components/ControlPill";
+import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
+import { SymbolView } from "../../components/ui/AppSymbol";
+import * as Dialog from "../../components/ui/Dialog";
+import { Menu } from "../../components/ui/Menu";
+import { m, type MessageResolver } from "../../i18n/messages";
 import { copyTextWithHaptic } from "../../lib/copyTextWithHaptic";
+import { relayEnvironmentDiscovery } from "../../state/relay";
 import { useAtomCommand } from "../../state/use-atom-command";
 import {
   deregisterManagedRelayEnvironmentCommand,
@@ -29,48 +27,53 @@ import {
 
 const linkedAtFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
 
-function linkedAtLabel(value: string): string {
+function linkedAtLabel(value: string, resolve: MessageResolver): string {
   const linkedAt = new Date(value);
   return Number.isNaN(linkedAt.getTime())
-    ? "Link date unavailable"
-    : `Linked ${linkedAtFormatter.format(linkedAt)}`;
+    ? resolve(msg("Link date unavailable"))
+    : resolve(msg("Linked {date}", { date: linkedAtFormatter.format(linkedAt) }));
 }
 
-function endpointLabel(environment: RelayClientEnvironmentRecord): string {
+function endpointLabel(
+  environment: RelayClientEnvironmentRecord,
+  resolve: MessageResolver,
+): string {
   return environment.endpoint.providerKind === "cloudflare_tunnel"
-    ? "Managed tunnel"
-    : "Activity publishing only";
+    ? resolve(msg("Managed tunnel"))
+    : resolve(msg("Activity publishing only"));
 }
 
 function confirmDeregister(environment: RelayClientEnvironmentRecord, onConfirm: () => void) {
-  const title = "Deregister server?";
-  const message = `“${environment.label}” will be removed from this account. Kairo Connect access will be revoked, any managed tunnel will be removed, and a host space will become available. Local connections on your devices are not changed.`;
-  if (process.env.EXPO_OS === "ios") {
-    Alert.alert(title, message, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Deregister", style: "destructive", onPress: onConfirm },
-    ]);
-    return;
-  }
-  showConfirmDialog({ title, message, confirmText: "Deregister", destructive: true, onConfirm });
+  const title = m(msg("Deregister server?"));
+  const message = m(
+    msg(
+      "“{environment}” will be removed from this account. {product} access will be revoked, any managed tunnel will be removed, and a host space will become available. Local connections on your devices are not changed.",
+      { environment: environment.label, product: "Kairo Connect" },
+    ),
+  );
+  Dialog.confirm({
+    title,
+    message,
+    confirmText: m(msg("Deregister")),
+    destructive: true,
+    onConfirm,
+  });
 }
 
-/**
- * The "Kairo Connect" custom page inside Clerk's native user profile: every
- * environment registered to the signed-in account, with account-level
- * deregistration. Mirrors the web UserButton page; connections on this device
- * are managed in Settings instead.
- */
 export function KairoConnectProfilePage() {
+  const gt = useGT();
+  const m = useMessages();
   const environmentsState = useManagedRelayEnvironments();
   const deregisterEnvironment = useAtomCommand(deregisterManagedRelayEnvironmentCommand, {
+    reportFailure: false,
+  });
+  const refreshRelayEnvironments = useAtomCommand(relayEnvironmentDiscovery.refreshAfterMutation, {
     reportFailure: false,
   });
   const [deregisteringEnvironmentId, setDeregisteringEnvironmentId] =
     useState<EnvironmentId | null>(null);
   const mutationPendingRef = useRef(false);
-  // Deregistered rows stay in the cached list until the refresh lands, so hide
-  // them by the linkedAt they had. A re-link produces a new linkedAt and shows again.
+  // Hide cached rows by linkedAt until refresh; re-linking changes linkedAt and restores visibility.
   const [removedEnvironments, setRemovedEnvironments] = useState<{
     readonly accountId: string | null;
     readonly linkedAtById: ReadonlyMap<EnvironmentId, string>;
@@ -96,12 +99,16 @@ export function KairoConnectProfilePage() {
         return { accountId, linkedAtById };
       });
       environmentsState.refresh();
+      void refreshRelayEnvironments();
       return;
     }
     if (isAtomCommandInterrupted(result)) return;
 
     const cause = squashAtomCommandFailure(result);
-    const message = cause instanceof Error ? cause.message : "Could not deregister the server.";
+    const message =
+      cause instanceof Error
+        ? (errorDisplayMessage(cause, m) ?? cause.message)
+        : gt("Could not deregister the server.");
     const traceId = findErrorTraceId(cause);
     console.error("[kairo-connect] Could not deregister environment", {
       environmentId: environment.environmentId,
@@ -109,16 +116,16 @@ export function KairoConnectProfilePage() {
       traceId,
       cause,
     });
-    Alert.alert(
-      "Could not deregister server",
-      traceId ? `${message}\n\nTrace ID: ${traceId}` : message,
+    Dialog.alert(
+      gt("Could not deregister server"),
+      traceId ? gt("{message}\n\nTrace ID: {traceId}", { message, traceId }) : message,
       traceId
         ? [
             {
-              text: "Copy trace ID",
+              text: gt("Copy trace ID"),
               onPress: () => copyTextWithHaptic(traceId, { target: "connection-trace-id" }),
             },
-            { text: "OK", style: "cancel" },
+            { text: gt("OK"), style: "cancel" },
           ]
         : undefined,
     );
@@ -135,6 +142,14 @@ export function KairoConnectProfilePage() {
   const isInitialLoad =
     !environmentsState.accountId || (environmentsState.data === null && !environmentsState.error);
   const errorTraceId = environmentsState.errorTraceId;
+  const environmentMenuActions = [
+    {
+      id: "deregister",
+      title: gt("Deregister"),
+      image: "trash",
+      attributes: { destructive: true },
+    },
+  ] satisfies MenuAction[];
 
   return (
     <ScrollView
@@ -148,17 +163,17 @@ export function KairoConnectProfilePage() {
         />
       }
     >
-      <ClerkSectionHeader>Registered servers</ClerkSectionHeader>
+      <ClerkSectionHeader>{gt("Registered servers")}</ClerkSectionHeader>
 
       {environmentsState.error ? (
         <>
           <ClerkRow
-            title="Could not load Kairo Connect environments"
+            title={gt("Could not load {product} environments", { product: "Kairo Connect" })}
             subtitle={environmentsState.error}
           />
           {errorTraceId ? (
             <ClerkButtonRow
-              label="Copy trace ID"
+              label={gt("Copy trace ID")}
               onPress={() => {
                 copyTextWithHaptic(errorTraceId, { target: "connection-trace-id" });
               }}
@@ -167,67 +182,70 @@ export function KairoConnectProfilePage() {
         </>
       ) : isInitialLoad ? (
         <View className="flex-row items-center gap-3 px-6 py-4">
-          <ActivityIndicator colorClassName={"accent-clerk-foreground-muted"} size="small" />
-          <Text className="text-base text-clerk-foreground-muted">Loading environments</Text>
+          <AppActivityIndicator colorClassName={"accent-clerk-foreground-muted"} size="small" />
+          <Text className="text-base text-clerk-foreground-muted">
+            <T>Loading environments</T>
+          </Text>
         </View>
       ) : environments.length > 0 ? (
         environments.map((environment) => (
           <ClerkRow
             key={environment.environmentId}
             title={environment.label}
-            subtitle={`${linkedAtLabel(environment.linkedAt)} · ${endpointLabel(environment)}`}
+            subtitle={`${linkedAtLabel(environment.linkedAt, m)} · ${endpointLabel(environment, m)}`}
             accessory={
               deregisteringEnvironmentId === environment.environmentId ? (
-                <ActivityIndicator colorClassName={"accent-clerk-foreground-muted"} size="small" />
+                <AppActivityIndicator
+                  colorClassName={"accent-clerk-foreground-muted"}
+                  size="small"
+                />
               ) : (
-                <ControlPillMenu
-                  actions={ENVIRONMENT_MENU_ACTIONS}
-                  isAnchoredToRight
-                  onPressAction={() =>
-                    confirmDeregister(environment, () => void handleDeregister(environment))
-                  }
-                >
-                  <Pressable
-                    accessibilityLabel={`Actions for ${environment.label}`}
-                    accessibilityRole="button"
-                    disabled={deregisteringEnvironmentId !== null}
-                    className="size-[30px] items-center justify-center active:opacity-60 disabled:opacity-50"
+                <View pointerEvents={deregisteringEnvironmentId === null ? "auto" : "none"}>
+                  <Menu
+                    actions={environmentMenuActions}
+                    isAnchoredToRight
+                    onPressAction={() =>
+                      confirmDeregister(environment, () => void handleDeregister(environment))
+                    }
                   >
-                    <View className="rotate-90">
-                      <SymbolView
-                        name="ellipsis"
-                        size={18}
-                        tintColorClassName={"accent-clerk-foreground-muted"}
-                        type="monochrome"
-                      />
-                    </View>
-                  </Pressable>
-                </ControlPillMenu>
+                    <Pressable
+                      accessibilityLabel={gt("Actions for {environment}", {
+                        environment: environment.label,
+                      })}
+                      accessibilityRole="button"
+                      disabled={deregisteringEnvironmentId !== null}
+                      className="size-[30px] items-center justify-center active:opacity-60 disabled:opacity-50"
+                    >
+                      <View className="rotate-90">
+                        <SymbolView
+                          name="ellipsis"
+                          size={18}
+                          tintColorClassName={"accent-clerk-foreground-muted"}
+                          type="monochrome"
+                        />
+                      </View>
+                    </Pressable>
+                  </Menu>
+                </View>
               )
             }
           />
         ))
       ) : (
         <ClerkRow
-          title="No servers registered"
-          subtitle="Link a server from its local Settings to reach it through Kairo Connect."
+          title={gt("No servers registered")}
+          subtitle={gt("Link a server from its local Settings to reach it through {product}.", {
+            product: "Kairo Connect",
+          })}
         />
       )}
 
       <Text className="px-6 pt-6 text-xs leading-normal text-clerk-foreground-muted">
-        Connections on this device are managed in Settings.
+        <T>Connections on this device are managed in Settings.</T>
       </Text>
     </ScrollView>
   );
 }
-
-const ENVIRONMENT_MENU_ACTIONS = [
-  { id: "deregister", title: "Deregister", image: "trash", attributes: { destructive: true } },
-] satisfies MenuAction[];
-
-// Layout primitives that mirror clerk-ios ClerkKitUI's profile rows so a custom
-// page reads as one of Clerk's own screens. System font on purpose: Clerk's
-// native views do not use the app's DM Sans.
 
 function ClerkSectionHeader(props: { readonly children: string }) {
   return (

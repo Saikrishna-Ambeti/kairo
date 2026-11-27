@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import type { DesktopNotificationSound } from "@kairo/contracts";
-import { HostProcessPlatform } from "@kairo/shared/hostProcess";
+import { HostProcessPlatform } from "@kairo/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import { beforeEach, vi } from "vite-plus/test";

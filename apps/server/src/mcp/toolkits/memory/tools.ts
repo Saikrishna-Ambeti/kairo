@@ -1,6 +1,6 @@
 import { SupermemoryError } from "@kairo/contracts";
 import * as Schema from "effect/Schema";
-import { Tool, Toolkit } from "effect/unstable/ai";
+import { Tool, Toolkit } from "effect/ai";
 
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import { SupermemoryService } from "../../../memory/SupermemoryService.ts";

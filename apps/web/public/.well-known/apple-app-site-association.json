@@ -1,0 +1,14 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": [
+          "ARK85ZXQ4Z.com.kairo.app",
+          "ARK85ZXQ4Z.com.kairo.app.preview",
+          "ARK85ZXQ4Z.com.kairo.app.dev"
+        ],
+        "components": [{ "/": "/threads/*" }]
+      }
+    ]
+  }
+}

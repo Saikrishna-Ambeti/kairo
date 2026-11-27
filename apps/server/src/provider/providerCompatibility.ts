@@ -1,16 +1,17 @@
 import {
+  ProviderSetupError,
   TrimmedNonEmptyString,
   ServerProviderCompatibilityStatus,
   type ProviderDriverKind,
+  type ProviderInstanceId,
   type ServerProvider,
   type ServerProviderCompatibilityAdvisory,
 } from "@kairo/contracts";
+import { brokenVersionDetail } from "@kairo/provider-core/server/compatibility";
 import { satisfiesSemverRange } from "@kairo/shared/semver";
 import * as Schema from "effect/Schema";
 import packageJson from "../../package.json" with { type: "json" };
 
-// Deliberately uses the shared CLI gate syntax: comparator groups joined by ||.
-// Prereleases and unrecognized release tags remain unknown.
 const StableVersion = TrimmedNonEmptyString.pipe(
   Schema.check(Schema.makeFilter((value) => /^\d+\.\d+\.\d+$/.test(value))),
 );
@@ -24,9 +25,22 @@ const VersionRange = TrimmedNonEmptyString.pipe(
     ),
   ),
 );
+const compilePattern = (pattern: string) => {
+  try {
+    return new RegExp(pattern, "u");
+  } catch {
+    return undefined;
+  }
+};
 const Policy = Schema.Struct({
   driver: TrimmedNonEmptyString,
-  kairoRange: VersionRange,
+  kairoCodeRange: VersionRange,
+  /** Matches a reported version that is not plain `X.Y.Z`; its first group is the version to rate. */
+  versionPattern: Schema.optionalKey(
+    TrimmedNonEmptyString.pipe(
+      Schema.check(Schema.makeFilter((value) => compilePattern(value) !== undefined)),
+    ),
+  ),
   recommendedRange: Schema.optionalKey(VersionRange),
   recommendedVersion: Schema.optionalKey(StableVersion),
   ranges: Schema.Array(
@@ -60,21 +74,16 @@ export function resolveProviderCompatibility(
   policies: ReadonlyArray<ProviderCompatibilityPolicy> | undefined,
   driver: ProviderDriverKind,
   version: string | null,
-  kairoVersion = packageJson.version,
+  kairoCodeVersion = packageJson.version,
 ): ServerProviderCompatibilityAdvisory | undefined {
   const policy = policies?.find(
-    (entry) => entry.driver === driver && satisfiesSemverRange(kairoVersion, entry.kairoRange),
+    (entry) => entry.driver === driver && satisfiesSemverRange(kairoCodeVersion, entry.kairoCodeRange),
   );
   if (!policy) return undefined;
   const unprefixed = version?.replace(/^v/, "");
-  // Cursor appends a build hash to its date; Google's ACP runtime uses a release prefix.
-  // Strip only these driver-specific forms, keeping semver prereleases unknown.
-  const stable =
-    driver === "cursor"
-      ? unprefixed?.replace(/^(\d{4}\.\d{2}\.\d{2})-[a-f0-9]+$/, "$1")
-      : driver === "antigravity"
-        ? unprefixed?.replace(/^agy_acp_server_(\d+\.\d+\.\d+)$/, "$1")
-        : unprefixed;
+  // Without a pattern, build hashes, revisions and prereleases stay unknown.
+  const pattern = policy.versionPattern ? compilePattern(policy.versionPattern) : undefined;
+  const stable = (pattern && unprefixed?.match(pattern)?.[1]) || unprefixed;
   const status =
     stable && /^\d+\.\d+\.\d+$/.test(stable)
       ? (policy.ranges.find((entry) => satisfiesSemverRange(stable, entry.range))?.status ??
@@ -99,7 +108,20 @@ export function resolveProviderCompatibility(
   };
 }
 
-/** A remote policy replaces its matching bundled policy; omission keeps the bundle. */
+/** The one refusal for a runtime the policy rates `broken`; `action` names how this runtime is updated. */
+export function brokenRuntimeError(input: {
+  readonly instanceId: ProviderInstanceId;
+  readonly name: string;
+  readonly version: string;
+  readonly advisory: ServerProviderCompatibilityAdvisory | undefined;
+  readonly action?: string;
+}): ProviderSetupError | undefined {
+  const detail = brokenVersionDetail(input);
+  return detail === undefined
+    ? undefined
+    : new ProviderSetupError({ instanceId: input.instanceId, operation: "runtime", detail });
+}
+
 export function applyProviderCompatibility(
   snapshot: ServerProvider,
   policies: ReadonlyArray<ProviderCompatibilityPolicy> | undefined,
@@ -107,19 +129,26 @@ export function applyProviderCompatibility(
 ): ServerProvider {
   const { compatibilityAdvisory: _previous, ...base } = snapshot;
   if (!snapshot.enabled || !snapshot.installed) return base;
-  const advisory =
-    resolveProviderCompatibility(policies, snapshot.driver, snapshot.version) ??
-    resolveProviderCompatibility(fallback, snapshot.driver, snapshot.version);
+  const resolve = (version: string | null) =>
+    resolveProviderCompatibility(policies, snapshot.driver, version) ??
+    resolveProviderCompatibility(fallback, snapshot.driver, version);
+  const advisory = resolve(snapshot.version);
   const latestVersion = snapshot.versionAdvisory?.latestVersion;
-  const latestAdvisory = latestVersion
-    ? (resolveProviderCompatibility(policies, snapshot.driver, latestVersion) ??
-      resolveProviderCompatibility(fallback, snapshot.driver, latestVersion))
-    : undefined;
+  const latestAdvisory = latestVersion ? resolve(latestVersion) : undefined;
+  const updateCommand = snapshot.versionAdvisory?.updateCommand;
+  // The maintenance resolver emits this command only for confirmed Homebrew installs.
+  const needsHomebrewRefresh =
+    updateCommand?.startsWith("brew upgrade ") &&
+    (advisory?.status === "unsupported" || advisory?.status === "broken") &&
+    (latestAdvisory?.status === "unsupported" || latestAdvisory?.status === "broken");
   return advisory
     ? {
         ...base,
         compatibilityAdvisory: {
           ...advisory,
+          message: needsHomebrewRefresh
+            ? `${advisory.message} Homebrew's local package metadata may be stale. Run brew update && ${updateCommand} on this environment's host, then refresh provider status.`
+            : advisory.message,
           ...(latestAdvisory ? { latestVersionStatus: latestAdvisory.status } : {}),
         },
       }

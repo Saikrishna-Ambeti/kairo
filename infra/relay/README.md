@@ -1,7 +1,7 @@
 # Kairo Connect Relay
 
 > [!NOTE]
-> Sign in to Kairo Connect from the app under Settings > Connections.
+> Sign in to Kairo Connect from the app under Settings > Sharing & access.
 
 The relay is the hosted control plane for Kairo Connect. It helps clients discover and connect to
 remote environments, manages the cloud-side records needed for those connections, and delivers
@@ -9,7 +9,7 @@ optional mobile notifications and Live Activities.
 
 The relay is intentionally not in the hot path for normal Kairo traffic. After a client connects,
 regular API and WebSocket traffic goes directly between that client and the selected environment.
-See the [Kairo Connect architecture note](../../docs/internals/kairo-connect.md) for the larger system
+See the [Kairo Connect architecture note](../../docs/internals/06_t3-connect.md) for the larger system
 design.
 
 ## Responsibilities
@@ -25,7 +25,7 @@ The relay currently owns:
 - Persisting relay state and exposing relay-specific traces for diagnostics.
 
 The environment server and relay have separate credentials and trust boundaries. Read
-[Environment Authentication Profile](../../docs/internals/environment-auth.md) before changing token,
+[Environment Authentication Profile](../../docs/internals/04_environment-auth.md) before changing token,
 credential, or authorization behavior.
 
 ## Code Map
@@ -119,7 +119,9 @@ one of those outputs changed, and `KAIRO_RELAY_CLIENT_CONFIG_ENV` redirects it t
 The relay is versioned separately from client releases. `.github/workflows/deploy-relay.yml` deploys
 the shared Alchemy `prod` stage on every push to `main`. Stable and nightly release builds both
 resolve their static public config from the same
-`production` GitHub environment. Pull requests do not deploy relay stages. Developers can
+`production` GitHub environment. Labeling a same-repository PR `relay:preview` deploys a `pr-<number>`
+stage, and the cleanup workflow tears it down; see
+[`relay-preview.yml`](../../.github/workflows/relay-preview.yml). Developers can
 deploy personal non-production stages locally with any stage name other than `prod`.
 
 The repository must define these Actions variables shared by relay deployments:
@@ -138,6 +140,10 @@ The `production` GitHub environment must define these Actions variables:
 - `RELAY_API_ZONE_NAME`
 - `RELAY_TUNNEL_ZONE_NAME`
 - `RELAY_DOMAIN` if overriding the derived production relay domain
+- `RELAY_ALERT_NOTIFIER_ID`, the Axiom notifier that relay alerts page. Without it the deployment
+  creates no monitors or health dashboard. See
+  [Relay alerts](../../docs/operations/05_relay-observability.md#alerts).
+- `RELAY_WARNING_NOTIFIER_ID`, optional, the Axiom notifier for relay warnings
 - `CLERK_PUBLISHABLE_KEY`
 - `CLERK_JWT_AUDIENCE`
 - `CLERK_JWT_TEMPLATE`
@@ -151,6 +157,9 @@ The `production` GitHub environment must define these Actions secrets:
 - `CLERK_SECRET_KEY`
 - `APNS_PRIVATE_KEY`
 - `FCM_SERVICE_ACCOUNT` when Android push is enabled
+- `T3CHAT_LINK_SECRET`, optional, shared with T3 Chat's `KAIRO_LINK_SECRET`. Without it the
+  T3 Chat account link is off. Local and preview stages can set `T3CHAT_URL` to point
+  at another T3 Chat deployment; production uses `https://t3.chat`.
 
 The account-scoped repository credentials are consumed by Alchemy while provisioning relay stages; they
 are not bound into the relay Worker. The production deployment uses an Axiom personal access token,
@@ -160,6 +169,6 @@ and hosted web builds.
 
 See:
 
-- [Kairo Connect setup](../../docs/operations/connect-setup.md) for Clerk keys, JWT templates, and sign-up restrictions.
-- [Relay Observability](../../docs/operations/relay-observability.md) for deployment tracing and diagnostics.
-- [Kairo Connect architecture](../../docs/internals/kairo-connect.md) for environment linking and trust boundaries.
+- [Kairo Connect setup](../../docs/operations/02_connect-setup.md) for Clerk keys, JWT templates, and sign-up restrictions.
+- [Relay Observability](../../docs/operations/05_relay-observability.md) for deployment tracing and diagnostics.
+- [Kairo Connect architecture](../../docs/internals/06_t3-connect.md) for environment linking and trust boundaries.

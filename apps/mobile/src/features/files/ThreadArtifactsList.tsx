@@ -4,8 +4,8 @@ import { StackActions, useNavigation } from "@react-navigation/native";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, View } from "react-native";
 
-import { AppText as Text } from "../../components/AppText";
-import { SymbolView } from "../../components/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
+import { SymbolView } from "../../components/ui/AppSymbol";
 import { downloadAndShareAttachment } from "../../lib/attachmentDownload";
 import { useRefreshAssetUrl } from "../../state/assets";
 import { useEnvironmentQuery } from "../../state/query";

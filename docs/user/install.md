@@ -5,18 +5,19 @@ desktop, web, or mobile app. Set up the machine where the agents will work first
 
 ## Requirements
 
-You need an installed, authenticated provider before starting a thread. You can
-launch Kairo and configure providers afterwards.
+You need at least one installed, authenticated coding agent (provider) before starting a thread. You can launch Kairo first and set up providers from the [Welcome page](./welcome-page.md) or **Settings → Providers**.
 
 ## Command line
 
+Install the `t3` command to `~/.local/bin`:
+
 ```bash
+# macOS / Linux
 curl -fsSL https://kairo.codes/install.sh | sh
 ```
 
-On Windows, in PowerShell:
-
 ```powershell
+# Windows (PowerShell)
 irm https://kairo.codes/install.ps1 | iex
 ```
 
@@ -25,24 +26,21 @@ afterwards, that directory is not on your `PATH` yet; the installer prints the
 line to add. Set `KAIRO_CHANNEL=nightly` to install the nightly train, or
 `KAIRO_VERSION` to pin an exact version.
 
-| Task                                             | Command                                                      |
-| ------------------------------------------------ | ------------------------------------------------------------ |
-| Start the server and open the web app            | `kairo`                                                      |
-| Start the server without a browser               | `kairo serve`                                                |
-| Keep it running in the background (macOS, Linux) | `kairo service install` ([details](./background-service.md)) |
-| Move to the newest release                       | `kairo update`                                               |
-| Remove it again                                  | `kairo uninstall`                                            |
+| Task                          | Command                                                                 |
+| ----------------------------- | ----------------------------------------------------------------------- |
+| Start server and open web app | `t3` (or `t3 ./my-project`)                                             |
+| Start server without browser  | `kairo serve`                                                              |
+| Set up remote access          | `kairo up` ([Remote access](./remote-access.md))                           |
+| Run in the background         | `kairo service install` ([Background service](./background-service.md))    |
+| Update                        | `kairo update`                                                             |
+| Reclaim database space        | `t3 doctor` ([Details](./background-service.md#reclaim-database-space)) |
+| Uninstall                     | `kairo uninstall`                                                          |
 
-Run `kairo --help` for the full reference.
-
-To try Kairo once without installing it, run `npx kairo@latest` instead (needs
-Node.js for `npx`).
+If `t3` reports a server is already running, connect with `kairo pair` or pass a separate `--base-dir`. Run `kairo --help` for all commands.
 
 ### Intel Macs
 
-There is no `kairo` executable for Intel Macs (the desktop app is available). To
-run a server there, build it from source with Node.js 24 and `vp`
-([Install vp](https://github.com/Saikrishna-Ambeti/kairo#install-vp)):
+There is no standalone `t3` binary for Intel Macs—use the desktop app, or build a server from source with `vp` ([development runbook](../operations/00_development.md#first-checkout)):
 
 ```bash
 git clone https://github.com/Saikrishna-Ambeti/kairo
@@ -50,108 +48,86 @@ cd kairo && vp i && vp run build:desktop
 node apps/server/dist/bin.mjs
 ```
 
-`kairo update` and the background service do not apply to a server run this way;
-update it with `git pull` and a rebuild.
-
 ## Desktop app
 
-Download a release from [GitHub Releases](https://github.com/Saikrishna-Ambeti/kairo/releases),
-or use a package manager:
+Download from [GitHub Releases](https://github.com/pingdotgg/t3code/releases) or install via a package manager:
 
-| Platform           | Install                               |
-| ------------------ | ------------------------------------- |
-| Windows            | `winget install KairoTools.Kairo`     |
-| macOS              | `brew install --cask kairo-code`      |
-| Debian, Ubuntu     | `sudo apt install ./Kairo-Code-*.deb` |
-| Arch Linux         | `yay -S kairo-bin`                    |
-| Arch Linux nightly | `yay -S kairo-nightly-bin`            |
+| Platform                | Command                                                          |
+| ----------------------- | ---------------------------------------------------------------- |
+| macOS                   | `brew install --cask kairo-code`                                    |
+| Windows                 | `winget install T3Tools.Kairo` or `scoop install extras/kairo` |
+| Debian / Ubuntu         | `sudo apt install ./T3-Code-*.deb`                               |
+| Arch Linux              | `yay -S kairo-bin` (or `yay -S kairo-nightly-bin`)             |
+| Nix (flakes, Nix 2.30+) | `nix profile add github:NixOS/nixpkgs/nixos-unstable#kairo`     |
 
-The `.deb` updates itself like the other desktop builds. It asks for your
-password to install each update. If your desktop has no password prompt, the
-update fails. Download the new `.deb` and install it the same way.
+- **Linux AppImage**: `chmod +x ./T3-Code-*.AppImage && ./T3-Code-*.AppImage` (x86_64 and ARM64). `.deb` self-updates with a password prompt; update AUR packages via your AUR helper (`yay -Syu`).
+- **NixOS / Home Manager**: Add `pkgs.kairo` to `environment.systemPackages` or `home.packages` (`kairo-desktop` launches the app; `t3` is included). Update via Nix rather than the in-app updater.
+
+### The `t3` command
+
+The desktop app bundles `t3` and sets it up on first launch (manage anytime under **Settings → About → t3 command**). Use **Add to PATH** if needed, then open a new terminal.
+
+- **Open a folder in the running desktop app**: Run `kairo app` (or `kairo app ../my-project`) from a terminal, or drag folders from your file manager onto the desktop sidebar.
 
 ### Windows Subsystem for Linux
 
-Choose a WSL distro in **Settings → Connections** to run agents and projects
-there. Install the provider CLIs inside that distro. Kairo installs its own
-server runtime there automatically; the first launch after an app update can
-take longer.
-
-### Open a project from a terminal
-
-With the desktop app already running on the same machine:
-
-```bash
-kairo app
-```
-
-This opens a new thread for the current directory, adding the project if needed.
-Pass a path, such as `kairo app ../my-project`, to open another directory. It requires
-the desktop app, so a standalone server or an SSH session is not enough. If the
-command cannot reach the app, start or update the desktop app and try again.
+Select a WSL distro in **Settings → Sharing & access** to run agents and projects inside WSL (install provider CLIs inside that distro). Kairo manages its own server runtime inside WSL automatically.
 
 ## Mobile app
 
-Install Kairo from the
-[App Store](https://apps.apple.com/us/app/kairo-remote-claude-more/id6787819824) or
-[Google Play](https://play.google.com/store/apps/details?id=com.kairo.app).
-The phone connects to a server on another machine. Follow
-[remote access](./remote-access.md) to link it through Kairo Connect or a pairing URL.
+Install from the [App Store](https://apps.apple.com/us/app/kairo-code-remote-claude-more/id6787819824) or [Google Play](https://play.google.com/store/apps/details?id=com.kairo.app) (QR codes are also in **Settings → About → Mobile app**). The mobile app connects to a server on another machine via [remote access](./remote-access.md).
 
-If the app crashes during launch, open Settings → Diagnostics on the next launch
-that succeeds. It lists startup crashes from the last 7 days with the error and
-component stack that store crash reports leave out. Copy the report and paste it
-into a GitHub issue. Error messages can quote values from the app, so read it over
-before sharing.
+- Store builds work with both Stable and Nightly servers. Optional Android beta APKs are under [Android beta releases](https://github.com/pingdotgg/t3code/releases?q=android-beta-).
+- If the mobile app crashes on launch, open **Settings → Diagnostics** on the next launch to copy recent startup crash reports.
 
 ## Providers
 
-Open **Settings → Providers** in the web or desktop app, select the environment,
-and enable the provider you want. Installation, login, and configuration belong
-to that environment's machine, even when you connect from a phone or another
-computer.
+Open **Settings → Providers** (web or desktop), select the environment, and enable the providers you use. Installation and sign-in always happen on the **environment's machine**.
 
-| Provider    | Install and authenticate                                                                                                                                  |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Codex       | [Connect with ChatGPT](./providers-codex.md#connect-with-chatgpt), or install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`. |
-| Claude      | Install [Claude Code](https://claude.com/product/claude-code), then run `claude auth login`.                                                              |
-| Cursor      | Install [Cursor CLI](https://cursor.com/cli), then run `agent login`.                                                                                     |
-| Grok Build  | Install [Grok Build CLI](https://x.ai/cli), then run `grok login`.                                                                                        |
-| OpenCode    | Install [OpenCode](https://opencode.ai), then run `opencode auth login`.                                                                                  |
-| Antigravity | Install and sign in with Google from Kairo's provider settings.                                                                                           |
+| Provider         | Install and authenticate                                                                                                 | Guide                                     |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
+| **Codex**        | Connect with ChatGPT in Settings, or install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`. | [Codex](./providers-codex.md)             |
+| **Claude**       | Install [Claude Code](https://claude.com/product/claude-code) and run `claude auth login`.                               | [Claude](./providers-claude.md)           |
+| **Cursor**       | Sign in in Settings or install [Cursor CLI](https://cursor.com/cli) and run `agent login`.                               | [Cursor](./cursor.md)                     |
+| **Grok Build**   | Install [Grok Build CLI](https://x.ai/cli) and run `grok login`.                                                         | [Grok](./providers-grok.md)               |
+| **Antigravity**  | Install managed runtime and sign in with Google in Settings.                                                             | [Antigravity](./providers-antigravity.md) |
+| **OpenCode**     | Install [OpenCode](https://opencode.ai) and run `opencode auth login`.                                                   | [OpenCode](./providers-opencode.md)       |
+| **Kiro**         | Install [Kiro CLI](https://kiro.dev/docs/cli/) and run `kiro-cli login`.                                                 | [Kiro](./providers-kiro.md)               |
+| **Pi**           | Install [Pi](./providers-pi.md) (Node.js 22.19+) and run `pi` → `/login`.                                                | [Pi](./providers-pi.md)                   |
+| **Muse Code**    | Install [Muse Code](https://dev.meta.ai/docs/muse-code) and run `muse login`.                                            | [Muse Code](./providers-muse.md)          |
+| **fx**           | Install [fx](https://fx.sh) and run `fx login`.                                                                          | [fx](./providers-fx.md)                   |
+| **ACP Registry** | Add GitHub Copilot and other agents in **Settings → Providers → Add provider → Show more**.                              | [ACP](./providers-acp.md)                 |
 
-Provider CLIs must be on the server's `PATH`. If Kairo cannot find one, set its
-**Binary path** in provider settings, especially when using a version manager.
-Cursor's executable is `cursor-agent`, although its login command is
-`agent login`. Codex connected through ChatGPT and Antigravity can use their
-managed runtimes without a `PATH` entry.
+- **Binary path**: If a CLI isn't on the server's `PATH` (common with version managers), set **Binary path** in the provider's settings.
+- **Updates**: Click **Update now** on outdated provider cards (supports Homebrew, mise `latest`, npm/pnpm/Yarn/Bun/Volta/Vite+, or the CLI's own updater; update Nix, Chocolatey, or pinned mise installs manually).
+- **Multiple instances**: Add extra provider instances for separate accounts, API keys, or custom endpoints (mark secret env vars as sensitive).
 
-Kairo warns when a provider version has known compatibility problems with your
-release. Check **Settings → Providers** on that environment for the recommended
-version or range. When its package manager supports installing a specific version,
-you can install the recommendation there. Otherwise use the provider's installer
-on the environment's machine. An unlisted version is unverified.
+### Provider check timeouts
 
-When a provider CLI is behind its latest release, its provider card shows the
-available version. **Update now** appears only when Kairo can tell which
-installer owns the CLI (its own update command, Homebrew, or a global npm, pnpm,
-bun, or Vite+ install) and runs that installer. Otherwise update the CLI the same
-way you installed it. Homebrew installs compare against the version Homebrew
-offers, which can trail the npm release by a few hours.
+If a working CLI times out during Kairo's readiness check, increase its probe deadline (in milliseconds) in the server's environment (or systemd override / `service.env`) and restart:
 
-Add another provider instance for a separate account or configuration. Each
-instance can have its own environment variables, such as API keys or a custom
-base URL. Mark secret values as sensitive; after saving, Kairo does not display
-their original values.
+```bash
+KAIRO_CODEX_PROBE_TIMEOUT_MS=60000 KAIRO_CLAUDE_PROBE_TIMEOUT_MS=60000 kairo serve
+```
 
-For provider-specific setup and accounts, see [Codex](./providers-codex.md),
-[Claude](./providers-claude.md), [OpenCode](./providers-opencode.md), and
-[Antigravity](./providers-antigravity.md).
+| Provider     | Environment variable                   |
+| ------------ | -------------------------------------- |
+| Codex        | `KAIRO_CODEX_PROBE_TIMEOUT_MS`        |
+| Claude       | `KAIRO_CLAUDE_PROBE_TIMEOUT_MS`       |
+| Cursor       | `KAIRO_CURSOR_PROBE_TIMEOUT_MS`       |
+| Antigravity  | `KAIRO_ANTIGRAVITY_PROBE_TIMEOUT_MS`  |
+| Grok         | `KAIRO_GROK_PROBE_TIMEOUT_MS`         |
+| Kiro         | `KAIRO_KIRO_PROBE_TIMEOUT_MS`         |
+| fx           | `KAIRO_FX_PROBE_TIMEOUT_MS`           |
+| Pi           | `KAIRO_PI_PROBE_TIMEOUT_MS`           |
+| Muse Code    | `KAIRO_MUSE_PROBE_TIMEOUT_MS`         |
+| OpenCode     | `KAIRO_OPENCODE_PROBE_TIMEOUT_MS`     |
+| ACP Registry | `KAIRO_ACP_REGISTRY_PROBE_TIMEOUT_MS` |
 
 ## Next steps
 
+- [User guide index](./README.md): overview of how Kairo works.
 - [Working with threads](./thread-sidebar.md): start tasks and organize parallel work.
-- [Permission modes](./permission-modes.md): choose when agents ask before acting.
+- [Permission modes](./permission-modes.md): control when agents ask before acting.
 - [Remote access](./remote-access.md): connect from another device.
-- [Running in the background](./background-service.md): keep a Linux or macOS host available.
-- [Updating Kairo](./updating.md): update the app and connected servers.
+- [Updating Kairo](./updating.md): keep apps, servers, and providers up to date.

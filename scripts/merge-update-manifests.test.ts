@@ -3,7 +3,7 @@ import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { Command, CliError } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 
 import {
   mergePlatformUpdateManifests,
@@ -20,13 +20,13 @@ describe("merge-update-manifests", () => {
       "mac",
       `version: 0.0.4
 files:
-  - url: Kairo-0.0.4-arm64.zip
+  - url: T3-Code-0.0.4-arm64.zip
     sha512: arm64zip
     size: 125621344
-  - url: Kairo-0.0.4-arm64.dmg
+  - url: T3-Code-0.0.4-arm64.dmg
     sha512: arm64dmg
     size: 131754935
-path: Kairo-0.0.4-arm64.zip
+path: T3-Code-0.0.4-arm64.zip
 sha512: arm64zip
 releaseDate: '2026-03-07T10:32:14.587Z'
 `,
@@ -37,13 +37,13 @@ releaseDate: '2026-03-07T10:32:14.587Z'
       "mac",
       `version: 0.0.4
 files:
-  - url: Kairo-0.0.4-x64.zip
+  - url: T3-Code-0.0.4-x64.zip
     sha512: x64zip
     size: 132000112
-  - url: Kairo-0.0.4-x64.dmg
+  - url: T3-Code-0.0.4-x64.dmg
     sha512: x64dmg
     size: 138148807
-path: Kairo-0.0.4-x64.zip
+path: T3-Code-0.0.4-x64.zip
 sha512: x64zip
 releaseDate: '2026-03-07T10:36:07.540Z'
 `,
@@ -57,68 +57,14 @@ releaseDate: '2026-03-07T10:36:07.540Z'
     assert.deepStrictEqual(
       merged.files.map((file) => file.url),
       [
-        "Kairo-0.0.4-arm64.zip",
-        "Kairo-0.0.4-arm64.dmg",
-        "Kairo-0.0.4-x64.zip",
-        "Kairo-0.0.4-x64.dmg",
+        "T3-Code-0.0.4-arm64.zip",
+        "T3-Code-0.0.4-arm64.dmg",
+        "T3-Code-0.0.4-x64.zip",
+        "T3-Code-0.0.4-x64.dmg",
       ],
     );
 
     const serialized = serializePlatformUpdateManifest("mac", merged);
-    assert.ok(!serialized.includes("path:"));
-    assert.equal((serialized.match(/- url:/g) ?? []).length, 4);
-  });
-
-  it("merges arm64 and x64 Windows update manifests into one multi-arch manifest", () => {
-    const arm64 = parsePlatformUpdateManifest(
-      "win",
-      `version: 0.0.4
-files:
-  - url: Kairo-0.0.4-arm64.exe
-    sha512: arm64exe
-    size: 125621344
-  - url: Kairo-0.0.4-arm64.exe.blockmap
-    sha512: arm64blockmap
-    size: 131754
-path: Kairo-0.0.4-arm64.exe
-sha512: arm64exe
-releaseDate: '2026-03-07T10:32:14.587Z'
-`,
-      "latest-win-arm64.yml",
-    );
-
-    const x64 = parsePlatformUpdateManifest(
-      "win",
-      `version: 0.0.4
-files:
-  - url: Kairo-0.0.4-x64.exe
-    sha512: x64exe
-    size: 132000112
-  - url: Kairo-0.0.4-x64.exe.blockmap
-    sha512: x64blockmap
-    size: 138148
-path: Kairo-0.0.4-x64.exe
-sha512: x64exe
-releaseDate: '2026-03-07T10:36:07.540Z'
-`,
-      "latest-win-x64.yml",
-    );
-
-    const merged = mergePlatformUpdateManifests("win", arm64, x64);
-
-    assert.equal(merged.version, "0.0.4");
-    assert.equal(merged.releaseDate, "2026-03-07T10:36:07.540Z");
-    assert.deepStrictEqual(
-      merged.files.map((file) => file.url),
-      [
-        "Kairo-0.0.4-arm64.exe",
-        "Kairo-0.0.4-arm64.exe.blockmap",
-        "Kairo-0.0.4-x64.exe",
-        "Kairo-0.0.4-x64.exe.blockmap",
-      ],
-    );
-
-    const serialized = serializePlatformUpdateManifest("win", merged);
     assert.ok(!serialized.includes("path:"));
     assert.equal((serialized.match(/- url:/g) ?? []).length, 4);
   });
@@ -128,7 +74,7 @@ releaseDate: '2026-03-07T10:36:07.540Z'
       "win",
       `version: 0.0.4
 files:
-  - url: Kairo-0.0.4-arm64.exe
+  - url: T3-Code-0.0.4-arm64.exe
     sha512: arm64exe
     size: 1
 releaseDate: '2026-03-07T10:32:14.587Z'
@@ -140,7 +86,7 @@ releaseDate: '2026-03-07T10:32:14.587Z'
       "win",
       `version: 0.0.5
 files:
-  - url: Kairo-0.0.5-x64.exe
+  - url: T3-Code-0.0.5-x64.exe
     sha512: x64exe
     size: 1
 releaseDate: '2026-03-07T10:36:07.540Z'
@@ -159,7 +105,7 @@ releaseDate: '2026-03-07T10:36:07.540Z'
       "mac",
       `version: '1.0'
 files:
-  - url: Kairo-1.0-x64.zip
+  - url: T3-Code-1.0-x64.zip
     sha512: zipsha
     size: 1
 releaseName: 'true'
@@ -181,7 +127,7 @@ releaseDate: '2026-03-07T10:36:07.540Z'
       "win",
       `version: '1.0'
 files:
-  - url: Kairo-1.0-x64.exe
+  - url: T3-Code-1.0-x64.exe
     sha512: exesha
     size: 1
 releaseDate: '2026-03-07T10:36:07.540Z'
@@ -200,26 +146,26 @@ releaseDate: '2026-03-07T10:36:07.540Z'
 it.layer(NodeServices.layer)("merge-update-manifests cli", (it) => {
   const arm64MacManifest = `version: 0.0.4
 files:
-  - url: Kairo-0.0.4-arm64.zip
+  - url: T3-Code-0.0.4-arm64.zip
     sha512: arm64zip
     size: 125621344
-  - url: Kairo-0.0.4-arm64.dmg
+  - url: T3-Code-0.0.4-arm64.dmg
     sha512: arm64dmg
     size: 131754935
-path: Kairo-0.0.4-arm64.zip
+path: T3-Code-0.0.4-arm64.zip
 sha512: arm64zip
 releaseDate: '2026-03-07T10:32:14.587Z'
 `;
 
   const x64MacManifest = `version: 0.0.4
 files:
-  - url: Kairo-0.0.4-x64.zip
+  - url: T3-Code-0.0.4-x64.zip
     sha512: x64zip
     size: 132000112
-  - url: Kairo-0.0.4-x64.dmg
+  - url: T3-Code-0.0.4-x64.dmg
     sha512: x64dmg
     size: 138148807
-path: Kairo-0.0.4-x64.zip
+path: T3-Code-0.0.4-x64.zip
 sha512: x64zip
 releaseDate: '2026-03-07T10:36:07.540Z'
 `;
@@ -240,69 +186,9 @@ releaseDate: '2026-03-07T10:36:07.540Z'
       yield* runCli(["--platform", "mac", primaryPath, secondaryPath]);
 
       const merged = yield* fs.readFileString(primaryPath);
-      assert.ok(merged.includes("Kairo-0.0.4-arm64.zip"));
-      assert.ok(merged.includes("Kairo-0.0.4-x64.zip"));
+      assert.ok(merged.includes("T3-Code-0.0.4-arm64.zip"));
+      assert.ok(merged.includes("T3-Code-0.0.4-x64.zip"));
       assert.ok(!merged.includes("path:"));
-    }),
-  );
-
-  it.effect("writes the merged manifest to an explicit output path", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const baseDir = yield* fs.makeTempDirectoryScoped({
-        prefix: "merge-update-manifests-cli-output-",
-      });
-      const primaryPath = path.join(baseDir, "latest-win-arm64.yml");
-      const secondaryPath = path.join(baseDir, "latest-win-x64.yml");
-      const outputPath = path.join(baseDir, "latest-win.yml");
-
-      yield* fs.writeFileString(
-        primaryPath,
-        `version: 0.0.4
-files:
-  - url: Kairo-0.0.4-arm64.exe
-    sha512: arm64exe
-    size: 125621344
-releaseDate: '2026-03-07T10:32:14.587Z'
-`,
-      );
-      yield* fs.writeFileString(
-        secondaryPath,
-        `version: 0.0.4
-files:
-  - url: Kairo-0.0.4-x64.exe
-    sha512: x64exe
-    size: 132000112
-releaseDate: '2026-03-07T10:36:07.540Z'
-`,
-      );
-
-      yield* runCli(["--platform", "win", primaryPath, secondaryPath, outputPath]);
-
-      const merged = yield* fs.readFileString(outputPath);
-      assert.ok(merged.includes("Kairo-0.0.4-arm64.exe"));
-      assert.ok(merged.includes("Kairo-0.0.4-x64.exe"));
-    }),
-  );
-
-  it.effect("rejects invalid platform values during cli parsing", () =>
-    Effect.gen(function* () {
-      const error = yield* runCli(["--platform", "linux", "a.yml", "b.yml"]).pipe(Effect.flip);
-
-      if (!CliError.isCliError(error)) {
-        assert.fail(`Expected CliError, got ${String(error)}`);
-      }
-
-      const platformError =
-        error._tag === "ShowHelp" ? (error.errors[0] as CliError.CliError | undefined) : error;
-
-      if (!platformError || platformError._tag !== "InvalidValue") {
-        assert.fail(`Expected InvalidValue, got ${String(platformError?._tag)}`);
-      }
-
-      assert.equal(platformError.option, "platform");
-      assert.equal(platformError.value, "linux");
     }),
   );
 });

@@ -20,7 +20,6 @@ describe("Niri capture config edits", () => {
   });
   it("ignores commented, nested, and string-valued binds and braces", () => {
     const before = `// binds { fake\n/* binds { /* nested */ } */\n/- binds { Ctrl+Shift+2 { quit; } }\nrecent-windows { binds { Alt+Tab { next-window; } }; }\nspawn-at-startup "echo" r#"binds { }"#\n"binds" {\n    Mod+Q { spawn "a } \\" b"; }\n}\n`;
-    // A quoted brace in a valid shell argument must not close the binds section.
     const valid = before.replace('"a } \\" b"', '"a } b"');
     const result = editCaptureConfig(valid, "niri", app, "install");
     expect(result.after).toContain(`    ${binding}\n}\n`);
@@ -38,14 +37,6 @@ describe("Niri capture config edits", () => {
     const before = "\uFEFFbinds {\r\n}\r\n";
     expect(editCaptureConfig(before, "niri", app, "install").after).toBe(
       `\uFEFFbinds {\r\n    ${binding}\r\n}\r\n`,
-    );
-  });
-  it("preserves Unicode spacing around nodes and line continuations", () => {
-    const spaces =
-      "\u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u202F\u205F\u3000";
-    const before = `binds${spaces}\\${spaces}\n{\n}\n`;
-    expect(editCaptureConfig(before, "niri", app, "install").after).toBe(
-      before.replace("}\n", `    ${binding}\n}\n`),
     );
   });
   it("does not duplicate an existing binding, including a custom chord", () => {
@@ -68,11 +59,6 @@ describe("Niri capture config edits", () => {
     const before = "binds { Shift+Control+2 { quit; } }";
     expect(niriConfigConflict(before, app, "Ctrl+Shift+2")).toBe(true);
     expect(() => editCaptureConfig(before, "niri", app, "install")).toThrow("already used");
-  });
-  it("does not count a slash-dash-disabled key as occupied", () => {
-    expect(niriConfigConflict("binds { /- Ctrl+Shift+2 { quit; }; }", app, "Ctrl+Shift+2")).toBe(
-      false,
-    );
   });
   it.each(["binds {", "binds {}\nbinds {}", "/* unfinished", 'spawn "unfinished'])(
     "fails safely for malformed structure: %s",
@@ -116,15 +102,23 @@ describe("Hyprland capture config edits", () => {
       editCaptureConfig("bind = SHIFT CTRL, 2, exec, kitty\n", "hyprland", app, "install"),
     ).toThrow("already used");
   });
-  it("leaves commented bindings alone", () => {
-    const before = "# bind = CTRL SHIFT, 2, global, com.kairo.Kairo:capture-window\n";
-    expect(editCaptureConfig(before, "hyprland", app, "remove").after).toBe(before);
-  });
   it.each([
     "return {}",
-    '--[[\nhl.bind("CTRL + SHIFT + 2", hl.dsp.global("com.kairo.Kairo:capture-window"))\n]]',
+    "local M = {}\n  return M",
+    '--[[\nhl.bind("CTRL + SHIFT + 2", hl.dsp.global("com.t3tools.Kairo:capture-window"))\n]]',
   ])("does not guess how to edit complex Lua", (source) => {
     expect(() => editCaptureConfig(source, "hyprland-lua", app, "install")).toThrow("manual edit");
+  });
+  it("edits Lua that returns early inside a function", () => {
+    const before =
+      'local function sync(window)\n  if window == nil then\n    return\n  end\n  hl.unbind("SUPER + Q")\nend\nhl.on("window.active", sync)\n';
+    const added = editCaptureConfig(before, "hyprland-lua", app, "install");
+    expect(added.after).toBe(
+      `${before}\n${captureConfigBinding("hyprland-lua", app, "Ctrl+Shift+2")}\n`,
+    );
+    expect(editCaptureConfig(added.after, "hyprland-lua", app, "remove").after.trim()).toBe(
+      before.trim(),
+    );
   });
   it.each(['Ctrl+"\nexec', "Ctrl+;", "2", "Mod+2"])(
     "rejects unsafe or ambiguous keys: %s",

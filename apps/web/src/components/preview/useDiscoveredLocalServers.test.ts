@@ -17,9 +17,9 @@ const scannerServer = (
 });
 
 describe("mergeServers", () => {
-  it("marks a matching live configured server and keeps its process metadata", () => {
+  it("enriches a configured entry with live process metadata when scanner sees it", () => {
     const result = mergeServers({
-      scanner: [scannerServer({ processName: "node", pid: 9999 })],
+      scanner: [scannerServer({ port: 5173, processName: "node", pid: 9999 })],
       configuredUrls: ["http://localhost:5173"],
     });
 
@@ -37,7 +37,31 @@ describe("mergeServers", () => {
     );
   });
 
-  it("matches loopback aliases and prefers configured servers when sorting", () => {
+  it("ignores non-loopback configured URLs", () => {
+    const result = mergeServers({
+      scanner: [scannerServer({})],
+      configuredUrls: ["https://example.com", "ws://localhost:5173"],
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0]?.source).toBe("scanner");
+  });
+
+  it.each(["127.0.0.1", "0.0.0.0", "[::1]"])(
+    "matches configured loopback alias %s to a live localhost server",
+    (host) => {
+      const result = mergeServers({
+        scanner: [
+          scannerServer({ requestedUrl: `http://localhost:5173/dashboard?mode=test#results` }),
+        ],
+        configuredUrls: [`http://${host}:5173/dashboard?mode=test#results`],
+      });
+      expect(result).toHaveLength(1);
+      expect(result[0]?.source).toBe("configured");
+      expect(result[0]?.requestedUrl).toBe("http://localhost:5173/dashboard?mode=test#results");
+    },
+  );
+
+  it("keeps the scanner-verified path and protocol", () => {
     const result = mergeServers({
       scanner: [
         scannerServer({ host: "localhost", port: 3000 }),
@@ -60,5 +84,15 @@ describe("mergeServers", () => {
     });
 
     expect(result[0]?.requestedUrl).toBe("https://localhost:5173/docs?mode=test#results");
+  });
+
+  it("does not overlay an unverified configured path when the server probes paths", () => {
+    const result = mergeServers({
+      scanner: [scannerServer({ requestedUrl: "http://localhost:5173/" })],
+      configuredUrls: ["http://localhost:5173/docs"],
+      configuredUrlProbing: true,
+    });
+
+    expect(result[0]?.requestedUrl).toBe("http://localhost:5173/");
   });
 });

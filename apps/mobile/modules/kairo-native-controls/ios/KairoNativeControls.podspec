@@ -4,7 +4,7 @@ Pod::Spec.new do |s|
   s.summary        = 'Native UIKit controls for Kairo mobile.'
   s.description    = 'UIKit-backed controls that match native iOS navigation chrome.'
   s.author         = 'Kairo Tools'
-  s.homepage       = 'https://kairo.com'
+  s.homepage       = 'https://t3tools.com'
   s.platforms      = {
     :ios => '18.0',
   }
@@ -15,5 +15,6 @@ Pod::Spec.new do |s|
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
   }
+  s.resource_bundles = { 'KairoNativeControlIcons' => ['Resources/Icons/pull-request*.png', 'Resources/Icons/issue*.png'] }
   s.source_files = '**/*.{h,m,mm,swift,hpp,cpp}'
 end

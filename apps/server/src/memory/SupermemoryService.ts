@@ -16,7 +16,7 @@ import { KairoCloudClient } from "../cloud/KairoCloudClient.ts";
 import * as KairoCloudClientLive from "../cloud/KairoCloudClient.ts";
 import { setComposioAccessToken } from "../composio/ComposioSecrets.ts";
 import { ServerEnvironment } from "../environment/ServerEnvironment.ts";
-import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
+import { ProviderRegistry } from "../provider/ProviderRegistry.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 import { computeProviderMemoryStatus } from "./SupermemoryMcp.ts";
 import { getKairoCloudAccessToken, KAIRO_CLOUD_ACCESS_TOKEN_SECRET } from "./SupermemorySecrets.ts";

@@ -29,7 +29,7 @@ export function usePrimaryServerApi() {
   const refreshProviders = useAtomCommand(serverEnvironment.refreshProviders, {
     reportFailure: false,
   });
-  const loginProvider = useAtomCommand(serverEnvironment.loginProvider, { reportFailure: false });
+  const startProviderAuth = useAtomCommand(serverEnvironment.startProviderAuth, { reportFailure: false });
   const updateProvider = useAtomCommand(serverEnvironment.updateProvider, { reportFailure: false });
   const getMemoryStatus = useAtomCommand(serverEnvironment.getMemoryStatus, {
     reportFailure: false,
@@ -59,8 +59,11 @@ export function usePrimaryServerApi() {
   return {
     refreshProviders: (input: { readonly instanceId?: ProviderInstanceId } = {}) =>
       runCommand(refreshProviders({ environmentId: requireEnvironmentId(), input })),
-    loginProvider: (input: ServerProviderUpdateInput) =>
-      runCommand(loginProvider({ environmentId: requireEnvironmentId(), input })),
+    startProviderAuth: (input: Pick<ServerProviderUpdateInput, "instanceId">) =>
+      runCommand(startProviderAuth({
+        environmentId: requireEnvironmentId(),
+        input: { instanceId: input.instanceId },
+      })),
     updateProvider: (input: ServerProviderUpdateInput) =>
       runCommand(updateProvider({ environmentId: requireEnvironmentId(), input })),
     getMemoryStatus: () =>

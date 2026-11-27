@@ -1,6 +1,10 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
+import * as HostProcess from "@kairo/shared/HostProcess";
+import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -10,7 +14,8 @@ import * as PlatformError from "effect/PlatformError";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 import * as DesktopAssets from "./DesktopAssets.ts";
@@ -21,7 +26,10 @@ interface RecordedRegistration {
   readonly files: Array<{ readonly path: string; readonly content: string }>;
   readonly commands: Array<{ readonly command: string; readonly args: ReadonlyArray<string> }>;
   readonly copies: Array<{ readonly source: string; readonly destination: string }>;
+  readonly icons: Array<{ readonly path: string; readonly bytes: ReadonlyArray<number> }>;
 }
+
+const ICON_BYTES = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 
 const makeEnvironment = (path: Path.Path, overrides: Record<string, unknown> = {}) =>
   DesktopEnvironment.DesktopEnvironment.of({
@@ -30,8 +38,8 @@ const makeEnvironment = (path: Path.Path, overrides: Record<string, unknown> = {
     isDevelopment: false,
     displayName: "Kairo (Alpha)",
     linuxDesktopEntryName: "com.kairo.Kairo.desktop",
-    linuxWmClass: "kairo",
     linuxApplicationsDir: "/home/alice/.local/share/applications",
+    desktopLauncherPath: Option.none(),
     appImagePath: Option.some("/home/alice/Applications/Kairo-Code.AppImage"),
     path,
     ...overrides,
@@ -52,10 +60,11 @@ const mockProcess = (exitCode: number, stalled = false) =>
     getOutputFd: () => Stream.empty,
   });
 
-const makeHandlerLayer = (
+const layerHandler = (
   recorded: RecordedRegistration,
   input: {
     readonly environment?: Record<string, unknown>;
+    readonly processSpawner?: ChildProcessSpawner.ChildProcessSpawner["Service"];
     readonly updateDesktopDatabaseExitCode?: number;
     readonly updateDesktopDatabaseStalled?: boolean;
     readonly updateDesktopDatabaseStarted?: Deferred.Deferred<void>;
@@ -63,7 +72,7 @@ const makeHandlerLayer = (
     readonly writeError?: PlatformError.PlatformError;
     readonly existingEntry?: string;
     readonly iconSource?: string;
-    readonly iconCopyError?: PlatformError.PlatformError;
+    readonly iconWriteError?: PlatformError.PlatformError;
   } = {},
 ) =>
   DesktopLinuxUrlHandler.layer.pipe(
@@ -86,10 +95,25 @@ const makeHandlerLayer = (
         }),
         FileSystem.layerNoop({
           copyFile: (source, destination) =>
-            input.iconCopyError
-              ? Effect.fail(input.iconCopyError)
+            Effect.sync(() => {
+              recorded.copies.push({ source, destination });
+            }),
+          readFile: (path) =>
+            path === input.iconSource
+              ? Effect.succeed(ICON_BYTES)
+              : Effect.fail(
+                  PlatformError.systemError({
+                    _tag: "NotFound",
+                    module: "FileSystem",
+                    method: "readFile",
+                    pathOrDescriptor: path,
+                  }),
+                ),
+          writeFile: (path, bytes) =>
+            input.iconWriteError
+              ? Effect.fail(input.iconWriteError)
               : Effect.sync(() => {
-                  recorded.copies.push({ source, destination });
+                  recorded.icons.push({ path, bytes: [...bytes] });
                 }),
           readFileString: () => Effect.succeed(input.existingEntry ?? ""),
           makeDirectory: (path) =>
@@ -106,6 +130,7 @@ const makeHandlerLayer = (
         Layer.succeed(
           ChildProcessSpawner.ChildProcessSpawner,
           ChildProcessSpawner.make((command) => {
+            if (input.processSpawner) return input.processSpawner.spawn(command);
             const childProcess = command as unknown as {
               readonly command: string;
               readonly args: ReadonlyArray<string>;
@@ -143,37 +168,35 @@ const makeHandlerLayer = (
 
 const runRegister = (
   recorded: RecordedRegistration,
-  input: Parameters<typeof makeHandlerLayer>[1] = {},
+  input: Parameters<typeof layerHandler>[1] = {},
 ) =>
   Effect.gen(function* () {
     const handler = yield* DesktopLinuxUrlHandler.DesktopLinuxUrlHandler;
     yield* handler.register;
-  }).pipe(Effect.provide(makeHandlerLayer(recorded, input)));
+  }).pipe(Effect.provide(layerHandler(recorded, input)));
 
 const emptyRecording = (): RecordedRegistration => ({
   directories: [],
   files: [],
   commands: [],
   copies: [],
+  icons: [],
 });
 
 describe("DesktopLinuxUrlHandler", () => {
   it("renders a scheme-handler desktop entry with freedesktop Exec quoting", () => {
     const entry = DesktopLinuxUrlHandler.renderUrlHandlerDesktopEntry({
       displayName: "Kairo (Nightly)",
-      execTarget: '/home/al ice/Apps/Kairo "100%" $HOME\\x.AppImage',
+      execTarget: '/home/al ice/Apps/T3 "100%" $HOME\\x.AppImage',
       scheme: "kairo",
       iconPath: "/home/al ice/icons/T3\\x.png",
     });
 
     assert.include(entry, "[Desktop Entry]");
     assert.include(entry, "Name=Kairo (Nightly)");
-    // Exec composes both escaping layers: a literal backslash becomes four
-    // backslashes in the file, a quote three characters, a dollar sign two
-    // backslashes plus the sign.
     assert.include(
       entry,
-      'Exec="/home/al ice/Apps/Kairo \\\\"100%%\\\\" \\\\$HOME\\\\\\\\x.AppImage" %U',
+      'Exec="/home/al ice/Apps/T3 \\\\"100%%\\\\" \\\\$HOME\\\\\\\\x.AppImage" %U',
     );
     assert.include(entry, "NoDisplay=true");
     assert.notInclude(entry, "StartupWMClass=");
@@ -181,31 +204,33 @@ describe("DesktopLinuxUrlHandler", () => {
     assert.include(entry, "Icon=/home/al ice/icons/T3\\\\x.png");
   });
 
-  it("carries structured context on registration errors", () => {
-    const writeError = new DesktopLinuxUrlHandler.DesktopLinuxUrlHandlerRegistrationError({
-      step: "write-desktop-entry",
-      scheme: "kairo",
-      desktopEntryPath: "/home/alice/.local/share/applications/com.kairo.Kairo.desktop",
-      cause: new Error("boom"),
-    });
-    assert.equal(
-      writeError.message,
-      "Failed to register the kairo:// URL handler (step: write-desktop-entry).",
-    );
-    assert.equal(
-      writeError.desktopEntryPath,
-      "/home/alice/.local/share/applications/com.kairo.Kairo.desktop",
-    );
-
-    const exitError = new DesktopLinuxUrlHandler.DesktopLinuxUrlHandlerRegistrationError({
-      step: "set-default-handler",
-      scheme: "kairo",
-      exitCode: 4,
-    });
-    assert.equal(
-      exitError.message,
-      "Failed to register the kairo:// URL handler (step: set-default-handler, xdg-mime exit code 4).",
-    );
+  it.each([
+    { from: "T3-Code-0.1.8-x86_64.AppImage", to: "T3-Code-x86_64.AppImage", restored: true },
+    {
+      from: "T3-Code-0.1.9-nightly.20261110.4449-arm64.AppImage",
+      to: "T3-Code-Nightly-arm64.AppImage",
+      restored: true,
+    },
+    { from: "T3-Code-0.1.8-x86_64.AppImage", to: "T3-Code-0.1.9-x86_64.AppImage", restored: false },
+    { from: "kairo.AppImage", to: "T3-Code-x86_64.AppImage", restored: false },
+    { from: "T3-Code-x86_64.AppImage", to: "T3-Code-x86_64.AppImage", restored: false },
+    { from: "../T3-Code-0.1.8-x86_64.AppImage", to: "T3-Code-x86_64.AppImage", restored: false },
+  ])("finds the launch path an update from $from to $to removed", ({ from, to, restored }) => {
+    for (const dir of ["/home/alice/Applications", '/home/al ice/My "100%" $Apps\\x']) {
+      const previous = dir + "/" + from;
+      const previousEntry = DesktopLinuxUrlHandler.renderUrlHandlerDesktopEntry({
+        displayName: "Kairo (Beta)",
+        execTarget: previous,
+        scheme: "kairo",
+      });
+      assert.equal(
+        DesktopLinuxUrlHandler.replacedVersionedAppImagePath({
+          previousEntry,
+          appImagePath: dir + "/" + to,
+        }),
+        restored ? previous : null,
+      );
+    }
   });
 
   it.effect(
@@ -224,7 +249,7 @@ describe("DesktopLinuxUrlHandler", () => {
         );
         assert.include(
           recorded.files[0]?.content,
-          'Exec="/home/alice/Applications/Kairo-Code.AppImage" %U',
+          "Exec=/home/alice/Applications/Kairo-Code.AppImage %U",
         );
         assert.include(recorded.files[0]?.content, "MimeType=x-scheme-handler/kairo;");
         assert.deepEqual(recorded.commands, [
@@ -249,8 +274,25 @@ describe("DesktopLinuxUrlHandler", () => {
 
       assert.include(
         recorded.files[0]?.content,
-        `Exec=${DesktopLinuxUrlHandler.escapeDesktopEntryExecArgument(process.execPath)} %U`,
+        DesktopLinuxUrlHandler.renderUrlHandlerDesktopEntry({
+          displayName: "Kairo (Alpha)",
+          execTarget: process.execPath,
+          scheme: "kairo",
+          iconPath: "/home/alice/.local/share/icons/com.kairo.Kairo.desktop.png",
+        }),
       );
+    });
+  });
+
+  it.effect("launches a distribution package through its configured launcher", () => {
+    const recorded = emptyRecording();
+
+    return Effect.gen(function* () {
+      yield* runRegister(recorded, {
+        environment: { desktopLauncherPath: Option.some("/opt/Kairo/kairo") },
+      });
+
+      assert.include(recorded.files[0]?.content, 'Exec="/opt/Kairo/kairo" %U');
     });
   });
 
@@ -296,22 +338,21 @@ describe("DesktopLinuxUrlHandler", () => {
         }),
       });
       assert.deepEqual(recorded.files, []);
-      assert.deepEqual(recorded.copies, [
-        { source: "/tmp/.mount_T3/resources/icon.png", destination: iconPath },
-      ]);
+      assert.deepEqual(recorded.copies, [], "icon must not be copied out of the app bundle");
+      assert.deepEqual(recorded.icons, [{ path: iconPath, bytes: [...ICON_BYTES] }]);
       assert.equal(recorded.commands.at(-1)?.command, "xdg-mime");
     });
   });
 
-  it.effect("still registers the handler when copying its icon fails", () => {
+  it.effect("still registers the handler when installing its icon fails", () => {
     const recorded = emptyRecording();
     return Effect.gen(function* () {
       yield* runRegister(recorded, {
         iconSource: "/tmp/.mount_T3/resources/icon.png",
-        iconCopyError: PlatformError.systemError({
+        iconWriteError: PlatformError.systemError({
           _tag: "PermissionDenied",
           module: "FileSystem",
-          method: "copyFile",
+          method: "writeFile",
           description: "read-only icon directory",
         }),
       });
@@ -372,22 +413,323 @@ describe("DesktopLinuxUrlHandler", () => {
     });
   });
 
-  it.effect("continues to xdg-mime when the desktop MIME cache refresh stalls", () =>
+  for (const stalledHelper of ["update-desktop-database", "xdg-mime"] as const) {
+    it.effect.skipIf(HostProcess.Platform.defaultValue() !== "linux")(
+      `finishes registration after a timed-out ${stalledHelper} ignores SIGTERM`,
+      () =>
+        Effect.gen(function* () {
+          const realSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+          const nodeExecutable = yield* HostProcess.ExecutablePath;
+          const recorded = emptyRecording();
+          const spawned = yield* Deferred.make<ChildProcessSpawner.ChildProcessHandle>();
+          const ready = yield* Deferred.make<void>();
+          const processSpawner = ChildProcessSpawner.make((command) =>
+            Effect.gen(function* () {
+              if (!ChildProcess.isStandardCommand(command)) {
+                return yield* Effect.die("expected a single registration command");
+              }
+              recorded.commands.push({ command: command.command, args: command.args.map(String) });
+              if (command.command !== stalledHelper) return mockProcess(0);
+              const child = yield* realSpawner.spawn(
+                ChildProcess.make(
+                  nodeExecutable,
+                  [
+                    "-e",
+                    // The watchdog makes the unfixed case exit with a distinguishable code.
+                    "process.on('SIGTERM', () => setTimeout(() => process.exit(99), 5000));" +
+                      "process.stdout.write('ready\\n'); setInterval(() => {}, 2147483647);",
+                  ],
+                  { ...command.options, stdout: "pipe" },
+                ),
+              );
+              yield* Deferred.succeed(spawned, child);
+              yield* Stream.runHead(child.stdout);
+              yield* Deferred.succeed(ready, undefined);
+              return child;
+            }),
+          );
+          const registration = yield* runRegister(recorded, { processSpawner }).pipe(
+            Effect.forkScoped,
+          );
+          const child = yield* Deferred.await(spawned);
+          yield* Effect.addFinalizer(() =>
+            child.isRunning.pipe(
+              Effect.flatMap((running) =>
+                running ? child.kill({ killSignal: "SIGKILL" }) : Effect.void,
+              ),
+              Effect.ignore,
+            ),
+          );
+          yield* Deferred.await(ready);
+          yield* TestClock.adjust("5 seconds");
+          yield* Fiber.join(registration);
+
+          const exit = yield* Effect.exit(child.exitCode);
+          if (Exit.isFailure(exit)) {
+            assert.include(Cause.pretty(exit.cause), "SIGKILL");
+          } else {
+            assert.fail(`${stalledHelper} exited with ${exit.value} instead of being force-killed`);
+          }
+          assert.deepEqual(
+            recorded.commands.map(({ command }) => command),
+            ["update-desktop-database", "xdg-mime"],
+          );
+        }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    );
+  }
+});
+
+interface ThemeIconRun {
+  readonly root: string;
+  readonly commands: Array<{ readonly command: string; readonly args: ReadonlyArray<string> }>;
+  readonly iconCacheOptions?: Array<Record<string, unknown>>;
+  readonly sourceMissing?: boolean;
+  readonly iconCacheExitCode?: number;
+  readonly iconCacheSpawnFails?: boolean;
+  readonly iconCacheStalled?: boolean;
+  readonly iconCacheStarted?: Deferred.Deferred<void>;
+  // Stands in for gtk-update-icon-cache rewriting the cache on success.
+  readonly onIconCacheRefresh?: Effect.Effect<void>;
+}
+
+const registerWithRealFileSystem = (run: ThemeIconRun) =>
+  Effect.gen(function* () {
+    const handler = yield* DesktopLinuxUrlHandler.DesktopLinuxUrlHandler;
+    yield* handler.register;
+  }).pipe(
+    Effect.provide(
+      DesktopLinuxUrlHandler.layer.pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            Layer.effect(
+              DesktopEnvironment.DesktopEnvironment,
+              Path.Path.pipe(
+                Effect.map((path) =>
+                  makeEnvironment(path, {
+                    linuxApplicationsDir: path.join(run.root, "applications"),
+                  }),
+                ),
+              ),
+            ),
+            Layer.effect(
+              DesktopAssets.DesktopAssets,
+              Path.Path.pipe(
+                Effect.map((path) => ({
+                  iconPaths: Effect.succeed({
+                    png: Option.none(),
+                    ico: Option.none(),
+                    icns: Option.none(),
+                  }),
+                  resolveResourcePath: (fileName: string) =>
+                    Effect.succeed(
+                      fileName === "icons/256x256.png"
+                        ? Option.some(
+                            path.join(
+                              run.root,
+                              run.sourceMissing ? "missing" : "resources",
+                              fileName,
+                            ),
+                          )
+                        : Option.none(),
+                    ),
+                })),
+              ),
+            ),
+            Layer.succeed(
+              ChildProcessSpawner.ChildProcessSpawner,
+              ChildProcessSpawner.make((command) => {
+                const childProcess = command as unknown as {
+                  readonly command: string;
+                  readonly args: ReadonlyArray<string>;
+                };
+                run.commands.push({ command: childProcess.command, args: childProcess.args });
+                if (childProcess.command !== "gtk-update-icon-cache") {
+                  return Effect.succeed(mockProcess(0));
+                }
+                run.iconCacheOptions?.push(
+                  (command as unknown as { readonly options: Record<string, unknown> }).options,
+                );
+                if (run.iconCacheSpawnFails) {
+                  return Effect.fail(
+                    PlatformError.systemError({
+                      _tag: "NotFound",
+                      module: "ChildProcess",
+                      method: "spawn",
+                      description: "gtk-update-icon-cache is not installed",
+                    }),
+                  );
+                }
+                const exitCode = run.iconCacheExitCode ?? 0;
+                const handle = mockProcess(exitCode, run.iconCacheStalled === true);
+                const refreshed =
+                  exitCode === 0 && run.onIconCacheRefresh ? run.onIconCacheRefresh : Effect.void;
+                return refreshed.pipe(
+                  Effect.andThen(
+                    run.iconCacheStarted
+                      ? Deferred.succeed(run.iconCacheStarted, undefined)
+                      : Effect.void,
+                  ),
+                  Effect.as(handle),
+                );
+              }),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
+const themeIconFixture = (source: Uint8Array) =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const root = yield* fileSystem.makeTempDirectoryScoped({ prefix: "kairo-theme-icons-" });
+    yield* fileSystem.makeDirectory(path.join(root, "resources", "icons"), { recursive: true });
+    yield* fileSystem.writeFile(path.join(root, "resources", "icons", "256x256.png"), source);
+    const hicolorDir = path.join(root, "icons", "hicolor");
+    const appsDir = path.join(hicolorDir, "256x256", "apps");
+    const cachePath = path.join(hicolorDir, "icon-theme.cache");
+    const pastSeconds = 1_600_000_000;
+    const seedCache = Effect.gen(function* () {
+      yield* fileSystem.makeDirectory(appsDir, { recursive: true });
+      yield* fileSystem.writeFile(cachePath, new Uint8Array([0]));
+      yield* fileSystem.utimes(cachePath, pastSeconds, pastSeconds);
+    });
+    const rewriteCache = fileSystem
+      .writeFile(cachePath, new Uint8Array([1]))
+      .pipe(Effect.orDie, Effect.provideService(FileSystem.FileSystem, fileSystem));
+    return { root, hicolorDir, appsDir, cachePath, pastSeconds, seedCache, rewriteCache };
+  });
+
+const iconCacheRuns = (run: ThemeIconRun) =>
+  run.commands.filter(({ command }) => command === "gtk-update-icon-cache").length;
+
+it.layer(NodeServices.layer)("DesktopLinuxUrlHandler theme icons", (it) => {
+  it.effect("installs both app id spellings without creating an icon cache", () =>
     Effect.gen(function* () {
-      const recorded = emptyRecording();
-      const started = yield* Deferred.make<void>();
-      const registration = yield* runRegister(recorded, {
-        updateDesktopDatabaseStalled: true,
-        updateDesktopDatabaseStarted: started,
-      }).pipe(Effect.forkChild);
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const icon = new Uint8Array([137, 80, 78, 71, 1, 2, 3]);
+      const fixture = yield* themeIconFixture(icon);
+      const run: ThemeIconRun = { root: fixture.root, commands: [] };
 
-      yield* Deferred.await(started);
-      yield* TestClock.adjust("5 seconds");
-      yield* Fiber.join(registration);
+      yield* registerWithRealFileSystem(run);
+      assert.deepEqual([...(yield* fileSystem.readDirectory(fixture.appsDir))].sort(), [
+        "com.kairo.Kairo.png",
+        "com.kairo.app.png",
+      ]);
+      for (const name of ["com.kairo.app", "com.kairo.Kairo"]) {
+        const target = path.join(fixture.appsDir, `${name}.png`);
+        assert.deepEqual([...(yield* fileSystem.readFile(target))], [...icon]);
+        yield* fileSystem.utimes(target, fixture.pastSeconds, fixture.pastSeconds);
+      }
 
+      yield* registerWithRealFileSystem(run);
+      for (const name of ["com.kairo.app", "com.kairo.Kairo"]) {
+        const info = yield* fileSystem.stat(path.join(fixture.appsDir, `${name}.png`));
+        assert.equal(Option.getOrThrow(info.mtime).getTime(), fixture.pastSeconds * 1000);
+      }
+      assert.isFalse(yield* fileSystem.exists(fixture.cachePath));
+      assert.equal(iconCacheRuns(run), 0);
+    }),
+  );
+
+  it.effect("replaces same-length stale icons and refreshes an existing cache once", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const fixture = yield* themeIconFixture(new Uint8Array([1, 2, 3]));
+      yield* fixture.seedCache;
+      const lower = path.join(fixture.appsDir, "com.kairo.app.png");
+      const upper = path.join(fixture.appsDir, "com.kairo.Kairo.png");
+      yield* fileSystem.writeFile(lower, new Uint8Array([3, 2, 1]));
+      yield* fileSystem.writeFile(upper, new Uint8Array([1, 2, 3]));
+      for (const target of [lower, upper]) {
+        yield* fileSystem.utimes(target, fixture.pastSeconds, fixture.pastSeconds);
+      }
+      const run: ThemeIconRun = {
+        root: fixture.root,
+        commands: [],
+        onIconCacheRefresh: fixture.rewriteCache,
+      };
+
+      yield* registerWithRealFileSystem(run);
+      yield* registerWithRealFileSystem(run);
+
+      assert.deepEqual([...(yield* fileSystem.readFile(lower))], [1, 2, 3]);
+      const upperInfo = yield* fileSystem.stat(upper);
+      assert.equal(Option.getOrThrow(upperInfo.mtime).getTime(), fixture.pastSeconds * 1000);
       assert.deepEqual(
-        recorded.commands.map(({ command }) => command),
+        run.commands.filter(({ command }) => command === "gtk-update-icon-cache"),
+        [{ command: "gtk-update-icon-cache", args: ["-f", "-t", fixture.hicolorDir] }],
+      );
+    }),
+  );
+
+  it.effect("refreshes when this launch changed an icon even if the cache looks newer", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const fixture = yield* themeIconFixture(new Uint8Array([1, 2, 3]));
+      yield* fixture.seedCache;
+      const run: ThemeIconRun = {
+        root: fixture.root,
+        commands: [],
+        onIconCacheRefresh: fixture.rewriteCache,
+      };
+      const future = fixture.pastSeconds + 10 * 365 * 24 * 60 * 60;
+      yield* fileSystem.utimes(fixture.cachePath, future, future);
+
+      yield* registerWithRealFileSystem(run);
+
+      assert.isTrue(yield* fileSystem.exists(path.join(fixture.appsDir, "com.kairo.Kairo.png")));
+      assert.equal(iconCacheRuns(run), 1);
+    }),
+  );
+
+  it.effect("retries a failed icon cache refresh on the next launch", () =>
+    Effect.gen(function* () {
+      const fixture = yield* themeIconFixture(new Uint8Array([1, 2, 3]));
+      yield* fixture.seedCache;
+      const failing: ThemeIconRun = { root: fixture.root, commands: [], iconCacheExitCode: 1 };
+      yield* registerWithRealFileSystem(failing);
+      assert.equal(iconCacheRuns(failing), 1);
+      assert.deepEqual(failing.commands.map(({ command }) => command).slice(1), [
+        "update-desktop-database",
+        "xdg-mime",
+      ]);
+
+      const recovering: ThemeIconRun = {
+        root: fixture.root,
+        commands: [],
+        onIconCacheRefresh: fixture.rewriteCache,
+      };
+      yield* registerWithRealFileSystem(recovering);
+      yield* registerWithRealFileSystem(recovering);
+      assert.equal(iconCacheRuns(recovering), 1);
+    }),
+  );
+
+  it.effect("still registers the handler when the theme icon install fails", () =>
+    Effect.gen(function* () {
+      const fixture = yield* themeIconFixture(new Uint8Array([1, 2, 3]));
+      const missingSource: ThemeIconRun = { root: fixture.root, commands: [], sourceMissing: true };
+      yield* registerWithRealFileSystem(missingSource);
+      assert.deepEqual(
+        missingSource.commands.map(({ command }) => command),
         ["update-desktop-database", "xdg-mime"],
+      );
+
+      yield* fixture.seedCache;
+      const missingTool: ThemeIconRun = {
+        root: fixture.root,
+        commands: [],
+        iconCacheSpawnFails: true,
+      };
+      yield* registerWithRealFileSystem(missingTool);
+      assert.deepEqual(
+        missingTool.commands.map(({ command }) => command),
+        ["gtk-update-icon-cache", "update-desktop-database", "xdg-mime"],
       );
     }),
   );

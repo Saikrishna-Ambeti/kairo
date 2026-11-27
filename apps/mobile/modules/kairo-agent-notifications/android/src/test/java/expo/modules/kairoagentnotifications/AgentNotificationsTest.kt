@@ -3,6 +3,7 @@ package expo.modules.kairoagentnotifications
 import android.app.Activity
 import android.app.AlarmManager
 import android.app.Application
+import android.app.NotificationChannel
 import android.app.Notification
 import android.app.NotificationManager
 import android.content.ComponentName
@@ -24,12 +25,10 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-@RunWith(RobolectricTestRunner::class)
-@Config(sdk = [24, 26, 33, 36], manifest = Config.NONE)
-class AgentNotificationsTest {
-  private lateinit var context: Application
-  private lateinit var manager: NotificationManager
-  private lateinit var lifecycle: LifecycleRegistry
+abstract class AgentNotificationsFixture {
+  protected lateinit var context: Application
+  protected lateinit var manager: NotificationManager
+  protected lateinit var lifecycle: LifecycleRegistry
 
   @Before
   fun setUp() {
@@ -49,22 +48,28 @@ class AgentNotificationsTest {
     )
     AgentNotifications.clear(context)
     AgentNotifications.configure(context, "device", "user", "kairo-dev", true)
+    AgentNotifications.setThreadOnScreen("/threads/environment/thread")
   }
 
-  private fun update(alertId: String, active: Boolean) = mapOf(
+  protected fun update(alertId: String, active: Boolean) = mapOf(
     "device_id" to "device",
-    "user_id" to "user",
+    "user_hash" to "60a4ea94a99303630c40fff23f4de5c06a8f978289a3889f31edfac3b89f85d7",
     "updated_at" to System.currentTimeMillis().toString(),
     "active" to active.toString(),
     "activity_title" to "1 active agent",
     "activity_body" to "Test thread · Working",
     "activity_path" to "/threads/environment/thread",
     "alert_id" to alertId,
+    "alert_group" to "environment/thread",
     "alert_title" to "Test thread",
     "alert_body" to "Done: Test project",
     "alert_path" to "/threads/environment/thread",
   )
+}
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [24, 26, 33, 36], manifest = Config.NONE)
+class AgentNotificationsTest : AgentNotificationsFixture() {
   @Test
   fun alertHistoryEvictsOnlyTheOldestEntryAfterCapacity() {
     lifecycle.currentState = Lifecycle.State.RESUMED
@@ -77,6 +82,12 @@ class AgentNotificationsTest {
   }
 
   @Test
+  fun alertsStackByThreadGroup() {
+    AgentNotifications.receive(context, update("grouped", false))
+    assertEquals("environment/thread", manager.activeNotifications.single().notification.group)
+  }
+
+  @Test
   fun missingLauncherDoesNotDiscardTheAlert() {
     shadowOf(context.packageManager).removeActivity(ComponentName(context, Activity::class.java))
     AgentNotifications.receive(context, update("no-launcher", false))
@@ -84,6 +95,14 @@ class AgentNotificationsTest {
       "Test thread",
       manager.activeNotifications.single().notification.extras.getString(Notification.EXTRA_TITLE)
     )
+  }
+
+  @Test
+  fun foregroundAlertsForThreadsThatAreNotOnScreen() {
+    lifecycle.currentState = Lifecycle.State.RESUMED
+    AgentNotifications.setThreadOnScreen("/threads/environment/other")
+    AgentNotifications.receive(context, update("elsewhere", false))
+    assertEquals("kairo-agent-alert", manager.activeNotifications.single().tag)
   }
 
   @Test
@@ -100,20 +119,6 @@ class AgentNotificationsTest {
     AgentNotifications.receive(context, update("completion", false))
 
     assertTrue(manager.activeNotifications.isEmpty())
-  }
-
-  @Test
-  fun backgroundCompletionAlertsAndClearsOngoingActivity() {
-    lifecycle.currentState = Lifecycle.State.RESUMED
-    AgentNotifications.receive(context, update("running", true))
-    lifecycle.currentState = Lifecycle.State.CREATED
-
-    AgentNotifications.receive(context, update("completion", false))
-
-    val alert = manager.activeNotifications.single()
-    assertEquals("kairo-agent-alert", alert.tag)
-    assertEquals("Test thread", alert.notification.extras.getString(Notification.EXTRA_TITLE))
-    assertFalse(alert.notification.flags and Notification.FLAG_ONGOING_EVENT != 0)
   }
 
   @Test
@@ -143,6 +148,22 @@ class AgentNotificationsTest {
   }
 
   @Test
+  fun repeatedThreadAlertsHaveOneSilentSummaryAndClearTogether() {
+    AgentNotifications.receive(context, update("first", false) + ("alert_group" to "thread-group"))
+    AgentNotifications.receive(context, update("second", false) + ("alert_group" to "thread-group"))
+
+    val summary = manager.activeNotifications.single {
+      it.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0
+    }
+    assertEquals("thread-group", summary.notification.group)
+    assertEquals(3, manager.activeNotifications.size)
+    assertEquals(null, summary.notification.sound)
+
+    AgentNotifications.clear(context)
+    assertTrue(manager.activeNotifications.isEmpty())
+  }
+
+  @Test
   fun groupedAlertDisplaysEveryThreadAndRetriesStaySilent() {
     val titles = (1..5).map { "Thread $it " + "x".repeat(111) }.joinToString(", ")
     val grouped = update("group-completion", false) + mapOf(
@@ -164,7 +185,7 @@ class AgentNotificationsTest {
   }
 
   @Test
-  fun foregroundSuppressedGroupCannotAppearOnBackgroundRetry() {
+  fun foregroundGroupForOtherThreadsAlertsOnceAcrossBackgroundRetry() {
     val grouped = update("group-attention", true) + mapOf(
       "alert_title" to "2 agents need attention",
       "alert_body" to "First thread, Second thread",
@@ -172,10 +193,13 @@ class AgentNotificationsTest {
     )
     lifecycle.currentState = Lifecycle.State.RESUMED
     AgentNotifications.receive(context, grouped)
+    assertEquals(1, manager.activeNotifications.count { it.tag == "kairo-agent-alert" })
     lifecycle.currentState = Lifecycle.State.CREATED
     AgentNotifications.receive(context, grouped)
 
-    assertEquals("kairo-agent-activity", manager.activeNotifications.single().tag)
+    assertEquals(2, manager.activeNotifications.size)
+    assertEquals(1, manager.activeNotifications.count { it.tag == "kairo-agent-activity" })
+    assertEquals(1, manager.activeNotifications.count { it.tag == "kairo-agent-alert" })
   }
 
   @Test
@@ -241,7 +265,7 @@ class AgentNotificationsTest {
   }
 
   @Test
-  fun finishedCardIsRetainedSilentlyWithoutOngoingFlagAndExpiresAtTheOriginalDeadline() {
+  fun finishedCardIsRetainedSilentlyAndExpiresAtTheOriginalDeadline() {
     lifecycle.currentState = Lifecycle.State.RESUMED
     val expiresAt = System.currentTimeMillis() + 15 * 60 * 1000L
     val finished = update("finished", false) + mapOf(
@@ -252,7 +276,7 @@ class AgentNotificationsTest {
     AgentNotifications.receive(context, finished)
     val card = manager.activeNotifications.single().notification
     assertEquals("Agent work failed", card.extras.getString(Notification.EXTRA_TITLE))
-    assertFalse(card.flags and Notification.FLAG_ONGOING_EVENT != 0)
+    assertEquals(Build.VERSION.SDK_INT >= 36, card.flags and Notification.FLAG_ONGOING_EVENT != 0)
     assertTimeout(card, 1..15 * 60 * 1000L)
     AgentNotifications.receive(
       context,
@@ -276,21 +300,6 @@ class AgentNotificationsTest {
     assertEquals("kairo-agent-activity", manager.activeNotifications.single().tag)
     AgentNotifications.configure(context, "device", "user", "kairo-dev", false)
     assertTrue(manager.activeNotifications.isEmpty())
-  }
-
-  @Test
-  fun reorderedActivityDoesNotEraseNewerCardOrDropAnIndependentAlert() {
-    val now = System.currentTimeMillis()
-    AgentNotifications.receive(context, update("new", true) + ("updated_at" to now.toString()))
-    AgentNotifications.receive(
-      context,
-      update("older-alert", false) + ("updated_at" to (now - 1000).toString())
-    )
-    assertEquals(3, manager.activeNotifications.size)
-    assertEquals(1, manager.activeNotifications.count { it.tag == "kairo-agent-activity" })
-    shadowOf(manager).setNotificationsEnabled(false)
-    AgentNotifications.receive(context, update("revoked-permission", true))
-    assertEquals(3, manager.activeNotifications.size)
   }
 
   @Test
@@ -405,10 +414,22 @@ class AgentNotificationsTest {
         "android.app.Notification\$BigTextStyle",
         card.extras.getString(Notification.EXTRA_TEMPLATE)
       )
-      assertEquals(active, NotificationCompat.isRequestPromotedOngoing(card))
+      assertEquals(
+        active || Build.VERSION.SDK_INT >= 36,
+        NotificationCompat.isRequestPromotedOngoing(card)
+      )
       if (!active) {
-        assertEquals(null, card.extras.getString(NotificationCompat.EXTRA_SHORT_CRITICAL_TEXT))
-        assertEquals(0, card.actions?.size ?: 0)
+        assertEquals(
+          if (Build.VERSION.SDK_INT < 36) {
+            null
+          } else if (phase == "failed") {
+            "Failed"
+          } else {
+            "Done"
+          },
+          card.extras.getString(NotificationCompat.EXTRA_SHORT_CRITICAL_TEXT)
+        )
+        assertEquals(if (Build.VERSION.SDK_INT >= 36) 1 else 0, card.actions?.size ?: 0)
       }
     }
   }
@@ -503,7 +524,8 @@ class AgentNotificationsTest {
     AgentNotifications.expire(context, expiresAt + 60_000)
     assertEquals(1, manager.activeNotifications.count { it.tag == "kairo-agent-activity" })
     AgentNotifications.expire(context, expiresAt + 2 * 60 * 60 * 1000L)
-    assertTrue(manager.activeNotifications.all { it.tag == "kairo-agent-alert" })
+    assertEquals(2, manager.activeNotifications.count { it.tag == "kairo-agent-alert" })
+    assertTrue(manager.activeNotifications.none { it.tag == "kairo-agent-activity" })
     assertTrue(alarms.scheduledAlarms.isEmpty())
   }
 
@@ -557,7 +579,7 @@ class AgentNotificationsTest {
   }
 
   @Test
-  fun liveUpdateChipChangesWithActivityAndClearsOnCompletion() {
+  fun liveUpdateChipChangesWithActivityAndShowsDoneOnCompletion() {
     lifecycle.currentState = Lifecycle.State.RESUMED
     AgentNotifications.receive(context, update("work", true))
     assertEquals(
@@ -581,9 +603,13 @@ class AgentNotificationsTest {
       )
     )
     val finishedCard = manager.activeNotifications.single().notification
-    assertEquals(null, finishedCard.extras.getString(NotificationCompat.EXTRA_SHORT_CRITICAL_TEXT))
-    assertFalse(NotificationCompat.isRequestPromotedOngoing(finishedCard))
-    assertFalse(finishedCard.flags and Notification.FLAG_ONGOING_EVENT != 0)
+    val promoted = Build.VERSION.SDK_INT >= 36
+    assertEquals(
+      if (promoted) "Done" else null,
+      finishedCard.extras.getString(NotificationCompat.EXTRA_SHORT_CRITICAL_TEXT)
+    )
+    assertEquals(promoted, NotificationCompat.isRequestPromotedOngoing(finishedCard))
+    assertEquals(promoted, finishedCard.flags and Notification.FLAG_ONGOING_EVENT != 0)
   }
 
   @Test
@@ -623,5 +649,179 @@ class AgentNotificationsTest {
     shadowOf(manager).setNotificationsEnabled(true)
     AgentNotifications.receive(context, message)
     assertEquals(2, manager.activeNotifications.size)
+  }
+}
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [26, 33, 36], manifest = Config.NONE)
+class AgentNotificationChannelsTest {
+  @Test
+  fun mutedAlertChannelKeepsTheSameActivityThroughCompletionUntilDismissedOrExpired() {
+    val context = RuntimeEnvironment.getApplication()
+    val manager = context.getSystemService(NotificationManager::class.java)
+    shadowOf(manager).setNotificationsEnabled(true)
+    AgentNotifications.clear(context)
+    AgentNotifications.configure(context, "device", "user", "kairo-dev", true)
+    val running = mapOf(
+      "device_id" to "device",
+      "user_hash" to "60a4ea94a99303630c40fff23f4de5c06a8f978289a3889f31edfac3b89f85d7",
+      "updated_at" to System.currentTimeMillis().toString(),
+      "active" to "true",
+      "activity_title" to "Agent activity"
+    )
+    manager.createNotificationChannel(
+      NotificationChannel("agent-alerts", "Agent alerts", NotificationManager.IMPORTANCE_NONE)
+    )
+    AgentNotifications.receive(context, running)
+    val initialCard = manager.activeNotifications.single()
+    assertEquals("kairo-agent-activity", initialCard.tag)
+
+    AgentNotifications.configure(context, "device", "user", "kairo-dev", true)
+    AgentNotifications.receive(
+      context,
+      running + mapOf(
+        "activity_phase" to "waiting_for_approval",
+        "activity_attention_count" to "1"
+      )
+    )
+    val card = manager.activeNotifications.single().notification
+    assertEquals("Approve", card.extras.getString(NotificationCompat.EXTRA_SHORT_CRITICAL_TEXT))
+
+    val finished = running + mapOf(
+      "active" to "false",
+      "activity_phase" to "completed",
+      "activity_line_0" to "Done\tTest thread\tTest project",
+      "activity_expires_at" to (System.currentTimeMillis() + 900000).toString()
+    )
+    AgentNotifications.receive(context, finished)
+    AgentNotifications.receive(context, finished)
+    val completedCard = manager.activeNotifications.single()
+    assertEquals(initialCard.id, completedCard.id)
+    assertEquals(initialCard.tag, completedCard.tag)
+    assertEquals("agent-activity", completedCard.notification.channelId)
+    assertEquals(
+      "Test thread",
+      completedCard.notification.extras.getString(Notification.EXTRA_TITLE)
+    )
+    assertEquals(
+      "Done Test project",
+      completedCard.notification.extras.getCharSequence(Notification.EXTRA_TEXT).toString()
+    )
+    val promoted = Build.VERSION.SDK_INT >= 36
+    assertEquals(promoted, NotificationCompat.isRequestPromotedOngoing(completedCard.notification))
+    assertEquals(
+      promoted,
+      completedCard.notification.flags and Notification.FLAG_ONGOING_EVENT != 0
+    )
+    assertEquals(
+      if (promoted) "Done" else null,
+      completedCard.notification.extras.getString(NotificationCompat.EXTRA_SHORT_CRITICAL_TEXT)
+    )
+
+    if (promoted) {
+      val dismiss = completedCard.notification.actions.single()
+      assertEquals("Dismiss", dismiss.title.toString())
+      AgentActivityDismissReceiver().onReceive(context, shadowOf(dismiss.actionIntent).savedIntent)
+    } else {
+      AgentNotifications.dismiss(context)
+    }
+    AgentNotifications.receive(context, finished)
+    assertTrue(manager.activeNotifications.isEmpty())
+
+    AgentNotifications.receive(context, running)
+    assertEquals("kairo-agent-activity", manager.activeNotifications.single().tag)
+    AgentNotifications.receive(
+      context,
+      finished + ("activity_expires_at" to (System.currentTimeMillis() - 1).toString())
+    )
+    assertTrue(manager.activeNotifications.isEmpty())
+  }
+}
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [24, 26, 33, 36], manifest = Config.NONE)
+class AgentNotificationsCompletionTest : AgentNotificationsFixture() {
+  private fun finished(alertId: String, expiresAt: Long) = update(alertId, false) + mapOf(
+    "activity_line_0" to "Done\tTest thread\tTest project",
+    "activity_phase" to "completed",
+    "activity_expires_at" to expiresAt.toString(),
+  )
+
+  @Test
+  fun backgroundCompletionAlertsAndClearsOngoingActivity() {
+    lifecycle.currentState = Lifecycle.State.RESUMED
+    AgentNotifications.receive(context, update("running", true))
+    lifecycle.currentState = Lifecycle.State.CREATED
+
+    val expiresAt = System.currentTimeMillis() + 900000
+    val completion = finished("completion", expiresAt)
+    AgentNotifications.receive(context, completion)
+    AgentNotifications.receive(context, completion)
+    AgentNotifications.receive(context, completion.filterKeys { !it.startsWith("alert_") })
+
+    val alert = manager.activeNotifications.single()
+    assertEquals("kairo-agent-alert", alert.tag)
+    assertEquals("Test thread", alert.notification.extras.getString(Notification.EXTRA_TITLE))
+    assertFalse(alert.notification.flags and Notification.FLAG_ONGOING_EVENT != 0)
+    AgentNotifications.receive(context, update("next-run", true))
+    assertEquals(1, manager.activeNotifications.count { it.tag == "kairo-agent-activity" })
+
+    // An alert for another thread, or a card that also lists another result, stays.
+    AgentNotifications.receive(
+      context,
+      finished("other-thread", expiresAt + 60000) + ("alert_path" to "/threads/other/thread")
+    )
+    assertEquals(1, manager.activeNotifications.count { it.tag == "kairo-agent-activity" })
+    AgentNotifications.receive(
+      context,
+      finished("with-muted-result", expiresAt + 120000) +
+        ("activity_line_1" to "Done\tMuted thread\tOther project")
+    )
+    assertEquals(1, manager.activeNotifications.count { it.tag == "kairo-agent-activity" })
+  }
+
+  @Test
+  @Config(sdk = [26, 33, 36])
+  fun blockedAlertChannelKeepsTheFinishedCard() {
+    manager.getNotificationChannel("agent-alerts").importance = NotificationManager.IMPORTANCE_NONE
+    AgentNotifications.receive(
+      context,
+      finished("completion", System.currentTimeMillis() + 900000)
+    )
+    assertEquals(1, manager.activeNotifications.count { it.tag == "kairo-agent-activity" })
+  }
+
+  @Test
+  fun reorderedActivityDoesNotEraseNewerCardOrDropAnIndependentAlert() {
+    val now = System.currentTimeMillis()
+    AgentNotifications.receive(context, update("new", true) + ("updated_at" to now.toString()))
+    AgentNotifications.receive(
+      context,
+      finished("older-alert", now + 900000) + ("updated_at" to (now - 1000).toString())
+    )
+    assertEquals(4, manager.activeNotifications.size)
+    assertEquals(1, manager.activeNotifications.count { it.tag == "kairo-agent-activity" })
+    // A newer replay of a finish can show its card before the original alert lands.
+    val finish = finished("finish", now + 960000)
+    AgentNotifications.receive(
+      context,
+      finish.filterKeys { !it.startsWith("alert_") } + ("updated_at" to (now + 2000).toString())
+    )
+    assertEquals(1, manager.activeNotifications.count { it.tag == "kairo-agent-activity" })
+    AgentNotifications.receive(context, finish + ("updated_at" to (now + 1000).toString()))
+    assertTrue(manager.activeNotifications.none { it.tag == "kairo-agent-activity" })
+    assertTrue(manager.activeNotifications.any { it.id == "finish".hashCode() })
+    AgentNotifications.receive(
+      context,
+      finished("previous-run", now + 900000) + ("updated_at" to now.toString())
+    )
+    AgentNotifications.receive(
+      context,
+      finish.filterKeys { !it.startsWith("alert_") } + ("updated_at" to (now + 3000).toString())
+    )
+    assertTrue(manager.activeNotifications.none { it.tag == "kairo-agent-activity" })
+    shadowOf(manager).setNotificationsEnabled(false)
+    AgentNotifications.receive(context, update("revoked-permission", true))
+    assertEquals(5, manager.activeNotifications.size)
   }
 }

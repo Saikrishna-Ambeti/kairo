@@ -1,7 +1,7 @@
+import { formatProviderSkillDisplayName } from "@kairo/shared/inlineSkills";
 import type { ServerProviderSkill } from "@kairo/contracts";
 import {
   dedupeProviderSkillsByName,
-  formatProviderSkillDisplayName,
   isProviderSkillUserInvocable,
 } from "@kairo/client-runtime/providerSkills";
 import {

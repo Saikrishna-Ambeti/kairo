@@ -1,0 +1,206 @@
+import type { ContentMatch, NodeType } from "@tiptap/pm/model";
+import type { EditorState, Transaction } from "@tiptap/pm/state";
+import { Selection, TextSelection } from "@tiptap/pm/state";
+import type { EditorView } from "@tiptap/pm/view";
+
+import { isClosingFence, parseOpeningFence, serializeSelection } from "~/composer-rich-text-doc";
+
+const CODE_BLOCK_INDENT = "  ";
+
+function leadingWhitespace(line: string): string {
+  return /^[ \t]*/.exec(line)?.[0] ?? "";
+}
+
+function outdentLine(line: string): string {
+  if (line.startsWith(CODE_BLOCK_INDENT)) return line.slice(CODE_BLOCK_INDENT.length);
+  if (line.startsWith("\t")) return line.slice(1);
+  if (line.startsWith(" ")) return line.slice(1);
+  return line;
+}
+
+function indentLines(lines: ReadonlyArray<string>, direction: "in" | "out"): string[] {
+  return lines.map((line) => {
+    if (direction === "in") return line.length === 0 ? line : `${CODE_BLOCK_INDENT}${line}`;
+    return outdentLine(line);
+  });
+}
+
+export function selectionInOneCodeBlock(state: EditorState): boolean {
+  const { $from, $to } = state.selection;
+  return $from.parent.type.spec.code === true && $from.sameParent($to);
+}
+
+function codeBlockRange(
+  state: EditorState,
+): { readonly from: number; readonly to: number; readonly text: string } | null {
+  const { $from, $to } = state.selection;
+  const parent = $from.parent;
+  if (parent.type.spec.code !== true) return null;
+  // Structural equality would let selections span identical fences.
+  if (!$from.sameParent($to)) return null;
+  const from = $from.start();
+  return { from, to: from + parent.content.size, text: parent.textContent };
+}
+
+export function indentedNewlineInCodeBlock(
+  state: EditorState,
+  dispatch?: (transaction: Transaction) => void,
+): boolean {
+  const block = codeBlockRange(state);
+  if (!block) return false;
+
+  const { from, to } = state.selection;
+  const beforeCursor = block.text.slice(0, from - block.from);
+  const currentLine = beforeCursor.slice(beforeCursor.lastIndexOf("\n") + 1);
+  const indent = leadingWhitespace(currentLine);
+
+  if (indent.length === 0) return false;
+
+  if (dispatch) {
+    const inserted = `\n${indent}`;
+    const transaction = state.tr.insertText(inserted, from, to);
+    const caret = from + inserted.length;
+    transaction.setSelection(TextSelection.create(transaction.doc, caret));
+    dispatch(transaction.scrollIntoView());
+  }
+  return true;
+}
+
+function defaultBlockAt(match: ContentMatch): NodeType | null {
+  for (let index = 0; index < match.edgeCount; index += 1) {
+    const { type } = match.edge(index);
+    if (type.isTextblock && !type.hasRequiredAttrs()) return type;
+  }
+  return null;
+}
+
+export function exitCodeBlockOnTrailingBlankLines(view: EditorView): boolean {
+  const { $from, empty } = view.state.selection;
+  if (!empty || $from.parent.type.spec.code !== true) return false;
+  if ($from.parentOffset !== $from.parent.content.size) return false;
+  const trailing = /\n[ \t]*\n[ \t]*$/.exec($from.parent.textContent);
+  if (!trailing) return false;
+  const above = $from.node(-1);
+  const after = $from.indexAfter(-1);
+  const exitType = defaultBlockAt(above.contentMatchAt(after));
+  const exitBlock = exitType?.createAndFill();
+  if (!exitType || !exitBlock || !above.canReplaceWith(after, after, exitType)) return false;
+
+  const transaction = view.state.tr.delete($from.pos - trailing[0].length, $from.pos);
+  // Close the fence on exit so following prose is not read as code.
+  if (!$from.parent.attrs.close) {
+    transaction.setNodeAttribute($from.before(), "close", `\n${$from.parent.attrs.fence}`);
+  }
+  const exitPos = transaction.mapping.map($from.after());
+  transaction.replaceWith(exitPos, exitPos, exitBlock);
+  transaction.setSelection(Selection.near(transaction.doc.resolve(exitPos), 1));
+  view.dispatch(transaction.scrollIntoView());
+  return true;
+}
+
+export function exitCodeBlockOnClosingFence(
+  state: EditorState,
+  dispatch?: (transaction: Transaction) => void,
+): boolean {
+  const block = codeBlockRange(state);
+  if (!block || !state.selection.empty) return false;
+  const caret = state.selection.from - block.from;
+  const lineStart = block.text.lastIndexOf("\n", caret - 1) + 1;
+  const newlineAfter = block.text.indexOf("\n", caret);
+  const lineEnd = newlineAfter === -1 ? block.text.length : newlineAfter;
+  const line = block.text.slice(lineStart, lineEnd);
+  const node = state.selection.$from.parent;
+  if (caret !== lineEnd || !isClosingFence(line, String(node.attrs.fence))) return false;
+
+  if (dispatch) {
+    const { schema } = state;
+    const paragraph = (text: string) =>
+      schema.nodes.paragraph!.create(null, text ? schema.text(text) : null);
+    const code = block.text.slice(0, Math.max(0, lineStart - 1));
+    const rest = newlineAfter === -1 ? [] : block.text.slice(newlineAfter + 1).split("\n");
+    const closed = node.type.create(
+      { ...node.attrs, close: `\n${line}` },
+      code ? schema.text(code) : null,
+    );
+    const start = state.selection.$from.before();
+    const transaction = state.tr.replaceWith(start, start + node.nodeSize, [
+      closed,
+      paragraph(""),
+      ...rest.map(paragraph),
+    ]);
+    transaction.setSelection(TextSelection.create(transaction.doc, start + closed.nodeSize + 1));
+    dispatch(transaction.scrollIntoView());
+  }
+  return true;
+}
+
+export function indentCodeBlock(
+  state: EditorState,
+  direction: "in" | "out",
+  dispatch?: (transaction: Transaction) => void,
+): boolean {
+  const block = codeBlockRange(state);
+  if (!block) return false;
+
+  const { from, to } = state.selection;
+  const startOffset = from - block.from;
+  const endOffset = to - block.from;
+
+  if (from === to && direction === "in") {
+    if (dispatch) {
+      const transaction = state.tr.insertText(CODE_BLOCK_INDENT, from, to);
+      dispatch(transaction.scrollIntoView());
+    }
+    return true;
+  }
+
+  const lineStart = startOffset === 0 ? 0 : block.text.lastIndexOf("\n", startOffset - 1) + 1;
+  const newlineAfter = block.text.indexOf("\n", Math.max(startOffset, endOffset - 1));
+  const lineEnd = newlineAfter === -1 ? block.text.length : newlineAfter;
+
+  const originalLines = block.text.slice(lineStart, lineEnd).split("\n");
+  const nextLines = indentLines(originalLines, direction);
+  if (nextLines.join("\n") === originalLines.join("\n")) return true;
+
+  if (dispatch) {
+    const transaction = state.tr;
+    let position = block.from + lineStart;
+    originalLines.forEach((line, index) => {
+      const delta = nextLines[index]!.length - line.length;
+      const start = transaction.mapping.map(position);
+      if (delta > 0) transaction.insertText(CODE_BLOCK_INDENT, start);
+      if (delta < 0) transaction.delete(start, start - delta);
+      position += line.length + 1;
+    });
+    transaction.setSelection(state.selection.map(transaction.doc, transaction.mapping));
+    dispatch(transaction.scrollIntoView());
+  }
+  return true;
+}
+
+/** Tiptap's input rules only fire on a space, leaving a fence followed by Enter literal. */
+export function convertCodeFenceOnEnter(
+  state: EditorState,
+  dispatch?: (transaction: Transaction) => void,
+): boolean {
+  const { $from, empty } = state.selection;
+  // List and quote serializers cannot write fences, so allow only top-level paragraphs.
+  if (!empty || $from.parent.type.name !== "paragraph" || $from.depth !== 1) return false;
+  if ($from.parentOffset !== $from.parent.content.size) return false;
+  const opening = parseOpeningFence(serializeSelection(state.doc, $from.start(), $from.end()));
+  const codeBlock = state.schema.nodes.codeBlock;
+  if (!opening || !codeBlock) return false;
+
+  if (dispatch) {
+    const blockStart = $from.before();
+    const { fence, language } = opening;
+    const transaction = state.tr.replaceWith(
+      blockStart,
+      blockStart + $from.parent.nodeSize,
+      codeBlock.create({ language, fence, close: `\n${fence}` }),
+    );
+    transaction.setSelection(TextSelection.create(transaction.doc, blockStart + 1));
+    dispatch(transaction.scrollIntoView());
+  }
+  return true;
+}

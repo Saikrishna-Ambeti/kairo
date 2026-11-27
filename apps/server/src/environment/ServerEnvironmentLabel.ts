@@ -1,4 +1,5 @@
-import { HostProcessHostname, HostProcessPlatform } from "@kairo/shared/hostProcess";
+import * as HostProcess from "@kairo/shared/HostProcess";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -116,6 +117,8 @@ const runFriendlyLabelCommand = Effect.fn("runFriendlyLabelCommand")(function* (
     .run({
       command: input.command,
       args: input.args,
+      // Server startup waits on this; hostnamectl can block on D-Bus when hostnamed is down.
+      timeout: "5 seconds",
       timeoutBehavior: "timedOutResult",
     })
     .pipe(
@@ -151,7 +154,7 @@ const runFriendlyLabelCommand = Effect.fn("runFriendlyLabelCommand")(function* (
 });
 
 const resolveFriendlyHostLabel = Effect.fn("resolveFriendlyHostLabel")(function* () {
-  const platform = yield* HostProcessPlatform;
+  const platform = yield* HostProcess.Platform;
   if (platform === "darwin") {
     return yield* runFriendlyLabelCommand({
       probe: "macos-computer-name",
@@ -179,16 +182,43 @@ const resolveFriendlyHostLabel = Effect.fn("resolveFriendlyHostLabel")(function*
   return null;
 });
 
+const isWsl = Effect.fn("isWsl")(function* () {
+  if ((yield* HostProcess.Platform) !== "linux") {
+    return false;
+  }
+  const fileSystem = yield* FileSystem.FileSystem;
+  const kernelRelease = yield* fileSystem
+    .readFileString("/proc/sys/kernel/osrelease")
+    .pipe(Effect.orElseSucceed(() => ""));
+  return kernelRelease.toLowerCase().includes("microsoft");
+});
+
+// Names this environment instead of the machine, e.g. for staged demos and scenario captures.
+const labelOverride = Config.String("KAIRO_ENVIRONMENT_LABEL").pipe(
+  Config.option,
+  Config.map(Option.flatMap((label) => Option.fromNullishOr(normalizeLabel(label)))),
+);
+
 export const resolveServerEnvironmentLabel = Effect.fn("resolveServerEnvironmentLabel")(function* (
   input: ResolveServerEnvironmentLabelInput,
 ) {
+  const override = yield* labelOverride.pipe(Effect.orElseSucceed(() => Option.none<string>()));
+  if (Option.isSome(override)) {
+    return override.value;
+  }
+
   const friendlyHostLabel = yield* resolveFriendlyHostLabel();
   if (friendlyHostLabel) {
     return friendlyHostLabel;
   }
 
-  const hostname = normalizeLabel(yield* HostProcessHostname);
+  const hostname = normalizeLabel(yield* HostProcess.Hostname);
   if (hostname) {
+    // WSL inherits the Windows hostname, so qualify it to tell the two environments apart.
+    if (yield* isWsl()) {
+      const distro = normalizeLabel((yield* HostProcess.Environment).WSL_DISTRO_NAME);
+      return distro ? `${hostname} WSL (${distro})` : `${hostname} WSL`;
+    }
     return hostname;
   }
 

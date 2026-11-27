@@ -1,39 +1,72 @@
 import {
   AuthStandardClientScopes,
   EnvironmentId,
+  type AuthEnvironmentScope,
   ORCHESTRATION_PROTOCOL_VERSION,
 } from "@kairo/contracts";
-import { describe, expect, it } from "@effect/vitest";
+import { assert, describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
+import * as SubscriptionRef from "effect/SubscriptionRef";
 
-import { remoteHttpClientLayer } from "../rpc/http.ts";
-import { ClientPresentation, SshEnvironmentGateway } from "../platform/capabilities.ts";
-import { BearerConnectionCredential, BearerConnectionProfile } from "./catalog.ts";
-import { BearerConnectionTarget } from "./model.ts";
+import * as RpcHttp from "../rpc/http.ts";
+import * as ClientCapabilities from "../platform/capabilities.ts";
+import * as ManagedRelay from "../relay/managedRelay.ts";
+import * as Persistence from "../platform/persistence.ts";
+import { fetchRemoteSessionState } from "../authorization/remote.ts";
+import {
+  BearerConnectionCredential,
+  BearerConnectionProfile,
+  BearerConnectionRegistration,
+  PrimaryConnectionRegistration,
+} from "./catalog.ts";
+import * as Connectivity from "./connectivity.ts";
+import * as ConnectionCredentialStore from "./credentialStore.ts";
+import * as ConnectionDriver from "./driver.ts";
+import {
+  BearerConnectionTarget,
+  ConnectionBlockedError,
+  PrimaryConnectionTarget,
+} from "./model.ts";
+import * as Onboarding from "./onboarding.ts";
 import {
   prepareBearerConnectionUpdate,
   preparePairingRegistration,
   prepareSshRegistration,
 } from "./onboarding.ts";
+import * as EnvironmentRegistry from "./registry.ts";
+import * as ConnectionProfileStore from "./profileStore.ts";
+import { connectionRoutes, routeHttpBaseUrl } from "./routes.ts";
+import * as ConnectionWakeups from "./wakeups.ts";
 
-const CLIENT_PRESENTATION_LAYER = Layer.succeed(
-  ClientPresentation,
-  ClientPresentation.of({
+const layerClientPresentation = Layer.succeed(
+  ClientCapabilities.ClientPresentation,
+  ClientCapabilities.ClientPresentation.of({
     metadata: {
       label: "Kairo Test",
       deviceType: "desktop",
       os: "Test OS",
     },
-    scopes: AuthStandardClientScopes,
   }),
 );
 
-function pairingHttpLayer(
+function layerPairingHttp(
   calls: Array<{ readonly url: string; readonly init: RequestInit }>,
-  options?: { readonly failDescriptor?: boolean; readonly protocolVersion?: number },
+  options?: {
+    readonly failDescriptor?: boolean;
+    readonly failExchange?: boolean;
+    readonly protocolVersion?: number;
+    readonly selfUpdate?: boolean;
+    readonly grantScopes?: ReadonlyArray<AuthEnvironmentScope>;
+    readonly exchangeGate?: { readonly reached: () => void; readonly release: Promise<void> };
+    readonly accessTokenRenewal?: boolean;
+  },
 ) {
+  const grantScopes = options?.grantScopes ?? AuthStandardClientScopes;
+  let sessionScopes: ReadonlyArray<string> = [];
   const fetchFn = ((input, init = {}) => {
     const url = String(input);
     calls.push({ url, init });
@@ -56,19 +89,70 @@ function pairingHttpLayer(
           orchestrationProtocolVersion: options?.protocolVersion ?? ORCHESTRATION_PROTOCOL_VERSION,
           capabilities: {
             repositoryIdentity: true,
+            ...(options?.selfUpdate === true ? { serverSelfUpdate: "boot-service" } : {}),
+            ...(options?.accessTokenRenewal === true ? { accessTokenRenewal: true } : {}),
           },
         }),
       );
     }
 
     if (url.endsWith("/oauth/token")) {
+      if (options?.failExchange === true) {
+        return Promise.resolve(
+          Response.json(
+            {
+              _tag: "EnvironmentAuthInvalidError",
+              code: "auth_invalid",
+              reason: "invalid_credential",
+              traceId: "trace-pairing-test",
+            },
+            { status: 401 },
+          ),
+        );
+      }
+      const body =
+        init.body instanceof Uint8Array ? new TextDecoder().decode(init.body) : String(init.body);
+      const requestedScope = new URLSearchParams(body).get("scope");
+      sessionScopes = requestedScope === null ? grantScopes : requestedScope.split(" ");
+      if (!sessionScopes.every((scope) => grantScopes.some((granted) => granted === scope))) {
+        return Promise.resolve(
+          Response.json(
+            {
+              _tag: "EnvironmentRequestInvalidError",
+              code: "invalid_request",
+              reason: "scope_not_granted",
+              traceId: "pairing-scope-test",
+            },
+            { status: 400 },
+          ),
+        );
+      }
+      const dpop = new Headers(init.headers).has("dpop");
+      const granted = Response.json({
+        access_token: dpop ? "dpop-token" : "bearer-token",
+        issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
+        token_type: dpop ? "DPoP" : "Bearer",
+        expires_in: 3600,
+        scope: sessionScopes.join(" "),
+      });
+      const gate = options?.exchangeGate;
+      if (gate === undefined) return Promise.resolve(granted);
+      gate.reached();
+      return gate.release.then(() => granted);
+    }
+
+    if (url.endsWith("/api/auth/session")) {
       return Promise.resolve(
         Response.json({
-          access_token: "bearer-token",
-          issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
-          token_type: "Bearer",
-          expires_in: 3600,
-          scope: AuthStandardClientScopes.join(" "),
+          authenticated: true,
+          auth: {
+            policy: "remote-reachable",
+            bootstrapMethods: ["one-time-token"],
+            sessionMethods: ["bearer-access-token"],
+            sessionCookieName: "kairo_session",
+          },
+          scopes: sessionScopes,
+          sessionMethod: "bearer-access-token",
         }),
       );
     }
@@ -76,8 +160,84 @@ function pairingHttpLayer(
     return Promise.reject(new Error(`Unexpected request: ${url}`));
   }) satisfies typeof fetch;
 
-  return remoteHttpClientLayer(fetchFn);
+  return RpcHttp.layerRemoteHttpClient(fetchFn);
 }
+
+function layerPairingOnboarding(
+  options?: Parameters<typeof layerPairingHttp>[1],
+  calls: Array<{ readonly url: string; readonly init: RequestInit }> = [],
+  provision?: ClientCapabilities.SshEnvironmentGateway["Service"]["provision"],
+) {
+  const dependencies = Layer.mergeAll(
+    layerClientPresentation,
+    layerPairingHttp(calls, options),
+    Layer.mock(Persistence.ConnectionTargetStore)({
+      list: Effect.succeed([]),
+      listDisabled: Effect.succeed([]),
+    }),
+    Layer.mock(Persistence.ConnectionRegistrationStore)({
+      register: () => Effect.void,
+      setEnabled: () => Effect.void,
+    }),
+    Layer.mock(Persistence.EnvironmentCacheStore)({}),
+    Layer.mock(ConnectionProfileStore.ConnectionProfileStore)({}),
+    Layer.mock(ConnectionCredentialStore.ConnectionCredentialStore)({
+      get: () => Effect.succeedNone,
+      put: () => Effect.void,
+    }),
+    Layer.mock(ClientCapabilities.SshEnvironmentGateway)(provision ? { provision } : {}),
+    Layer.succeed(
+      Connectivity.Connectivity,
+      Connectivity.Connectivity.of({ status: Effect.succeed("online"), changes: Stream.never }),
+    ),
+    Layer.mock(ConnectionDriver.ConnectionDriver)({ connect: () => Effect.never }),
+    Layer.succeed(
+      ConnectionWakeups.ConnectionWakeups,
+      ConnectionWakeups.ConnectionWakeups.of({ changes: Stream.never }),
+    ),
+  );
+  return Onboarding.layer.pipe(
+    Layer.provideMerge(EnvironmentRegistry.layer.pipe(Layer.provideMerge(dependencies))),
+  );
+}
+
+const PAIRED_ENVIRONMENT_ID = EnvironmentId.make("environment-paired");
+const PAIRING_INPUT = { host: "remote.example.test", pairingCode: "pairing-token" };
+const PAIRED_PROFILE = new BearerConnectionProfile({
+  connectionId: "bearer:environment-paired:https://remote.example.test",
+  environmentId: PAIRED_ENVIRONMENT_ID,
+  label: "Paired environment",
+  httpBaseUrl: "https://remote.example.test/",
+  wsBaseUrl: "wss://remote.example.test/",
+});
+const UNSUPPORTED_ERROR = new ConnectionBlockedError({
+  reason: "unsupported",
+  detail: "The saved server used an incompatible orchestration protocol.",
+});
+
+const registerSwitchedOffEnvironment = Effect.gen(function* () {
+  const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+  const registration = new BearerConnectionRegistration({
+    target: new BearerConnectionTarget({
+      environmentId: PAIRED_ENVIRONMENT_ID,
+      connectionId: PAIRED_PROFILE.connectionId,
+      label: "Old label",
+    }),
+    profile: new BearerConnectionProfile({ ...PAIRED_PROFILE, label: "Old label" }),
+    credential: new BearerConnectionCredential({ token: "old-token" }),
+  });
+  yield* registry.register(registration);
+  yield* registry.setEnabled(PAIRED_ENVIRONMENT_ID, false);
+  yield* registry.setCompatibility(PAIRED_ENVIRONMENT_ID, UNSUPPORTED_ERROR);
+  const entries = yield* SubscriptionRef.get(registry.entries);
+  expect(entries.get(PAIRED_ENVIRONMENT_ID)).toEqual({
+    target: registration.target,
+    profile: Option.some(registration.profile),
+    enabled: false,
+    unsupportedReason: UNSUPPORTED_ERROR.message,
+  });
+  return entries;
+});
 
 describe("connection onboarding", () => {
   it.effect("prepares a persisted bearer registration from pairing details", () =>
@@ -86,19 +246,19 @@ describe("connection onboarding", () => {
       const registration = yield* preparePairingRegistration({
         host: "remote.example.test",
         pairingCode: "pairing-token",
-      }).pipe(Effect.provide(Layer.mergeAll(CLIENT_PRESENTATION_LAYER, pairingHttpLayer(calls))));
+      }).pipe(Effect.provide(layerPairingOnboarding(undefined, calls)));
 
       expect(registration).toMatchObject({
         _tag: "BearerConnectionRegistration",
         target: {
           environmentId: "environment-paired",
           label: "Paired environment",
-          connectionId: "bearer:environment-paired",
+          connectionId: "bearer:environment-paired:https://remote.example.test",
         },
         profile: {
           environmentId: "environment-paired",
           label: "Paired environment",
-          connectionId: "bearer:environment-paired",
+          connectionId: "bearer:environment-paired:https://remote.example.test",
           httpBaseUrl: "https://remote.example.test/",
           wsBaseUrl: "wss://remote.example.test/",
         },
@@ -118,9 +278,254 @@ describe("connection onboarding", () => {
           : String(tokenRequest?.init.body);
       const tokenParams = new URLSearchParams(tokenBody);
       expect(tokenParams.get("subject_token")).toBe("pairing-token");
-      expect(tokenParams.get("scope")).toBe(AuthStandardClientScopes.join(" "));
+      expect(tokenParams.has("scope")).toBe(false);
       expect(tokenParams.get("client_label")).toBe("Kairo Test");
+      expect(tokenParams.get("client_device_type")).toBe("desktop");
+      expect(tokenParams.get("client_os")).toBe("Test OS");
     }),
+  );
+
+  it.effect("turns a switched-off environment back on when it is paired again", () =>
+    Effect.gen(function* () {
+      const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+      const onboarding = yield* Onboarding.ConnectionOnboarding;
+      yield* registerSwitchedOffEnvironment;
+
+      const environmentId = yield* onboarding.registerPairing(PAIRING_INPUT);
+
+      expect(environmentId).toBe(PAIRED_ENVIRONMENT_ID);
+      const entries = yield* SubscriptionRef.get(registry.entries);
+      const entry = entries.get(environmentId);
+      expect(entries.size).toBe(1);
+      expect(entry?.enabled).toBe(true);
+      expect(entry?.unsupportedReason).toBeUndefined();
+      expect(entry?.profile).toEqual(Option.some(PAIRED_PROFILE));
+      expect(entry?.target).toEqual(
+        new BearerConnectionTarget({
+          environmentId,
+          connectionId: PAIRED_PROFILE.connectionId,
+          label: PAIRED_PROFILE.label,
+        }),
+      );
+    }).pipe(Effect.provide(layerPairingOnboarding())),
+  );
+
+  it.effect("refuses a pairing link that claims a saved environment from a new address", () => {
+    const calls: Array<{ readonly url: string; readonly init: RequestInit }> = [];
+    return Effect.gen(function* () {
+      const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+      const onboarding = yield* Onboarding.ConnectionOnboarding;
+      const before = yield* registerSwitchedOffEnvironment;
+
+      const error = yield* onboarding
+        .registerPairing({ host: "attacker.example.test", pairingCode: "pairing-token" })
+        .pipe(Effect.flip);
+
+      expect(error).toMatchObject({ _tag: "ConnectionBlockedError", reason: "configuration" });
+      expect(yield* SubscriptionRef.get(registry.entries)).toEqual(before);
+      expect(calls.map((call) => call.url)).toEqual([
+        "https://attacker.example.test/.well-known/kairo/environment",
+      ]);
+    }).pipe(Effect.provide(layerPairingOnboarding(undefined, calls)));
+  });
+
+  it.effect(
+    "refuses to add an SSH route to a saved environment during untargeted onboarding",
+    () => {
+      const target = {
+        alias: "devbox",
+        hostname: "devbox.example.test",
+        username: "developer",
+        port: 22,
+      };
+      return Effect.gen(function* () {
+        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const onboarding = yield* Onboarding.ConnectionOnboarding;
+        const before = yield* registerSwitchedOffEnvironment;
+
+        const result = yield* onboarding.registerSsh({ target }).pipe(Effect.result);
+
+        expect(result).toMatchObject({
+          _tag: "Failure",
+          failure: { _tag: "ConnectionBlockedError", reason: "configuration" },
+        });
+        expect(yield* SubscriptionRef.get(registry.entries)).toEqual(before);
+      }).pipe(
+        Effect.provide(
+          layerPairingOnboarding(undefined, [], () =>
+            Effect.succeed({
+              environmentId: PAIRED_ENVIRONMENT_ID,
+              label: "Remote development box",
+              bootstrap: {
+                target,
+                httpBaseUrl: "http://127.0.0.1:3201",
+                wsBaseUrl: "ws://127.0.0.1:3201",
+                pairingToken: "pairing-token",
+              },
+              bearerToken: "bearer-token",
+            }),
+          ),
+        ),
+      );
+    },
+  );
+
+  it.effect("refuses a new address when the environment is saved during the exchange", () => {
+    let reached!: () => void;
+    let release!: () => void;
+    const exchangeReached = new Promise<void>((resolve) => (reached = resolve));
+    const exchangeGate = {
+      reached: () => reached(),
+      release: new Promise<void>((resolve) => (release = resolve)),
+    };
+    return Effect.gen(function* () {
+      const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+      const onboarding = yield* Onboarding.ConnectionOnboarding;
+      const pairing = yield* onboarding
+        .registerPairing({ host: "attacker.example.test", pairingCode: "pairing-token" })
+        .pipe(Effect.result, Effect.forkChild);
+      yield* Effect.promise(() => exchangeReached);
+      const before = yield* registerSwitchedOffEnvironment;
+      release();
+
+      const outcome = yield* Fiber.join(pairing);
+
+      expect(outcome).toMatchObject({
+        _tag: "Failure",
+        failure: { _tag: "ConnectionBlockedError", reason: "configuration" },
+      });
+      expect(yield* SubscriptionRef.get(registry.entries)).toEqual(before);
+    }).pipe(Effect.provide(layerPairingOnboarding({ exchangeGate })));
+  });
+
+  it.effect("adds a new address as a route when pairing targets that environment", () =>
+    Effect.gen(function* () {
+      const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+      const onboarding = yield* Onboarding.ConnectionOnboarding;
+      yield* registerSwitchedOffEnvironment;
+
+      yield* onboarding.registerPairing({
+        host: "lan.example.test",
+        pairingCode: "pairing-token",
+        expectedEnvironmentId: PAIRED_ENVIRONMENT_ID,
+      });
+
+      const entry = (yield* SubscriptionRef.get(registry.entries)).get(PAIRED_ENVIRONMENT_ID);
+      expect(entry === undefined ? [] : connectionRoutes(entry).map(routeHttpBaseUrl)).toEqual(
+        expect.arrayContaining(["https://remote.example.test/", "https://lan.example.test/"]),
+      );
+    }).pipe(Effect.provide(layerPairingOnboarding())),
+  );
+
+  it.effect(
+    "re-pairs an outdated self-updatable environment so its connection can be rechecked",
+    () =>
+      Effect.gen(function* () {
+        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const onboarding = yield* Onboarding.ConnectionOnboarding;
+        yield* registerSwitchedOffEnvironment;
+        yield* registry.setCompatibility(
+          PAIRED_ENVIRONMENT_ID,
+          new ConnectionBlockedError({
+            reason: "unsupported",
+            detail: "The saved server needs an update.",
+            serverUpdateRequired: true,
+          }),
+        );
+        expect(
+          (yield* SubscriptionRef.get(registry.entries)).get(PAIRED_ENVIRONMENT_ID),
+        ).toMatchObject({
+          enabled: false,
+          serverUpdateRequired: true,
+        });
+
+        const environmentId = yield* onboarding.registerPairing(PAIRING_INPUT);
+
+        expect(environmentId).toBe(PAIRED_ENVIRONMENT_ID);
+        const entry = (yield* SubscriptionRef.get(registry.entries)).get(environmentId);
+        expect(entry?.enabled).toBe(true);
+        expect(entry?.unsupportedReason).toBeUndefined();
+        expect(entry?.serverUpdateRequired).toBeUndefined();
+        expect(entry?.profile).toEqual(Option.some(PAIRED_PROFILE));
+      }).pipe(
+        Effect.provide(
+          layerPairingOnboarding({
+            protocolVersion: ORCHESTRATION_PROTOCOL_VERSION - 1,
+            selfUpdate: true,
+          }),
+        ),
+      ),
+  );
+
+  it.effect.each([
+    {
+      kind: "primary",
+      registration: new PrimaryConnectionRegistration({
+        target: new PrimaryConnectionTarget({
+          environmentId: PAIRED_ENVIRONMENT_ID,
+          label: "Host environment",
+          httpBaseUrl: "http://127.0.0.1:3773",
+          wsBaseUrl: "ws://127.0.0.1:3773",
+        }),
+      }),
+    },
+    {
+      kind: "bearer",
+      registration: new BearerConnectionRegistration({
+        target: new BearerConnectionTarget({
+          environmentId: PAIRED_ENVIRONMENT_ID,
+          connectionId: "platform:wsl",
+          label: "WSL",
+        }),
+        profile: new BearerConnectionProfile({
+          ...PAIRED_PROFILE,
+          connectionId: "platform:wsl",
+          label: "WSL",
+          httpBaseUrl: "http://127.0.0.1:4000",
+          wsBaseUrl: "ws://127.0.0.1:4000",
+        }),
+        credential: new BearerConnectionCredential({ token: "platform-token" }),
+      }),
+    },
+  ] as const)(
+    "leaves a platform-managed $kind environment untouched when its id is paired",
+    ({ registration }) =>
+      Effect.gen(function* () {
+        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const onboarding = yield* Onboarding.ConnectionOnboarding;
+        yield* registry.reconcilePlatform([registration]);
+        yield* registry.setCompatibility(PAIRED_ENVIRONMENT_ID, UNSUPPORTED_ERROR);
+        const before = yield* SubscriptionRef.get(registry.entries);
+        expect(before.get(PAIRED_ENVIRONMENT_ID)).toMatchObject({
+          enabled: true,
+          unsupportedReason: UNSUPPORTED_ERROR.message,
+        });
+
+        const environmentId = yield* onboarding.registerPairing(PAIRING_INPUT);
+
+        expect(environmentId).toBe(PAIRED_ENVIRONMENT_ID);
+        expect(yield* SubscriptionRef.get(registry.entries)).toEqual(before);
+      }).pipe(Effect.provide(layerPairingOnboarding())),
+  );
+
+  it.effect("leaves a switched-off environment unchanged when the pairing exchange fails", () =>
+    Effect.gen(function* () {
+      const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+      const onboarding = yield* Onboarding.ConnectionOnboarding;
+      const before = yield* registerSwitchedOffEnvironment;
+
+      const error = yield* onboarding.registerPairing(PAIRING_INPUT).pipe(Effect.flip);
+
+      expect(error).toMatchObject({
+        _tag: "ConnectionBlockedError",
+        reason: "authentication",
+        traceId: "trace-pairing-test",
+      });
+      const after = yield* SubscriptionRef.get(registry.entries);
+      expect(after).toEqual(before);
+      expect(after.get(PAIRED_ENVIRONMENT_ID)?.enabled).toBe(false);
+      expect(after.get(PAIRED_ENVIRONMENT_ID)?.unsupportedReason).toBe(UNSUPPORTED_ERROR.message);
+    }).pipe(Effect.provide(layerPairingOnboarding({ failExchange: true }))),
   );
 
   it.effect("rejects an incompatible server without consuming the pairing credential", () =>
@@ -131,14 +536,100 @@ describe("connection onboarding", () => {
         pairingCode: "pairing-token",
       }).pipe(
         Effect.provide(
-          Layer.mergeAll(
-            CLIENT_PRESENTATION_LAYER,
-            pairingHttpLayer(calls, { protocolVersion: ORCHESTRATION_PROTOCOL_VERSION + 1 }),
-          ),
+          layerPairingOnboarding({ protocolVersion: ORCHESTRATION_PROTOCOL_VERSION + 1 }, calls),
         ),
         Effect.flip,
       );
       expect(error).toMatchObject({ reason: "unsupported" });
+      expect(calls.map((call) => call.url)).toEqual([
+        "https://remote.example.test/.well-known/kairo/environment",
+      ]);
+    }),
+  );
+  it.effect.each([
+    { label: "read-only", scopes: ["orchestration:read"] },
+    { label: "default", scopes: AuthStandardClientScopes },
+  ] as const)("preserves the $label grant when pairing a remote environment", ({ scopes }) =>
+    Effect.gen(function* () {
+      const registration = yield* preparePairingRegistration({
+        host: "remote.example.test",
+        pairingCode: "pairing-token",
+      });
+
+      assert(registration.credential._tag === "BearerConnectionCredential");
+      const session = yield* fetchRemoteSessionState({
+        httpBaseUrl: registration.profile.httpBaseUrl,
+        bearerToken: registration.credential.token,
+      });
+
+      expect(session.authenticated).toBe(true);
+      expect(session.scopes).toEqual(scopes);
+    }).pipe(Effect.provide(layerPairingOnboarding({ grantScopes: scopes }))),
+  );
+
+  it.effect.each([
+    { name: "a host that renews, with a device key", renews: true, signer: true, dpop: true },
+    { name: "a host that renews, without a device key", renews: true, signer: false, dpop: false },
+    { name: "an older host, with a device key", renews: false, signer: true, dpop: false },
+  ])("pairs with $name as DPoP: $dpop", ({ renews, signer, dpop }) =>
+    Effect.gen(function* () {
+      const registration = yield* preparePairingRegistration({
+        host: "remote.example.test",
+        pairingCode: "pairing-token",
+      });
+      expect(registration.credential).toMatchObject(
+        dpop
+          ? { _tag: "DpopConnectionCredential", accessToken: "dpop-token" }
+          : { _tag: "BearerConnectionCredential", token: "bearer-token" },
+      );
+    }).pipe(
+      Effect.provide(
+        Layer.merge(
+          layerPairingOnboarding({ accessTokenRenewal: renews }),
+          signer
+            ? Layer.succeed(
+                ManagedRelay.ManagedRelayDpopSigner,
+                ManagedRelay.ManagedRelayDpopSigner.of({
+                  thumbprint: Effect.succeed("device-key"),
+                  createProof: (proof) => Effect.succeed(`proof:${proof.url}`),
+                }),
+              )
+            : Layer.empty,
+        ),
+      ),
+    ),
+  );
+
+  it.effect("refuses to add a route that reaches a different machine, keeping the code", () =>
+    Effect.gen(function* () {
+      const calls: Array<{ readonly url: string; readonly init: RequestInit }> = [];
+      const error = yield* preparePairingRegistration({
+        host: "remote.example.test",
+        pairingCode: "pairing-token",
+        expectedEnvironmentId: EnvironmentId.make("some-other-machine"),
+      }).pipe(Effect.provide(layerPairingOnboarding(undefined, calls)), Effect.flip);
+      expect(error).toMatchObject({ reason: "configuration" });
+      expect(error.message).toContain("different machine");
+      expect(calls.map((call) => call.url)).toEqual([
+        "https://remote.example.test/.well-known/kairo/environment",
+      ]);
+    }),
+  );
+
+  it.effect("refuses an outdated server that cannot update itself", () =>
+    Effect.gen(function* () {
+      const calls: Array<{ readonly url: string; readonly init: RequestInit }> = [];
+      const error = yield* preparePairingRegistration({
+        host: "remote.example.test",
+        pairingCode: "pairing-token",
+      }).pipe(
+        Effect.provide(
+          layerPairingOnboarding({ protocolVersion: ORCHESTRATION_PROTOCOL_VERSION - 1 }, calls),
+        ),
+        Effect.flip,
+      );
+      expect(error).toMatchObject({ reason: "unsupported" });
+      expect(error).not.toHaveProperty("serverUpdateRequired");
       expect(calls.map((call) => call.url)).toEqual([
         "https://remote.example.test/.well-known/kairo/environment",
       ]);
@@ -152,39 +643,11 @@ describe("connection onboarding", () => {
       yield* preparePairingRegistration({
         host: "remote.example.test",
         pairingCode: "pairing-token",
-      }).pipe(
-        Effect.provide(
-          Layer.mergeAll(
-            CLIENT_PRESENTATION_LAYER,
-            pairingHttpLayer(calls, { failDescriptor: true }),
-          ),
-        ),
-        Effect.flip,
-      );
+      }).pipe(Effect.provide(layerPairingOnboarding({ failDescriptor: true }, calls)), Effect.flip);
 
       expect(calls.map((call) => call.url)).toEqual([
         "https://remote.example.test/.well-known/kairo/environment",
       ]);
-    }),
-  );
-
-  it.effect("rejects invalid pairing details before making a request", () =>
-    Effect.gen(function* () {
-      const calls: Array<{ readonly url: string; readonly init: RequestInit }> = [];
-      const error = yield* preparePairingRegistration({
-        host: "",
-        pairingCode: "",
-      }).pipe(
-        Effect.provide(Layer.mergeAll(CLIENT_PRESENTATION_LAYER, pairingHttpLayer(calls))),
-        Effect.flip,
-      );
-
-      expect(error).toMatchObject({
-        _tag: "ConnectionBlockedError",
-        reason: "configuration",
-        message: "Enter a backend URL.",
-      });
-      expect(calls).toEqual([]);
     }),
   );
 
@@ -246,8 +709,8 @@ describe("connection onboarding", () => {
         target,
       }).pipe(
         Effect.provideService(
-          SshEnvironmentGateway,
-          SshEnvironmentGateway.of({
+          ClientCapabilities.SshEnvironmentGateway,
+          ClientCapabilities.SshEnvironmentGateway.of({
             provision: () =>
               Effect.succeed({
                 environmentId: EnvironmentId.make("environment-ssh"),
@@ -271,14 +734,16 @@ describe("connection onboarding", () => {
         target: {
           environmentId: "environment-ssh",
           label: "Remote development box",
-          connectionId: "ssh:environment-ssh",
+          connectionId: 'ssh:environment-ssh:["devbox","devbox.example.test","developer",22]',
         },
         profile: {
           environmentId: "environment-ssh",
           label: "Remote development box",
-          connectionId: "ssh:environment-ssh",
+          connectionId: 'ssh:environment-ssh:["devbox","devbox.example.test","developer",22]',
           target,
         },
+        // Saved so the first connect reuses this pairing instead of adding another.
+        credential: { token: "bearer-token" },
       });
     }),
   );

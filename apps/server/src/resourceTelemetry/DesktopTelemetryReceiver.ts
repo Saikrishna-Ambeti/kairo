@@ -1,20 +1,28 @@
 // @effect-diagnostics nodeBuiltinImport:off
 import * as NodeFS from "node:fs";
+import * as NodeNet from "node:net";
+import * as NodeTls from "node:tls";
 
 import * as NodeStream from "@effect/platform-node/NodeStream";
 import {
   DesktopHostTelemetryMessage,
   type DesktopHostTelemetryMessage as DesktopHostTelemetryMessageValue,
   type DesktopHostTelemetrySnapshot,
+  type DesktopShellEnvironmentSnapshot,
   DesktopTelemetryControlMessage,
+  type DesktopUpdateChannel,
   type DesktopUpdateStatusReport,
   type ResourceTelemetrySourceStatus,
 } from "@kairo/contracts";
 import { resolveServerBackgroundActivitySettings } from "@kairo/shared/backgroundActivitySettings";
+import * as HostProcess from "@kairo/shared/HostProcess";
+import { applyShellEnvironment } from "@kairo/shared/shell";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PubSub from "effect/PubSub";
@@ -23,10 +31,11 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as Ndjson from "effect/unstable/encoding/Ndjson";
+import * as Ndjson from "effect/encoding/Ndjson";
 
-import { ServerConfig } from "../config.ts";
-import { ServerSettingsService } from "../serverSettings.ts";
+import { eventVersion as messageVersion } from "./NativeTelemetryClient.ts";
+import * as ServerConfig from "../config.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import { subscribeBeforeSnapshotWithoutMutex } from "../utils/subscribeBeforeSnapshot.ts";
 
 const INITIAL_SAMPLE_DEADLINE_MS = 90_000;
@@ -147,6 +156,12 @@ export interface DesktopTelemetryReceiverHealth {
   readonly lastError: Option.Option<string>;
 }
 
+/** Moves the desktop app to `channel` and installs only `targetVersion`. */
+export interface DesktopTrackSwitch {
+  readonly channel: DesktopUpdateChannel;
+  readonly targetVersion: string;
+}
+
 export class DesktopTelemetryReceiver extends Context.Service<
   DesktopTelemetryReceiver,
   {
@@ -160,6 +175,8 @@ export class DesktopTelemetryReceiver extends Context.Service<
       never,
       Scope.Scope
     >;
+    /** Emits when a desktop shell environment changes this process's PATH; replays the last one. */
+    readonly pathChanges: Stream.Stream<void>;
     readonly health: Effect.Effect<DesktopTelemetryReceiverHealth>;
     readonly subscribeHealth: Effect.Effect<
       {
@@ -172,11 +189,11 @@ export class DesktopTelemetryReceiver extends Context.Service<
     readonly setDiagnosticsDemand: (
       enabled: boolean,
     ) => Effect.Effect<void, DesktopTelemetryControlError>;
-    /** Asks the desktop app supervising this server to update itself. The
-        desktop answers with desktopUpdateStatus reports carrying the same
-        requestId. */
+    /** Tells the desktop parent that the server accepts requests, so it can skip readiness polling. */
+    readonly announceServerReady: Effect.Effect<void, DesktopTelemetryControlError>;
     readonly requestDesktopUpdate: (
       requestId: string,
+      trackSwitch?: DesktopTrackSwitch,
     ) => Effect.Effect<void, DesktopTelemetryControlError>;
     readonly commitDesktopUpdate: (
       requestId: string,
@@ -184,9 +201,6 @@ export class DesktopTelemetryReceiver extends Context.Service<
     readonly cancelDesktopUpdate: (
       requestId: string,
     ) => Effect.Effect<void, DesktopTelemetryControlError>;
-    /** Latest desktop update state report plus subsequent reports. The
-        desktop replays its latest report when the backend attaches, so this
-        is populated shortly after startup on desktop-managed servers. */
     readonly desktopUpdates: Effect.Effect<
       {
         readonly latest: Option.Option<DesktopUpdateStatusReport>;
@@ -198,6 +212,70 @@ export class DesktopTelemetryReceiver extends Context.Service<
   }
 >()("kairo/resourceTelemetry/DesktopTelemetryReceiver") {}
 
+class DesktopShellCertificatesUpdateFailed extends Schema.TaggedError<DesktopShellCertificatesUpdateFailed>()(
+  "DesktopShellCertificatesUpdateFailed",
+  { cause: Schema.Defect() },
+) {
+  override get message(): string {
+    return "Failed to update desktop shell TLS certificates.";
+  }
+}
+
+export function makeApplyDesktopShellEnvironmentSnapshot(
+  environment: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+) {
+  let baseCertificates: Array<string> | undefined;
+  return Effect.fn("resourceTelemetry.desktopTelemetryReceiver.applyShellEnvironment")(function* (
+    message: DesktopShellEnvironmentSnapshot,
+  ) {
+    if (message.platform !== platform) return;
+    // Node's first default-CA enumeration consults process.env, so capture it before the patch.
+    if (message.environment.NODE_EXTRA_CA_CERTS !== undefined && baseCertificates === undefined) {
+      // Remove only the startup extras, preserving duplicates from bundled or system trust.
+      const extras = [...NodeTls.getCACertificates("extra")];
+      baseCertificates = NodeTls.getCACertificates("default").filter((certificate) => {
+        const index = extras.indexOf(certificate);
+        if (index === -1) return true;
+        extras.splice(index, 1);
+        return false;
+      });
+    }
+    applyShellEnvironment(environment, message.environment, platform);
+    if (message.environment.NODE_EXTRA_CA_CERTS !== undefined) {
+      yield* Effect.gen(function* () {
+        const certificates = baseCertificates;
+        // --use-openssl-ca roots are not enumerable; replacing the list would discard them.
+        if (certificates === undefined || certificates.length === 0) {
+          yield* Effect.logWarning(
+            "Preserving non-enumerable TLS trust. Restart to apply updated desktop shell certificates.",
+          );
+          return;
+        }
+        const fs = yield* FileSystem.FileSystem;
+        const file = message.environment.NODE_EXTRA_CA_CERTS;
+        const bundle = file ? yield* fs.readFileString(file) : undefined;
+        yield* Effect.try({
+          try: () => {
+            const extras =
+              bundle?.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g) ?? [];
+            if (bundle?.trim() && extras.length === 0) {
+              throw new Error("No PEM certificates found.");
+            }
+            NodeTls.setDefaultCACertificates([...certificates, ...extras]);
+          },
+          catch: (cause) => new DesktopShellCertificatesUpdateFailed({ cause }),
+        });
+      }).pipe(
+        Effect.catch((cause) =>
+          Effect.logWarning("Failed to update desktop shell TLS certificates.", Cause.fail(cause)),
+        ),
+      );
+    }
+    if (message.discovered) delete environment.KAIRO_DESKTOP_SHELL_DISCOVERY_PENDING;
+  });
+}
+
 const decodeMessage = Schema.decodeUnknownEffect(DesktopHostTelemetryMessage);
 const encodeControlMessage = Schema.encodeEffect(
   Schema.fromJsonString(DesktopTelemetryControlMessage),
@@ -207,7 +285,7 @@ const isProtocolMismatch = Schema.is(DesktopTelemetryProtocolMismatch);
 const isDecodeFailed = Schema.is(DesktopTelemetryDecodeFailed);
 const isStreamFailed = Schema.is(DesktopTelemetryStreamFailed);
 
-export function isDesktopTelemetryContactStale(
+function isDesktopTelemetryContactStale(
   lastContactAtMs: Option.Option<number>,
   nowMs: number,
 ): boolean {
@@ -217,7 +295,7 @@ export function isDesktopTelemetryContactStale(
   );
 }
 
-export function resolveDesktopTelemetrySnapshotStaleAfterMs(
+function resolveDesktopTelemetrySnapshotStaleAfterMs(
   activeIntervalMs: number,
   idleIntervalMs: number,
 ): number {
@@ -227,14 +305,14 @@ export function resolveDesktopTelemetrySnapshotStaleAfterMs(
   );
 }
 
-export function initialDesktopTelemetryContactAt(
+function initialDesktopTelemetryContactAt(
   desktopTelemetryFd: number | undefined,
   nowMs: number,
 ): Option.Option<number> {
   return desktopTelemetryFd === undefined ? Option.none() : Option.some(nowMs);
 }
 
-export const recordDesktopTelemetrySampleHealth = Effect.fn(
+const recordDesktopTelemetrySampleHealth = Effect.fn(
   "resourceTelemetry.desktopTelemetryReceiver.recordSampleHealth",
 )(function* (
   health: Ref.Ref<DesktopTelemetryReceiverHealth>,
@@ -260,12 +338,6 @@ function normalizeReceiverError(error: unknown): DesktopTelemetryReceiverError {
     return error;
   }
   return new DesktopTelemetryDecodeFailed({ cause: error });
-}
-
-function messageVersion(value: unknown): number | undefined {
-  if (typeof value !== "object" || value === null) return undefined;
-  const version = Reflect.get(value, "version");
-  return typeof version === "number" ? version : undefined;
 }
 
 export const writeAllToFileDescriptor = Effect.fn(
@@ -327,10 +399,32 @@ export function requireDesktopTelemetryWriteProgress(
     : Effect.fail(new DesktopTelemetryControlStalled({ fd, remainingBytes }));
 }
 
-/** @public Service construction is part of the canonical Effect module API. */
+export const makeDesktopShellEnvironmentUpdates = Effect.fn(
+  "DesktopTelemetryReceiver.makeDesktopShellEnvironmentUpdates",
+)(function* (environment: NodeJS.ProcessEnv, platform: NodeJS.Platform) {
+  const applyShellEnvironment = makeApplyDesktopShellEnvironmentSnapshot(environment, platform);
+  // Replayed, because the provider watcher may subscribe after the snapshot arrived.
+  const pathChanges = yield* Effect.acquireRelease(
+    PubSub.sliding<void>({ capacity: 1, replay: 1 }),
+    PubSub.shutdown,
+  );
+  const readPath = () => environment.PATH ?? environment.Path;
+  // Untraced: applyShellEnvironment already carries this operation's span.
+  const apply = Effect.fnUntraced(function* (message: DesktopShellEnvironmentSnapshot) {
+    const before = readPath();
+    yield* applyShellEnvironment(message);
+    if (readPath() !== before) yield* PubSub.publish(pathChanges, undefined);
+  });
+  return { apply, pathChanges: Stream.fromPubSub(pathChanges) };
+});
+
+/** @public */
 export const make = Effect.fn("resourceTelemetry.desktopTelemetryReceiver.make")(function* () {
-  const config = yield* ServerConfig;
-  const serverSettings = yield* ServerSettingsService;
+  const config = yield* ServerConfig.ServerConfig;
+  const environment = yield* HostProcess.Environment;
+  const platform = yield* HostProcess.Platform;
+  const shellEnvironment = yield* makeDesktopShellEnvironmentUpdates(environment, platform);
+  const serverSettings = yield* ServerSettings.ServerSettingsService;
   const latest = yield* Ref.make(Option.none<DesktopHostTelemetrySnapshot>());
   const receiverStartedAt = yield* DateTime.now;
   const lastContactAtMs = yield* Ref.make(
@@ -463,13 +557,10 @@ export const make = Effect.fn("resourceTelemetry.desktopTelemetryReceiver.make")
 
   if (config.desktopTelemetryFd !== undefined) {
     const fd = config.desktopTelemetryFd;
+    // The parent waits before closing; use cancellable socket reads so filesystem reads cannot block exit.
     const readable = yield* Effect.acquireRelease(
       Effect.try({
-        try: () =>
-          NodeFS.createReadStream("", {
-            fd,
-            autoClose: true,
-          }),
+        try: () => new NodeNet.Socket({ fd, readable: true, writable: false }),
         catch: (cause) => new DesktopTelemetryStreamFailed({ fd, cause }),
       }),
       (stream) =>
@@ -528,7 +619,10 @@ export const make = Effect.fn("resourceTelemetry.desktopTelemetryReceiver.make")
           );
         }
 
-        // Not a resource sample: do not touch `latest` or sample health.
+        if (message.type === "shellEnvironment") {
+          return recordContact.pipe(Effect.andThen(shellEnvironment.apply(message)));
+        }
+
         if (message.type === "desktopUpdateStatus") {
           return recordContact.pipe(
             Effect.andThen(Ref.set(latestUpdateReport, Option.some(message))),
@@ -633,6 +727,7 @@ export const make = Effect.fn("resourceTelemetry.desktopTelemetryReceiver.make")
   return DesktopTelemetryReceiver.of({
     latest: Ref.get(latest),
     changes: Stream.fromPubSub(changes),
+    pathChanges: shellEnvironment.pathChanges,
     subscribe: snapshotMutex.withPermits(1)(
       Effect.gen(function* () {
         const initial = yield* Ref.get(latest);
@@ -646,16 +741,29 @@ export const make = Effect.fn("resourceTelemetry.desktopTelemetryReceiver.make")
     health: Ref.get(health),
     subscribeHealth: subscribeBeforeSnapshotWithoutMutex(healthChanges, Ref.get(health)),
     setDiagnosticsDemand,
-    requestDesktopUpdate: (requestId) =>
-      sendControlMessage({
-        version: 1,
-        type: "requestDesktopUpdate",
-        requestId,
-      }),
-    commitDesktopUpdate: (requestId) =>
-      sendControlMessage({ version: 1, type: "commitDesktopUpdate", requestId }),
-    cancelDesktopUpdate: (requestId) =>
-      sendControlMessage({ version: 1, type: "cancelDesktopUpdate", requestId }),
+    announceServerReady: sendControlMessage({ version: 1, type: "serverReady" }).pipe(
+      Effect.withSpan("DesktopTelemetryReceiver.announceServerReady"),
+    ),
+    requestDesktopUpdate: Effect.fn("DesktopTelemetryReceiver.requestDesktopUpdate")(
+      function (requestId, trackSwitch) {
+        return sendControlMessage({
+          version: 1,
+          type: "requestDesktopUpdate",
+          requestId,
+          ...trackSwitch,
+        });
+      },
+    ),
+    commitDesktopUpdate: Effect.fn("DesktopTelemetryReceiver.commitDesktopUpdate")(
+      function (requestId) {
+        return sendControlMessage({ version: 1, type: "commitDesktopUpdate", requestId });
+      },
+    ),
+    cancelDesktopUpdate: Effect.fn("DesktopTelemetryReceiver.cancelDesktopUpdate")(
+      function (requestId) {
+        return sendControlMessage({ version: 1, type: "cancelDesktopUpdate", requestId });
+      },
+    ),
     desktopUpdates: Effect.gen(function* () {
       const subscription = yield* PubSub.subscribe(updateReportChanges);
       const initial = yield* Ref.get(latestUpdateReport);
@@ -686,6 +794,7 @@ export const layerTest = (
     DesktopTelemetryReceiver.of({
       latest,
       changes,
+      pathChanges: overrides.pathChanges ?? Stream.empty,
       subscribe:
         overrides.subscribe ??
         latest.pipe(
@@ -703,10 +812,19 @@ export const layerTest = (
             changes: Stream.empty,
           })),
         ),
-      setDiagnosticsDemand: () => Effect.void,
-      requestDesktopUpdate: () => Effect.void,
-      commitDesktopUpdate: () => Effect.void,
-      cancelDesktopUpdate: () => Effect.void,
+      setDiagnosticsDemand: Effect.fn("DesktopTelemetryReceiver.setDiagnosticsDemand")(function () {
+        return Effect.void;
+      }),
+      announceServerReady: Effect.void,
+      requestDesktopUpdate: Effect.fn("DesktopTelemetryReceiver.requestDesktopUpdate")(function () {
+        return Effect.void;
+      }),
+      commitDesktopUpdate: Effect.fn("DesktopTelemetryReceiver.commitDesktopUpdate")(function () {
+        return Effect.void;
+      }),
+      cancelDesktopUpdate: Effect.fn("DesktopTelemetryReceiver.cancelDesktopUpdate")(function () {
+        return Effect.void;
+      }),
       desktopUpdates:
         overrides.desktopUpdates ??
         Effect.succeed({

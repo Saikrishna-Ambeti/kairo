@@ -1,16 +1,17 @@
 import {
+  AuthStandardClientScopes,
   CommandId,
-  AuthAdministrativeScopes,
-  EnvironmentHttpApi,
   EnvironmentHttpCommonError,
-  type OrchestrationReadModel,
+  PROJECT_TRACKED_FOLDERS_MAX,
+  type ProjectMutation,
+  type ProjectSnapshot,
   ProjectId,
-  type ClientOrchestrationCommand,
 } from "@kairo/contracts";
+import { expandHomePath } from "@kairo/provider-core/server/pathExpansion";
+import { splitsSurrogatePair } from "@kairo/shared/assistantCitations";
+import * as HostProcess from "@kairo/shared/HostProcess";
 import * as Console from "effect/Console";
-import * as Crypto from "effect/Crypto";
-import * as DateTime from "effect/DateTime";
-import * as Duration from "effect/Duration";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -18,24 +19,27 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as References from "effect/References";
 import * as Schema from "effect/Schema";
-import { Argument, Command, Flag, GlobalFlag } from "effect/unstable/cli";
-import { FetchHttpClient, HttpClient, HttpClientError } from "effect/unstable/http";
-import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
+import { Argument, Command, Flag, GlobalFlag } from "effect/cli";
+import { FetchHttpClient, HttpClient, HttpClientError } from "effect/http";
 
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
+import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 
 import * as ServerConfig from "../config.ts";
-import * as OrchestrationEngine from "../orchestration/Services/OrchestrationEngine.ts";
-import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
-import { OrchestrationLayerLive } from "../orchestration/runtimeLayer.ts";
-import { layerConfig as SqlitePersistenceLayerLive } from "../persistence/Layers/Sqlite.ts";
+import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import type * as RuntimeLayer from "../orchestration-v2/runtimeLayer.ts";
+import * as ProjectEnrichmentService from "../project/ProjectEnrichmentService.ts";
+import * as ProjectFaviconResolver from "../project/ProjectFaviconResolver.ts";
 import * as RepositoryIdentityResolver from "../project/RepositoryIdentityResolver.ts";
-import {
-  clearPersistedServerRuntimeState,
-  readPersistedServerRuntimeState,
-} from "../serverRuntimeState.ts";
+import * as ProjectService from "../project/ProjectService.ts";
+import { projectMutationOperation } from "../project/ProjectMutation.ts";
+import * as KairoProjectFileLoader from "../project/KairoProjectFileLoader.ts";
+import * as ServerSettings from "../serverSettings.ts";
+import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
+import { discoverFolders, mergeProjectFolders } from "../workspace/WorkspaceFolders.ts";
 import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
 import { type CliAuthLocationFlags, projectLocationFlags, resolveCliAuthConfig } from "./config.ts";
+import * as RunningServer from "./runningServer.ts";
 
 type ProjectMutationTarget = {
   readonly id: ProjectId;
@@ -43,11 +47,7 @@ type ProjectMutationTarget = {
   readonly workspaceRoot: string;
 };
 
-type ProjectCommandExecutionMode = "live" | "offline";
-type ProjectCliDispatchCommand = Extract<
-  ClientOrchestrationCommand,
-  { type: "project.create" | "project.meta.update" | "project.delete" }
->;
+type ProjectCliDispatchCommand = ProjectMutation;
 
 const isEnvironmentHttpCommonError = Schema.is(EnvironmentHttpCommonError);
 
@@ -87,18 +87,6 @@ export class ProjectLiveServerUndeclaredStatusError extends Schema.TaggedError<P
 ) {
   override get message(): string {
     return `Server request failed with undeclared status ${this.status}.`;
-  }
-}
-
-export class ProjectLiveServerRequestError extends Schema.TaggedError<ProjectLiveServerRequestError>()(
-  "ProjectLiveServerRequestError",
-  {
-    operation: Schema.Literal("callLiveServer"),
-    cause: Schema.Defect(),
-  },
-) {
-  override get message(): string {
-    return "Failed to call the running server.";
   }
 }
 
@@ -154,19 +142,33 @@ export class ProjectAlreadyExistsError extends Schema.TaggedError<ProjectAlready
   }
 }
 
+export class ProjectTooManyTrackedFoldersError extends Schema.TaggedError<ProjectTooManyTrackedFoldersError>()(
+  "ProjectTooManyTrackedFoldersError",
+  {
+    operation: Schema.Literal("addProject"),
+    count: Schema.Number,
+    max: Schema.Number,
+  },
+) {
+  override get message(): string {
+    return `--track names ${this.count} folders, but a project tracks at most ${this.max}.`;
+  }
+}
+
 export const ProjectCommandError = Schema.Union([
   ProjectCommandIdGenerationError,
   ProjectLiveServerDeclaredResponseError,
   ProjectLiveServerUndeclaredStatusError,
-  ProjectLiveServerRequestError,
   ProjectTitleEmptyError,
   ProjectIdentifierEmptyError,
   ProjectNotFoundError,
   ProjectAlreadyExistsError,
+  ProjectTooManyTrackedFoldersError,
 ]);
 export type ProjectCommandError = typeof ProjectCommandError.Type;
 
-export function projectCommandErrorFromLiveServerRequest(cause: unknown): ProjectCommandError {
+/** Names a server's error answer; unanswered requests pass through for `changeState`. */
+function projectCommandErrorFromServerAnswer<E>(cause: E) {
   if (isEnvironmentHttpCommonError(cause)) {
     return new ProjectLiveServerDeclaredResponseError({
       operation: "callLiveServer",
@@ -182,12 +184,11 @@ export function projectCommandErrorFromLiveServerRequest(cause: unknown): Projec
       cause,
     });
   }
-
-  return new ProjectLiveServerRequestError({ operation: "callLiveServer", cause });
+  return cause;
 }
 
-const projectCommandUuid = Crypto.Crypto.pipe(
-  Effect.flatMap((crypto) => crypto.randomUUIDv4),
+const projectCommandUuid = SecureRandom.SecureRandom.pipe(
+  Effect.flatMap((random) => random.uuidV4()),
   Effect.mapError(
     (cause) =>
       new ProjectCommandIdGenerationError({
@@ -197,35 +198,25 @@ const projectCommandUuid = Crypto.Crypto.pipe(
   ),
 );
 
-const ProjectCliRuntimeLive = Layer.mergeAll(
-  WorkspacePaths.layer,
-  OrchestrationLayerLive.pipe(
+const makeProjectCliRuntimeLayer = (layerProjectService: typeof RuntimeLayer.layerProjectService) =>
+  layerProjectService.pipe(
+    Layer.provideMerge(ProjectEnrichmentService.layer),
     Layer.provideMerge(RepositoryIdentityResolver.layer),
-    Layer.provideMerge(SqlitePersistenceLayerLive),
-  ),
-);
-
-const PROJECT_CLI_LIVE_SERVER_TIMEOUT = Duration.seconds(1);
-const withProjectCliSessionToken = <A, E, R>(
-  environmentAuth: EnvironmentAuth.EnvironmentAuth["Service"],
-  run: (token: string) => Effect.Effect<A, E, R>,
-) =>
-  Effect.acquireUseRelease(
-    environmentAuth.issueSession({
-      scopes: AuthAdministrativeScopes,
-      label: "kairo project cli",
-    }),
-    (issued) => run(issued.token),
-    (issued) => environmentAuth.revokeSession(issued.sessionId).pipe(Effect.ignore({ log: true })),
+    Layer.provideMerge(
+      ProjectFaviconResolver.layer.pipe(
+        Layer.provide(WorkspacePaths.layer),
+        Layer.provide(KairoProjectFileLoader.layer),
+      ),
+    ),
+    Layer.provideMerge(WorkspacePaths.layer),
+    Layer.provideMerge(
+      ServerSettings.layer.pipe(
+        Layer.provide(Layer.merge(ServerSecretStore.layer, ManagedPolicy.layer)),
+      ),
+    ),
+    // Built after acquireServerOwnership; layerCliConfig would contend with this process's own lock.
+    Layer.provideMerge(SqlitePersistence.layerConfig),
   );
-
-const withProjectCliLiveServerTimeout = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(Effect.timeout(PROJECT_CLI_LIVE_SERVER_TIMEOUT));
-
-const makeLiveServerClient = (origin: string) =>
-  HttpApiClient.make(EnvironmentHttpApi, {
-    baseUrl: origin,
-  });
 
 const normalizeWorkspaceRootForProjectCommand = Effect.fn(
   "normalizeWorkspaceRootForProjectCommand",
@@ -255,7 +246,7 @@ const resolveProjectTitle = Effect.fn("resolveProjectTitle")(function* (
 });
 
 const findActiveProjectTarget = Effect.fn("findActiveProjectTarget")(function* (input: {
-  readonly snapshot: OrchestrationReadModel;
+  readonly snapshot: ProjectSnapshot;
   readonly identifier: string;
 }) {
   const trimmedIdentifier = input.identifier.trim();
@@ -279,12 +270,15 @@ const findActiveProjectTarget = Effect.fn("findActiveProjectTarget")(function* (
   const normalizedWorkspaceRootResult = yield* Effect.result(
     normalizeWorkspaceRootForProjectCommand(trimmedIdentifier),
   );
+  // A stored workspace path still identifies its project after the directory is gone, so a
+  // relative or trailing-slash path resolves the same way it would while the directory exists.
   const normalizedWorkspaceRoot =
-    normalizedWorkspaceRootResult._tag === "Success" ? normalizedWorkspaceRootResult.success : null;
+    normalizedWorkspaceRootResult._tag === "Success"
+      ? normalizedWorkspaceRootResult.success
+      : normalizedWorkspaceRootResult.failure.normalizedWorkspaceRoot;
 
-  // A stored workspace path still identifies its project after the directory is gone.
   const exactWorkspaceMatch = activeProjects.find(
-    (project) => project.workspaceRoot === (normalizedWorkspaceRoot ?? trimmedIdentifier),
+    (project) => project.workspaceRoot === normalizedWorkspaceRoot,
   );
 
   const resolved = exactWorkspaceMatch;
@@ -293,7 +287,7 @@ const findActiveProjectTarget = Effect.fn("findActiveProjectTarget")(function* (
       operation: "resolveProjectTarget",
       identifier: trimmedIdentifier,
       activeProjectCount: activeProjects.length,
-      ...(normalizedWorkspaceRoot === null ? {} : { normalizedWorkspaceRoot }),
+      normalizedWorkspaceRoot,
       ...(normalizedWorkspaceRootResult._tag === "Failure"
         ? { cause: normalizedWorkspaceRootResult.failure }
         : {}),
@@ -307,84 +301,17 @@ const findActiveProjectTarget = Effect.fn("findActiveProjectTarget")(function* (
   } satisfies ProjectMutationTarget;
 });
 
-const fetchLiveOrchestrationSnapshot = (origin: string, bearerToken: string) =>
-  Effect.gen(function* () {
-    const client = yield* makeLiveServerClient(origin);
-    return yield* client.orchestration.snapshot({
-      headers: { authorization: `Bearer ${bearerToken}` },
-    });
-  }).pipe(
-    withProjectCliLiveServerTimeout,
-    Effect.mapError(projectCommandErrorFromLiveServerRequest),
-  );
-
-const dispatchLiveOrchestrationCommand = (
-  origin: string,
-  bearerToken: string,
-  command: ProjectCliDispatchCommand,
-) =>
-  Effect.gen(function* () {
-    const client = yield* makeLiveServerClient(origin);
-    yield* client.orchestration.dispatch({
-      headers: { authorization: `Bearer ${bearerToken}` },
-      payload: command,
-    } as Parameters<typeof client.orchestration.dispatch>[0]);
-  }).pipe(
-    withProjectCliLiveServerTimeout,
-    Effect.mapError(projectCommandErrorFromLiveServerRequest),
-  );
-
-const getOfflineSnapshot = Effect.fn("getOfflineSnapshot")(function* () {
-  const projectionSnapshotQuery = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
-  // Project commands only read the project list, so use the lightweight
-  // command read model instead of hydrating every thread body in the database.
-  return yield* projectionSnapshotQuery.getCommandReadModel();
-});
-
-const tryResolveLiveProjectExecutionMode = Effect.fn("tryResolveLiveProjectExecutionMode")(
-  function* (
-    environmentAuth: EnvironmentAuth.EnvironmentAuth["Service"],
-    config: ServerConfig.ServerConfig["Service"],
-  ) {
-    const runtimeState = yield* readPersistedServerRuntimeState(config.serverRuntimeStatePath);
-    if (Option.isNone(runtimeState)) {
-      return Option.none<{ readonly origin: string }>();
-    }
-
-    const attempt = withProjectCliSessionToken(environmentAuth, (token) =>
-      fetchLiveOrchestrationSnapshot(runtimeState.value.origin, token).pipe(
-        Effect.as({
-          origin: runtimeState.value.origin,
-        }),
-      ),
-    );
-
-    const attempted = yield* Effect.result(attempt);
-    if (attempted._tag === "Success") {
-      return Option.some(attempted.success);
-    }
-
-    yield* Effect.logDebug("Failed to connect to the persisted project CLI server.", {
-      origin: runtimeState.value.origin,
-      cause: attempted.failure,
-    });
-    yield* clearPersistedServerRuntimeState(config.serverRuntimeStatePath);
-    return Option.none<{ readonly origin: string }>();
-  },
-);
-
 const runProjectMutation = Effect.fn("runProjectMutation")(function* (
   flags: CliAuthLocationFlags,
   run: (input: {
-    readonly snapshot: OrchestrationReadModel;
+    readonly snapshot: ProjectSnapshot;
     readonly dispatch: (
       command: ProjectCliDispatchCommand,
     ) => Effect.Effect<void, Error, FileSystem.FileSystem | HttpClient.HttpClient | Path.Path>;
-    readonly mode: ProjectCommandExecutionMode;
   }) => Effect.Effect<
     string,
     Error,
-    | Crypto.Crypto
+    | SecureRandom.SecureRandom
     | FileSystem.FileSystem
     | HttpClient.HttpClient
     | Path.Path
@@ -396,44 +323,44 @@ const runProjectMutation = Effect.fn("runProjectMutation")(function* (
   const minimumLogLevel = config.logLevel;
 
   return yield* Effect.gen(function* () {
-    const environmentAuth = yield* EnvironmentAuth.EnvironmentAuth;
-    const liveMode = yield* tryResolveLiveProjectExecutionMode(environmentAuth, config);
-
-    if (Option.isSome(liveMode)) {
-      return yield* withProjectCliSessionToken(environmentAuth, (token) =>
-        Effect.gen(function* () {
-          const snapshot = yield* fetchLiveOrchestrationSnapshot(liveMode.value.origin, token);
-          const output = yield* run({
-            snapshot,
-            dispatch: (command) =>
-              dispatchLiveOrchestrationCommand(liveMode.value.origin, token, command),
-            mode: "live",
-          });
-          yield* Console.log(output);
-        }),
-      );
-    }
-
-    const offlineRuntimeLayer = ProjectCliRuntimeLive.pipe(
-      Layer.provide(ServerConfig.layer(config)),
-      Layer.provide(Layer.succeed(References.MinimumLogLevel, minimumLogLevel)),
-    );
-
-    return yield* Effect.gen(function* () {
-      const snapshot = yield* getOfflineSnapshot();
-      const orchestrationEngine = yield* OrchestrationEngine.OrchestrationEngineService;
-      const output = yield* run({
-        snapshot,
-        dispatch: (command) => orchestrationEngine.dispatch(command),
-        mode: "offline",
-      });
-      yield* Console.log(output);
-    }).pipe(Effect.provide(offlineRuntimeLayer));
+    const output = yield* RunningServer.changeState({
+      scopes: AuthStandardClientScopes,
+      viaServer: Effect.fn("project.viaServer")(function* (client) {
+        return yield* run({
+          snapshot: yield* client.projects.snapshot({ headers: {} }),
+          dispatch: (command) =>
+            client.projects.mutate({ headers: {}, payload: command } as Parameters<
+              typeof client.projects.mutate
+            >[0]),
+        });
+      }, Effect.mapError(projectCommandErrorFromServerAnswer)),
+      locally: Effect.promise(() => import("../orchestration-v2/runtimeLayer.ts")).pipe(
+        Effect.flatMap(({ layerProjectService }) =>
+          Effect.gen(function* () {
+            const projects = yield* ProjectService.ProjectService;
+            return yield* run({
+              snapshot: yield* projects.snapshot,
+              dispatch: (command) =>
+                projectMutationOperation(projects, command).pipe(Effect.asVoid),
+            });
+          }).pipe(
+            Effect.provide(
+              makeProjectCliRuntimeLayer(layerProjectService).pipe(
+                Layer.provide(ServerConfig.layer(config)),
+                Layer.provide(Layer.succeed(References.MinimumLogLevel, minimumLogLevel)),
+              ),
+            ),
+          ),
+        ),
+      ),
+    });
+    yield* Console.log(output);
   }).pipe(
+    Effect.scoped,
     Effect.provide(
-      Layer.mergeAll(EnvironmentAuth.runtimeLayer, WorkspacePaths.layer).pipe(
+      Layer.mergeAll(EnvironmentAuth.layerRuntime, WorkspacePaths.layer).pipe(
         Layer.provideMerge(FetchHttpClient.layer),
-        Layer.provide(ServerConfig.layer(config)),
+        Layer.provideMerge(ServerConfig.layer(config)),
         Layer.provide(Layer.succeed(References.MinimumLogLevel, minimumLogLevel)),
       ),
     ),
@@ -446,6 +373,12 @@ const projectAddCommand = Command.make("add", {
     Argument.withDescription("Workspace root to add as a project."),
   ),
   title: Flag.String("title").pipe(Flag.withDescription("Optional project title."), Flag.optional),
+  track: Flag.String("track").pipe(
+    Flag.withDescription(
+      "A folder outside the path that the project also works in. Repositories inside the path are found on their own. Repeat for more.",
+    ),
+    Flag.atLeast(0),
+  ),
 }).pipe(
   Command.withDescription("Add a project."),
   Command.withHandler((flags) =>
@@ -455,7 +388,7 @@ const projectAddCommand = Command.make("add", {
         snapshot,
         dispatch,
       }: {
-        readonly snapshot: OrchestrationReadModel;
+        readonly snapshot: ProjectSnapshot;
         readonly dispatch: (
           command: ProjectCliDispatchCommand,
         ) => Effect.Effect<void, Error, FileSystem.FileSystem | HttpClient.HttpClient | Path.Path>;
@@ -464,6 +397,52 @@ const projectAddCommand = Command.make("add", {
         const existingProject = snapshot.projects.find(
           (project) => project.deletedAt === null && project.workspaceRoot === workspaceRoot,
         );
+        const path = yield* Path.Path;
+        const home = yield* HostProcess.HomeDirectory;
+        const named = flags.track
+          .map((folder) => {
+            const resolved = path.resolve(expandHomePath(folder, home));
+            const name = (path.basename(resolved) || resolved).trimStart();
+            return {
+              path: resolved,
+              name: name.slice(0, splitsSurrogatePair(name, 128) ? 127 : 128).trim(),
+            };
+          })
+          .filter(
+            (folder, index, all) => all.findIndex((other) => other.path === folder.path) === index,
+          );
+        // Re-adding an archived project's folder restores it, matching the clients.
+        if (existingProject?.archivedAt != null) {
+          const title = Option.isSome(flags.title)
+            ? yield* resolveProjectTitle(workspaceRoot, flags.title.value)
+            : undefined;
+          // An update replaces the whole list of added folders.
+          const kept = (existingProject.trackedFolders ?? [])
+            .filter((folder) => folder.discovered !== true)
+            .map((folder) => ({ path: folder.path, name: folder.name }));
+          const added = named.filter(
+            (folder) => !kept.some((existing) => existing.path === folder.path),
+          );
+          if (kept.length + added.length > PROJECT_TRACKED_FOLDERS_MAX) {
+            return yield* new ProjectTooManyTrackedFoldersError({
+              operation: "addProject",
+              count: kept.length + added.length,
+              max: PROJECT_TRACKED_FOLDERS_MAX,
+            });
+          }
+          yield* dispatch({
+            type: "project.update",
+            commandId: CommandId.make(yield* projectCommandUuid),
+            projectId: existingProject.id,
+            archived: false,
+            ...(title === undefined ? {} : { title }),
+            ...(added.length === 0 ? {} : { trackedFolders: [...kept, ...added] }),
+          });
+          const unarchived = `Unarchived project ${existingProject.id} (${title ?? existingProject.title}) at ${workspaceRoot}.`;
+          return added.length === 0
+            ? unarchived
+            : `${unarchived} It now also covers ${added.length} more ${added.length === 1 ? "folder" : "folders"}.`;
+        }
         if (existingProject) {
           return yield* new ProjectAlreadyExistsError({
             operation: "addProject",
@@ -473,6 +452,16 @@ const projectAddCommand = Command.make("add", {
         }
 
         const title = yield* resolveProjectTitle(workspaceRoot, Option.getOrUndefined(flags.title));
+        // Found here, not by a running server: this command runs on the server's machine.
+        const found = yield* discoverFolders(workspaceRoot);
+        if (named.length > PROJECT_TRACKED_FOLDERS_MAX) {
+          return yield* new ProjectTooManyTrackedFoldersError({
+            operation: "addProject",
+            count: named.length,
+            max: PROJECT_TRACKED_FOLDERS_MAX,
+          });
+        }
+        const trackedFolders = mergeProjectFolders(found, named);
         const projectId = ProjectId.make(yield* projectCommandUuid);
         yield* dispatch({
           type: "project.create",
@@ -480,9 +469,13 @@ const projectAddCommand = Command.make("add", {
           projectId,
           title,
           workspaceRoot,
-          createdAt: DateTime.formatIso(yield* DateTime.now),
+          ...(trackedFolders.length === 0 ? {} : { trackedFolders }),
         });
-        return `Added project ${projectId} (${title}) at ${workspaceRoot}.`;
+        const added = `Added project ${projectId} (${title}) at ${workspaceRoot}.`;
+        if (trackedFolders.length > 0) {
+          return `${added} It also covers ${trackedFolders.length} other ${trackedFolders.length === 1 ? "folder" : "folders"}.`;
+        }
+        return added;
       }),
     ),
   ),
@@ -506,7 +499,7 @@ const projectRemoveCommand = Command.make("remove", {
         snapshot,
         dispatch,
       }: {
-        readonly snapshot: OrchestrationReadModel;
+        readonly snapshot: ProjectSnapshot;
         readonly dispatch: (
           command: ProjectCliDispatchCommand,
         ) => Effect.Effect<void, Error, FileSystem.FileSystem | HttpClient.HttpClient | Path.Path>;
@@ -542,7 +535,7 @@ const projectRenameCommand = Command.make("rename", {
         snapshot,
         dispatch,
       }: {
-        readonly snapshot: OrchestrationReadModel;
+        readonly snapshot: ProjectSnapshot;
         readonly dispatch: (
           command: ProjectCliDispatchCommand,
         ) => Effect.Effect<void, Error, FileSystem.FileSystem | HttpClient.HttpClient | Path.Path>;
@@ -557,7 +550,7 @@ const projectRenameCommand = Command.make("rename", {
         }
 
         yield* dispatch({
-          type: "project.meta.update",
+          type: "project.update",
           commandId: CommandId.make(yield* projectCommandUuid),
           projectId: project.id,
           title: nextTitle,

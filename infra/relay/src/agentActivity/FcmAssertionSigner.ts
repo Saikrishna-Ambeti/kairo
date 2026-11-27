@@ -34,7 +34,7 @@ export class FcmAssertionSigner extends Context.Service<
   }
 >()("kairo-relay/agentActivity/FcmAssertionSigner") {}
 
-export const make = Effect.gen(function* () {
+const make = Effect.gen(function* () {
   const { subtle } = yield* WebCrypto.WebCrypto;
   return FcmAssertionSigner.of({
     sign: Effect.fn("relay.fcm.assertion")(function* (input) {

@@ -1,39 +1,63 @@
 // @effect-diagnostics nodeBuiltinImport:off -- The integration fixture binds the same platform socket or named pipe as the CLI.
+import * as NodeChildProcess from "node:child_process";
+import * as NodeEvents from "node:events";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeNet from "node:net";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { it } from "@effect/vitest";
+import { assert, it } from "@effect/vitest";
 import type { DesktopAppActivationRequest } from "@kairo/contracts";
 import { resolveDesktopAppControlAddress } from "@kairo/shared/desktopAppControl";
-import {
-  HostProcessPlatform,
-  HostProcessUserId,
-  HostProcessWorkingDirectory,
-} from "@kairo/shared/hostProcess";
+import * as HostProcess from "@kairo/shared/HostProcess";
 import * as NetService from "@kairo/shared/Net";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Command } from "effect/unstable/cli";
-import { afterEach, describe, expect, vi } from "vite-plus/test";
+import * as Schema from "effect/Schema";
+import * as TestConsole from "effect/testing/TestConsole";
+import { Command } from "effect/cli";
+import { describe, expect } from "vite-plus/test";
 
-import { makeCli } from "../bin.ts";
+import { makeCli } from "../binCli.ts";
+import { PersistedServerRuntimeState } from "../serverRuntimeState.ts";
 
-vi.mock("node:os", async (importOriginal) => {
-  const os = await importOriginal<typeof import("node:os")>();
-  return { ...os, homedir: vi.fn(os.homedir) };
-});
+const liveProcess = Effect.acquireRelease(
+  Effect.promise(async () => {
+    const child = NodeChildProcess.spawn(process.execPath, ["-e", "process.stdin.resume()"], {
+      stdio: ["pipe", "ignore", "ignore"],
+    });
+    await NodeEvents.EventEmitter.once(child, "spawn");
+    return child;
+  }),
+  (child) =>
+    Effect.promise(async () => {
+      const exited = NodeEvents.EventEmitter.once(child, "exit");
+      child.kill();
+      await exited;
+    }),
+);
 
-afterEach(() => vi.mocked(NodeOS.homedir).mockReset());
+const encodeRuntimeState = Schema.encodeEffect(Schema.fromJsonString(PersistedServerRuntimeState));
+
+// Node reads this variable itself, so the test must set the real process environment.
+const setProcessEnv = (name: string, value: string) => {
+  const previous = process.env[name];
+  process.env[name] = value;
+  return () => {
+    if (previous === undefined) delete process.env[name];
+    else process.env[name] = previous;
+  };
+};
 
 const runCli = (args: ReadonlyArray<string>, env: Record<string, string> = {}) =>
   Command.runWith(makeCli(), { version: "0.0.0" })(args).pipe(
     Effect.provide(
       Layer.mergeAll(
         NodeServices.layer,
+        NodeCrypto.layer,
         NetService.layer,
         ConfigProvider.layer(ConfigProvider.fromEnv({ env })),
       ),
@@ -97,6 +121,7 @@ async function startFakeDesktop(input: {
   });
 
   return {
+    directory: target.directory,
     received,
     close: async () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -112,8 +137,8 @@ async function startFakeDesktop(input: {
 const fakeDesktop = Effect.fn(function* (
   input: Omit<Parameters<typeof startFakeDesktop>[0], "platform" | "userId">,
 ) {
-  const platform = yield* HostProcessPlatform;
-  const userId = yield* HostProcessUserId;
+  const platform = yield* HostProcess.Platform;
+  const userId = yield* HostProcess.UserId;
   return yield* Effect.acquireRelease(
     Effect.promise(() => startFakeDesktop({ ...input, platform, userId })),
     (server) => Effect.promise(() => server.close()),
@@ -123,67 +148,142 @@ const fakeDesktop = Effect.fn(function* (
 const withTempDirectory = <A, E, R>(
   prefix: string,
   use: (root: string) => Effect.Effect<A, E, R>,
+  tempDir = NodeOS.tmpdir(),
 ) =>
   Effect.acquireUseRelease(
-    Effect.promise(() => NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), prefix))),
+    Effect.promise(() => NodeFSP.mkdtemp(NodePath.join(tempDir, prefix))),
     use,
     (root) => Effect.promise(() => NodeFSP.rm(root, { recursive: true, force: true })),
   );
 
+describe("kairo server command safety", () => {
+  it.effect("rejects unknown command words without creating a home or project", () =>
+    withTempDirectory("kairo-cli-unknown-", (root) =>
+      Effect.gen(function* () {
+        const baseDir = NodePath.join(root, "home");
+        for (const word of [
+          "account",
+          "login",
+          "clients",
+          "conenct",
+          "package.json",
+          "C:new-project",
+        ]) {
+          const error = yield* runCli([word, "--base-dir", baseDir]).pipe(
+            Effect.provideService(HostProcess.Platform, "linux"),
+            Effect.flip,
+          );
+          expect(String(error)).toContain(`Unknown command "${word}"`);
+          expect(yield* pathExists(word)).toBe(word === "package.json");
+          expect(yield* pathExists(baseDir)).toBe(false);
+        }
+      }),
+    ),
+  );
+
+  it.effect("does not offer auto-bootstrap in serve help, since serve never bootstraps", () =>
+    Effect.gen(function* () {
+      yield* runCli(["serve", "--help"]);
+      const help = (yield* TestConsole.logLines).join("\n");
+      expect(help).toContain("--no-browser");
+      expect(help).not.toContain("--auto-bootstrap-project-from-cwd");
+    }).pipe(Effect.provide(Layer.fresh(TestConsole.layer))),
+  );
+
+  it.effect("refuses manual startup over a live server before creating directories", () =>
+    withTempDirectory("kairo-cli-running-", (root) =>
+      Effect.gen(function* () {
+        const baseDir = NodePath.join(root, "home");
+        const stateDir = NodePath.join(baseDir, "userdata");
+        const statePath = NodePath.join(stateDir, "server-runtime.json");
+        const child = yield* liveProcess;
+        assert(child.pid !== undefined);
+        const record = yield* encodeRuntimeState({
+          version: 1,
+          pid: child.pid,
+          port: 3773,
+          origin: "http://127.0.0.1:3773",
+          startedAt: "2026-10-01T00:00:00.000Z",
+          serviceManaged: true,
+        });
+        yield* Effect.promise(() => NodeFSP.mkdir(stateDir, { recursive: true }));
+        yield* Effect.promise(() => NodeFSP.writeFile(statePath, record));
+        const newDirectory = NodePath.join(root, "new-project");
+        const platform = yield* HostProcess.Platform;
+        for (const args of [
+          [],
+          ["start"],
+          ["."],
+          ["node_modules"],
+          ["C:new-project"],
+          [newDirectory],
+          ["start", newDirectory],
+        ]) {
+          const error = yield* runCli(args, { KAIRO_HOME: baseDir }).pipe(
+            Effect.provideService(
+              HostProcess.Platform,
+              args[0] === "C:new-project" ? "win32" : platform,
+            ),
+            Effect.flip,
+          );
+          expect(String(error)).toContain("A Kairo server is already running");
+          expect(yield* Effect.promise(() => NodeFSP.readFile(statePath, "utf8"))).toBe(record);
+          expect(yield* pathExists(newDirectory)).toBe(false);
+          expect(yield* Effect.promise(() => NodeFSP.readdir(stateDir))).toEqual([
+            "server-runtime.json",
+          ]);
+        }
+      }),
+    ),
+  );
+});
+
 describe("kairo app", () => {
-  it.effect("rejects SSH before it tries to reach a desktop app", () =>
-    withTempDirectory("kairo-app-ssh-test-", (root) =>
+  it.live.each(["permissions", "owner", "symlink", "missing owner"] as const)(
+    "rejects unsafe %s on the socket directory before sending",
+    (unsafe) =>
       Effect.gen(function* () {
-        const baseDir = NodePath.join(root, "missing-kairo-home");
-        const error = yield* runCli(["app", "--base-dir", baseDir], {
-          SSH_CONNECTION: "client server",
-        }).pipe(Effect.flip);
-
-        expect(error).toMatchObject({
-          _tag: "DesktopAppSshUnsupportedError",
-          message:
-            "`kairo app` only controls a desktop app on the same machine. It cannot run over SSH.",
-        });
-        expect(yield* pathExists(baseDir)).toBe(false);
-      }),
-    ),
-  );
-
-  it.effect("rejects unsupported platforms without creating state", () =>
-    withTempDirectory("kairo-app-platform-test-", (root) =>
-      Effect.gen(function* () {
-        const baseDir = NodePath.join(root, "missing-kairo-home");
-        const error = yield* runCli(["app", "--base-dir", baseDir]).pipe(
-          Effect.provideService(HostProcessPlatform, "freebsd"),
-          Effect.flip,
+        const platform = yield* HostProcess.Platform;
+        if (platform === "win32") return;
+        yield* withTempDirectory(
+          "kairo-app-unsafe-",
+          (root) =>
+            Effect.gen(function* () {
+              yield* Effect.acquireRelease(
+                Effect.sync(() => setProcessEnv("TMPDIR", root)),
+                (restore) => Effect.sync(restore),
+              );
+              const baseDir = NodePath.join(root, ".kairo");
+              const userId = yield* HostProcess.UserId;
+              assert(userId !== undefined);
+              const expectedUserId =
+                unsafe === "missing owner" ? undefined : unsafe === "owner" ? userId + 1 : userId;
+              const desktop = yield* fakeDesktop({ baseDir }).pipe(
+                Effect.provideService(HostProcess.UserId, expectedUserId),
+              );
+              const directory = desktop.directory;
+              assert(directory !== null);
+              if (unsafe === "permissions") {
+                yield* Effect.promise(() => NodeFSP.chmod(directory, 0o755));
+              } else if (unsafe === "symlink") {
+                const moved = NodePath.join(root, "moved");
+                yield* Effect.promise(() => NodeFSP.rename(directory, moved));
+                yield* Effect.promise(() => NodeFSP.symlink(moved, directory));
+              }
+              const result = yield* runCli(["app"]).pipe(
+                Effect.provideService(HostProcess.HomeDirectory, root),
+                Effect.provideService(HostProcess.UserId, expectedUserId),
+                Effect.result,
+              );
+              expect(desktop.received).toEqual([]);
+              expect(result).toMatchObject({
+                _tag: "Failure",
+                failure: { _tag: "DesktopAppUnreachableError" },
+              });
+            }).pipe(Effect.scoped),
+          "/tmp",
         );
-
-        expect(error).toMatchObject({
-          _tag: "DesktopAppPlatformUnsupportedError",
-          platform: "freebsd",
-          message: "`kairo app` is not supported on freebsd.",
-        });
-        expect(yield* pathExists(baseDir)).toBe(false);
       }),
-    ),
-  );
-
-  it.effect("does not create state when only a server or no desktop app is running", () =>
-    withTempDirectory("kairo-app-missing-test-", (root) =>
-      Effect.gen(function* () {
-        const baseDir = NodePath.join(root, "missing-kairo-home");
-        const error = yield* runCli(["app", "--base-dir", baseDir]).pipe(Effect.flip);
-
-        expect(error).toMatchObject({
-          _tag: "DesktopAppUnreachableError",
-          candidateAddresses: [expect.any(String)],
-          workspaceRoot: yield* HostProcessWorkingDirectory,
-          message: expect.stringContaining("Could not reach the Kairo desktop app."),
-          cause: { code: "ENOENT" },
-        });
-        expect(yield* pathExists(baseDir)).toBe(false);
-      }),
-    ),
   );
 
   it.effect("uses KAIRO_HOME or --base-dir and sends the default or explicit path", () =>
@@ -191,8 +291,8 @@ describe("kairo app", () => {
       Effect.gen(function* () {
         const baseDir = NodePath.join(root, "kairo-home");
         const explicitPath = NodePath.join(root, "project");
-        const platform = yield* HostProcessPlatform;
-        const workingDirectory = yield* HostProcessWorkingDirectory;
+        const platform = yield* HostProcess.Platform;
+        const workingDirectory = yield* HostProcess.WorkingDirectory;
         const desktop = yield* fakeDesktop({ baseDir });
 
         yield* runCli(["app"], { KAIRO_HOME: baseDir });
@@ -210,7 +310,6 @@ describe("kairo app", () => {
   it.effect("prefers the installed desktop app when a dev desktop is also running", () =>
     withTempDirectory("kairo-app-preferred-test-", (root) =>
       Effect.gen(function* () {
-        vi.mocked(NodeOS.homedir).mockReturnValue(root);
         const baseDir = NodePath.join(root, ".kairo");
         const desktop = yield* fakeDesktop({ baseDir });
         const development = yield* fakeDesktop({ baseDir, stateSubdirectory: "dev" });
@@ -219,14 +318,13 @@ describe("kairo app", () => {
 
         expect(desktop.received).toHaveLength(1);
         expect(development.received).toHaveLength(0);
-      }).pipe(Effect.scoped),
+      }).pipe(Effect.provideService(HostProcess.HomeDirectory, root), Effect.scoped),
     ),
   );
 
   it.effect("finds the dev desktop when the default desktop socket is absent", () =>
     withTempDirectory("kairo-app-dev-test-", (root) =>
       Effect.gen(function* () {
-        vi.mocked(NodeOS.homedir).mockReturnValue(root);
         const baseDir = NodePath.join(root, ".kairo");
         const development = yield* fakeDesktop({ baseDir, stateSubdirectory: "dev" });
 
@@ -235,14 +333,13 @@ describe("kairo app", () => {
 
         expect(development.received).toHaveLength(2);
         expect(yield* pathExists(baseDir)).toBe(false);
-      }).pipe(Effect.scoped),
+      }).pipe(Effect.provideService(HostProcess.HomeDirectory, root), Effect.scoped),
     ),
   );
 
   it.effect("never searches a dev state directory for an explicit Kairo home", () =>
     withTempDirectory("kairo-app-explicit-test-", (root) =>
       Effect.gen(function* () {
-        vi.mocked(NodeOS.homedir).mockReturnValue(root);
         const baseDir = NodePath.join(root, ".kairo");
         const development = yield* fakeDesktop({ baseDir, stateSubdirectory: "dev" });
 
@@ -252,15 +349,15 @@ describe("kairo app", () => {
         expect(flagError).toMatchObject({ _tag: "DesktopAppUnreachableError" });
         expect(envError).toMatchObject({ _tag: "DesktopAppUnreachableError" });
         expect(development.received).toHaveLength(0);
-      }).pipe(Effect.scoped),
+      }).pipe(Effect.provideService(HostProcess.HomeDirectory, root), Effect.scoped),
     ),
   );
 
-  for (const responseKind of ["failure", "invalid"] as const) {
-    it.effect(`never falls back after the default desktop sends a ${responseKind} response`, () =>
+  it.effect.each(["failure", "invalid"] as const)(
+    "never falls back after the default desktop sends a %s response",
+    (responseKind) =>
       withTempDirectory("kairo-app-response-test-", (root) =>
         Effect.gen(function* () {
-          vi.mocked(NodeOS.homedir).mockReturnValue(root);
           const baseDir = NodePath.join(root, ".kairo");
           const desktop = yield* fakeDesktop({
             baseDir,
@@ -286,7 +383,7 @@ describe("kairo app", () => {
               _tag: "DesktopAppRequestFailedError",
               code: "project-create-failed",
               requestId: desktop.received[0]?.requestId,
-              workspaceRoot: yield* HostProcessWorkingDirectory,
+              workspaceRoot: yield* HostProcess.WorkingDirectory,
               message: expect.stringContaining("project-create-failed"),
               cause: {
                 ok: false,
@@ -300,8 +397,7 @@ describe("kairo app", () => {
               cause: { message: "The desktop app response is invalid." },
             });
           }
-        }).pipe(Effect.scoped),
+        }).pipe(Effect.provideService(HostProcess.HomeDirectory, root), Effect.scoped),
       ),
-    );
-  }
+  );
 });

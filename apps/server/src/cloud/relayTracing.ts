@@ -1,21 +1,61 @@
-import { makeRelayClientTracingLayer } from "@kairo/shared/relayTracing";
+import type { ManagedPolicySummary } from "@kairo/contracts";
+import * as HostProcess from "@kairo/shared/HostProcess";
+import {
+  nodeProcessRuntimeAttributes,
+  processServiceInstanceId,
+} from "@kairo/shared/observability";
+import { isRelayTracingEnabled } from "@kairo/shared/otelEnvironment";
+import * as RelayTracing from "@kairo/shared/relayTracing";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 
+import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import { resolveRelayClientTracingConfig } from "./publicConfig.ts";
 
 const relayClientTracingConfig = resolveRelayClientTracingConfig();
 
-export const headlessRelayClientTracingLayer = makeRelayClientTracingLayer(
-  relayClientTracingConfig,
-  {
-    serviceName: "kairo-server",
-    runtime: "node",
-    client: "headless-cli",
-  },
-);
+/**
+ * `false` once the environment or a managed policy opted out. Until the desktop has read the
+ * login shell, a shell-profile opt-out is still unknown, so tracing stays off.
+ */
+export const allowedFor = (
+  env: Readonly<Record<string, string | undefined>>,
+  policy: ManagedPolicySummary | undefined,
+) =>
+  policy?.limits?.telemetry !== false &&
+  env.KAIRO_DESKTOP_SHELL_DISCOVERY_PENDING !== "1" &&
+  isRelayTracingEnabled(env);
 
-export const serverRelayBrokerTracingLayer = makeRelayClientTracingLayer(relayClientTracingConfig, {
+/** Relay traces leave the machine for Kairo Connect, so a policy with `telemetry: false` stops them. */
+export const relayLayer = (
+  resource: Omit<RelayTracing.RelayClientTracingResource, "serviceInstanceId">,
+  tracingConfig = relayClientTracingConfig,
+) =>
+  Layer.unwrap(
+    Effect.gen(function* () {
+      const policy = yield* ManagedPolicy.ManagedPolicy;
+      // Desktop shell discovery updates this record in place, so it is reread per span.
+      const environment = yield* HostProcess.Environment;
+      return RelayTracing.layer(
+        ManagedPolicy.deniedBy(policy, "telemetry") === undefined ? tracingConfig : null,
+        // Never the operator's own `service.instance.id`: it names their machine for their receiver.
+        { ...resource, serviceInstanceId: processServiceInstanceId() },
+        { isEnabled: () => allowedFor(environment, undefined) },
+      );
+    }),
+  );
+
+export const layerHeadlessRelayClient = relayLayer({
   serviceName: "kairo-server",
   runtime: "node",
+  attributes: nodeProcessRuntimeAttributes(),
+  client: "headless-cli",
+});
+
+export const layerServerRelayBroker = relayLayer({
+  serviceName: "kairo-server",
+  runtime: "node",
+  attributes: nodeProcessRuntimeAttributes(),
   client: "environment-server",
   component: "relay-broker",
 });

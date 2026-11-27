@@ -1,75 +1,37 @@
-import { ProjectId, ProviderInstanceId, ThreadId, TurnId } from "@kairo/contracts";
+import { ProjectId, ThreadId, TurnId } from "@kairo/contracts";
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as SqlClient from "effect/sql/SqlClient";
 
 import { ArtifactMetadataRepository } from "../Services/ArtifactMetadata.ts";
-import { ProjectionProjectRepository } from "../Services/ProjectionProjects.ts";
-import { ProjectionThreadRepository } from "../Services/ProjectionThreads.ts";
 import { ArtifactMetadataRepositoryLive } from "./ArtifactMetadata.ts";
-import { ProjectionProjectRepositoryLive } from "./ProjectionProjects.ts";
-import { ProjectionThreadRepositoryLive } from "./ProjectionThreads.ts";
-import { SqlitePersistenceMemory } from "./Sqlite.ts";
+import * as Sqlite from "../Sqlite.ts";
 
 const artifactMetadataLayer = it.layer(
-  Layer.mergeAll(
-    ArtifactMetadataRepositoryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
-    ProjectionProjectRepositoryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
-    ProjectionThreadRepositoryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
-    SqlitePersistenceMemory,
-  ),
+  ArtifactMetadataRepositoryLive.pipe(Layer.provideMerge(Sqlite.layerMemory)),
 );
 
 artifactMetadataLayer("ArtifactMetadataRepository", (it) => {
   it.effect("searches metadata across projects and filters by artifact type", () =>
     Effect.gen(function* () {
-      const projects = yield* ProjectionProjectRepository;
-      const threads = yield* ProjectionThreadRepository;
+      const sql = yield* SqlClient.SqlClient;
       const artifacts = yield* ArtifactMetadataRepository;
       const projectId = ProjectId.make("project-physics");
       const threadId = ThreadId.make("thread-thermodynamics");
       const createdAt = "2026-04-01T10:00:00.000Z";
 
-      yield* projects.upsert({
-        projectId,
-        title: "Physics Lab",
-        workspaceRoot: "/tmp/physics-lab",
-        defaultModelSelection: null,
-        defaultThreadEnvMode: null,
-        autoPull: false,
-        scripts: [],
-        createdAt,
-        updatedAt: createdAt,
-        deletedAt: null,
-      });
-      yield* threads.upsert({
-        threadId,
-        projectId,
-        title: "Thermodynamics assignment",
-        modelSelection: {
-          instanceId: ProviderInstanceId.make("codex"),
-          model: "gpt-5-codex",
-        },
-        runtimeMode: "full-access",
-        interactionMode: "default",
-        branch: null,
-        worktreePath: null,
-        latestTurnId: null,
-        createdAt,
-        updatedAt: createdAt,
-        archivedAt: null,
-        settledOverride: null,
-        settledAt: null,
-        unsettledAt: null,
-        snoozedUntil: null,
-        snoozedAt: null,
-        pinnedAt: null,
-        latestUserMessageAt: null,
-        pendingApprovalCount: 0,
-        pendingUserInputCount: 0,
-        hasActionableProposedPlan: 0,
-        deletedAt: null,
-      });
+      yield* sql`
+        INSERT INTO projection_projects (project_id,title,workspace_root,scripts_json,created_at,updated_at)
+        VALUES (${projectId},'Physics Lab','/tmp/physics-lab','[]',${createdAt},${createdAt})
+      `;
+      yield* sql`
+        INSERT INTO orchestration_v2_projection_threads (
+          thread_id,project_id,title,default_provider,runtime_mode,interaction_mode,created_at,updated_at,payload_json
+        ) VALUES (
+          ${threadId},${projectId},'Thermodynamics assignment','codex','full-access','default',${createdAt},${createdAt},'{}'
+        )
+      `;
       yield* artifacts.upsert({
         threadId,
         projectId,

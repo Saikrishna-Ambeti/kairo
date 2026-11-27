@@ -1,58 +1,47 @@
-/**
- * Downscale + re-encode for image attachments that are too big for where
- * they're headed. Two consumers share the same pipeline:
- *
- * - The prompt stash persists images as base64 in localStorage (~5MB origin
- *   quota), so `compressImageForStash` targets a per-image character budget.
- * - The composer accepts pasted/dropped images larger than the provider's
- *   `PROVIDER_SEND_TURN_MAX_IMAGE_BYTES` wire cap and shrinks them to fit
- *   via `compressImageToByteLimit` instead of rejecting the paste.
- *
- * Supported images already within budget pass through untouched. HEIC/HEIF
- * photos are decoded to JPEG first because providers cannot consume them.
- */
+import {
+  downscalableImageMimeType,
+  fitImageAttachmentSize,
+  IMAGE_ATTACHMENT_MAX_EDGE,
+} from "@kairo/client-runtime/image-attachment-size";
+import { msg } from "gt-react";
 
-/**
- * Longest edge kept when an image has to be re-encoded. Sized so a typical
- * retina screenshot (3024px wide) stays legible rather than being halved.
- */
-const MAX_DIMENSION = 2048;
-/** Base64 budget for a single stashed image (~975KB of binary). */
+import { m } from "../i18n/messages";
+import {
+  createCanvas,
+  type EncodeCanvas,
+  encodeCanvasOnThisThread,
+  fitImageToMaxEdge,
+  iccProfileIsDisplayP3,
+  type ImageSize,
+  MAX_IMAGE_METADATA_BYTES,
+  readImageColorSpace,
+  renderThumbnail,
+  renderThumbnailFromBitmap,
+} from "./imageCanvas";
+import type {
+  ImageWorkerResponse,
+  ImageWorkerResults,
+  ImageWorkerTask,
+} from "./imageCompression.worker";
+
+const MAX_DIMENSION = IMAGE_ATTACHMENT_MAX_EDGE;
 export const MAX_STASH_IMAGE_DATA_URL_CHARS = 1_300_000;
-/**
- * Ceiling on the *source* file handed to the re-encoder. File size is a
- * proxy for pixel count, and decoding hundreds of megapixels into an
- * ImageBitmap can OOM the tab — beyond this we refuse rather than risk it.
- */
+/** Bound source decoding: enormous ImageBitmaps can OOM the tab before resizing. */
 export const MAX_COMPRESSIBLE_SOURCE_BYTES = 50 * 1024 * 1024;
 const MAX_HEIC_DECODE_PIXELS = 64_000_000;
-const MAX_HEIC_METADATA_BYTES = 1024 * 1024;
-/**
- * Quality ladder tried in order until the encoded image fits the budget.
- * The floor stays high enough to avoid visible blocking on UI screenshots;
- * if even that overflows we drop resolution instead of quality.
- */
 const QUALITY_STEPS = [0.92, 0.85, 0.78, 0.68] as const;
-/** Extra downscale passes applied when even the lowest quality overflows. */
 const FALLBACK_SCALE_STEPS = [0.75, 0.55] as const;
 const HEIC_IMAGE_MIME_TYPE = /^image\/hei(?:c|f)$/i;
 const HEIC_IMAGE_EXTENSION = /\.(?:heic|heif)$/i;
-
-type ImageSize = { width: number; height: number };
 
 export interface CompressedStashImage {
   imageSize?: ImageSize;
   dataUrl: string;
   mimeType: string;
   sizeBytes: number;
-  /** True when the payload was re-encoded rather than stored verbatim. */
   recompressed: boolean;
 }
 
-/**
- * Why an image could not be compressed. Callers report these differently:
- * "too large" is a budget outcome, "unreadable" is a decode failure.
- */
 export type ImageCompressionFailureReason = "too-large" | "unreadable";
 
 export type CompressStashImageResult =
@@ -109,70 +98,86 @@ function findHeicMetadataBox(
   return null;
 }
 
-/** Read HEIC image dimensions before the decoder allocates full RGBA buffers. */
-async function validateHeicImageDimensions(
-  file: File,
-): Promise<ImageCompressionFailureReason | null> {
-  const metadata = await file.slice(0, MAX_HEIC_METADATA_BYTES).arrayBuffer();
+/** `colr` is an nclx code point (12 is Display P3) or an embedded ICC profile. */
+function heicColorIsDisplayP3(view: DataView, box: HeicMetadataBox): boolean {
+  if (box.payloadOffset + 6 > box.endOffset) return false;
+  const colorType = view.getUint32(box.payloadOffset);
+  if (colorType === 0x6e636c78) return view.getUint16(box.payloadOffset + 4) === 12;
+  if (colorType === 0x70726f66 || colorType === 0x72494343) {
+    return iccProfileIsDisplayP3(view, box.payloadOffset + 4, box.endOffset);
+  }
+  return false;
+}
+
+type HeicMetadataResult =
+  | { ok: true; displayP3: boolean }
+  | { ok: false; reason: ImageCompressionFailureReason };
+
+async function readHeicMetadata(file: File): Promise<HeicMetadataResult> {
+  const unreadable = { ok: false, reason: "unreadable" } as const;
+  const metadata = await file.slice(0, MAX_IMAGE_METADATA_BYTES).arrayBuffer();
   const view = new DataView(metadata);
   const meta = findHeicMetadataBox(view, 0, view.byteLength, 0x6d657461);
-  if (!meta || meta.payloadOffset + 4 > meta.endOffset) return "unreadable";
+  if (!meta || meta.payloadOffset + 4 > meta.endOffset) return unreadable;
   const properties = findHeicMetadataBox(view, meta.payloadOffset + 4, meta.endOffset, 0x69707270);
-  if (!properties) return "unreadable";
+  if (!properties) return unreadable;
   const containers = findHeicMetadataBox(
     view,
     properties.payloadOffset,
     properties.endOffset,
     0x6970636f,
   );
-  if (!containers) return "unreadable";
+  if (!containers) return unreadable;
 
   let offset = containers.payloadOffset;
   let foundImageDimensions = false;
   while (offset < containers.endOffset) {
     const image = findHeicMetadataBox(view, offset, containers.endOffset, 0x69737065);
     if (!image) break;
-    if (image.payloadOffset + 12 > image.endOffset) return "unreadable";
+    if (image.payloadOffset + 12 > image.endOffset) return unreadable;
     const width = view.getUint32(image.payloadOffset + 4);
     const height = view.getUint32(image.payloadOffset + 8);
-    if (width === 0 || height === 0) return "unreadable";
-    if (width > MAX_HEIC_DECODE_PIXELS / height) return "too-large";
+    if (width === 0 || height === 0) return unreadable;
+    if (width > MAX_HEIC_DECODE_PIXELS / height) return { ok: false, reason: "too-large" };
     foundImageDimensions = true;
     offset = image.endOffset;
   }
-  return foundImageDimensions ? null : "unreadable";
-}
+  if (!foundImageDimensions) return unreadable;
 
-/** Chunked so a large image can't blow the argument limit of `fromCharCode`. */
-const BASE64_CHUNK_SIZE = 0x8000;
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (let offset = 0; offset < bytes.length; offset += BASE64_CHUNK_SIZE) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + BASE64_CHUNK_SIZE));
+  let displayP3 = false;
+  offset = containers.payloadOffset;
+  while (!displayP3 && offset < containers.endOffset) {
+    const color = findHeicMetadataBox(view, offset, containers.endOffset, 0x636f6c72);
+    if (!color) break;
+    displayP3 = heicColorIsDisplayP3(view, color);
+    offset = color.endOffset;
   }
-  return btoa(binary);
+  return { ok: true, displayP3 };
 }
 
-/**
- * Blob → base64 data URL. Uses `arrayBuffer()` rather than `FileReader` so
- * the module works anywhere `Blob` does (including non-DOM test runners).
- */
-async function blobToDataUrl(blob: File | Blob, mimeTypeOverride?: string): Promise<string> {
-  const buffer = await blob.arrayBuffer();
-  const mimeType = mimeTypeOverride || blob.type || "application/octet-stream";
-  return `data:${mimeType};base64,${bytesToBase64(new Uint8Array(buffer))}`;
+export function readFileAsDataUrl(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error(m(msg("Could not read image data."))));
+    });
+    reader.addEventListener("error", () => {
+      reject(reader.error ?? new Error(m(msg("Failed to read image."))));
+    });
+    reader.readAsDataURL(file);
+  });
 }
 
-/** Approximate decoded byte count for a base64 data URL. */
-function dataUrlByteLength(dataUrl: string): number {
-  const commaIndex = dataUrl.indexOf(",");
-  const payload = commaIndex === -1 ? dataUrl : dataUrl.slice(commaIndex + 1);
-  const padding = payload.endsWith("==") ? 2 : payload.endsWith("=") ? 1 : 0;
-  return Math.max(0, Math.floor((payload.length * 3) / 4) - padding);
+function dataUrlLength(blob: Blob): number {
+  return (
+    `data:${blob.type || "application/octet-stream"};base64,`.length + 4 * Math.ceil(blob.size / 3)
+  );
 }
 
-/** Base64 payload of a data URL decoded back into a `File`. */
 export function dataUrlToFile(dataUrl: string, name: string, mimeType: string): File {
   const payload = dataUrl.slice(dataUrl.indexOf(",") + 1);
   const binary = atob(payload);
@@ -183,10 +188,6 @@ export function dataUrlToFile(dataUrl: string, name: string, mimeType: string): 
   return new File([bytes], name, { type: mimeType });
 }
 
-/**
- * Re-encoding changes the container, so a name like `shot.png` would lie
- * about its contents. Swap the extension to match the encoded mime type.
- */
 function fileNameForMimeType(name: string, mimeType: string): string {
   const extension = mimeType === "image/webp" ? ".webp" : ".jpg";
   const dotIndex = name.lastIndexOf(".");
@@ -201,114 +202,161 @@ function canRecompress(): boolean {
   );
 }
 
-interface Canvas2D {
-  canvas: OffscreenCanvas | HTMLCanvasElement;
-  context: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
+let imageWorker: Worker | null = null;
+let imageWorkerUnavailable = false;
+let nextImageWorkerId = 0;
+const pendingImageWorkerTasks = new Map<number, (response: ImageWorkerResponse | null) => void>();
+
+function settleImageWorkerTask(id: number, response: ImageWorkerResponse | null) {
+  pendingImageWorkerTasks.get(id)?.(response);
+  pendingImageWorkerTasks.delete(id);
 }
 
-function createCanvas(width: number, height: number): Canvas2D | null {
-  if (typeof OffscreenCanvas === "function") {
-    const canvas = new OffscreenCanvas(width, height);
-    const context = canvas.getContext("2d");
-    if (!context) return null;
-    return { canvas, context };
+function startImageWorker(): Worker | null {
+  if (imageWorker || imageWorkerUnavailable || typeof Worker !== "function") return imageWorker;
+  try {
+    imageWorker = new Worker(new URL("./imageCompression.worker.ts", import.meta.url), {
+      type: "module",
+    });
+  } catch {
+    imageWorkerUnavailable = true;
+    return null;
   }
-  if (typeof document === "undefined") return null;
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext("2d");
-  if (!context) return null;
-  return { canvas, context };
+  imageWorker.addEventListener("message", (event: MessageEvent<ImageWorkerResponse>) =>
+    settleImageWorkerTask(event.data.id, event.data),
+  );
+  imageWorker.addEventListener("error", () => {
+    imageWorkerUnavailable = true;
+    imageWorker?.terminate();
+    imageWorker = null;
+    for (const id of pendingImageWorkerTasks.keys()) settleImageWorkerTask(id, null);
+  });
+  return imageWorker;
 }
 
 /**
- * WebP is preferred: at matched visual quality it lands roughly 25-35%
- * smaller than JPEG, so the same budget buys more resolution and detail —
- * and it keeps alpha, so screenshots with transparency survive intact.
- * Browsers that can't encode it silently fall back to JPEG.
+ * Chromium runs main-thread canvas encodes as idle tasks (~1 s each on a page with no idle time),
+ * and main-thread Blob reads wait behind every busy frame. A worker does neither.
+ * `null` means the caller should do the work on the main thread.
  */
-async function encodeCanvas(
-  canvas: OffscreenCanvas | HTMLCanvasElement,
-  quality: number,
-  mimeType: string,
-  budgetChars: number,
-): Promise<{ dataUrl: string | null; mimeType: string } | null> {
-  if (typeof HTMLCanvasElement !== "undefined" && canvas instanceof HTMLCanvasElement) {
-    const dataUrl = canvas.toDataURL(mimeType, quality);
-    // toDataURL silently returns a PNG when the requested type is unsupported.
-    if (!dataUrl.startsWith(`data:${mimeType}`)) return null;
-    return { dataUrl: dataUrl.length <= budgetChars ? dataUrl : null, mimeType };
-  }
-  const blob = await (canvas as OffscreenCanvas).convertToBlob({ type: mimeType, quality });
-  if (blob.type && blob.type !== mimeType) return null;
-  const dataUrlLength = `data:${mimeType};base64,`.length + 4 * Math.ceil(blob.size / 3);
-  if (dataUrlLength > budgetChars) return { dataUrl: null, mimeType };
-  return { dataUrl: await blobToDataUrl(blob, mimeType), mimeType };
+async function runInImageWorker<Task extends ImageWorkerTask>(
+  task: Task,
+  transfer: Transferable[] = [],
+): Promise<{ value: ImageWorkerResults[Task["kind"]] } | null> {
+  const worker = startImageWorker();
+  if (!worker) return null;
+  const id = nextImageWorkerId++;
+  const response = await new Promise<ImageWorkerResponse | null>((resolve) => {
+    pendingImageWorkerTasks.set(id, resolve);
+    worker.postMessage({ id, task }, transfer);
+  });
+  return response && "value" in response
+    ? { value: response.value as ImageWorkerResults[Task["kind"]] }
+    : null;
 }
 
-const composerThumbnails = new WeakMap<File, Promise<string | null>>();
+const encodeCanvas: EncodeCanvas = async (canvas, colorSpace, quality, mimeType) => {
+  if (
+    typeof OffscreenCanvas === "function" &&
+    canvas instanceof OffscreenCanvas &&
+    startImageWorker()
+  ) {
+    const bitmap = await createImageBitmap(canvas);
+    // The worker may have failed during the snapshot; then this falls back below.
+    const encoded = await runInImageWorker(
+      { kind: "encode", bitmap, colorSpace, mimeType, quality },
+      [bitmap],
+    );
+    if (encoded) return encoded.value;
+    bitmap.close();
+  }
+  return encodeCanvasOnThisThread(canvas, colorSpace, quality, mimeType);
+};
 
-/** Cache a centered square crop for the composer's object-cover image tiles. */
-export function createComposerImageThumbnail(file: File): Promise<string | null> {
-  const cached = composerThumbnails.get(file);
-  if (cached) return cached;
-  const thumbnail = (async () => {
-    if (!canRecompress()) return null;
-    let bitmap: ImageBitmap | undefined;
-    try {
-      bitmap = await createImageBitmap(file);
-      const side = Math.min(bitmap.width, bitmap.height);
-      if (side <= 0) return null;
-      const dimension = Math.min(256, side);
-      const surface = createCanvas(dimension, dimension);
-      if (!surface) return null;
-      surface.context.drawImage(
-        bitmap,
-        (bitmap.width - side) / 2,
-        (bitmap.height - side) / 2,
-        side,
-        side,
-        0,
-        0,
-        dimension,
-        dimension,
-      );
-      return (
-        (await encodeCanvas(surface.canvas, 1, "image/png", Number.POSITIVE_INFINITY))?.dataUrl ??
-        null
-      );
-    } catch {
-      return null;
-    } finally {
-      bitmap?.close();
-    }
-  })();
+const composerThumbnails = new WeakMap<File, Promise<string | null>>();
+const settledComposerThumbnails = new WeakMap<File, string | null>();
+
+function cacheComposerImageThumbnail(
+  file: File,
+  thumbnail: Promise<string | null>,
+): Promise<string | null> {
   composerThumbnails.set(file, thumbnail);
+  void thumbnail.then((src) => settledComposerThumbnails.set(file, src));
   return thumbnail;
 }
 
+/** `undefined` until the thumbnail settles, so a tile can paint a known thumbnail immediately. */
+export function readComposerImageThumbnail(file: File): string | null | undefined {
+  return settledComposerThumbnails.get(file);
+}
+
+export function createComposerImageThumbnail(file: File): Promise<string | null> {
+  return (
+    composerThumbnails.get(file) ??
+    cacheComposerImageThumbnail(file, renderComposerImageThumbnail(file))
+  );
+}
+
 /**
- * Draws `bitmap` scaled to fit `maxDimension` and encodes it, stepping
- * quality down until the data URL fits `budgetChars`.
+ * Pasted images are re-encoded after their placeholder already shows the source's thumbnail.
+ * Reusing it keeps the tile from flashing back to its fallback while the new file is decoded.
+ * Resolves once the target's thumbnail is readable, so a tile swapped to it paints at once even
+ * when compression finished before the source's thumbnail did.
  */
+export async function inheritComposerImageThumbnail(source: File, target: File): Promise<void> {
+  const sourceThumbnail = composerThumbnails.get(source);
+  if (source === target || !sourceThumbnail || composerThumbnails.has(target)) return;
+  cacheComposerImageThumbnail(
+    target,
+    sourceThumbnail.then((src) => src ?? renderComposerImageThumbnail(target)),
+  );
+  const src = await sourceThumbnail;
+  if (src) settledComposerThumbnails.set(target, src);
+}
+
+async function renderComposerImageThumbnail(file: File): Promise<string | null> {
+  if (isHeicImageFile(file)) return prepareHeicImage(file).thumbnail;
+  // Placeholders thumbnail the uncompressed source, which can be big enough to OOM the decode.
+  if (!canRecompress() || file.size > MAX_COMPRESSIBLE_SOURCE_BYTES) return null;
+  try {
+    const inWorker = await runInImageWorker({ kind: "thumbnail", file });
+    if (inWorker) return inWorker.value;
+    const blob = await renderThumbnail(file, encodeCanvas);
+    return blob ? await readFileAsDataUrl(blob) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function renderComposerImageThumbnailFromBitmap(
+  bitmap: ImageBitmap,
+  colorSpace: PredefinedColorSpace,
+): Promise<string | null> {
+  try {
+    const blob = await renderThumbnailFromBitmap(bitmap, colorSpace, encodeCanvas);
+    return blob ? await readFileAsDataUrl(blob) : null;
+  } catch {
+    return null;
+  }
+}
+
 async function encodeWithinBudget(
   bitmap: ImageBitmap,
+  colorSpace: PredefinedColorSpace,
   maxDimension: number,
   budgetChars: number,
   preferredMimeType?: "image/jpeg",
-): Promise<{ dataUrl: string; mimeType: string; imageSize: ImageSize } | null> {
+): Promise<{ blob: Blob; mimeType: string; imageSize: ImageSize } | null> {
   const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
   const width = Math.max(1, Math.round(bitmap.width * scale));
   const height = Math.max(1, Math.round(bitmap.height * scale));
-  const target = createCanvas(width, height);
+  const target = createCanvas(width, height, colorSpace);
   if (!target) return null;
 
-  // Probe WebP once; JPEG (no alpha) needs a white matte, so the fill has to
-  // happen before drawing and depends on which codec we end up using.
+  // Probe the codec before drawing; JPEG needs a white matte because it has no alpha.
   const mimeType =
     preferredMimeType ??
-    ((await encodeCanvas(target.canvas, QUALITY_STEPS[0], "image/webp", 0))
+    ((await encodeCanvas(target.canvas, colorSpace, QUALITY_STEPS[0], "image/webp"))
       ? "image/webp"
       : "image/jpeg");
 
@@ -319,23 +367,19 @@ async function encodeWithinBudget(
   target.context.drawImage(bitmap, 0, 0, width, height);
 
   for (const quality of QUALITY_STEPS) {
-    const encoded = await encodeCanvas(target.canvas, quality, mimeType, budgetChars);
+    const encoded = await encodeCanvas(target.canvas, colorSpace, quality, mimeType);
     if (!encoded) break;
-    if (encoded.dataUrl !== null) {
-      return { dataUrl: encoded.dataUrl, mimeType: encoded.mimeType, imageSize: { width, height } };
+    if (dataUrlLength(encoded) <= budgetChars) {
+      return { blob: encoded, mimeType, imageSize: { width, height } };
     }
   }
   return null;
 }
 
 type ReencodeResult =
-  | { ok: true; dataUrl: string; mimeType: string; imageSize: ImageSize }
+  | { ok: true; blob: Blob; mimeType: string; imageSize: ImageSize }
   | { ok: false; reason: ImageCompressionFailureReason };
 
-/**
- * Shared re-encode loop: decodes `file`, then walks the quality ladder and
- * fallback downscale passes until an encoding fits `budgetChars`.
- */
 async function reencodeWithinBudget(
   file: File,
   budgetChars: number,
@@ -346,42 +390,38 @@ async function reencodeWithinBudget(
   }
 
   let bitmap: ImageBitmap;
+  let colorSpace: PredefinedColorSpace;
   try {
+    colorSpace = await readImageColorSpace(file);
     bitmap = await createImageBitmap(file);
   } catch {
     return { ok: false, reason: "unreadable" };
   }
 
   try {
-    // Each pass shrinks relative to the *previous target*, capped by
-    // MAX_DIMENSION. Scaling a fixed ceiling instead would be a no-op for
-    // images already smaller than that ceiling — the fallback passes would
-    // all resolve to the source size and never actually reduce resolution.
+    // Shrink the previous target; using MAX_DIMENSION leaves smaller images unchanged.
     const baseDimension = Math.min(MAX_DIMENSION, Math.max(bitmap.width, bitmap.height));
-    // Tracks whether the *last* attempt threw, so a run of encoder failures
-    // is reported as unreadable while a run of merely-too-big results is
-    // reported as too-large.
     let encodeFailed = false;
     for (const dimensionScale of [1, ...FALLBACK_SCALE_STEPS]) {
       const targetDimension = Math.max(1, Math.round(baseDimension * dimensionScale));
       let encoded: Awaited<ReturnType<typeof encodeWithinBudget>>;
       try {
-        encoded = await encodeWithinBudget(bitmap, targetDimension, budgetChars, preferredMimeType);
+        encoded = await encodeWithinBudget(
+          bitmap,
+          colorSpace,
+          targetDimension,
+          budgetChars,
+          preferredMimeType,
+        );
       } catch {
-        // Canvas allocation, drawing, or the codec itself can throw — often
-        // precisely *because* the target is too big (OOM on a large bitmap).
-        // Keep trying the smaller fallback scales rather than giving up: a
-        // reduced pass may well succeed. The exception must never escape,
-        // though, since callers finalize state after this returns and a
-        // throw would strand it (e.g. a stash entry stuck "still saving").
         encodeFailed = true;
         continue;
       }
       encodeFailed = false;
-      if (encoded && encoded.dataUrl.length <= budgetChars) {
+      if (encoded) {
         return {
           ok: true,
-          dataUrl: encoded.dataUrl,
+          blob: encoded.blob,
           mimeType: encoded.mimeType,
           imageSize: encoded.imageSize,
         };
@@ -393,124 +433,201 @@ async function reencodeWithinBudget(
   }
 }
 
-/**
- * Produces the payload to persist for a stashed image.
- *
- * Small images are stored verbatim (preserving PNG transparency and exact
- * pixels). Anything over budget is downscaled and re-encoded; if it still
- * doesn't fit after the fallback passes, reports a failure so the caller
- * can record it as dropped.
- */
 export async function compressImageForStash(
   file: File,
   budgetChars: number = MAX_STASH_IMAGE_DATA_URL_CHARS,
 ): Promise<CompressStashImageResult> {
-  let originalDataUrl: string;
   try {
-    originalDataUrl = await blobToDataUrl(file);
-  } catch {
-    return { ok: false, reason: "unreadable" };
-  }
-  if (originalDataUrl.length <= budgetChars) {
+    if (dataUrlLength(file) <= budgetChars) {
+      return {
+        ok: true,
+        image: {
+          dataUrl: await readFileAsDataUrl(file),
+          mimeType: file.type,
+          sizeBytes: file.size,
+          recompressed: false,
+        },
+      };
+    }
+    const reencoded = await reencodeWithinBudget(file, budgetChars);
+    if (!reencoded.ok) {
+      return reencoded;
+    }
     return {
       ok: true,
       image: {
-        dataUrl: originalDataUrl,
-        mimeType: file.type,
-        sizeBytes: file.size,
-        recompressed: false,
+        dataUrl: await readFileAsDataUrl(reencoded.blob),
+        mimeType: reencoded.mimeType,
+        sizeBytes: reencoded.blob.size,
+        recompressed: true,
+        imageSize: reencoded.imageSize,
       },
     };
+  } catch {
+    return { ok: false, reason: "unreadable" };
   }
-  const reencoded = await reencodeWithinBudget(file, budgetChars);
-  if (!reencoded.ok) {
-    return reencoded;
-  }
-  return {
-    ok: true,
-    image: {
-      dataUrl: reencoded.dataUrl,
-      mimeType: reencoded.mimeType,
-      sizeBytes: dataUrlByteLength(reencoded.dataUrl),
-      recompressed: true,
-      imageSize: reencoded.imageSize,
-    },
-  };
 }
 
-/**
- * Shrinks `file` until its binary size fits `maxBytes`, returning a new
- * `File` (WebP or JPEG). Files already within the limit pass through
- * untouched, preserving their exact bytes and format. Sources above
- * `MAX_COMPRESSIBLE_SOURCE_BYTES` are refused outright — decoding them is
- * the risk, so no amount of output budget makes them safe. An internally
- * converted image can provide its original source size when the intermediate
- * format expands beyond that ceiling.
- */
+async function fitImageFileToMaxEdge(
+  file: File,
+): Promise<{ file: File; imageSize: ImageSize } | null> {
+  const mimeType = downscalableImageMimeType(file.type);
+  if (!mimeType || !canRecompress() || file.size > MAX_COMPRESSIBLE_SOURCE_BYTES) return null;
+  try {
+    const fitted =
+      (await runInImageWorker({ kind: "fit", file, mimeType, quality: QUALITY_STEPS[0] })) ??
+      ({ value: await fitImageToMaxEdge(file, mimeType, QUALITY_STEPS[0], encodeCanvas) } as const);
+    if (!fitted.value) return null;
+    return {
+      file: new File([fitted.value.blob], file.name, {
+        type: mimeType,
+        lastModified: file.lastModified,
+      }),
+      imageSize: fitted.value.imageSize,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function compressImageToByteLimit(
   file: File,
   maxBytes: number,
   options?: { preferredMimeType?: "image/jpeg"; sourceSizeBytes?: number },
 ): Promise<CompressImageFileResult> {
-  if (file.size <= maxBytes) {
+  const fitted = await fitImageFileToMaxEdge(file);
+  if (fitted && fitted.file.size <= maxBytes) {
+    return { ok: true, file: fitted.file, recompressed: true, imageSize: fitted.imageSize };
+  }
+  if (!fitted && file.size <= maxBytes) {
     return { ok: true, file, recompressed: false };
   }
   if ((options?.sourceSizeBytes ?? file.size) > MAX_COMPRESSIBLE_SOURCE_BYTES) {
     return { ok: false, reason: "too-large" };
   }
-  // The re-encode loop budgets in data-URL characters. Base64 turns 3 bytes
-  // into 4 chars; flooring keeps the budget a hair conservative instead of
-  // admitting an encoding right at the byte cap.
   const budgetChars = Math.floor(maxBytes / 3) * 4;
-  const reencoded = await reencodeWithinBudget(file, budgetChars, options?.preferredMimeType);
+  const reencoded = await reencodeWithinBudget(
+    fitted?.file ?? file,
+    budgetChars,
+    options?.preferredMimeType,
+  );
   if (!reencoded.ok) {
     return reencoded;
   }
   return {
     ok: true,
-    file: dataUrlToFile(
-      reencoded.dataUrl,
+    file: new File(
+      [reencoded.blob],
       fileNameForMimeType(file.name || "image", reencoded.mimeType),
-      reencoded.mimeType,
+      { type: reencoded.mimeType },
     ),
     recompressed: true,
     imageSize: reencoded.imageSize,
   };
 }
 
-/**
- * Converts HEIC/HEIF photos to provider-compatible JPEG before applying the
- * attachment size limit. The decoder is loaded only when such a photo arrives.
- */
-export async function prepareImageForAttachment(
-  file: File,
-  maxBytes: number,
-): Promise<CompressImageFileResult> {
-  if (!isHeicImageFile(file)) {
-    return compressImageToByteLimit(file, maxBytes);
-  }
+const heicPreparations = new WeakMap<
+  File,
+  { image: Promise<CompressImageFileResult>; thumbnail: Promise<string | null> }
+>();
+// Preparing tiles share full-size decodes, so keep only one HEIC bitmap alive at a time.
+let heicPreparationQueue = Promise.resolve();
 
+function prepareHeicImage(file: File) {
+  const cached = heicPreparations.get(file);
+  if (cached) return cached;
+  let resolveThumbnail!: (src: string | null) => void;
+  const thumbnail = new Promise<string | null>((resolve) => {
+    resolveThumbnail = resolve;
+  });
+  const image = heicPreparationQueue
+    .then(() => convertHeicImage(file, resolveThumbnail))
+    .finally(() => resolveThumbnail(null));
+  heicPreparationQueue = image.then(
+    () => undefined,
+    () => undefined,
+  );
+  const preparation = { image, thumbnail };
+  heicPreparations.set(file, preparation);
+  return preparation;
+}
+
+async function readPixelsAsDisplayP3(
+  bitmap: ImageBitmap,
+  { width, height }: ImageSize,
+): Promise<ImageBitmap | undefined> {
+  const raw = createCanvas(width, height, "srgb");
+  if (!raw) return undefined;
+  raw.context.drawImage(bitmap, 0, 0, width, height);
+  const pixels = raw.context.getImageData(0, 0, width, height);
+  return createImageBitmap(new ImageData(pixels.data, width, height, { colorSpace: "display-p3" }));
+}
+
+async function convertHeicImage(
+  file: File,
+  onThumbnail: (src: string | null) => void,
+): Promise<CompressImageFileResult> {
   if (file.size > MAX_COMPRESSIBLE_SOURCE_BYTES) {
     return { ok: false, reason: "too-large" };
   }
 
-  let converted: Blob;
+  let bitmap: ImageBitmap | undefined;
   try {
-    const dimensionError = await validateHeicImageDimensions(file);
-    if (dimensionError) {
-      return { ok: false, reason: dimensionError };
+    const metadata = await readHeicMetadata(file);
+    if (!metadata.ok) return metadata;
+    bitmap =
+      typeof createImageBitmap === "function"
+        ? await createImageBitmap(file).catch(() => undefined)
+        : undefined;
+    const decodedNatively = bitmap !== undefined;
+    if (!bitmap) {
+      const { heicTo } = await import("heic-to/csp");
+      bitmap = await heicTo({ blob: file, type: "bitmap" });
     }
-    const { heicTo } = await import("heic-to/csp");
-    converted = await heicTo({ blob: file, type: "image/jpeg", quality: QUALITY_STEPS[0] });
+    const imageSize = fitImageAttachmentSize(bitmap) ?? {
+      width: bitmap.width,
+      height: bitmap.height,
+    };
+    // heic-to ignores the color profile and hands back the raw Display P3 values as sRGB.
+    if (!decodedNatively && metadata.displayP3) {
+      const source = bitmap;
+      bitmap = await readPixelsAsDisplayP3(source, imageSize);
+      source.close();
+      if (!bitmap) return { ok: false, reason: "unreadable" };
+    }
+    const colorSpace = metadata.displayP3 ? "display-p3" : "srgb";
+    const surface = createCanvas(imageSize.width, imageSize.height, colorSpace);
+    if (!surface) return { ok: false, reason: "unreadable" };
+    surface.context.drawImage(bitmap, 0, 0, imageSize.width, imageSize.height);
+    const [converted] = await Promise.all([
+      encodeCanvas(surface.canvas, colorSpace, QUALITY_STEPS[0], "image/jpeg"),
+      renderComposerImageThumbnailFromBitmap(bitmap, colorSpace).then(onThumbnail),
+    ]);
+    if (!converted) return { ok: false, reason: "unreadable" };
+    return {
+      ok: true,
+      file: new File([converted], fileNameForMimeType(file.name || "image", "image/jpeg"), {
+        type: "image/jpeg",
+        lastModified: file.lastModified,
+      }),
+      recompressed: true,
+      imageSize,
+    };
   } catch {
     return { ok: false, reason: "unreadable" };
+  } finally {
+    bitmap?.close();
   }
+}
 
-  const jpeg = new File([converted], fileNameForMimeType(file.name || "image", "image/jpeg"), {
-    type: "image/jpeg",
-    lastModified: file.lastModified,
-  });
-  const result = await compressImageToByteLimit(jpeg, maxBytes, {
+export async function prepareImageForAttachment(
+  file: File,
+  maxBytes: number,
+): Promise<CompressImageFileResult> {
+  if (!isHeicImageFile(file)) return compressImageToByteLimit(file, maxBytes);
+  const prepared = await prepareHeicImage(file).image;
+  if (!prepared.ok || prepared.file.size <= maxBytes) return prepared;
+  const result = await compressImageToByteLimit(prepared.file, maxBytes, {
     preferredMimeType: "image/jpeg",
     sourceSizeBytes: file.size,
   });

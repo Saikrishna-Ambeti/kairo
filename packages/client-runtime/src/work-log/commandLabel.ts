@@ -62,9 +62,6 @@ const SKIPPABLE_SUDO_PROBES = new Set(["[", "[[", "test", "true"]);
 const NON_PROGRAM_PREFIX_CHARACTERS = "<>(){}[];|&$`#!%@:";
 const NON_PROGRAM_SUFFIX_CHARACTERS = "){]}`";
 
-// These tokens describe shell syntax or shell-local control flow, not a useful
-// executable name. Falling back to "command" is less misleading than labels
-// such as "Ran if", "Ran [", or "Ran function".
 const NON_DESCRIPTIVE_SHELL_PROGRAMS = new Set([
   "!",
   "#",
@@ -160,8 +157,6 @@ const NON_DESCRIPTIVE_SHELL_PROGRAMS = new Set([
   "while",
 ]);
 
-// Unlike setup builtins, these can make later segments part of control flow or
-// otherwise unreachable, so do not use a later program as the command label.
 const TERMINAL_SHELL_PROGRAMS = new Set([
   "and",
   "begin",
@@ -176,7 +171,6 @@ const TERMINAL_SHELL_PROGRAMS = new Set([
   "else",
   "end",
   "esac",
-  "eval",
   "exec",
   "exit",
   "false",
@@ -199,7 +193,11 @@ const TERMINAL_SHELL_PROGRAMS = new Set([
   "while",
 ]);
 
-function shellCommandArgumentIndex(tokens: ReadonlyArray<string>, start: number): number | null {
+function shellCommandArgumentIndex(
+  shell: string,
+  tokens: ReadonlyArray<string>,
+  start: number,
+): number | null {
   for (let index = start; index < tokens.length; index += 1) {
     const option = tokens[index]!;
     if (option === "--" || !option.startsWith("-")) return null;
@@ -207,7 +205,10 @@ function shellCommandArgumentIndex(tokens: ReadonlyArray<string>, start: number)
       index += 1;
       continue;
     }
-    if (option === "--command" || /^-[a-zA-Z]*c[a-zA-Z]*$/.test(option)) return index + 1;
+    if (option === "--command" || /^-[a-zA-Z]*c[a-zA-Z]*$/.test(option)) {
+      // fish takes the next token as the script even when it is `--`.
+      return index + (shell !== "fish" && tokens[index + 1] === "--" ? 2 : 1);
+    }
   }
   return null;
 }
@@ -784,8 +785,6 @@ function powerShellAssignmentProgramName(
   );
   if (!assignment) return { matched: false, program: null };
 
-  // Environment assignments are setup. Their right-hand side is a value, not
-  // a command, so prefer the next top-level segment when one exists.
   if (assignment[1]?.toLowerCase() === "env") {
     return {
       matched: true,
@@ -922,9 +921,6 @@ function referencedCommandAlias(token: string): string | null {
   return reference?.[1] ?? reference?.[2] ?? null;
 }
 
-// Recover only literal aliases declared by an earlier top-level shell segment.
-// This covers common `SSH=(ssh ...)` and `TOOL=/path/to/tool` forms without
-// evaluating expansions or trying to model general shell state.
 function literalCommandAliasProgramName(command: string): string | null {
   const aliases = new Map<string, string>();
   let remainingCommand: string | null = command;
@@ -1235,8 +1231,9 @@ function parseCommandProgramName(
       }
       return null;
     }
-    if (tokenProgram && SHELL_PROGRAMS.has(tokenProgram.replace(/\.exe$/i, "").toLowerCase())) {
-      const scriptIndex = shellCommandArgumentIndex(tokens, index + 1);
+    const shellProgram = tokenProgram?.replace(/\.exe$/i, "").toLowerCase();
+    if (shellProgram && SHELL_PROGRAMS.has(shellProgram)) {
+      const scriptIndex = shellCommandArgumentIndex(shellProgram, tokens, index + 1);
       if (scriptIndex !== null) {
         const script = tokens[scriptIndex];
         return script
@@ -1366,4 +1363,100 @@ function commandProgramNameInternal(
 
 export function commandProgramName(command: string, depth = 0): string | null {
   return commandProgramNameInternal(command, depth, "shell", MAX_COMMAND_SEGMENTS);
+}
+
+// Escape bytes and other control characters render as invisible gaps; display
+// shows them as Unicode control pictures (ESC becomes ␛) instead. Tab, newline
+// and carriage return lay out as whitespace, so CRLF scripts stay unmarked.
+const CONTROL_CHARACTERS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu;
+
+export function commandDisplayText(command: string): string {
+  return withVisibleControlCharacters(withoutShellWrapper(command));
+}
+
+export function withVisibleControlCharacters(text: string): string {
+  return text.replace(CONTROL_CHARACTERS, (character) =>
+    character === "\u007f" ? "␡" : String.fromCharCode(0x2400 + character.charCodeAt(0)),
+  );
+}
+
+// A wrapper whose quoting does not balance is kept: the script's end cannot be
+// known, which happens when Codex's secret redaction removes the backslash of
+// an escaped quote inside `-lc "…"`.
+function withoutShellWrapper(command: string): string {
+  const trimmed = command.trim();
+  const split = splitFirstShellCommand(trimmed);
+  if (split.remainingCommand !== null) return trimmed;
+  const tokens = tokenizeShellCommand(trimmed);
+  const executable = tokens?.[0]?.split(/[\\/]/u).at(-1)?.toLowerCase();
+  const program = executable?.replace(/\.exe$/u, "");
+  if (!tokens || !executable || !program) return trimmed;
+  const scriptIndex = SHELL_PROGRAMS.has(program)
+    ? shellCommandArgumentIndex(program, tokens, 1)
+    : WINDOWS_SHELL_PROGRAMS.has(executable)
+      ? windowsShellScriptIndex(program, tokens)
+      : null;
+  // Positional arguments can affect the script; keep those invocations intact.
+  if (scriptIndex === null || scriptIndex !== tokens.length - 1) return trimmed;
+  return tokens[scriptIndex]?.trim() || trimmed;
+}
+
+function windowsShellScriptIndex(shell: string, tokens: ReadonlyArray<string>): number | null {
+  for (let index = 1; index < tokens.length; index += 1) {
+    const option = tokens[index]!.toLowerCase();
+    if (shell === "cmd") {
+      if (option === "/c") return index + 1;
+      if (!option.startsWith("/")) return null;
+      continue;
+    }
+    if (option === "-command" || option === "-c") return index + 1;
+    if (POWERSHELL_OPTIONS_WITH_VALUE.has(option)) {
+      index += 1;
+      continue;
+    }
+    if (!POWERSHELL_FLAGS.has(option)) return null;
+  }
+  return null;
+}
+
+const POWERSHELL_PROGRAMS = new Set(["powershell", "pwsh"]);
+
+const POWERSHELL_VERBS = new Set(
+  `Add Approve Assert Backup Block Build Checkpoint Clear Close Compare Complete Compress Confirm Connect Convert ConvertFrom ConvertTo Copy Debug Deny Deploy Disable Disconnect Dismount Edit Enable Enter Exit Expand Export Find ForEach Format Get Grant Group Hide Import Initialize Install Invoke Join Limit Lock Measure Merge Mount Move New Open Optimize Out Ping Pop Protect Publish Push Read Receive Redo Register Remove Rename Repair Request Reset Resize Resolve Restart Restore Resume Revoke Save Search Select Send Set Show Skip Sort Split Start Step Stop Submit Suspend Switch Sync Tee Test Trace Unblock Undo Uninstall Unlock Unprotect Unpublish Unregister Update Use Wait Watch Where Write`.split(
+    " ",
+  ),
+);
+
+function isPowerShellCmdlet(word: string): boolean {
+  const cmdlet = /^([A-Z][a-z]+(?:[A-Z][a-z]+)?)-[A-Z][A-Za-z]*$/u.exec(word);
+  return cmdlet !== null && POWERSHELL_VERBS.has(cmdlet[1]!);
+}
+
+export function commandHighlightLanguage(command: string): "powershell" | "shellscript" {
+  const program = /^(?:&\s*)?(?:"([^"]*)"|'([^']*)'|(\S+))/u.exec(command.trim());
+  const name = (program?.[1] ?? program?.[2] ?? program?.[3] ?? "")
+    .split(/[\\/]/u)
+    .at(-1)
+    ?.toLowerCase()
+    .replace(/\.exe$/u, "");
+  if (name && POWERSHELL_PROGRAMS.has(name)) return "powershell";
+  return isPowerShellScript(command) ? "powershell" : "shellscript";
+}
+
+function isPowerShellScript(command: string): boolean {
+  let rest: string | null = command.trim();
+  if (/^&\s*\S/u.test(rest)) return true;
+  for (let segment = 0; rest && segment < MAX_COMMAND_SEGMENTS; segment += 1) {
+    const { firstCommand, remainingCommand } = splitFirstShellCommand(rest);
+    const statement = firstCommand.trim();
+    if (
+      /^\$(?:env|global|local|script):/iu.test(statement) ||
+      /^\$[A-Za-z_]\w*\s+=/u.test(statement) ||
+      isPowerShellCmdlet(statement.match(/^\S+/u)?.[0] ?? "")
+    ) {
+      return true;
+    }
+    rest = remainingCommand;
+  }
+  return false;
 }

@@ -1,26 +1,28 @@
 import {
-  ConnectionPersistenceError,
-  ConnectionRegistrationStore,
-  ConnectionTargetStore,
   putRemoteDpopTokenInCatalog,
   registerConnectionInCatalog,
   removeConnectionFromCatalog,
   setConnectionEnabledInCatalog,
+  setRoutesInCatalog,
   removeCatalogValue,
   replaceCatalogValue,
+  Persistence,
+  ThreadTriageOutboxStore,
 } from "@kairo/client-runtime/platform";
 import { TokenStore } from "@kairo/client-runtime/authorization";
 import {
   ConnectionTransientError,
   CredentialStore,
   ProfileStore,
-  GitHubRoutingPermissions,
-  makeGitHubRoutingPermissions,
+  PullRequestRoutingPermissions,
+  makePullRequestRoutingPermissions,
 } from "@kairo/client-runtime/connection";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+
+import { mobileThreadTriageOutboxStore } from "../state/thread-triage-outbox-storage";
 import * as CatalogStore from "./catalog-store";
 
 function targetPersistenceError(
@@ -28,26 +30,27 @@ function targetPersistenceError(
     | "list-targets"
     | "list-disabled-targets"
     | "register-connection"
+    | "set-connection-routes"
     | "remove-connection"
     | "set-connection-enabled",
   error: ConnectionTransientError,
 ) {
-  return new ConnectionPersistenceError({
+  return new Persistence.ConnectionPersistenceError({
     operation,
     message: error.message,
   });
 }
 
-export const connectionStorageLayer = Layer.effectContext(
+export const layer = Layer.effectContext(
   Effect.gen(function* () {
     const catalog = yield* CatalogStore.make();
-    const githubRoutingPermissions = yield* makeGitHubRoutingPermissions({
+    const githubRoutingPermissions = yield* makePullRequestRoutingPermissions({
       read: catalog.read.pipe(Effect.map((document) => document.githubRoutingPermissions ?? [])),
       write: (githubRoutingPermissions) =>
         catalog.update((document) => ({ ...document, githubRoutingPermissions })),
     });
 
-    const targetStore = ConnectionTargetStore.of({
+    const targetStore = Persistence.ConnectionTargetStore.of({
       list: catalog.read.pipe(
         Effect.map((document) => document.targets),
         Effect.mapError((error) => targetPersistenceError("list-targets", error)),
@@ -57,21 +60,34 @@ export const connectionStorageLayer = Layer.effectContext(
         Effect.mapError((error) => targetPersistenceError("list-disabled-targets", error)),
       ),
     });
-    const registrationStore = ConnectionRegistrationStore.of({
-      register: (registration) =>
+    const registrationStore = Persistence.ConnectionRegistrationStore.of({
+      register: Effect.fn("Persistence.ConnectionRegistrationStore.register")(
+        (registration, routes) =>
+          catalog
+            .update((document) => registerConnectionInCatalog(document, registration, routes))
+            .pipe(Effect.mapError((error) => targetPersistenceError("register-connection", error))),
+      ),
+      setRoutes: Effect.fn("Persistence.ConnectionRegistrationStore.setRoutes")(
+        (environmentId, routes) =>
+          catalog
+            .update((document) => setRoutesInCatalog(document, environmentId, routes))
+            .pipe(
+              Effect.mapError((error) => targetPersistenceError("set-connection-routes", error)),
+            ),
+      ),
+      remove: Effect.fn("Persistence.ConnectionRegistrationStore.remove")((environmentId) =>
         catalog
-          .update((document) => registerConnectionInCatalog(document, registration))
-          .pipe(Effect.mapError((error) => targetPersistenceError("register-connection", error))),
-      remove: (target) =>
-        catalog
-          .update((document) => removeConnectionFromCatalog(document, target))
+          .update((document) => removeConnectionFromCatalog(document, environmentId))
           .pipe(Effect.mapError((error) => targetPersistenceError("remove-connection", error))),
-      setEnabled: (environmentId, enabled) =>
-        catalog
-          .update((document) => setConnectionEnabledInCatalog(document, environmentId, enabled))
-          .pipe(
-            Effect.mapError((error) => targetPersistenceError("set-connection-enabled", error)),
-          ),
+      ),
+      setEnabled: Effect.fn("Persistence.ConnectionRegistrationStore.setEnabled")(
+        (environmentId, enabled) =>
+          catalog
+            .update((document) => setConnectionEnabledInCatalog(document, environmentId, enabled))
+            .pipe(
+              Effect.mapError((error) => targetPersistenceError("set-connection-enabled", error)),
+            ),
+      ),
     });
     const profileStore = ProfileStore.make({
       get: (connectionId) =>
@@ -144,12 +160,13 @@ export const connectionStorageLayer = Layer.effectContext(
           ),
         })),
     });
-    return Context.make(ConnectionTargetStore, targetStore).pipe(
-      Context.add(GitHubRoutingPermissions, githubRoutingPermissions),
-      Context.add(ConnectionRegistrationStore, registrationStore),
+    return Context.make(Persistence.ConnectionTargetStore, targetStore).pipe(
+      Context.add(PullRequestRoutingPermissions, githubRoutingPermissions),
+      Context.add(Persistence.ConnectionRegistrationStore, registrationStore),
       Context.add(ProfileStore.ConnectionProfileStore, profileStore),
       Context.add(CredentialStore.ConnectionCredentialStore, credentialStore),
       Context.add(TokenStore.RemoteDpopAccessTokenStore, remoteTokenStore),
+      Context.add(ThreadTriageOutboxStore, mobileThreadTriageOutboxStore),
     );
   }),
 );

@@ -2,7 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { EnvironmentId, ProviderInstanceId, ThreadId } from "@kairo/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { McpSchema, McpServer } from "effect/unstable/ai";
+import { McpSchema, McpServer } from "effect/ai";
 
 import { SupermemoryService } from "../../../memory/SupermemoryService.ts";
 import { MemoryToolkitRegistrationLive } from "../../McpHttpServer.ts";
@@ -23,9 +23,13 @@ const client = McpSchema.McpServerClient.of({
 
 const invocation = (capabilities: ReadonlySet<McpInvocationContext.McpCapability>) => ({
   environmentId: EnvironmentId.make("environment-memory-test"),
-  threadId: ThreadId.make("thread-memory-test"),
-  providerSessionId: "provider-session-memory-test",
-  providerInstanceId: ProviderInstanceId.make("codex"),
+  thread: {
+    threadId: ThreadId.make("thread-memory-test"),
+    providerSessionId: "provider-session-memory-test",
+    providerInstanceId: ProviderInstanceId.make("codex"),
+  },
+  client: undefined,
+  requestNamespace: "memory-test",
   capabilities,
   issuedAt: 1,
 });

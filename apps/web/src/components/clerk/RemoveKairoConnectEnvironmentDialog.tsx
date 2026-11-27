@@ -1,5 +1,9 @@
+import { Discovery } from "@kairo/client-runtime/relay";
+import type { EnvironmentId } from "@kairo/contracts";
+import { T, useGT, Var } from "gt-react";
 import { useState } from "react";
 
+import { useRelayEnvironmentDiscovery } from "../../state/environments";
 import {
   AlertDialog,
   AlertDialogClose,
@@ -12,26 +16,43 @@ import {
 import { Button, InlineButton } from "../ui/button";
 import { useKairoConnectAccountPage } from "./KairoConnectAccountPages";
 
-/**
- * Confirms removing a Kairo Connect environment from this device. Removal here
- * leaves the account registration (and its host space) in place, so the dialog
- * says so and links to the account page where it can be deregistered.
- */
 export function RemoveKairoConnectEnvironmentDialog({
   environmentLabel,
+  environmentId,
   onCancel,
   onConfirm,
 }: {
-  /** The environment awaiting confirmation; null keeps the dialog closed. */
   readonly environmentLabel: string | null;
+  readonly environmentId: EnvironmentId | null;
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
 }) {
   const accountPage = useKairoConnectAccountPage();
-  // Keep the label through the close animation.
-  const [shownLabel, setShownLabel] = useState(environmentLabel);
-  if (environmentLabel !== null && environmentLabel !== shownLabel) setShownLabel(environmentLabel);
+  const gt = useGT();
+  const discovery = useRelayEnvironmentDiscovery();
+  const registration = environmentId
+    ? Discovery.relayEnvironmentRegistration(discovery, environmentId)
+    : "unknown";
+  const [shown, setShown] = useState({ label: environmentLabel, registration });
+  if (
+    environmentLabel !== null &&
+    (environmentLabel !== shown.label || registration !== shown.registration)
+  ) {
+    setShown({ label: environmentLabel, registration });
+  }
   const openAccountPage = accountPage.open;
+  const accountPageLink = openAccountPage ? (
+    <InlineButton
+      onClick={() => {
+        onCancel();
+        openAccountPage();
+      }}
+    >
+      <T>Kairo Connect settings</T>
+    </InlineButton>
+  ) : (
+    gt("Kairo Connect settings")
+  );
 
   return (
     <>
@@ -43,31 +64,36 @@ export function RemoveKairoConnectEnvironmentDialog({
       >
         <AlertDialogPopup>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove {shownLabel} from this device?</AlertDialogTitle>
+            <AlertDialogTitle>
+              <T>
+                Remove <Var>{shown.label}</Var> from this device?
+              </T>
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              This forgets its pairing, credentials, and cached threads here.
+              <T>This forgets its pairing, credentials, and cached threads here.</T>
             </AlertDialogDescription>
             <AlertDialogDescription>
-              It stays on your Kairo Connect account and keeps its host space. Deregister it in{" "}
-              {openAccountPage ? (
-                <InlineButton
-                  onClick={() => {
-                    onCancel();
-                    openAccountPage();
-                  }}
-                >
-                  Kairo Connect settings
-                </InlineButton>
+              {shown.registration === "registered" ? (
+                <T>
+                  It stays on your Kairo Connect account and keeps its host space. Deregister it in{" "}
+                  <Var>{accountPageLink}</Var> to free it.
+                </T>
+              ) : shown.registration === "unregistered" ? (
+                gt("It's no longer on your Kairo Connect account.")
               ) : (
-                "Kairo Connect settings"
-              )}{" "}
-              to free it.
+                <T>
+                  This doesn't change your Kairo Connect account. To deregister it there, use{" "}
+                  <Var>{accountPageLink}</Var>.
+                </T>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
+            <AlertDialogClose render={<Button variant="outline" />}>
+              <T>Cancel</T>
+            </AlertDialogClose>
             <Button variant="destructive" onClick={onConfirm}>
-              Remove from this device
+              <T>Remove from this device</T>
             </Button>
           </AlertDialogFooter>
         </AlertDialogPopup>

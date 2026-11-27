@@ -10,7 +10,7 @@ import {
 import { useEffect, useState } from "react";
 
 import { useArtifacts } from "../../state/artifacts";
-import { useActiveEnvironmentId } from "../../state/entities";
+import { usePrimaryEnvironmentId } from "../../state/environments";
 import { WorkspaceBreadcrumb, WorkspaceBreadcrumbItem } from "../WorkspaceBreadcrumb";
 import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
@@ -22,7 +22,7 @@ import { ArtifactRow } from "./ArtifactRow";
 import { ARTIFACT_FILTERS, type ArtifactFilter } from "./artifactDisplay";
 
 export function LibraryPage() {
-  const environmentId = useActiveEnvironmentId();
+  const environmentId = usePrimaryEnvironmentId();
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<ArtifactFilter>("all");

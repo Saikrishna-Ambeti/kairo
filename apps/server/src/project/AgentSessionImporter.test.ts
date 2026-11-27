@@ -1,1216 +1,1053 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it, vi } from "@effect/vitest";
+import { expect, it } from "@effect/vitest";
 import {
-  AgentSessionImportProjectChangedError,
-  CommandId,
-  MessageId,
+  type AgentSessionSource,
+  type ServerSettingsError,
+  EventId,
   ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
+  MessageId,
+  RunId,
   ThreadId,
-  type OrchestrationCommand,
-  type OrchestrationProjectShell,
-  type OrchestrationThread,
-  type ProviderSendTurnInput,
+  type ApplicationStoredEvent,
+  type OrchestrationV2AppThread,
+  type OrchestrationV2DomainEvent,
+  type OrchestrationV2ProviderThread,
 } from "@kairo/contracts";
-import * as Effect from "effect/Effect";
+import * as IdAllocator from "@kairo/provider-core/server/IdAllocator";
+import * as AcpRegistryRuntimeCoordinator from "@kairo/provider-acp-registry/server/AcpRegistryRuntimeCoordinator";
+import * as ProviderAdapter from "@kairo/provider-core/server/ProviderAdapter";
+import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
-import * as Fiber from "effect/Fiber";
+import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as SqlClient from "effect/sql/SqlClient";
 import * as TestClock from "effect/testing/TestClock";
 
-import { makeTestProviderAdapterHarness } from "../../integration/TestProviderAdapter.integration.ts";
-import { ServerConfig } from "../config.ts";
-import { GitWorkflowService } from "../git/GitWorkflowService.ts";
-import { OrchestrationCommandReceiptRepositoryLive } from "../persistence/Layers/OrchestrationCommandReceipts.ts";
-import { OrchestrationEventStoreLive } from "../persistence/Layers/OrchestrationEventStore.ts";
-import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
-import * as ProviderSessionRuntime from "../persistence/ProviderSessionRuntime.ts";
-import { OrchestrationEngineLive } from "../orchestration/Layers/OrchestrationEngine.ts";
-import { OrchestrationProjectionPipelineLive } from "../orchestration/Layers/ProjectionPipeline.ts";
-import { OrchestrationProjectionSnapshotQueryLive } from "../orchestration/Layers/ProjectionSnapshotQuery.ts";
-import { ProviderCommandReactorLive } from "../orchestration/Layers/ProviderCommandReactor.ts";
-import { OrchestrationCommandInvariantError } from "../orchestration/Errors.ts";
-import * as ThreadBackgroundLiveness from "../orchestration/ThreadBackgroundLiveness.ts";
-import * as ThreadPlanProgress from "../orchestration/ThreadPlanProgress.ts";
-import * as OrchestrationEngine from "../orchestration/Services/OrchestrationEngine.ts";
-import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
-import { ProviderCommandReactor } from "../orchestration/Services/ProviderCommandReactor.ts";
-import { ProviderSessionDirectoryLive } from "../provider/Layers/ProviderSessionDirectory.ts";
-import { makeProviderServiceLive } from "../provider/Layers/ProviderService.ts";
+import * as ServerConfig from "../config.ts";
+import * as EventSink from "../orchestration-v2/EventSink.ts";
+import * as EventStore from "../orchestration-v2/EventStore.ts";
+import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
+import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
+import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
+import * as ProviderAdapterRegistry from "../orchestration-v2/ProviderAdapterRegistry.ts";
+import * as ThreadCommandExecutor from "../orchestration-v2/ThreadCommandExecutor.ts";
 import {
-  NoOpProviderEventLoggers,
-  ProviderEventLoggers,
-} from "../provider/Layers/ProviderEventLoggers.ts";
-import { ProviderSessionDirectoryPersistenceError } from "../provider/Errors.ts";
-import { ProviderAdapterRegistry } from "../provider/Services/ProviderAdapterRegistry.ts";
-import { ProviderAuthService } from "../provider/Services/ProviderAuthService.ts";
-import * as ProviderSessionDirectory from "../provider/Services/ProviderSessionDirectory.ts";
-import { makeAdapterRegistryMock } from "../provider/testUtils/providerAdapterRegistryMock.ts";
-import { makeProviderRegistryLayer } from "../provider/testUtils/providerRegistryMock.ts";
-import { ServerSettingsService } from "../serverSettings.ts";
-import * as AnalyticsService from "../telemetry/AnalyticsService.ts";
-import { TextGeneration } from "../textGeneration/TextGeneration.ts";
-import { TerminalManager } from "../terminal/Manager.ts";
-import { VcsStatusBroadcaster } from "../vcs/VcsStatusBroadcaster.ts";
-import * as RepositoryIdentityResolver from "./RepositoryIdentityResolver.ts";
-import { importRecentAgentThreads } from "./AgentSessionImporter.ts";
+  CLAUDE_MODEL_SELECTION,
+  CODEX_MODEL_SELECTION,
+} from "../orchestration-v2/testkit/fixtures/shared.ts";
+import * as ProviderSessionRuntime from "../persistence/ProviderSessionRuntime.ts";
+import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as ServerSettings from "../serverSettings.ts";
+import * as AgentSessionImporter from "./AgentSessionImporter.ts";
 import * as AgentSessionScanner from "./AgentSessionScanner.ts";
+import * as ProjectService from "./ProjectService.ts";
 
-const PROJECT_ID = ProjectId.make("project-1");
-const WORKSPACE_ROOT = "/tmp/project-from-server";
-const CLAUDE_SESSION_ID = "123e4567-e89b-42d3-a456-426614174000";
-const encodeTranscriptRecord = Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
+const projectId = ProjectId.make("agent-session-import-project");
+const timestamp = "2026-09-01T10:00:00.000Z";
+const now = DateTime.makeUnsafe(timestamp);
+const stores = Layer.mergeAll(EventStore.layer, ProjectionStore.layer).pipe(
+  Layer.provideMerge(SqlitePersistence.layerMemory),
+);
+const persistence = Layer.mergeAll(
+  stores,
+  EventSink.layer.pipe(Layer.provide(stores)),
+  ProviderSessionRuntime.layer.pipe(Layer.provide(SqlitePersistence.layerMemory)),
+  IdAllocator.layer,
+);
 
-const makeThread = (source: "codex" | "claudeAgent"): AgentSessionScanner.AgentSessionThread => ({
-  source,
-  providerInstanceId: ProviderInstanceId.make(source),
-  providerSessionId: source === "codex" ? "codex-session" : CLAUDE_SESSION_ID,
-  title: `Imported ${source} thread`,
-  model: null,
-  createdAt: "2026-08-24T10:00:00.000Z",
-  updatedAt: "2026-08-24T10:01:00.000Z",
-  messages: [
-    { role: "user", text: "Fix the bug", createdAt: "2026-08-24T10:00:00.000Z" },
-    { role: "assistant", text: "Fixed", createdAt: "2026-08-24T10:01:00.000Z" },
-  ],
-});
-
-const makeThreadOutcome = (thread: AgentSessionScanner.AgentSessionThread) =>
-  ({
-    _tag: "Importable",
-    thread,
-    source: {
-      provider: thread.source,
-      providerInstanceId: thread.providerInstanceId,
-      providerSessionId: thread.providerSessionId,
-      filePath: `/tmp/transcripts/${thread.providerInstanceId}/${thread.providerSessionId}.jsonl`,
-      size: 0,
-      mtimeMs: 0,
-      device: 0,
-      inode: 0,
-      birthtimeMs: 0,
-    },
-  }) satisfies AgentSessionScanner.AgentSessionRecentThread;
-
-const makeProject = (): OrchestrationProjectShell => ({
-  id: PROJECT_ID,
-  title: "Project",
-  workspaceRoot: WORKSPACE_ROOT,
-  defaultModelSelection: null,
-  scripts: [],
-  createdAt: "2026-08-24T09:00:00.000Z",
-  updatedAt: "2026-08-24T09:00:00.000Z",
-});
-
-const makeProjectedThread = (input: {
-  readonly source: "codex" | "claudeAgent";
-  readonly projectId?: ProjectId;
-  readonly imported?: boolean;
-  readonly includeFollowup?: boolean;
-}): OrchestrationThread => {
-  const sourceThread = makeThread(input.source);
-  const threadId = ThreadId.make(
-    `import:${sourceThread.providerInstanceId}:${sourceThread.providerSessionId}`,
-  );
+function candidate(
+  modelSelection: typeof CODEX_MODEL_SELECTION,
+  providerSessionId: string,
+  provider: AgentSessionSource = "codex",
+) {
+  const providerInstanceId = modelSelection.instanceId;
   return {
+    _tag: "Importable" as const,
+    source: {
+      provider,
+      providerInstanceId,
+      providerSessionId,
+      filePath: `/tmp/${providerInstanceId}/${providerSessionId}.jsonl`,
+      size: 100,
+      mtimeMs: 2,
+      device: 3,
+      inode: 4,
+      birthtimeMs: 1,
+    },
+    thread: {
+      source: provider,
+      providerInstanceId,
+      providerSessionId,
+      title: "Imported thread",
+      model: modelSelection.model,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      omittedMessageCount: 0,
+      messages: [
+        { role: "user" as const, text: "Fix it", createdAt: timestamp },
+        { role: "assistant" as const, text: "Fixed", createdAt: timestamp },
+      ],
+    },
+    worktree: null as { path: string; branch: string | null } | null,
+  } satisfies AgentSessionScanner.AgentSessionRecentThread;
+}
+
+const PI_MODEL_SELECTION = { instanceId: ProviderInstanceId.make("pi"), model: "default" };
+
+// Pi threads are owned by their session file path, not the session UUID.
+const nativeId = ({ source }: ReturnType<typeof candidate>) =>
+  source.provider === "pi" ? source.filePath : source.providerSessionId;
+
+function importId(source: ReturnType<typeof candidate>) {
+  return ThreadId.make(
+    `import:${source.source.providerInstanceId}:${source.source.providerSessionId}`,
+  );
+}
+
+const seedOwner = Effect.fn(function* (
+  source: ReturnType<typeof candidate>,
+  lifecycle: "active" | "archived" | "deleted" = "active",
+) {
+  const sink = yield* EventSink.EventSinkV2;
+  const ids = yield* IdAllocator.IdAllocatorV2;
+  const { providerInstanceId, providerSessionId, provider } = source.source;
+  const nativeThreadId = nativeId(source);
+  const threadId = ThreadId.make(`owner:${providerInstanceId}:${providerSessionId}`);
+  const driver = ProviderDriverKind.make(provider);
+  const providerThread: OrchestrationV2ProviderThread = {
+    id: ids.derive.providerThread({ driver, nativeThreadId }),
+    driver,
+    providerInstanceId,
+    providerSessionId: null,
+    appThreadId: threadId,
+    ownerNodeId: null,
+    nativeThreadRef: { driver, nativeId: nativeThreadId, strength: "strong" },
+    nativeConversationHeadRef: null,
+    status: "idle",
+    firstRunOrdinal: 1,
+    lastRunOrdinal: 1,
+    handoffIds: [],
+    forkedFrom: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const thread: OrchestrationV2AppThread = {
+    createdBy: "user",
+    creationSource: "web",
     id: threadId,
-    projectId: input.projectId ?? PROJECT_ID,
-    title: sourceThread.title,
-    modelSelection: { instanceId: sourceThread.providerInstanceId, model: "default" },
+    projectId,
+    title: "Native thread",
+    providerInstanceId,
+    modelSelection: { instanceId: providerInstanceId, model: source.thread.model },
     runtimeMode: "full-access",
     interactionMode: "default",
-    pullRequests: [],
     branch: null,
     worktreePath: null,
-    latestTurn: null,
-    createdAt: sourceThread.createdAt,
-    updatedAt: sourceThread.updatedAt,
-    archivedAt: null,
+    activeProviderThreadId: providerThread.id,
+    lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: threadId },
+    forkedFrom: null,
+    createdAt: now,
+    updatedAt: now,
+    archivedAt: lifecycle === "archived" ? now : null,
+    deletedAt: lifecycle === "deleted" ? now : null,
     settledOverride: null,
     settledAt: null,
-    deletedAt: null,
-    messages: input.imported
-      ? [
-          {
-            id: MessageId.make(`${threadId}:000000`),
-            role: "user",
-            text: "Fix the bug",
-            turnId: null,
-            streaming: false,
-            createdAt: "2026-08-24T10:00:00.000Z",
-            updatedAt: "2026-08-24T10:00:00.000Z",
-          },
-          ...(input.includeFollowup
-            ? [
-                {
-                  id: MessageId.make("user-followup"),
-                  role: "user" as const,
-                  text: "Keep going",
-                  turnId: null,
-                  streaming: false,
-                  createdAt: "2026-08-24T10:02:00.000Z",
-                  updatedAt: "2026-08-24T10:02:00.000Z",
-                },
-              ]
-            : []),
-        ]
-      : [],
-    proposedPlans: [],
-    activities: [],
-    checkpoints: [],
-    session: null,
+    lastVisitedAt: null,
   };
-};
-
-const makeSnapshotsLayer = (input: {
-  readonly project?: OrchestrationProjectShell;
-  readonly getThread?: (threadId: ThreadId) => Option.Option<OrchestrationThread>;
-}) =>
-  Layer.mock(ProjectionSnapshotQuery.ProjectionSnapshotQuery)({
-    getProjectShellById: () =>
-      Effect.succeed(input.project === undefined ? Option.none() : Option.some(input.project)),
-    getImportedAgentSessionSources: () => Effect.succeed([]),
-    getThreadDetailById: (threadId) => Effect.succeed(input.getThread?.(threadId) ?? Option.none()),
+  yield* sink.write({
+    events: [
+      {
+        id: EventId.make(`${threadId}:created`),
+        type: "thread.created",
+        threadId,
+        occurredAt: now,
+        payload: thread,
+      },
+      {
+        id: EventId.make(`${threadId}:provider`),
+        type: "provider-thread.updated",
+        threadId,
+        occurredAt: now,
+        payload: providerThread,
+      },
+    ],
   });
+  return threadId;
+});
 
-const runImport = (input: {
-  readonly scanner: AgentSessionScanner.AgentSessionScanner["Service"];
-  readonly engine: OrchestrationEngine.OrchestrationEngineService["Service"];
-  readonly directory: ProviderSessionDirectory.ProviderSessionDirectory["Service"];
-  readonly snapshots: ReturnType<typeof makeSnapshotsLayer>;
-  readonly expectedWorkspaceRoot?: string;
-}) =>
-  importRecentAgentThreads({
-    projectId: PROJECT_ID,
-    ...(input.expectedWorkspaceRoot === undefined
-      ? {}
-      : { expectedWorkspaceRoot: input.expectedWorkspaceRoot }),
-  }).pipe(
-    Effect.provideService(AgentSessionScanner.AgentSessionScanner, input.scanner),
-    Effect.provideService(OrchestrationEngine.OrchestrationEngineService, input.engine),
-    Effect.provideService(ProviderSessionDirectory.ProviderSessionDirectory, input.directory),
-    Effect.provide(input.snapshots),
-  );
-
-it.layer(NodeServices.layer)("AgentSessionImporter", (it) => {
-  describe("importRecentAgentThreads", () => {
-    it.effect("uses the project root and stores provider-specific resume cursors", () =>
-      Effect.gen(function* () {
-        const commands: Array<OrchestrationCommand> = [];
-        const bindings: Array<ProviderSessionDirectory.ProviderRuntimeBinding> = [];
-        let scannedRoot: string | undefined;
-        const scanner = AgentSessionScanner.AgentSessionScanner.of({
-          scan: Effect.die("unused"),
-          recentThreads: (workspaceRoot) => {
-            scannedRoot = workspaceRoot;
-            return Stream.concat(
-              Stream.succeed(makeThreadOutcome(makeThread("codex"))),
-              Stream.fromEffect(
+const makeImporter = Effect.fn(function* (
+  candidates: ReadonlyArray<AgentSessionScanner.AgentSessionRecentThread>,
+  beforeTransaction: Effect.Effect<void> = Effect.void,
+  getAdapter?: ProviderAdapterRegistry.ProviderAdapterRegistryV2Shape["get"],
+  threadCommands?: ThreadCommandExecutor.ThreadCommandExecutor["Service"],
+  settings: Layer.Layer<
+    ServerSettings.ServerSettingsService,
+    ServerSettingsError
+  > = ServerSettings.layerTest(),
+  realScan?: {
+    readonly workspaceRoot: string;
+    readonly scanner: AgentSessionScanner.AgentSessionScanner["Service"];
+  },
+) {
+  const sql = yield* SqlClient.SqlClient;
+  const events = yield* EventStore.EventStoreV2;
+  const projections = yield* ProjectionStore.ProjectionStoreV2;
+  const published: Array<ApplicationStoredEvent> = [];
+  const withTransaction: typeof sql.withTransaction = (effect) =>
+    beforeTransaction.pipe(Effect.andThen(sql.withTransaction(effect)));
+  const importSql = new Proxy(sql, {
+    get: (target, key, receiver) =>
+      key === "withTransaction" ? withTransaction : Reflect.get(target, key, receiver),
+  });
+  const sinkLayer = Layer.fresh(EventSink.layer).pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        Layer.succeed(SqlClient.SqlClient, importSql),
+        Layer.succeed(ProjectionStore.ProjectionStoreV2, projections),
+        Layer.succeed(EventStore.EventStoreV2, {
+          ...events,
+          publishCommitted: (batch) =>
+            events.publishCommitted(batch).pipe(
+              Effect.tap(() =>
                 Effect.sync(() => {
-                  expect(bindings).toHaveLength(1);
-                  return makeThreadOutcome(makeThread("claudeAgent"));
+                  published.push(...batch);
                 }),
               ),
-            );
-          },
-        });
-        const engine = OrchestrationEngine.OrchestrationEngineService.of({
-          dispatch: (command) => Effect.sync(() => ({ sequence: commands.push(command) })),
-          readEvents: () => Stream.empty,
-          readThreadEvents: () => Stream.empty,
-          getThreadReplayStats: () => Effect.die("unused"),
-          streamDomainEvents: Stream.empty,
-          subscribeDomainEvents: Effect.succeed(Stream.empty),
-          latestSequence: Effect.succeed(0),
-        });
-        const directory = ProviderSessionDirectory.ProviderSessionDirectory.of({
-          upsert: (binding) => Effect.sync(() => void bindings.push(binding)),
-          getProvider: () => Effect.die("unused"),
-          recordImportedTranscript: () => Effect.void,
-          getBinding: () => Effect.succeedNone,
-          listThreadIds: () => Effect.die("unused"),
-          listBindings: () => Effect.die("unused"),
-        });
-
-        const result = yield* runImport({
-          scanner,
-          engine,
-          directory,
-          snapshots: makeSnapshotsLayer({ project: makeProject() }),
-          expectedWorkspaceRoot: `${WORKSPACE_ROOT}/`,
-        });
-
-        expect(result).toEqual({ importedCount: 2, skippedCount: 0 });
-        expect(scannedRoot).toBe(WORKSPACE_ROOT);
-        expect(commands.map((command) => command.type)).toEqual([
-          "thread.create",
-          "thread.history.import",
-          "thread.create",
-          "thread.history.import",
-        ]);
-        expect(commands.filter((command) => command.type === "thread.create")).toMatchObject([
-          { historyImport: true },
-          { historyImport: true },
-        ]);
-        expect(
-          commands
-            .filter((command) => command.type === "thread.history.import")
-            .flatMap((command) => command.messages.map((message) => message.messageId)),
-        ).toEqual([
-          "import:codex:codex-session:000000",
-          "import:codex:codex-session:000001",
-          `import:claudeAgent:${CLAUDE_SESSION_ID}:000000`,
-          `import:claudeAgent:${CLAUDE_SESSION_ID}:000001`,
-        ]);
-        expect(bindings).toMatchObject([
-          {
-            provider: "codex",
-            providerInstanceId: "codex",
-            resumeCursor: { threadId: "codex-session" },
-            runtimePayload: { cwd: WORKSPACE_ROOT },
-          },
-          {
-            provider: "claudeAgent",
-            providerInstanceId: "claudeAgent",
-            resumeCursor: {
-              threadId: `import:claudeAgent:${CLAUDE_SESSION_ID}`,
-              resume: CLAUDE_SESSION_ID,
-            },
-            runtimePayload: { cwd: WORKSPACE_ROOT },
-          },
-        ]);
-      }),
-    );
-
-    it.effect("rejects a changed project root before scanning or writing", () =>
-      Effect.gen(function* () {
-        const recentThreads = vi.fn(() => Stream.empty);
-        const error = yield* importRecentAgentThreads({
-          projectId: PROJECT_ID,
-          expectedWorkspaceRoot: WORKSPACE_ROOT,
-        }).pipe(
-          Effect.provideService(
-            AgentSessionScanner.AgentSessionScanner,
-            AgentSessionScanner.AgentSessionScanner.of({
-              scan: Effect.die("must not scan a changed project"),
-              recentThreads,
-            }),
-          ),
-          Effect.provide(
-            Layer.mergeAll(
-              Layer.mock(OrchestrationEngine.OrchestrationEngineService)({}),
-              Layer.mock(ProviderSessionDirectory.ProviderSessionDirectory)({}),
-              makeSnapshotsLayer({
-                project: { ...makeProject(), workspaceRoot: "/tmp/project-moved" },
-              }),
             ),
+        }),
+      ),
+    ),
+  );
+  const context = yield* Layer.build(
+    AgentSessionImporter.layer.pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          sinkLayer,
+          settings,
+          Layer.succeed(IdAllocator.IdAllocatorV2, yield* IdAllocator.IdAllocatorV2),
+          Layer.succeed(
+            ProviderSessionRuntime.ProviderSessionRuntimeRepository,
+            yield* ProviderSessionRuntime.ProviderSessionRuntimeRepository,
           ),
-          Effect.flip,
-        );
-
-        expect(error).toEqual(new AgentSessionImportProjectChangedError({ projectId: PROJECT_ID }));
-        expect(recentThreads).not.toHaveBeenCalled();
-      }),
-    );
-
-    it.effect("counts scanner skips without writing a thread or binding", () =>
-      Effect.gen(function* () {
-        const scanner = AgentSessionScanner.AgentSessionScanner.of({
-          scan: Effect.die("unused"),
-          recentThreads: () => Stream.succeed({ _tag: "Skipped" }),
-        });
-        const engine = OrchestrationEngine.OrchestrationEngineService.of({
-          dispatch: () => Effect.die("must not dispatch for a scanner skip"),
-          readEvents: () => Stream.empty,
-          readThreadEvents: () => Stream.empty,
-          getThreadReplayStats: () => Effect.die("unused"),
-          streamDomainEvents: Stream.empty,
-          subscribeDomainEvents: Effect.succeed(Stream.empty),
-          latestSequence: Effect.succeed(0),
-        });
-        const directory = ProviderSessionDirectory.ProviderSessionDirectory.of({
-          upsert: () => Effect.die("must not bind a scanner skip"),
-          getProvider: () => Effect.die("unused"),
-          recordImportedTranscript: () => Effect.die("unused"),
-          getBinding: () => Effect.die("must not read a scanner skip binding"),
-          listThreadIds: () => Effect.die("unused"),
-          listBindings: () => Effect.die("unused"),
-        });
-
-        const result = yield* runImport({
-          scanner,
-          engine,
-          directory,
-          snapshots: makeSnapshotsLayer({ project: makeProject() }),
-        });
-
-        expect(result).toEqual({ importedCount: 0, skippedCount: 1 });
-      }),
-    );
-
-    it.effect("recovers after a rejected history receipt and a failed binding write", () =>
-      Effect.gen(function* () {
-        let threadCreated = false;
-        let historyImported = false;
-        let historyAttemptCount = 0;
-        let bindingAttemptCount = 0;
-        const rejectedCommandIds = new Set<string>();
-        const bindings: Array<ProviderSessionDirectory.ProviderRuntimeBinding> = [];
-        const scanner = AgentSessionScanner.AgentSessionScanner.of({
-          scan: Effect.die("unused"),
-          recentThreads: () => Stream.fromIterable([makeThreadOutcome(makeThread("codex"))]),
-        });
-        const engine = OrchestrationEngine.OrchestrationEngineService.of({
-          dispatch: (command) => {
-            if (rejectedCommandIds.has(command.commandId)) {
-              return Effect.fail(
-                new OrchestrationCommandInvariantError({
-                  commandType: command.type,
-                  detail: "Previously rejected.",
-                }),
-              );
-            }
-            if (command.type === "thread.create") threadCreated = true;
-            if (command.type === "thread.history.import") {
-              historyAttemptCount += 1;
-              if (historyAttemptCount === 1) {
-                rejectedCommandIds.add(command.commandId);
-                return Effect.fail(
-                  new OrchestrationCommandInvariantError({
-                    commandType: command.type,
-                    detail: "Temporary history import failure.",
-                  }),
-                );
-              }
-              historyImported = true;
-            }
-            return Effect.succeed({ sequence: 1 });
-          },
-          readEvents: () => Stream.empty,
-          readThreadEvents: () => Stream.empty,
-          getThreadReplayStats: () => Effect.die("unused"),
-          streamDomainEvents: Stream.empty,
-          subscribeDomainEvents: Effect.succeed(Stream.empty),
-          latestSequence: Effect.succeed(0),
-        });
-        const directory = ProviderSessionDirectory.ProviderSessionDirectory.of({
-          upsert: (binding) => {
-            bindingAttemptCount += 1;
-            if (bindingAttemptCount === 1) {
-              return Effect.fail(
-                new ProviderSessionDirectoryPersistenceError({
-                  operation: "upsert",
-                  detail: "Temporary session storage failure.",
-                }),
-              );
-            }
-            bindings.push(binding);
-            return Effect.void;
-          },
-          getProvider: () => Effect.die("unused"),
-          recordImportedTranscript: () => Effect.void,
-          getBinding: () =>
-            Effect.succeed(bindings[0] === undefined ? Option.none() : Option.some(bindings[0])),
-          listThreadIds: () => Effect.die("unused"),
-          listBindings: () => Effect.die("unused"),
-        });
-        const snapshots = makeSnapshotsLayer({
-          project: makeProject(),
-          getThread: () =>
-            threadCreated
-              ? Option.some(makeProjectedThread({ source: "codex", imported: historyImported }))
-              : Option.none(),
-        });
-        const importOnce = () => runImport({ scanner, engine, directory, snapshots });
-
-        expect(yield* importOnce()).toEqual({ importedCount: 0, skippedCount: 1 });
-        expect(yield* importOnce()).toEqual({ importedCount: 0, skippedCount: 1 });
-        expect(yield* importOnce()).toEqual({ importedCount: 1, skippedCount: 0 });
-        const historyAttemptsAfterCompletion = historyAttemptCount;
-        expect(yield* importOnce()).toEqual({ importedCount: 1, skippedCount: 0 });
-        expect(historyAttemptCount).toBe(historyAttemptsAfterCompletion);
-        expect(historyAttemptCount).toBe(2);
-        expect(bindings).toHaveLength(1);
-      }),
-    );
-
-    it.effect("does not replace completed history or an active binding on retry", () =>
-      Effect.gen(function* () {
-        const scanner = AgentSessionScanner.AgentSessionScanner.of({
-          scan: Effect.die("unused"),
-          recentThreads: () => Stream.fromIterable([makeThreadOutcome(makeThread("codex"))]),
-        });
-        const runningBinding: ProviderSessionDirectory.ProviderRuntimeBinding = {
-          threadId: ThreadId.make("import:codex:codex-session"),
-          provider: ProviderDriverKind.make("codex"),
-          providerInstanceId: ProviderInstanceId.make("codex"),
-          status: "running",
-          resumeCursor: { threadId: "newer-codex-session" },
-        };
-        const directory = ProviderSessionDirectory.ProviderSessionDirectory.of({
-          upsert: () => Effect.die("must not replace an active binding"),
-          getProvider: () => Effect.die("unused"),
-          recordImportedTranscript: () => Effect.void,
-          getBinding: () => Effect.succeedSome(runningBinding),
-          listThreadIds: () => Effect.die("unused"),
-          listBindings: () => Effect.die("unused"),
-        });
-        const engine = OrchestrationEngine.OrchestrationEngineService.of({
-          dispatch: () => Effect.die("must not replay history or settle active work"),
-          readEvents: () => Stream.empty,
-          readThreadEvents: () => Stream.empty,
-          getThreadReplayStats: () => Effect.die("unused"),
-          streamDomainEvents: Stream.empty,
-          subscribeDomainEvents: Effect.succeed(Stream.empty),
-          latestSequence: Effect.succeed(0),
-        });
-
-        const result = yield* runImport({
-          scanner,
-          engine,
-          directory,
-          snapshots: makeSnapshotsLayer({
-            project: makeProject(),
-            getThread: () =>
-              Option.some(
-                makeProjectedThread({ source: "codex", imported: true, includeFollowup: true }),
-              ),
+          realScan === undefined
+            ? Layer.mock(AgentSessionScanner.AgentSessionScanner)({
+                recentThreads: () => Stream.fromIterable(candidates),
+              })
+            : Layer.succeed(AgentSessionScanner.AgentSessionScanner, realScan.scanner),
+          Layer.mock(ProjectService.ProjectService)({
+            getById: () =>
+              Effect.succeedSome({
+                id: projectId,
+                title: "Project",
+                workspaceRoot: realScan?.workspaceRoot ?? "/workspace/project",
+                defaultModelSelection: null,
+                scripts: [],
+                createdAt: timestamp,
+                updatedAt: timestamp,
+                deletedAt: null,
+              }),
           }),
-        });
-
-        expect(result).toEqual({ importedCount: 1, skippedCount: 0 });
-      }),
-    );
-
-    it.effect("skips malformed Claude ids and wrong-project thread collisions", () =>
-      Effect.gen(function* () {
-        const scanner = AgentSessionScanner.AgentSessionScanner.of({
-          scan: Effect.die("unused"),
-          recentThreads: () =>
-            Stream.fromIterable([
-              makeThreadOutcome({ ...makeThread("claudeAgent"), providerSessionId: "not-a-uuid" }),
-              makeThreadOutcome(makeThread("codex")),
-            ]),
-        });
-        const commands: Array<OrchestrationCommand> = [];
-        const engine = OrchestrationEngine.OrchestrationEngineService.of({
-          dispatch: (command) => Effect.sync(() => ({ sequence: commands.push(command) })),
-          readEvents: () => Stream.empty,
-          readThreadEvents: () => Stream.empty,
-          getThreadReplayStats: () => Effect.die("unused"),
-          streamDomainEvents: Stream.empty,
-          subscribeDomainEvents: Effect.succeed(Stream.empty),
-          latestSequence: Effect.succeed(0),
-        });
-        const directory = ProviderSessionDirectory.ProviderSessionDirectory.of({
-          upsert: () => Effect.die("must not bind malformed or wrong-project sessions"),
-          getProvider: () => Effect.die("unused"),
-          recordImportedTranscript: () => Effect.die("unused"),
-          getBinding: () => Effect.succeedNone,
-          listThreadIds: () => Effect.die("unused"),
-          listBindings: () => Effect.die("unused"),
-        });
-
-        const result = yield* runImport({
-          scanner,
-          engine,
-          directory,
-          snapshots: makeSnapshotsLayer({
-            project: makeProject(),
-            getThread: (threadId) =>
-              threadId === "import:codex:codex-session"
-                ? Option.some(
-                    makeProjectedThread({
-                      source: "codex",
-                      projectId: ProjectId.make("project-other"),
-                    }),
-                  )
-                : Option.none(),
+          Layer.mock(Orchestrator.OrchestratorV2)({
+            getThreadRecords: (threadId, fields) =>
+              projections
+                .getThreadRecords(threadId, fields)
+                .pipe(
+                  Effect.mapError(
+                    (cause) => new Orchestrator.OrchestratorProjectionError({ threadId, cause }),
+                  ),
+                ),
           }),
-        });
-
-        expect(result).toEqual({ importedCount: 0, skippedCount: 2 });
-        expect(commands).toHaveLength(0);
-      }),
-    );
-  });
+          Layer.mock(ProviderAdapterRegistry.ProviderAdapterRegistryV2)(
+            getAdapter === undefined ? {} : { get: getAdapter },
+          ),
+          Layer.succeed(
+            ThreadCommandExecutor.ThreadCommandExecutor,
+            threadCommands ?? (yield* ThreadCommandExecutor.make),
+          ),
+        ),
+      ),
+    ),
+  );
+  const importer = Context.get(context, AgentSessionImporter.AgentSessionImporter);
+  return {
+    run: importer.importRecentAgentThreads({ projectId }),
+    importNativeHistory: importer.importNativeHistory,
+    published,
+  };
 });
 
-const integrationThread = {
-  ...makeThread("codex"),
-  updatedAt: "2026-08-24T10:00:00.000Z",
-  messages: Array.from({ length: 12 }, (_, index) => ({
-    role: index % 2 === 0 ? ("user" as const) : ("assistant" as const),
-    text: `Message ${index}`,
-    createdAt: "2026-08-24T10:00:00.000Z",
-  })),
-};
-const integrationScanner = AgentSessionScanner.AgentSessionScanner.of({
-  scan: Effect.die("unused"),
-  recentThreads: () => Stream.fromIterable([makeThreadOutcome(integrationThread)]),
-});
-const integrationServerConfig = ServerConfig.layerTest(process.cwd(), {
-  prefix: "kairo-agent-session-importer-test-",
-});
-const integrationRuntimeRepository = ProviderSessionRuntime.layer.pipe(
-  Layer.provide(SqlitePersistenceMemory),
-);
-const integrationLayer = Layer.mergeAll(
-  OrchestrationEngineLive.pipe(
-    Layer.provide(OrchestrationProjectionSnapshotQueryLive),
-    Layer.provide(OrchestrationProjectionPipelineLive),
-  ),
-  OrchestrationProjectionSnapshotQueryLive,
-  integrationRuntimeRepository,
-  ProviderSessionDirectoryLive.pipe(Layer.provide(integrationRuntimeRepository)),
-  Layer.succeed(AgentSessionScanner.AgentSessionScanner, integrationScanner),
-).pipe(
-  Layer.provide(ThreadBackgroundLiveness.layer),
-  Layer.provide(ThreadPlanProgress.layer),
-  Layer.provide(OrchestrationEventStoreLive),
-  Layer.provide(OrchestrationCommandReceiptRepositoryLive),
-  Layer.provide(RepositoryIdentityResolver.layer),
-  Layer.provide(SqlitePersistenceMemory),
-  Layer.provideMerge(integrationServerConfig),
-  Layer.provideMerge(NodeServices.layer),
-);
-
-it.layer(integrationLayer)("AgentSessionImporter integration", (it) => {
-  it.effect("imports once after the real engine persists an old rejected receipt", () =>
+it.effect(
+  "ignores owned sessions, including archived and deleted threads, but imports other instances and unowned sessions",
+  () =>
     Effect.gen(function* () {
-      const engine = yield* OrchestrationEngine.OrchestrationEngineService;
-      const snapshots = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
-      const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
-      const threadId = ThreadId.make("import:codex:codex-session");
+      const projections = yield* ProjectionStore.ProjectionStoreV2;
+      const events = yield* EventStore.EventStoreV2;
+      const runtimes = yield* ProviderSessionRuntime.ProviderSessionRuntimeRepository;
+      const active = candidate(CODEX_MODEL_SELECTION, "active");
+      const archived = candidate(
+        CLAUDE_MODEL_SELECTION,
+        "020e7f00-dce6-406b-8ec6-ed90498945d6",
+        "claudeAgent",
+      );
+      const deleted = candidate(CODEX_MODEL_SELECTION, "deleted");
+      const ownedPi = candidate(PI_MODEL_SELECTION, "owned-pi", "pi");
+      const owners = [
+        yield* seedOwner(active),
+        yield* seedOwner(archived, "archived"),
+        yield* seedOwner(deleted, "deleted"),
+        yield* seedOwner(ownedPi),
+      ];
+      const before = yield* Effect.forEach(owners, (id) =>
+        projections.getThreadRecords(id, ["providerThreads"]),
+      );
+      const otherInstance = candidate(
+        { ...CLAUDE_MODEL_SELECTION, instanceId: ProviderInstanceId.make("claude-other") },
+        archived.source.providerSessionId,
+        "claudeAgent",
+      );
+      const unowned = candidate(CODEX_MODEL_SELECTION, "unowned");
+      unowned.thread.omittedMessageCount = 1;
+      unowned.worktree = { path: "/workspace/project/.claude/worktrees/feat", branch: "feat" };
+      const unownedPi = candidate(PI_MODEL_SELECTION, "unowned-pi", "pi");
+      const importer = yield* makeImporter([
+        active,
+        archived,
+        deleted,
+        ownedPi,
+        otherInstance,
+        unowned,
+        unownedPi,
+      ]);
 
-      yield* engine.dispatch({
-        type: "project.create",
-        commandId: CommandId.make("create-import-integration-project"),
-        projectId: PROJECT_ID,
-        title: "Project",
-        workspaceRoot: WORKSPACE_ROOT,
-        defaultModelSelection: null,
-        createdAt: "2026-08-24T09:00:00.000Z",
-      });
-      const rejected = yield* Effect.result(
-        engine.dispatch({
-          type: "thread.history.import",
-          commandId: CommandId.make(`agent-session:history:${threadId}`),
-          threadId,
-          messages: [
+      expect(yield* importer.run).toEqual({ importedCount: 3, skippedCount: 0 });
+      for (const source of [active, archived, deleted, ownedPi]) {
+        const threadId = importId(source);
+        expect(yield* Effect.option(projections.getThread(threadId))).toEqual(Option.none());
+        expect(yield* events.read({ threadId }).pipe(Stream.runCollect)).toEqual([]);
+        expect(yield* runtimes.getByThreadId({ threadId })).toEqual(Option.none());
+      }
+      expect(
+        yield* Effect.forEach(owners, (id) =>
+          projections.getThreadRecords(id, ["providerThreads"]),
+        ),
+      ).toEqual(before);
+      expect(
+        new Set(
+          importer.published.flatMap((stored) =>
+            "event" in stored ? [stored.event.threadId] : [],
+          ),
+        ),
+      ).toEqual(new Set([importId(otherInstance), importId(unowned), importId(unownedPi)]));
+      for (const source of [otherInstance, unowned, unownedPi]) {
+        const threadId = importId(source);
+        const records = yield* projections.getThreadRecords(threadId, [
+          "messages",
+          "turnItems",
+          "providerThreads",
+        ]);
+        expect(records.messages.map((message) => message.text)).toEqual(["Fix it", "Fixed"]);
+        const notices = records.turnItems.filter((item) => item.type === "system_notice");
+        if (source === unowned) {
+          expect(records.turnItems[0]).toBe(notices[0]);
+          expect(notices).toMatchObject([
             {
-              messageId: MessageId.make(`${threadId}:000000`),
-              role: "user",
-              text: "Fix the bug",
-              createdAt: "2026-08-24T10:00:00.000Z",
+              ordinal: 1,
+              runId: null,
+              message: expect.stringContaining("1 earlier message was not imported"),
             },
-          ],
+          ]);
+        } else {
+          expect(notices).toEqual([]);
+        }
+        expect(records.thread.historyOrigin).toBe("v1_import");
+        expect(records.thread.worktreePath).toBe(source.worktree?.path ?? null);
+        expect(records.thread.branch).toBe(source.worktree?.branch ?? null);
+        expect(records.thread.activeProviderThreadId).toBe(records.providerThreads[0]?.id);
+        expect(records.providerThreads[0]?.nativeThreadRef?.nativeId).toBe(nativeId(source));
+        expect(Option.getOrThrow(yield* runtimes.getByThreadId({ threadId }))).toMatchObject({
+          providerInstanceId: source.source.providerInstanceId,
+          resumeCursor:
+            source.source.provider === "claudeAgent"
+              ? { threadId, resume: source.source.providerSessionId }
+              : { threadId: nativeId(source) },
+          runtimePayload: {
+            cwd: source.worktree?.path ?? "/workspace/project",
+            importedTranscripts: [source.source],
+          },
+        });
+      }
+    }).pipe(Effect.scoped, Effect.provide(persistence)),
+);
+
+it.effect("tolerates a missing transcript owner but propagates failed ownership reads", () =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const runtimes = yield* ProviderSessionRuntime.ProviderSessionRuntimeRepository;
+    const source = candidate(CODEX_MODEL_SELECTION, "ownership-read");
+    const threadId = importId(source);
+    yield* runtimes.upsert({
+      threadId: ThreadId.make("missing-owner"),
+      providerName: "codex",
+      providerInstanceId: source.source.providerInstanceId,
+      adapterKey: "codex",
+      runtimeMode: "full-access",
+      status: "stopped",
+      lastSeenAt: timestamp,
+      resumeCursor: null,
+      runtimePayload: { importedTranscripts: [source.source] },
+    });
+    yield* runtimes.recordImportedTranscript({
+      threadId: ThreadId.make("missing-owner"),
+      source: source.source,
+    });
+    const importer = yield* makeImporter([source]);
+    expect(yield* importer.run).toEqual({ importedCount: 1, skippedCount: 0 });
+
+    yield* sql`UPDATE orchestration_v2_projection_threads SET payload_json = '{}' WHERE thread_id = ${threadId}`;
+    expect(yield* Effect.flip(importer.run)).toMatchObject({
+      _tag: "AgentSessionScanError",
+      operation: "read-projects",
+      cause: {
+        _tag: "OrchestratorProjectionError",
+        threadId,
+        cause: { _tag: "ProjectionStoreReadError" },
+      },
+    });
+  }).pipe(Effect.scoped, Effect.provide(persistence)),
+);
+
+it.effect("rechecks ownership after the import reaches the commit transaction", () =>
+  Effect.gen(function* () {
+    const enteringTransaction = yield* Deferred.make<void>();
+    const continueTransaction = yield* Deferred.make<void>();
+    const source = candidate(CODEX_MODEL_SELECTION, "claimed-during-import");
+    const importer = yield* makeImporter(
+      [source],
+      Deferred.succeed(enteringTransaction, undefined).pipe(
+        Effect.andThen(Deferred.await(continueTransaction)),
+      ),
+    );
+    const pending = yield* Effect.forkScoped(importer.run);
+    yield* Deferred.await(enteringTransaction);
+    // Commit ownership after all pre-transaction reads, before the import acquires SQLite.
+    const ownerId = yield* seedOwner(source);
+    yield* Deferred.succeed(continueTransaction, undefined);
+    expect(yield* Fiber.join(pending)).toEqual({ importedCount: 0, skippedCount: 0 });
+    expect(yield* importer.run).toEqual({ importedCount: 0, skippedCount: 0 });
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    const events = yield* EventStore.EventStoreV2;
+    const runtimes = yield* ProviderSessionRuntime.ProviderSessionRuntimeRepository;
+    expect(yield* Effect.option(projections.getThread(importId(source)))).toEqual(Option.none());
+    expect(yield* events.read({ threadId: importId(source) }).pipe(Stream.runCollect)).toEqual([]);
+    expect(yield* runtimes.list()).toEqual([]);
+    expect(importer.published).toEqual([]);
+    expect(
+      (yield* projections.getThreadRecords(ownerId, ["providerThreads"])).providerThreads[0]
+        ?.appThreadId,
+    ).toBe(ownerId);
+  }).pipe(Effect.scoped, Effect.provide(persistence)),
+);
+
+it.effect(
+  "retries failed commits and runtime persistence without replaying committed history",
+  () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const events = yield* EventStore.EventStoreV2;
+      const projections = yield* ProjectionStore.ProjectionStoreV2;
+      const runtimes = yield* ProviderSessionRuntime.ProviderSessionRuntimeRepository;
+      const source = candidate(CODEX_MODEL_SELECTION, "retry");
+      const threadId = importId(source);
+      const importer = yield* makeImporter([source]);
+      yield* sql`CREATE TEMP TRIGGER fail_import BEFORE INSERT ON orchestration_events WHEN NEW.event_type = 'message.updated' BEGIN SELECT RAISE(ABORT, 'test publication failure'); END`;
+      expect(yield* importer.run).toEqual({ importedCount: 0, skippedCount: 1 });
+      expect(yield* events.read({ threadId }).pipe(Stream.runCollect)).toEqual([]);
+      expect(yield* Effect.option(projections.getThread(threadId))).toEqual(Option.none());
+      expect(yield* runtimes.list()).toEqual([]);
+      expect(importer.published).toEqual([]);
+      yield* sql`DROP TRIGGER fail_import`;
+
+      yield* sql`CREATE TEMP TRIGGER fail_runtime BEFORE INSERT ON provider_session_runtime BEGIN SELECT RAISE(ABORT, 'test runtime failure'); END`;
+      expect(yield* importer.run).toEqual({ importedCount: 0, skippedCount: 1 });
+      const committed = yield* events.read({ threadId }).pipe(Stream.runCollect);
+      expect(committed).toHaveLength(6);
+      expect(importer.published).toHaveLength(6);
+      expect(yield* runtimes.list()).toEqual([]);
+      yield* sql`DROP TRIGGER fail_runtime`;
+
+      expect(yield* importer.run).toEqual({ importedCount: 0, skippedCount: 0 });
+      expect(yield* importer.run).toEqual({ importedCount: 0, skippedCount: 0 });
+      expect(yield* events.read({ threadId }).pipe(Stream.runCollect)).toEqual(committed);
+      expect(importer.published).toHaveLength(6);
+      expect(
+        (yield* projections.getThreadRecords(threadId, ["messages"])).messages.map(
+          (message) => message.text,
+        ),
+      ).toEqual(["Fix it", "Fixed"]);
+      expect(Option.getOrThrow(yield* runtimes.getByThreadId({ threadId }))).toMatchObject({
+        providerInstanceId: source.source.providerInstanceId,
+        resumeCursor: { threadId: source.source.providerSessionId },
+        runtimePayload: { importedTranscripts: [source.source] },
+      });
+    }).pipe(Effect.scoped, Effect.provide(persistence)),
+);
+
+it.effect("counts only new threads when re-importing cached and recovered transcripts", () =>
+  Effect.gen(function* () {
+    const events = yield* EventStore.EventStoreV2;
+    const runtimes = yield* ProviderSessionRuntime.ProviderSessionRuntimeRepository;
+    const cached = candidate(
+      CLAUDE_MODEL_SELECTION,
+      "020e7f00-dce6-406b-8ec6-ed90498945d6",
+      "claudeAgent",
+    );
+    const recovered = candidate(CODEX_MODEL_SELECTION, "recovered");
+    const initial = yield* makeImporter([cached, recovered]);
+    expect(yield* initial.run).toEqual({ importedCount: 2, skippedCount: 0 });
+    const before = yield* events.read({ threadId: importId(recovered) }).pipe(Stream.runCollect);
+    // The file changed on disk but still holds the imported messages.
+    recovered.source.size += 100;
+    recovered.source.mtimeMs += 1;
+    const duplicate = { ...recovered.source, filePath: "/tmp/duplicate.jsonl" };
+    const fresh = candidate(CODEX_MODEL_SELECTION, "fresh");
+    const repeated = yield* makeImporter([
+      { _tag: "AlreadyImported", source: cached.source },
+      recovered,
+      { _tag: "Duplicate", source: duplicate },
+      fresh,
+      { _tag: "Skipped" },
+    ]);
+
+    expect(yield* repeated.run).toEqual({ importedCount: 1, skippedCount: 1 });
+    expect(yield* events.read({ threadId: importId(recovered) }).pipe(Stream.runCollect)).toEqual(
+      before,
+    );
+    expect(
+      new Set(
+        repeated.published.flatMap((stored) => ("event" in stored ? [stored.event.threadId] : [])),
+      ),
+    ).toEqual(new Set([importId(fresh)]));
+    expect(
+      Option.getOrThrow(yield* runtimes.getByThreadId({ threadId: importId(recovered) })),
+    ).toMatchObject({
+      runtimePayload: { importedTranscripts: [recovered.source, duplicate] },
+    });
+  }).pipe(Effect.scoped, Effect.provide(persistence)),
+);
+
+it.effect("does not certify new native history after a partial import retry", () =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    const runtimes = yield* ProviderSessionRuntime.ProviderSessionRuntimeRepository;
+    const original = candidate(CODEX_MODEL_SELECTION, "partial-retry");
+    const threadId = importId(original);
+    const importer = yield* makeImporter([original]);
+    yield* sql`CREATE TEMP TRIGGER fail_runtime BEFORE INSERT ON provider_session_runtime BEGIN SELECT RAISE(ABORT, 'test runtime failure'); END`;
+    expect(yield* importer.run).toEqual({ importedCount: 0, skippedCount: 1 });
+    yield* sql`DROP TRIGGER fail_runtime`;
+    expect(yield* runtimes.list()).toEqual([]);
+    const continued = candidate(CODEX_MODEL_SELECTION, original.source.providerSessionId);
+    continued.source.size = 200;
+    continued.source.mtimeMs = 3;
+    continued.thread.messages.push(
+      { role: "user", text: "Continue outside T3", createdAt: timestamp },
+      { role: "assistant", text: "Native continuation", createdAt: timestamp },
+    );
+    // The thread holds only the original messages, so the continued transcript stays unrecorded.
+    expect(yield* (yield* makeImporter([continued])).run).toEqual({
+      importedCount: 0,
+      skippedCount: 1,
+    });
+    expect(yield* runtimes.list()).toEqual([]);
+    expect(
+      (yield* projections.getThreadRecords(threadId, ["messages"])).messages.map(
+        (message) => message.text,
+      ),
+    ).toEqual(["Fix it", "Fixed"]);
+  }).pipe(Effect.scoped, Effect.provide(persistence)),
+);
+
+it.effect("does not record a changed transcript as imported without its new messages", () =>
+  Effect.gen(function* () {
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    const runtimes = yield* ProviderSessionRuntime.ProviderSessionRuntimeRepository;
+    const first = candidate(
+      CLAUDE_MODEL_SELECTION,
+      "6f1c2a7e-3b4d-4e5f-9a8b-1c2d3e4f5a6b",
+      "claudeAgent",
+    );
+    const threadId = importId(first);
+    expect(yield* (yield* makeImporter([first])).run).toEqual({
+      importedCount: 1,
+      skippedCount: 0,
+    });
+
+    const continued = candidate(
+      CLAUDE_MODEL_SELECTION,
+      first.source.providerSessionId,
+      "claudeAgent",
+    );
+    continued.source.size = 200;
+    continued.source.mtimeMs = 3;
+    continued.thread.messages.push(
+      { role: "user", text: "Continue", createdAt: timestamp },
+      { role: "assistant", text: "Continued", createdAt: timestamp },
+    );
+    yield* (yield* makeImporter([continued])).run;
+
+    const recorded = AgentSessionScanner.decodeImportedTranscriptPayload(
+      Option.getOrThrow(yield* runtimes.getByThreadId({ threadId })).runtimePayload,
+    ).pipe(Option.getOrThrow).importedTranscripts;
+    const texts = (yield* projections.getThreadRecords(threadId, ["messages"])).messages.map(
+      (message) => message.text,
+    );
+    expect({
+      recordsChangedTranscript: recorded?.some((source) => source.size === 200) ?? false,
+      showsNewMessages: texts.includes("Continued"),
+    }).not.toEqual({ recordsChangedTranscript: true, showsNewMessages: false });
+  }).pipe(Effect.scoped, Effect.provide(persistence)),
+);
+
+it.effect(
+  "copies native session history into the imported thread once, retrying a failed read",
+  () =>
+    Effect.gen(function* () {
+      const projections = yield* ProjectionStore.ProjectionStoreV2;
+      const source = candidate(CODEX_MODEL_SELECTION, "native-history");
+      const threadId = yield* seedOwner(source);
+      const resolved: Array<ProviderInstanceId> = [];
+      const opened: Array<ProviderAdapter.ProviderAdapterV2OpenSessionInput> = [];
+      let closed = false;
+      let failRead = true;
+      const replayed = (role: "user" | "assistant", text: string) => ({
+        createdBy: role === "user" ? ("user" as const) : ("agent" as const),
+        creationSource: "provider" as const,
+        id: MessageId.make(`replayed:${text}`),
+        threadId,
+        runId: null,
+        nodeId: null,
+        role,
+        text,
+        attachments: [],
+        streaming: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const adapter = {
+        openSession: (input: ProviderAdapter.ProviderAdapterV2OpenSessionInput) =>
+          Effect.acquireRelease(
+            Effect.sync(() => {
+              opened.push(input);
+              return {
+                readThreadSnapshot: ({ providerThread }) =>
+                  failRead
+                    ? Effect.fail(
+                        new ProviderAdapter.ProviderAdapterReadThreadSnapshotError({
+                          driver: providerThread.driver,
+                          providerThreadId: providerThread.id,
+                        }),
+                      )
+                    : Effect.succeed({
+                        providerThread,
+                        providerTurns: [],
+                        runtimeRequests: [],
+                        reasoningMessageIds: [MessageId.make("replayed:Check the build log")],
+                        messages: [
+                          replayed("user", "Fix the build"),
+                          replayed("assistant", "Check the build log"),
+                          replayed("assistant", "Fixed it"),
+                          replayed("assistant", " "),
+                        ],
+                      }),
+              } as Pick<ProviderAdapter.ProviderAdapterV2SessionRuntime, "readThreadSnapshot">;
+            }),
+            () =>
+              Effect.sync(() => {
+                closed = true;
+              }),
+          ),
+      } as unknown as ProviderAdapter.ProviderAdapterV2["Service"];
+      const importer = yield* makeImporter([], Effect.void, (instanceId) =>
+        Effect.sync(() => {
+          resolved.push(instanceId);
+          return adapter;
         }),
       );
-      expect(rejected._tag).toBe("Failure");
 
-      const result = yield* importRecentAgentThreads({ projectId: PROJECT_ID });
-      const importedThread = yield* snapshots.getThreadDetailById(threadId);
-      const binding = yield* directory.getBinding(threadId);
-
-      expect(result).toEqual({ importedCount: 1, skippedCount: 0 });
-      expect(Option.getOrThrow(importedThread).messages.map((message) => message.text)).toEqual(
-        integrationThread.messages.map((message) => message.text),
-      );
-      expect(Option.getOrThrow(importedThread).settledOverride).toBe("settled");
-      expect(Option.getOrThrow(importedThread).updatedAt).toBe("2026-08-24T10:00:00.000Z");
-      expect(Option.getOrThrow(binding)).toMatchObject({
-        provider: "codex",
-        providerInstanceId: "codex",
-        resumeCursor: { threadId: "codex-session" },
-        runtimePayload: { cwd: WORKSPACE_ROOT },
-      });
-
-      yield* engine.dispatch({
-        type: "thread.revert.complete",
-        commandId: CommandId.make("revert-imported-thread-to-baseline"),
+      const importHistory = importer.importNativeHistory({
         threadId,
-        turnCount: 0,
-        createdAt: "2026-08-24T10:05:00.000Z",
+        workspaceRoot: "/workspace/project",
       });
-      const afterRevert = yield* snapshots.getThreadDetailById(threadId);
-      expect(Option.getOrThrow(afterRevert).messages.map((message) => message.text)).toEqual(
-        integrationThread.messages.map((message) => message.text),
+
+      expect((yield* Effect.flip(importHistory))._tag).toBe(
+        "ProviderAdapterReadThreadSnapshotError",
       );
-    }),
-  );
+      expect(closed).toBe(true);
+      expect(
+        (yield* projections.getThreadRecords(threadId, [])).thread.historyOrigin,
+      ).toBeUndefined();
 
-  it.effect(
-    "retries a bounded import after scanner restart without rereading completed transcripts",
-    () =>
-      Effect.gen(function* () {
-        const engine = yield* OrchestrationEngine.OrchestrationEngineService;
-        const snapshots = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
-        const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
-        const fileSystem = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const nowMs = Date.parse("2026-08-24T12:00:00.000Z");
-        yield* TestClock.setTime(nowMs);
-        const fixtureDir = yield* fileSystem.makeTempDirectoryScoped({
-          prefix: "kairo-import-retry-",
-        });
-        const workspaceRoot = path.join(fixtureDir, "workspace");
-        const claudeHomePath = path.join(fixtureDir, "claude");
-        const codexHomePath = path.join(fixtureDir, "codex");
-        const sessionsDir = path.join(codexHomePath, "sessions", "2026", "08", "24");
-        yield* fileSystem.makeDirectory(workspaceRoot);
-        yield* fileSystem.makeDirectory(claudeHomePath);
-        yield* fileSystem.makeDirectory(sessionsDir, { recursive: true });
+      failRead = false;
+      expect(yield* importHistory).toBe(3);
+      expect(resolved).toEqual([
+        CODEX_MODEL_SELECTION.instanceId,
+        CODEX_MODEL_SELECTION.instanceId,
+      ]);
+      expect(opened[1]).toMatchObject({
+        threadId,
+        initialNativeThreadId: source.source.providerSessionId,
+        runtimePolicy: { cwd: "/workspace/project" },
+      });
+      // Forks keep run-less history only for this origin.
+      expect((yield* projections.getThreadRecords(threadId, [])).thread.historyOrigin).toBe(
+        "v1_import",
+      );
+      expect(yield* importHistory).toBe(0);
+      expect(opened).toHaveLength(2);
+      const page = yield* projections.getTimelinePage(threadId, { view: "activity", limit: 10 });
+      expect(
+        page.items.map(({ item }) => [
+          item.type,
+          item.runId,
+          "text" in item ? item.text : undefined,
+        ]),
+      ).toEqual([
+        ["user_message", null, "Fix the build"],
+        ["reasoning", null, "Check the build log"],
+        ["assistant_message", null, "Fixed it"],
+      ]);
+    }).pipe(Effect.scoped, Effect.provide(persistence)),
+);
 
-        const projectId = ProjectId.make("project-bounded-import-retry");
-        const transcripts = Array.from({ length: 101 }, (_, index) => {
-          const providerSessionId = `bounded-session-${String(index).padStart(3, "0")}`;
-          return {
-            providerSessionId,
-            threadId: ThreadId.make(`import:codex:${providerSessionId}`),
-            filePath: path.join(sessionsDir, `rollout-${providerSessionId}.jsonl`),
-          };
-        });
-        for (const [index, transcript] of transcripts.entries()) {
-          yield* fileSystem.writeFileString(
-            transcript.filePath,
-            [
-              encodeTranscriptRecord({
-                type: "session_meta",
-                payload: { id: transcript.providerSessionId, cwd: workspaceRoot },
+it.effect("releases the ACP import lock when a native session never answers", () =>
+  Effect.gen(function* () {
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    const coordinator = yield* AcpRegistryRuntimeCoordinator.AcpRegistryRuntimeCoordinator;
+    const threadId = yield* seedOwner(candidate(CODEX_MODEL_SELECTION, "native-history-hang"));
+    const opened = yield* Deferred.make<void>();
+    let closed = false;
+    // An agent that only resumes sessions and never answers its first session/resume.
+    const adapter = {
+      openSession: () =>
+        Effect.suspend(() => {
+          if (!closed) {
+            return Effect.addFinalizer(() =>
+              Effect.sync(() => {
+                closed = true;
               }),
-              encodeTranscriptRecord({
-                type: "event_msg",
-                payload: {
-                  type: "user_message",
-                  message: `Prompt ${transcript.providerSessionId}`,
-                },
+            ).pipe(
+              Effect.andThen(Deferred.succeed(opened, undefined)),
+              Effect.andThen(Effect.never),
+            );
+          }
+          return Effect.succeed({
+            readThreadSnapshot: ({ providerThread }) =>
+              Effect.succeed({
+                providerThread,
+                providerTurns: [],
+                runtimeRequests: [],
+                messages: [
+                  {
+                    createdBy: "user",
+                    creationSource: "provider",
+                    id: MessageId.make("replayed:hang"),
+                    threadId,
+                    runId: null,
+                    nodeId: null,
+                    role: "user",
+                    text: "Fix the build",
+                    attachments: [],
+                    streaming: false,
+                    createdAt: now,
+                    updatedAt: now,
+                  },
+                ],
               }),
-            ].join("\n"),
-          );
-          const seconds = nowMs / 1_000 - index;
-          yield* fileSystem.utimes(transcript.filePath, seconds, seconds);
-        }
-        const legacy = transcripts[0]!;
-        const failed = transcripts[1]!;
-        const remaining = transcripts[100]!;
-        yield* engine.dispatch({
-          type: "project.create",
-          commandId: CommandId.make("create-bounded-import-project"),
-          projectId,
-          title: "Bounded import",
-          workspaceRoot,
-          defaultModelSelection: null,
-          createdAt: "2026-08-24T09:00:00.000Z",
-        });
-
-        // This completed import predates persisted transcript source metadata.
-        yield* directory.upsert({
-          threadId: legacy.threadId,
-          provider: ProviderDriverKind.make("codex"),
-          providerInstanceId: ProviderInstanceId.make("codex"),
-          status: "stopped",
-          resumeCursor: { threadId: "legacy-current-session" },
-          runtimePayload: { cwd: workspaceRoot },
-        });
-        yield* engine.dispatch({
-          type: "thread.create",
-          commandId: CommandId.make("create-legacy-bounded-import"),
-          threadId: legacy.threadId,
-          projectId,
-          title: "Legacy import",
-          modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "default" },
-          runtimeMode: "full-access",
-          interactionMode: "default",
-          branch: null,
-          worktreePath: null,
-          createdAt: "2026-08-24T10:00:00.000Z",
-          historyImport: true,
-        });
-        yield* engine.dispatch({
-          type: "thread.history.import",
-          commandId: CommandId.make("import-legacy-bounded-history"),
-          threadId: legacy.threadId,
-          messages: [
-            {
-              messageId: MessageId.make(`${legacy.threadId}:000000`),
-              role: "user",
-              text: "Legacy imported history",
-              createdAt: "2026-08-24T10:00:00.000Z",
-            },
-          ],
-        });
-        expect(yield* snapshots.getImportedAgentSessionSources(projectId)).toEqual([]);
-
-        let failHistory = true;
-        const importerEngine = OrchestrationEngine.OrchestrationEngineService.of({
-          ...engine,
-          dispatch: (command) => {
-            if (
-              failHistory &&
-              command.type === "thread.history.import" &&
-              command.threadId === failed.threadId
-            ) {
-              failHistory = false;
-              return Effect.fail(
-                new OrchestrationCommandInvariantError({
-                  commandType: command.type,
-                  detail: "Injected history import failure.",
-                }),
-              );
-            }
-            return engine.dispatch(command);
-          },
-        });
-        const settingsLayer = ServerSettingsService.layerTest({
-          providers: {
-            claudeAgent: { homePath: claudeHomePath },
-            codex: { homePath: codexHomePath },
-          },
-        });
-        const transcriptPaths = new Set(transcripts.map((transcript) => transcript.filePath));
-        const runAttempt = Effect.fn("runBoundedImportAttempt")(function* (
-          completedPaths: ReadonlySet<string>,
-        ) {
-          const openCounts = new Map<string, number>();
-          const fullReads: string[] = [];
-          const observedFileSystem = FileSystem.FileSystem.of({
-            ...fileSystem,
-            open: (filePath, options) =>
-              Effect.suspend(() => {
-                if (transcriptPaths.has(filePath)) {
-                  const count = (openCounts.get(filePath) ?? 0) + 1;
-                  openCounts.set(filePath, count);
-                  // A fresh scanner first opens each file for project discovery.
-                  if (count > 1) {
-                    fullReads.push(filePath);
-                    if (completedPaths.has(filePath)) {
-                      return Effect.die(new Error(`Completed transcript reopened: ${filePath}`));
-                    }
-                  }
-                }
-                return fileSystem.open(filePath, options);
-              }),
-          });
-          const result = yield* importRecentAgentThreads({ projectId }).pipe(
-            Effect.provide(
-              Layer.fresh(AgentSessionScanner.layer).pipe(
-                Layer.provide(settingsLayer),
-                Layer.provide(Layer.succeed(FileSystem.FileSystem, observedFileSystem)),
-              ),
-            ),
-            Effect.provideService(OrchestrationEngine.OrchestrationEngineService, importerEngine),
-          );
-          return { result, fullReads, openCounts };
-        });
-
-        const first = yield* runAttempt(new Set());
-        expect(first.result).toEqual({ importedCount: 99, skippedCount: 2 });
-        expect(failHistory).toBe(false);
-        expect(first.fullReads).toEqual(transcripts.slice(0, 100).map((entry) => entry.filePath));
-        expect(first.openCounts.get(remaining.filePath)).toBe(1);
-        const completedSources = yield* snapshots.getImportedAgentSessionSources(projectId);
-        expect(completedSources).toHaveLength(99);
-        expect(completedSources).toContainEqual({
-          threadId: legacy.threadId,
-          source: expect.objectContaining({ filePath: legacy.filePath }),
-        });
-        expect(
-          Option.getOrThrow(yield* snapshots.getThreadDetailById(failed.threadId)).messages,
-        ).toEqual([]);
-        expect(Option.getOrThrow(yield* directory.getBinding(failed.threadId))).toMatchObject({
-          status: "stopped",
-          resumeCursor: { threadId: failed.providerSessionId },
-        });
-        expect(Option.isNone(yield* snapshots.getThreadDetailById(remaining.threadId))).toBe(true);
-
-        const completedPaths = new Set(completedSources.map((entry) => entry.source.filePath));
-        const second = yield* runAttempt(completedPaths);
-        expect(second.result).toEqual({ importedCount: 101, skippedCount: 0 });
-        expect(second.fullReads).toEqual([failed.filePath, remaining.filePath]);
-        for (const transcript of transcripts) {
-          expect(second.openCounts.get(transcript.filePath)).toBe(
-            completedPaths.has(transcript.filePath) ? 1 : 2,
-          );
-        }
-        expect(yield* snapshots.getImportedAgentSessionSources(projectId)).toHaveLength(101);
-        expect(
-          Option.getOrThrow(yield* snapshots.getThreadDetailById(legacy.threadId)).messages.map(
-            (message) => message.text,
-          ),
-        ).toEqual(["Legacy imported history"]);
-        expect(
-          Option.getOrThrow(yield* directory.getBinding(legacy.threadId)).resumeCursor,
-        ).toEqual({
-          threadId: "legacy-current-session",
-        });
-        for (const transcript of [failed, remaining]) {
-          expect(
-            Option.getOrThrow(
-              yield* snapshots.getThreadDetailById(transcript.threadId),
-            ).messages.map((message) => message.text),
-          ).toEqual([`Prompt ${transcript.providerSessionId}`]);
-        }
-      }),
-  );
-
-  for (const source of ["codex", "claudeAgent"] as const) {
-    it.effect(`resumes imported ${source} history only after the first prompt`, () =>
-      Effect.gen(function* () {
-        const engine = yield* OrchestrationEngine.OrchestrationEngineService;
-        const snapshots = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
-        const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
-        const fileSystem = yield* FileSystem.FileSystem;
-        const workspaceRoot = yield* fileSystem.makeTempDirectoryScoped();
-        const projectId = ProjectId.make(`project-import-resume-${source}`);
-        const sourceThread = {
-          ...makeThread(source),
-          providerSessionId: source === "codex" ? "codex-first-resume" : CLAUDE_SESSION_ID,
-        };
-        const threadId = ThreadId.make(
-          `import:${sourceThread.providerInstanceId}:${sourceThread.providerSessionId}`,
-        );
-        const resumeCursor =
-          source === "codex"
-            ? { threadId: sourceThread.providerSessionId }
-            : { threadId, resume: sourceThread.providerSessionId };
-        const provider = ProviderDriverKind.make(source);
-        const harness = yield* makeTestProviderAdapterHarness({ provider });
-        const importSettled = yield* Deferred.make<void>();
-        const turnSent = yield* Deferred.make<void>();
-        const startSession = vi.fn(harness.adapter.startSession);
-        const sendTurn = vi.fn((input: ProviderSendTurnInput) =>
-          harness.adapter
-            .sendTurn(input)
-            .pipe(Effect.tap(() => Deferred.succeed(turnSent, undefined))),
-        );
-        const providerLayer = makeProviderServiceLive().pipe(
-          Layer.provide(
-            Layer.succeed(
-              ProviderAdapterRegistry,
-              makeAdapterRegistryMock({
-                [provider]: { ...harness.adapter, startSession, sendTurn },
-              }),
-            ),
-          ),
-          Layer.provide(
-            Layer.succeed(ProviderSessionDirectory.ProviderSessionDirectory, directory),
-          ),
-          Layer.provide(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
-          Layer.provide(AnalyticsService.layerTest),
-        );
-        const reactorLayer = ProviderCommandReactorLive.pipe(
-          Layer.provideMerge(providerLayer),
-          Layer.provide(
-            Layer.succeed(ProjectionSnapshotQuery.ProjectionSnapshotQuery, {
-              ...snapshots,
-              // Acknowledge the imported settlement before draining the reactor.
-              getThreadShellById: (requestedThreadId) =>
-                snapshots
-                  .getThreadShellById(requestedThreadId)
-                  .pipe(
-                    Effect.tap(() =>
-                      requestedThreadId === threadId
-                        ? Deferred.succeed(importSettled, undefined)
-                        : Effect.void,
-                    ),
-                  ),
-            }),
-          ),
-          Layer.provide(
-            Layer.mock(ProviderAuthService)({
-              tryHandlePromptCommand: () => Effect.succeed(false),
-            }),
-          ),
-          Layer.provide(makeProviderRegistryLayer()),
-          Layer.provide(Layer.mock(GitWorkflowService)({})),
-          Layer.provide(Layer.mock(VcsStatusBroadcaster)({})),
-          Layer.provide(Layer.mock(TextGeneration)({})),
-          Layer.provide(Layer.mock(TerminalManager)({ closeIdle: () => Effect.void })),
-          Layer.provide(ServerSettingsService.layerTest()),
-        );
-
-        yield* engine.dispatch({
-          type: "project.create",
-          commandId: CommandId.make(`create-import-resume-project-${source}`),
-          projectId,
-          title: "Import resume",
-          workspaceRoot,
-          defaultModelSelection: null,
-          createdAt: "2026-08-24T09:00:00.000Z",
-        });
-        yield* harness.queueTurnResponseForNextSession({ events: [] });
-
-        yield* Effect.gen(function* () {
-          const reactor = yield* ProviderCommandReactor;
-          yield* reactor.start();
-          expect(yield* importRecentAgentThreads({ projectId })).toEqual({
-            importedCount: 1,
-            skippedCount: 0,
-          });
-          yield* Deferred.await(importSettled);
-          yield* reactor.drain;
-          expect(startSession).not.toHaveBeenCalled();
-          expect(sendTurn).not.toHaveBeenCalled();
-          const importedThread = Option.getOrThrow(yield* snapshots.getThreadDetailById(threadId));
-          expect(importedThread.session).toBeNull();
-          expect(importedThread.latestTurn).toBeNull();
-
-          yield* engine.dispatch({
-            type: "thread.turn.start",
-            commandId: CommandId.make(`resume-imported-${source}`),
-            threadId,
-            message: {
-              messageId: MessageId.make(`resume-imported-message-${source}`),
-              role: "user",
-              text: "Continue this session",
-              attachments: [],
-            },
-            modelSelection: importedThread.modelSelection,
-            runtimeMode: importedThread.runtimeMode,
-            interactionMode: importedThread.interactionMode,
-            createdAt: "2026-08-24T10:02:00.000Z",
-          });
-          yield* Deferred.await(turnSent);
-          yield* reactor.drain;
-          expect(startSession).toHaveBeenCalledExactlyOnceWith(
-            expect.objectContaining({
-              threadId,
-              provider,
-              providerInstanceId: sourceThread.providerInstanceId,
-              resumeCursor,
-              cwd: workspaceRoot,
-            }),
-          );
-          expect(sendTurn).toHaveBeenCalledExactlyOnceWith(
-            expect.objectContaining({ threadId, input: "Continue this session" }),
-          );
-          expect(Option.getOrThrow(yield* directory.getBinding(threadId))).toMatchObject({
-            provider,
-            providerInstanceId: sourceThread.providerInstanceId,
-            resumeCursor,
-          });
-        }).pipe(
-          Effect.provide(reactorLayer),
-          Effect.provideService(
-            AgentSessionScanner.AgentSessionScanner,
-            AgentSessionScanner.AgentSessionScanner.of({
-              scan: Effect.die("unused"),
-              recentThreads: () => Stream.succeed(makeThreadOutcome(sourceThread)),
-            }),
-          ),
-        );
-      }),
+          } as Pick<ProviderAdapter.ProviderAdapterV2SessionRuntime, "readThreadSnapshot">);
+        }),
+    } as unknown as ProviderAdapter.ProviderAdapterV2["Service"];
+    const importer = yield* makeImporter([], Effect.void, () => Effect.succeed(adapter));
+    const importHistory = coordinator.withSessionMutation(
+      importer.importNativeHistory({ threadId, workspaceRoot: "/workspace/project" }),
     );
-  }
 
-  it.effect("persists the resume cursor before publishing a new imported thread", () =>
-    Effect.gen(function* () {
-      const engine = yield* OrchestrationEngine.OrchestrationEngineService;
-      const snapshots = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
-      const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
-      const repository = yield* ProviderSessionRuntime.ProviderSessionRuntimeRepository;
-      const projectId = ProjectId.make("project-import-binding-race");
-      const workspaceRoot = "/tmp/project-import-binding-race";
-      const providerSessionId = "codex-binding-race";
-      const threadId = ThreadId.make(`import:codex:${providerSessionId}`);
-      const scanner = AgentSessionScanner.AgentSessionScanner.of({
-        scan: Effect.die("unused"),
-        recentThreads: () =>
-          Stream.succeed(
-            makeThreadOutcome({ ...integrationThread, providerSessionId, title: "Binding race" }),
+    const importing = yield* importHistory.pipe(Effect.flip, Effect.forkChild);
+    yield* Deferred.await(opened);
+    // Any other ACP import or delete waits for the same lock.
+    const next = yield* coordinator
+      .withSessionMutation(Effect.succeed("next"))
+      .pipe(Effect.forkChild);
+    yield* TestClock.adjust("2 minutes");
+
+    expect((yield* Fiber.join(importing))._tag).toBe("TimeoutError");
+    expect(closed).toBe(true);
+    expect(yield* Fiber.join(next)).toBe("next");
+    expect(
+      (yield* projections.getThreadRecords(threadId, [])).thread.historyOrigin,
+    ).toBeUndefined();
+    expect(yield* importHistory).toBe(1);
+    expect((yield* projections.getThreadRecords(threadId, [])).thread.historyOrigin).toBe(
+      "v1_import",
+    );
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(Layer.merge(persistence, AcpRegistryRuntimeCoordinator.layer)),
+  ),
+);
+
+/**
+ * Runs a thread command that read the thread before the history load ended and
+ * writes once the importer is about to commit, as an unserialized write would.
+ */
+const importDuringCommand = Effect.fn(function* (
+  name: string,
+  command: (thread: OrchestrationV2AppThread) => ReadonlyArray<OrchestrationV2DomainEvent>,
+) {
+  const projections = yield* ProjectionStore.ProjectionStoreV2;
+  const sink = yield* EventSink.EventSinkV2;
+  const threadId = yield* seedOwner(candidate(CODEX_MODEL_SELECTION, name));
+  const lock = yield* ThreadCommandExecutor.make;
+  const loaded = yield* Deferred.make<void>();
+  const importerCommitting = yield* Deferred.make<void>();
+  const commandWritten = yield* Deferred.make<void>();
+  const committing = Deferred.succeed(importerCommitting, undefined);
+  const adapter = {
+    openSession: () =>
+      Effect.succeed({
+        readThreadSnapshot: ({ providerThread }) =>
+          Deferred.await(loaded).pipe(
+            Effect.as({
+              providerThread,
+              providerTurns: [],
+              runtimeRequests: [],
+              messages: [
+                {
+                  createdBy: "user" as const,
+                  creationSource: "provider" as const,
+                  id: MessageId.make(`replayed:${name}`),
+                  threadId,
+                  runId: null,
+                  nodeId: null,
+                  role: "user" as const,
+                  text: "Fix the build",
+                  attachments: [],
+                  streaming: false,
+                  createdAt: now,
+                  updatedAt: now,
+                },
+              ],
+            }),
           ),
-      });
-      const importerAtBindingWrite = yield* Deferred.make<void>();
-      const releaseImporter = yield* Deferred.make<void>();
-      const importerRepository = ProviderSessionRuntime.ProviderSessionRuntimeRepository.of({
-        ...repository,
-        upsert: (runtime, options) =>
-          options?.onConflict === "ignore"
-            ? Deferred.succeed(importerAtBindingWrite, undefined).pipe(
-                Effect.andThen(Deferred.await(releaseImporter)),
-                Effect.andThen(repository.upsert(runtime, options)),
-              )
-            : repository.upsert(runtime, options),
-      });
-      const importerDirectory = yield* ProviderSessionDirectory.ProviderSessionDirectory.pipe(
-        Effect.provide(
-          Layer.fresh(ProviderSessionDirectoryLive).pipe(
-            Layer.provide(
-              Layer.succeed(
-                ProviderSessionRuntime.ProviderSessionRuntimeRepository,
-                importerRepository,
-              ),
-            ),
-          ),
-        ),
-      );
-
-      yield* engine.dispatch({
-        type: "project.create",
-        commandId: CommandId.make("create-import-binding-race-project"),
-        projectId,
-        title: "Binding race",
-        workspaceRoot,
-        defaultModelSelection: null,
-        createdAt: "2026-08-24T09:00:00.000Z",
-      });
-
-      const importFiber = yield* importRecentAgentThreads({ projectId }).pipe(
-        Effect.provideService(AgentSessionScanner.AgentSessionScanner, scanner),
-        Effect.provideService(ProviderSessionDirectory.ProviderSessionDirectory, importerDirectory),
-        Effect.forkChild,
-      );
-
-      yield* Effect.raceFirst(
-        Deferred.await(importerAtBindingWrite),
-        Fiber.join(importFiber).pipe(
-          Effect.flatMap((result) =>
-            Effect.die(
-              new Error(`Import completed before the binding write: ${JSON.stringify(result)}`),
-            ),
-          ),
-        ),
-      );
-      expect(Option.isNone(yield* snapshots.getThreadDetailById(threadId))).toBe(true);
-
-      yield* directory.upsert({
-        threadId,
-        provider: ProviderDriverKind.make("codex"),
-        providerInstanceId: ProviderInstanceId.make("codex"),
-        status: "running",
-        resumeCursor: { threadId: "active-client-session" },
-        runtimePayload: { cwd: workspaceRoot, activeTurnId: "turn-active" },
-      });
-      yield* Deferred.succeed(releaseImporter, undefined);
-
-      expect(yield* Fiber.join(importFiber)).toEqual({ importedCount: 1, skippedCount: 0 });
-      expect(
-        Option.getOrThrow(yield* snapshots.getThreadDetailById(threadId)).messages.map(
-          (message) => message.text,
-        ),
-      ).toEqual(integrationThread.messages.map((message) => message.text));
-      expect(Option.getOrThrow(yield* directory.getBinding(threadId))).toMatchObject({
-        status: "running",
-        resumeCursor: { threadId: "active-client-session" },
-        runtimePayload: { cwd: workspaceRoot, activeTurnId: "turn-active" },
-      });
-    }),
+      } as Pick<ProviderAdapter.ProviderAdapterV2SessionRuntime, "readThreadSnapshot">),
+  } as unknown as ProviderAdapter.ProviderAdapterV2["Service"];
+  const importer = yield* makeImporter(
+    [],
+    committing.pipe(Effect.andThen(Deferred.await(commandWritten))),
+    () => Effect.succeed(adapter),
+    {
+      ...lock,
+      withLock: (key, effect) => committing.pipe(Effect.andThen(lock.withLock(key, effect))),
+    },
   );
-
-  it.effect("does not import history over a turn started on a partial thread", () =>
-    Effect.gen(function* () {
-      const engine = yield* OrchestrationEngine.OrchestrationEngineService;
-      const snapshots = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
-      const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
-      const repository = yield* ProviderSessionRuntime.ProviderSessionRuntimeRepository;
-      const projectId = ProjectId.make("project-import-turn-race");
-      const workspaceRoot = "/tmp/project-import-turn-race";
-      const providerSessionId = "codex-turn-race";
-      const threadId = ThreadId.make(`import:codex:${providerSessionId}`);
-      const scanner = AgentSessionScanner.AgentSessionScanner.of({
-        scan: Effect.die("unused"),
-        recentThreads: () =>
-          Stream.succeed(
-            makeThreadOutcome({ ...integrationThread, providerSessionId, title: "Turn race" }),
-          ),
-      });
-      const importerAtBindingWrite = yield* Deferred.make<void>();
-      const releaseImporter = yield* Deferred.make<void>();
-      const importerRepository = ProviderSessionRuntime.ProviderSessionRuntimeRepository.of({
-        ...repository,
-        upsert: (runtime, options) =>
-          options?.onConflict === "ignore"
-            ? Deferred.succeed(importerAtBindingWrite, undefined).pipe(
-                Effect.andThen(Deferred.await(releaseImporter)),
-                Effect.andThen(repository.upsert(runtime, options)),
-              )
-            : repository.upsert(runtime, options),
-      });
-      const importerDirectory = yield* ProviderSessionDirectory.ProviderSessionDirectory.pipe(
-        Effect.provide(
-          Layer.fresh(ProviderSessionDirectoryLive).pipe(
-            Layer.provide(
-              Layer.succeed(
-                ProviderSessionRuntime.ProviderSessionRuntimeRepository,
-                importerRepository,
-              ),
-            ),
-          ),
-        ),
-      );
-
-      yield* engine.dispatch({
-        type: "project.create",
-        commandId: CommandId.make("create-import-turn-race-project"),
-        projectId,
-        title: "Turn race",
-        workspaceRoot,
-        defaultModelSelection: null,
-        createdAt: "2026-08-24T09:00:00.000Z",
-      });
-      yield* engine.dispatch({
-        type: "thread.create",
-        commandId: CommandId.make("create-import-turn-race-thread"),
-        threadId,
-        projectId,
-        title: "Turn race",
-        modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "default" },
-        runtimeMode: "full-access",
-        interactionMode: "default",
-        branch: null,
-        worktreePath: null,
-        createdAt: "2026-08-24T10:00:00.000Z",
-      });
-
-      const importFiber = yield* importRecentAgentThreads({ projectId }).pipe(
-        Effect.provideService(AgentSessionScanner.AgentSessionScanner, scanner),
-        Effect.provideService(ProviderSessionDirectory.ProviderSessionDirectory, importerDirectory),
-        Effect.forkChild,
-      );
-      yield* Deferred.await(importerAtBindingWrite);
-
-      yield* directory.upsert({
-        threadId,
-        provider: ProviderDriverKind.make("codex"),
-        providerInstanceId: ProviderInstanceId.make("codex"),
-        status: "running",
-        resumeCursor: { threadId: "active-client-session" },
-        runtimePayload: { cwd: workspaceRoot, activeTurnId: "turn-active" },
-      });
-      yield* engine.dispatch({
-        type: "thread.turn.start",
-        commandId: CommandId.make("start-turn-during-import"),
-        threadId,
-        message: {
-          messageId: MessageId.make("message-during-import"),
-          role: "user",
-          text: "Continue while import waits",
-          attachments: [],
-        },
-        runtimeMode: "full-access",
-        interactionMode: "default",
-        createdAt: "2026-08-24T10:02:00.000Z",
-      });
-      yield* Deferred.succeed(releaseImporter, undefined);
-
-      expect(yield* Fiber.join(importFiber)).toEqual({ importedCount: 0, skippedCount: 1 });
-      expect(Option.getOrThrow(yield* directory.getBinding(threadId))).toMatchObject({
-        status: "running",
-        resumeCursor: { threadId: "active-client-session" },
-        runtimePayload: { cwd: workspaceRoot, activeTurnId: "turn-active" },
-      });
-      expect(
-        Option.getOrThrow(yield* snapshots.getThreadDetailById(threadId)).messages.map(
-          (message) => message.text,
-        ),
-      ).toEqual(["Continue while import waits"]);
-    }),
+  const commanding = yield* Effect.forkScoped(
+    lock.withLock(
+      threadId,
+      Effect.gen(function* () {
+        const { thread } = yield* projections.getThreadRecords(threadId, []);
+        yield* Deferred.succeed(loaded, undefined);
+        yield* Deferred.await(importerCommitting);
+        yield* sink.write({ events: command(thread) });
+        yield* Deferred.succeed(commandWritten, undefined);
+      }),
+    ),
   );
+  const imported = yield* importer.importNativeHistory({
+    threadId,
+    workspaceRoot: "/workspace/project",
+  });
+  yield* Fiber.join(commanding);
+  const records = yield* projections.getThreadRecords(threadId, ["runs"]);
+  const page = yield* projections.getTimelinePage(threadId, { view: "messages", limit: 10 });
+  return { imported, thread: records.thread, runs: records.runs, items: page.items };
 });
+
+it.effect("keeps a thread edit made while the native history loads", () =>
+  Effect.gen(function* () {
+    const result = yield* importDuringCommand("renamed-during-load", (thread) => [
+      {
+        id: EventId.make(`${thread.id}:renamed`),
+        type: "thread.metadata-updated",
+        threadId: thread.id,
+        occurredAt: now,
+        payload: { ...thread, title: "Renamed" },
+      },
+    ]);
+    expect(result.imported).toBe(1);
+    expect(result.thread.title).toBe("Renamed");
+    expect(result.thread.historyOrigin).toBe("v1_import");
+    expect(result.items).toHaveLength(1);
+  }).pipe(Effect.scoped, Effect.provide(persistence)),
+);
+
+it.effect("skips the native history when a run starts while it loads", () =>
+  Effect.gen(function* () {
+    const result = yield* importDuringCommand("run-during-load", (thread) => [
+      {
+        id: EventId.make(`${thread.id}:run`),
+        type: "run.updated",
+        threadId: thread.id,
+        occurredAt: now,
+        payload: {
+          id: RunId.make(`${thread.id}:run`),
+          threadId: thread.id,
+          ordinal: 1,
+          providerInstanceId: thread.providerInstanceId,
+          modelSelection: thread.modelSelection,
+          providerThreadId: null,
+          userMessageId: MessageId.make(`${thread.id}:prompt`),
+          rootNodeId: null,
+          activeAttemptId: null,
+          status: "queued",
+          requestedAt: now,
+          startedAt: null,
+          completedAt: null,
+          checkpointId: null,
+          contextHandoffId: null,
+        },
+      },
+    ]);
+    expect(result.imported).toBe(0);
+    expect(result.runs).toHaveLength(1);
+    expect(result.thread.historyOrigin).toBeUndefined();
+    expect(result.items).toEqual([]);
+  }).pipe(Effect.scoped, Effect.provide(persistence)),
+);
+
+it.effect("imports under a policy ceiling in the project's default, kept under the ceiling", () =>
+  Effect.gen(function* () {
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    const runtimes = yield* ProviderSessionRuntime.ProviderSessionRuntimeRepository;
+    const source = candidate(CODEX_MODEL_SELECTION, "ceiling");
+    const threadId = importId(source);
+    const importer = yield* makeImporter(
+      [source],
+      Effect.void,
+      undefined,
+      undefined,
+      ServerSettings.layerTest(
+        { defaultRuntimeMode: "full-access" },
+        {
+          organization: "Example Corp",
+          lockedSettings: [],
+          limits: { maxRuntimeMode: "auto-accept-edits" },
+        },
+      ),
+    );
+    expect(yield* importer.run).toEqual({ importedCount: 1, skippedCount: 0 });
+    expect((yield* projections.getThread(threadId)).runtimeMode).toBe("auto-accept-edits");
+    expect(Option.getOrThrow(yield* runtimes.getByThreadId({ threadId })).runtimeMode).toBe(
+      "auto-accept-edits",
+    );
+  }).pipe(Effect.scoped, Effect.provide(persistence)),
+);
+
+it.effect("repeated imports reach linked-worktree sessions behind the scan budget", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "kairo-import-worktree-budget-" });
+    const repo = path.join(root, "repo");
+    const worktree = path.join(root, "feature");
+    const worktreeGitDir = path.join(repo, ".git", "worktrees", "feature");
+    yield* fs.makeDirectory(worktreeGitDir, { recursive: true });
+    yield* fs.makeDirectory(worktree);
+    yield* fs.writeFileString(path.join(repo, ".git", "config"), "[core]\n");
+    yield* fs.writeFileString(path.join(worktreeGitDir, "commondir"), "../..\n");
+    yield* fs.writeFileString(path.join(worktreeGitDir, "HEAD"), "ref: refs/heads/feature\n");
+    yield* fs.writeFileString(path.join(worktree, ".git"), `gitdir: ${worktreeGitDir}\n`);
+
+    const claudeHome = path.join(root, "claude");
+    const codexHome = path.join(root, "codex");
+    const sessions = path.join(codexHome, "sessions", "2026", "09", "01");
+    yield* fs.makeDirectory(sessions, { recursive: true });
+    const nowMs = DateTime.toEpochMillis(now);
+    yield* TestClock.setTime(nowMs);
+    // One more session than the 100-transcript scan budget, all run in the linked worktree.
+    for (let index = 0; index < 101; index++) {
+      const file = path.join(sessions, `rollout-${String(index).padStart(3, "0")}.jsonl`);
+      const records = [
+        { type: "session_meta", payload: { id: `session-${index}`, cwd: worktree } },
+        { type: "event_msg", payload: { type: "user_message", message: `Request ${index}` } },
+        {
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "assistant",
+            content: [{ type: "output_text", text: "Done" }],
+          },
+        },
+      ];
+      yield* fs.writeFileString(
+        file,
+        records.map((record) => JSON.stringify(record) + "\n").join(""),
+      );
+      const modifiedAtSeconds = nowMs / 1000 - (index + 1);
+      yield* fs.utimes(file, modifiedAtSeconds, modifiedAtSeconds);
+    }
+
+    const scannerContext = yield* Layer.build(
+      AgentSessionScanner.layer.pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            ServerConfig.layerTest(claudeHome, { prefix: "kairo-import-budget-config-" }),
+            ServerSettings.layerTest({
+              providerInstances: {
+                [ProviderInstanceId.make("claudeAgent")]: {
+                  driver: ProviderDriverKind.make("claudeAgent"),
+                  config: { homePath: claudeHome },
+                },
+                [ProviderInstanceId.make("codex")]: {
+                  driver: ProviderDriverKind.make("codex"),
+                  config: { homePath: codexHome },
+                },
+                // Keeps the default Pi instance off the developer's real ~/.pi.
+                [ProviderInstanceId.make("pi")]: {
+                  driver: ProviderDriverKind.make("pi"),
+                  enabled: false,
+                  config: {},
+                },
+              },
+            }),
+            Layer.mock(ProjectStore.ProjectStoreV2)({ listShells: () => Effect.succeed([]) }),
+            Layer.succeed(
+              ProviderSessionRuntime.ProviderSessionRuntimeRepository,
+              yield* ProviderSessionRuntime.ProviderSessionRuntimeRepository,
+            ),
+          ),
+        ),
+      ),
+    );
+    const importer = yield* makeImporter([], Effect.void, undefined, undefined, undefined, {
+      workspaceRoot: repo,
+      scanner: Context.get(scannerContext, AgentSessionScanner.AgentSessionScanner),
+    });
+
+    expect(yield* importer.run).toEqual({ importedCount: 100, skippedCount: 1 });
+    expect(yield* importer.run).toEqual({ importedCount: 1, skippedCount: 0 });
+    const oldest = yield* ProjectionStore.ProjectionStoreV2.pipe(
+      Effect.flatMap((projections) =>
+        projections.getThread(ThreadId.make("import:codex:session-100")),
+      ),
+    );
+    expect(oldest.worktreePath).toBe(worktree);
+  }).pipe(Effect.scoped, Effect.provide(Layer.merge(persistence, NodeServices.layer))),
+);

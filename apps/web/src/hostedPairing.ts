@@ -1,6 +1,6 @@
 import { DEFAULT_HOSTED_APP_URL } from "@kairo/shared/connectAuth";
 
-import { getPairingTokenFromUrl, setPairingTokenOnUrl } from "./pairingUrl";
+import { getPairingTokenFromUrl, setPairingTokenOnUrl } from "@kairo/shared/remote";
 
 export interface HostedPairingRequest {
   readonly host: string;
@@ -40,8 +40,6 @@ export function isHostedStaticApp(url?: URL): boolean {
     return true;
   }
 
-  // No window, or a window without a location (tests, static render), means
-  // no origin to be hosted at.
   if (url === undefined && (typeof window === "undefined" || window.location === undefined)) {
     return false;
   }

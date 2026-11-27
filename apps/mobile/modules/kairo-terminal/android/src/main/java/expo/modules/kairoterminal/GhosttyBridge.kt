@@ -3,7 +3,7 @@ package expo.modules.kairoterminal
 internal object GhosttyBridge {
   init {
     System.loadLibrary("ghostty-vt")
-    System.loadLibrary("kairoterminal")
+    System.loadLibrary("t3terminal")
   }
 
   @JvmStatic

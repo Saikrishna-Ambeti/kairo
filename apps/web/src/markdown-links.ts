@@ -1,41 +1,26 @@
+import { isLocalEditorFileUrl } from "@kairo/contracts";
+import { fileBasename, isAbsolutePath, workspaceRelativeFilePath } from "@kairo/shared/path";
 import {
-  fileBasename,
-  formatFilePathPosition,
   inlineCodeFilePathCandidate,
   isRelativeFilePath,
   normalizeMarkdownLinkDestination,
-  parseFileUrlHref,
-  parseMarkdownFileLink,
-  safeDecodeURIComponent,
-  splitFilePathPosition,
-  workspaceRelativeFilePath,
-} from "@kairo/client-runtime/markdown-links";
+  resolveMarkdownFileLink,
+} from "@kairo/shared/markdownLinks";
+import { parseFileUrlHref, splitFilePathPosition } from "@kairo/shared/fileLinks";
 
 import { formatWorkspaceRelativePath } from "./filePathDisplay";
-import { isTerminalLinkActivation, resolvePathLinkTarget } from "./terminal-links";
-
-export { normalizeMarkdownLinkDestination };
-
-const MARKDOWN_LINK_HREF_PATTERN =
-  /\[[^\]]*]\(\s*(?:<([^>\n]+)>|([^\s)]+))(?:\s+["'][^"']*["'])?\s*\)/g;
+import { isTerminalLinkActivation } from "./terminal-links";
 
 export interface MarkdownFileLinkMeta {
   filePath: string;
+  workspaceLookupPath: string | null;
   targetPath: string;
   displayPath: string;
   workspaceRelativePath: string | null;
   basename: string;
   line?: number;
   column?: number;
-}
-
-export function extractMarkdownLinkHrefs(markdown: string): string[] {
-  const hrefs: string[] = [];
-  for (const match of markdown.matchAll(MARKDOWN_LINK_HREF_PATTERN)) {
-    const href = (match[1] ?? match[2])?.trim();
-    if (href) hrefs.push(href);
-  }
-  return hrefs;
+  endLine?: number;
 }
 
 export function shouldOpenMarkdownFileLinkInEditor(
@@ -45,55 +30,72 @@ export function shouldOpenMarkdownFileLinkInEditor(
   return isTerminalLinkActivation(event, platform);
 }
 
-export function shouldOpenMarkdownFileLinkInBrowserByDefault(path: string): boolean {
-  return /\.pdf$/i.test(path.split(/[?#]/, 1)[0] ?? "");
-}
-
-export function isWindowsDrivePathHref(href: string): boolean {
-  return /^[A-Za-z]:[\\/]/.test(safeDecodeURIComponent(href));
-}
-
 export function rewriteMarkdownFileUriHref(href: string | undefined): string | null {
   if (!href) return null;
   const target = parseFileUrlHref(normalizeMarkdownLinkDestination(href));
   return target ? `${target.path}${target.hash}` : null;
 }
 
-/**
- * `baseDir` anchors relative links; it defaults to the workspace root and is the
- * file's own directory when rendering a markdown file. `cwd` stays the workspace
- * root so the result still knows whether the target is inside it.
- */
-export function resolveMarkdownFileLinkTarget(
-  href: string | undefined,
-  cwd?: string,
-  baseDir: string | undefined = cwd,
-): string | null {
-  if (!href) return null;
-  const target = parseMarkdownFileLink(href);
-  if (!target) return null;
-
-  const pathWithPosition = formatFilePathPosition(target);
-  if (!isRelativeFilePath(pathWithPosition)) return pathWithPosition;
-  if (!baseDir) return null;
-  return resolvePathLinkTarget(pathWithPosition, baseDir);
+export function isLocalEditorFileHref(href: string): boolean {
+  try {
+    return isLocalEditorFileUrl(new URL(href));
+  } catch {
+    return false;
+  }
 }
 
-/**
- * Inline code spans mostly hold identifiers, commands, and refs (`node.meta`,
- * `origin/main`) rather than deliberate link destinations, so auto-linking
- * them demands stronger path evidence than an explicit markdown link does:
- * an unambiguous path prefix, a file extension, or a :line suffix.
- */
+// Every message resolves its links and code spans more than once while rendering.
+const MAX_MEMOIZED = 4_000;
+const inlineCodeMetas = new Map<string, MarkdownFileLinkMeta | null>();
+const linkMetas = new Map<string, MarkdownFileLinkMeta | null>();
+
+function memoized(
+  cache: Map<string, MarkdownFileLinkMeta | null>,
+  key: string,
+  resolve: () => MarkdownFileLinkMeta | null,
+): MarkdownFileLinkMeta | null {
+  const cached = cache.get(key);
+  if (cached !== undefined) return cached;
+  if (cache.size >= MAX_MEMOIZED) cache.clear();
+  const meta = resolve();
+  cache.set(key, meta);
+  return meta;
+}
+
 export function resolveInlineCodeFileLinkMeta(
   codeText: string,
   cwd?: string,
   baseDir: string | undefined = cwd,
 ): MarkdownFileLinkMeta | null {
+  return memoized(inlineCodeMetas, `${cwd ?? ""}\u0000${baseDir ?? ""}\u0000${codeText}`, () =>
+    resolveInlineCodeFileLinkMetaUncached(codeText, cwd, baseDir),
+  );
+}
+
+function resolveInlineCodeFileLinkMetaUncached(
+  codeText: string,
+  cwd: string | undefined,
+  baseDir: string | undefined,
+): MarkdownFileLinkMeta | null {
   const candidate = inlineCodeFilePathCandidate(codeText);
   if (candidate === null) return null;
 
-  return resolveMarkdownFileLinkMeta(candidate, cwd, baseDir);
+  return resolveMarkdownFileLinkMeta(
+    candidate,
+    cwd,
+    inlineCodePathNamesFromWorkspaceRoot(candidate, cwd, baseDir) ? cwd : baseDir,
+  );
+}
+
+function inlineCodePathNamesFromWorkspaceRoot(
+  candidate: string,
+  cwd: string | undefined,
+  baseDir: string | undefined,
+): boolean {
+  if (!cwd || !baseDir || !isRelativeFilePath(candidate)) return false;
+  if (/^(?:~|\.{1,2})\//.test(candidate)) return false;
+  if (!splitFilePathPosition(candidate).path.includes("/")) return false;
+  return workspaceRelativeFilePath(baseDir, cwd) !== null;
 }
 
 export function resolveMarkdownFileLinkMeta(
@@ -101,20 +103,36 @@ export function resolveMarkdownFileLinkMeta(
   cwd?: string,
   baseDir: string | undefined = cwd,
 ): MarkdownFileLinkMeta | null {
-  const targetPath = resolveMarkdownFileLinkTarget(href, cwd, baseDir);
-  if (!targetPath) return null;
-  return buildFileLinkMetaFromTarget(targetPath, cwd);
+  if (href === undefined) return null;
+  return memoized(linkMetas, `${cwd ?? ""}\u0000${baseDir ?? ""}\u0000${href}`, () =>
+    resolveMarkdownFileLinkMetaUncached(href, cwd, baseDir),
+  );
 }
 
-function buildFileLinkMetaFromTarget(targetPath: string, cwd?: string): MarkdownFileLinkMeta {
-  const { path, line, column } = splitFilePathPosition(targetPath);
+function resolveMarkdownFileLinkMetaUncached(
+  href: string | undefined,
+  cwd: string | undefined,
+  baseDir: string | undefined,
+): MarkdownFileLinkMeta | null {
+  const resolved = resolveMarkdownFileLink(href, cwd, baseDir);
+  if (!resolved) return null;
+  const {
+    sourcePath,
+    targetPath,
+    position: { path, ...lines },
+  } = resolved;
   return {
     filePath: path,
     targetPath,
     displayPath: formatWorkspaceRelativePath(targetPath, cwd),
     workspaceRelativePath: workspaceRelativeFilePath(path, cwd),
     basename: fileBasename(path),
-    ...(line !== undefined ? { line } : {}),
-    ...(column !== undefined ? { column } : {}),
+    ...lines,
+    workspaceLookupPath:
+      !isAbsolutePath(sourcePath) &&
+      baseDir !== undefined &&
+      workspaceRelativeFilePath(baseDir, cwd) === "."
+        ? sourcePath
+        : null,
   };
 }

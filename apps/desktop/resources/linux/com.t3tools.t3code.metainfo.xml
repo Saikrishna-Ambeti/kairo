@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.kairo.app</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Kairo</name>
+  <summary>Desktop GUI for coding agents</summary>
+  <developer id="com.t3tools">
+    <name>Kairo Tools Inc.</name>
+  </developer>
+  <description>
+    <p>
+      Kairo is an open-source desktop app for coding agents. Work with your
+      existing agent subscriptions, review code changes, and run commands in
+      your projects.
+    </p>
+    <p>
+      Connect from desktop, web, or mobile to continue working remotely.
+    </p>
+  </description>
+  <launchable type="desktop-id">kairo.desktop</launchable>
+  <icon type="stock">kairo</icon>
+  <provides>
+    <binary>kairo</binary>
+  </provides>
+  <categories>
+    <category>Development</category>
+  </categories>
+  <url type="homepage">https://kairo.codes</url>
+  <url type="bugtracker">https://github.com/pingdotgg/t3code/issues</url>
+  <url type="vcs-browser">https://github.com/pingdotgg/t3code</url>
+</component>

@@ -1,54 +1,63 @@
-/**
- * `kairo triage` - hand a misbehaving install to the user's own coding agent.
- *
- * The command is deliberately thin: it writes a `context.md` with machine facts
- * (version, paths, server liveness), then launches claude or codex
- * interactively, seeded with the playbook from `triagePrompt.ts`. The agent
- * asks the user what went wrong, investigates, and files the issue; the
- * harness's own permission prompts gate anything it wants to run. With no
- * agent CLI installed, the prompt and context are written to disk for the user
- * to paste into whatever agent they do have.
- */
 // @effect-diagnostics nodeBuiltinImport:off
 import * as NodeChildProcess from "node:child_process";
 import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 import * as NodeReadlinePromises from "node:readline/promises";
 
-import { HostProcessArchitecture, HostProcessPlatform } from "@kairo/shared/hostProcess";
-import { isCommandAvailable, resolveSpawnCommand } from "@kairo/shared/shell";
+import * as HostProcess from "@kairo/shared/HostProcess";
+import { isCommandAvailable, resolveCommandPath, resolveSpawnCommand } from "@kairo/shared/shell";
 import * as Config from "effect/Config";
 import * as Console from "effect/Console";
-import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
-import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import { Command, Flag } from "effect/unstable/cli";
+import { Command, Flag } from "effect/cli";
 
 import packageJson from "../../package.json" with { type: "json" };
-import * as BootService from "../cloud/bootService.ts";
 import * as ServerConfig from "../config.ts";
 import { resolveBaseDir } from "../os-jank.ts";
-import { isProcessAlive, readPersistedServerRuntimeState } from "../serverRuntimeState.ts";
+import { buildTriageLaunchPrompt } from "../triage/triagePrompt.ts";
+import { describeServerProcess, writeTriageSession } from "../triage/triageSession.ts";
 import { baseDirFlag } from "./config.ts";
+import { interactiveStdin } from "./consoleStdin.ts";
 import { resolveCliCommand } from "./invocation.ts";
-import {
-  buildTriageContext,
-  buildTriageLaunchPrompt,
-  buildTriageSeedPrompt,
-} from "./triagePrompt.ts";
 
 interface TriageAgent {
-  readonly id: "claude" | "codex";
+  readonly id: "claude" | "codex" | "antigravity";
   readonly command: string;
   readonly label: string;
+  readonly stateDirEnv: string;
+  readonly defaultStateDir: string;
+  readonly promptArgs?: ReadonlyArray<string>;
 }
 
 const TRIAGE_AGENTS: ReadonlyArray<TriageAgent> = [
-  { id: "claude", command: "claude", label: "Claude Code" },
-  { id: "codex", command: "codex", label: "Codex" },
+  {
+    id: "claude",
+    command: "claude",
+    label: "Claude Code",
+    stateDirEnv: "CLAUDE_CONFIG_DIR",
+    defaultStateDir: ".claude",
+  },
+  {
+    id: "codex",
+    command: "codex",
+    label: "Codex",
+    stateDirEnv: "CODEX_HOME",
+    defaultStateDir: ".codex",
+  },
+  {
+    id: "antigravity",
+    command: "agy",
+    label: "Antigravity",
+    stateDirEnv: "GEMINI_HOME",
+    defaultStateDir: ".gemini",
+    promptArgs: ["--prompt-interactive"],
+  },
 ];
+
+const resolveAgentStateDir = (agent: TriageAgent) =>
+  process.env[agent.stateDirEnv]?.trim() || NodePath.join(NodeOS.homedir(), agent.defaultStateDir);
 
 export class TriageAgentUnavailableError extends Schema.TaggedError<TriageAgentUnavailableError>()(
   "TriageAgentUnavailableError",
@@ -64,7 +73,7 @@ export class TriageAgentChoiceRequiredError extends Schema.TaggedError<TriageAge
   {},
 ) {
   override get message(): string {
-    return "Both claude and codex are installed and there is no terminal to ask which to use. Re-run with --agent claude or --agent codex.";
+    return "Multiple supported agent CLIs are installed and there is no terminal to ask which to use. Re-run with --agent claude, --agent codex, or --agent antigravity.";
   }
 }
 
@@ -77,53 +86,51 @@ export class TriageAgentSpawnError extends Schema.TaggedError<TriageAgentSpawnEr
   }
 }
 
-/** One human-readable line about the local server, for `context.md`. */
-const describeServerProcess = Effect.fn("triage.describeServerProcess")(function* (
-  serverRuntimeStatePath: string,
-) {
-  // readPersistedServerRuntimeState swallows read/decode failures itself and
-  // returns none, so a corrupt state file reads as "not running" here.
-  const state = yield* readPersistedServerRuntimeState(serverRuntimeStatePath);
-  if (Option.isNone(state)) {
-    return "not running (no server-runtime.json; the server may never have started here)";
-  }
-  if (!isProcessAlive(state.value.pid)) {
-    return `not running (state file is stale: pid ${String(state.value.pid)} is dead; last origin ${state.value.origin})`;
-  }
-  return `running (pid ${String(state.value.pid)}, ${state.value.origin})`;
-});
+export const matchAgentAnswer = <Agent extends { readonly id: string }>(
+  agents: ReadonlyArray<Agent>,
+  answer: string,
+) => {
+  const trimmed = answer.trim();
+  return (
+    agents.find((_, index) => String(index + 1) === trimmed) ??
+    agents.find((agent) => agent.id === trimmed.toLowerCase())
+  );
+};
 
-const pickAgent = (agents: ReadonlyArray<TriageAgent>) =>
+export const pickAgent = <Agent extends { readonly id: string; readonly label: string }>(
+  agents: ReadonlyArray<Agent>,
+  input: NodeJS.ReadableStream = process.stdin,
+  output: NodeJS.WritableStream = process.stdout,
+) =>
   Effect.promise(async () => {
-    const readline = NodeReadlinePromises.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
+    const readline = NodeReadlinePromises.createInterface({ input, output });
+    // A readline closed by ended input leaves a pending question unsettled, and asking after a
+    // close throws, so closing aborts every question.
+    const closed = new AbortController();
+    readline.once("close", () => closed.abort());
     try {
       const menu = agents
         .map((agent, index) => `  [${String(index + 1)}] ${agent.label}`)
         .join("\n");
       for (;;) {
-        const answer = (await readline.question(`Run triage with:\n${menu}\n> `)).trim();
-        const byNumber = agents[Number.parseInt(answer, 10) - 1];
-        if (byNumber !== undefined) {
-          return byNumber;
-        }
-        const byId = agents.find((agent) => agent.id === answer.toLowerCase());
-        if (byId !== undefined) {
-          return byId;
+        const answer = await readline.question(`Run triage with:\n${menu}\n> `, {
+          signal: closed.signal,
+        });
+        const picked = matchAgentAnswer(agents, answer);
+        if (picked !== undefined) {
+          return picked;
         }
       }
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return undefined;
+      }
+      throw error;
     } finally {
       readline.close();
     }
   });
 
-/**
- * Run the agent CLI as a normal interactive session: the user's terminal is
- * the UI, and the harness's own permission prompts gate every action. Resolves
- * with the child's exit code.
- */
 const runInteractiveSession = (input: {
   readonly command: string;
   readonly args: ReadonlyArray<string>;
@@ -133,18 +140,27 @@ const runInteractiveSession = (input: {
   Effect.callback<number, TriageAgentSpawnError>((resume) => {
     const child = NodeChildProcess.spawn(input.command, [...input.args], {
       cwd: input.cwd,
-      stdio: "inherit",
+      // The Windows desktop launcher supplies terminal input through the reopened console.
+      stdio: [interactiveStdin(), "inherit", "inherit"],
       shell: input.shell,
     });
     child.once("error", (cause) =>
       resume(Effect.fail(new TriageAgentSpawnError({ command: input.command, cause }))),
     );
-    // Signal death has no exit code; report failure rather than success.
     child.once("exit", (code, signal) => resume(Effect.succeed(code ?? (signal === null ? 0 : 1))));
   });
 
-const agentFlag = Flag.Literals("agent", ["claude", "codex"]).pipe(
-  Flag.withDescription("Agent CLI to use. Default: ask when both are installed."),
+const describeTriageFiles = (session: {
+  readonly promptFilePath: string;
+  readonly contextFilePath: string;
+}) => [
+  "The triage prompt and machine context were written to:",
+  `  ${session.promptFilePath}`,
+  `  ${session.contextFilePath}`,
+];
+
+const agentFlag = Flag.Literals("agent", ["claude", "codex", "antigravity"]).pipe(
+  Flag.withDescription("Agent CLI to use. Default: ask when multiple are installed."),
   Flag.optional,
 );
 
@@ -159,63 +175,26 @@ export const triageCommand = Command.make("triage", {
   model: modelFlag,
 }).pipe(
   Command.withDescription(
-    "Investigate a Kairo problem on this machine with claude or codex, and help file a good issue.",
+    "Investigate a Kairo problem on this machine with Claude Code, Codex, or Antigravity, and help file a good issue.",
   ),
   Command.withHandler((flags) =>
     Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-
       // Triage is a user-facing feature: always the userdata state, never dev.
-      // --base-dir wins; KAIRO_HOME is its documented env equivalent (same
-      // precedence as `kairo pair`).
       const explicitBaseDir = Option.getOrUndefined(flags.baseDir);
       const envHome = yield* Config.String("KAIRO_HOME").pipe(Config.option);
       const baseDir = yield* resolveBaseDir(explicitBaseDir ?? Option.getOrUndefined(envHome));
       const paths = yield* ServerConfig.deriveServerPaths(baseDir, undefined, {});
 
-      const now = yield* DateTime.now;
-      const scratchDir = path.join(
-        paths.stateDir,
-        "triage",
-        // ISO instant, made safe for Windows paths.
-        DateTime.formatIso(now).replaceAll(":", "-").replace(".", "-"),
-      );
-      yield* fs.makeDirectory(scratchDir, { recursive: true });
-
-      const version = packageJson.version;
-      const contextFilePath = path.join(scratchDir, "context.md");
-      yield* fs.writeFileString(
-        contextFilePath,
-        buildTriageContext({
-          generatedAt: DateTime.formatIso(now),
-          version,
-          releaseTag: /^[^-+]+-(?:nightly|preview)\./.test(version)
-            ? `v${version} (prerelease build; if this tag does not exist, clone main)`
-            : `v${version}`,
-          os: `${yield* HostProcessPlatform} ${yield* HostProcessArchitecture} (${NodeOS.release()})`,
-          nodeVersion: process.version,
+      const session = yield* writeTriageSession({
+        baseDir,
+        paths,
+        entry: {
+          kind: "cli",
+          cliVersion: packageJson.version,
           launchedAs: yield* resolveCliCommand("triage"),
-          server: yield* describeServerProcess(paths.serverRuntimeStatePath),
-          paths: {
-            stateDir: paths.stateDir,
-            dbPath: paths.dbPath,
-            settingsPath: paths.settingsPath,
-            logsDir: paths.logsDir,
-            // The server writes no log file of its own. Service installs and the
-            // desktop app capture its output. The glob covers every desktop backend
-            // (such as WSL) and rotated copies; names come from DesktopObservability.ts.
-            serviceLogPath: path.join(paths.logsDir, BootService.BOOT_SERVICE_LOG_FILE),
-            desktopBackendLogGlob: path.join(paths.logsDir, "server-child*.log*"),
-            serverTracePath: paths.serverTracePath,
-            providerEventLogPath: paths.providerEventLogPath,
-            terminalLogsDir: paths.terminalLogsDir,
-            providerStatusCacheDir: paths.providerStatusCacheDir,
-            secretsDir: paths.secretsDir,
-            sourceCacheDir: path.join(baseDir, "source"),
-          },
-        }),
-      );
+        },
+        server: yield* describeServerProcess(paths.serverRuntimeStatePath),
+      });
 
       const installed: Array<TriageAgent> = [];
       for (const agent of TRIAGE_AGENTS) {
@@ -229,34 +208,34 @@ export const triageCommand = Command.make("triage", {
       if (requested !== undefined) {
         selected = installed.find((agent) => agent.id === requested);
         if (selected === undefined) {
-          return yield* new TriageAgentUnavailableError({ agent: requested });
+          return yield* new TriageAgentUnavailableError({
+            agent: TRIAGE_AGENTS.find((agent) => agent.id === requested)?.command ?? requested,
+          });
         }
       } else if (installed.length === 1) {
         selected = installed[0];
       } else if (installed.length > 1) {
-        // Both streams must be terminals: with stdout redirected the picker
-        // prompt is invisible and the command would hang waiting on it.
+        // The picker needs terminal output too, or its invisible prompt hangs.
         if (!process.stdin.isTTY || !process.stdout.isTTY) {
           return yield* new TriageAgentChoiceRequiredError();
         }
-        selected = yield* pickAgent(installed);
+        const picked = yield* pickAgent(installed);
+        if (picked === undefined) {
+          yield* Console.log("\nNo agent started.");
+          return;
+        }
+        selected = picked;
       }
 
-      // The full seed prompt always goes to disk. The agent is launched with a
-      // one-line pointer at it: Windows `.cmd` shims run through cmd.exe,
-      // which cannot carry the multiline playbook as an argv string, and with
-      // no agent installed the same file is the paste-anywhere fallback.
-      const promptFilePath = path.join(scratchDir, "prompt.md");
-      yield* fs.writeFileString(promptFilePath, buildTriageSeedPrompt(contextFilePath));
+      // Windows .cmd shims cannot carry multiline argv; the prompt file also serves as the paste fallback.
+      const { sessionDir, promptFilePath } = session;
 
       if (selected === undefined) {
         yield* Console.log(
           [
-            "No supported agent CLI (claude, codex) was found on this machine.",
+            "No supported agent CLI (claude, codex, agy) was found on this machine.",
             "",
-            "The triage prompt and machine context were written to:",
-            `  ${promptFilePath}`,
-            `  ${contextFilePath}`,
+            ...describeTriageFiles(session),
             "",
             "Paste the prompt file into any coding agent to run triage by hand.",
           ].join("\n"),
@@ -265,14 +244,37 @@ export const triageCommand = Command.make("triage", {
       }
 
       const model = Option.getOrUndefined(flags.model);
-      const spawnSpec = yield* resolveSpawnCommand(selected.command, [
+      const launchPrompt = buildTriageLaunchPrompt(promptFilePath);
+      // The agent starts in the session directory, so a PATH match relative to this one would
+      // be searched from there. Windows keeps the bare name for its .cmd shim handling.
+      const onPath =
+        (yield* HostProcess.Platform) === "win32"
+          ? null
+          : yield* resolveCommandPath(selected.command);
+      const command = onPath === null ? selected.command : NodePath.resolve(onPath);
+      const spawnSpec = yield* resolveSpawnCommand(command, [
         ...(model === undefined ? [] : ["--model", model]),
-        buildTriageLaunchPrompt(promptFilePath),
+        ...(selected.promptArgs ?? []),
+        launchPrompt,
       ]);
       yield* Console.log(`Starting ${selected.label}. It will ask what went wrong.\n`);
-      const exitCode = yield* runInteractiveSession({ ...spawnSpec, cwd: scratchDir });
+      const exitCode = yield* runInteractiveSession({ ...spawnSpec, cwd: sessionDir });
       if (exitCode !== 0) {
         process.exitCode = exitCode;
+        yield* Console.log(
+          [
+            "",
+            `${selected.label} exited with code ${String(exitCode)}.`,
+            "",
+            `${selected.label} keeps its state in ${resolveAgentStateDir(selected)}.`,
+            `If that drive is out of space, free some up or set ${selected.stateDirEnv} to a folder on another drive.`,
+            "",
+            ...describeTriageFiles(session),
+            "",
+            `To retry, start \`${selected.command}\` yourself with any flags it suggested, or use any coding agent, and give it this prompt:`,
+            launchPrompt,
+          ].join("\n"),
+        );
       }
     }),
   ),

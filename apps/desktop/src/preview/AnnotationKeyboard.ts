@@ -1,6 +1,7 @@
 import type { PreviewAnnotationSubmission } from "@kairo/contracts";
 
 interface AnnotationKeyboardEvent {
+  readonly isTrusted: boolean;
   readonly key: string;
   readonly metaKey: boolean;
   readonly ctrlKey: boolean;
@@ -10,7 +11,8 @@ interface AnnotationKeyboardEvent {
 
 export function resolveAnnotationSubmission(
   event: AnnotationKeyboardEvent,
+  canSend: boolean,
 ): PreviewAnnotationSubmission | null {
-  if (event.key !== "Enter" || event.shiftKey || event.isComposing) return null;
-  return event.metaKey || event.ctrlKey ? "send" : "attach";
+  if (!event.isTrusted || event.key !== "Enter" || event.shiftKey || event.isComposing) return null;
+  return event.metaKey || event.ctrlKey ? (canSend ? "send" : null) : "attach";
 }

@@ -7,6 +7,7 @@ final class KairoNativeVideoPresentation: NSObject, AVPlayerViewControllerDelega
   private let controller = AVPlayerViewController()
   private let completion: (Error?) -> Void
   private var itemObservation: NSKeyValueObservation?
+  private var playbackObservation: NSKeyValueObservation?
   private var backgroundObserver: NSObjectProtocol?
   private var playbackError: Error?
   private var presented = false
@@ -27,7 +28,8 @@ final class KairoNativeVideoPresentation: NSObject, AVPlayerViewControllerDelega
   private weak var fullScreenController: UIViewController?
   private var embedded = false
 
-  init(identifier: String, url: URL, title: String, completion: @escaping (Error?) -> Void) {
+  init(identifier: String, url: URL, title: String,
+       onPlaybackChange: @escaping (Bool) -> Void, completion: @escaping (Error?) -> Void) {
     self.identifier = identifier
     self.completion = completion
     super.init()
@@ -38,6 +40,12 @@ final class KairoNativeVideoPresentation: NSObject, AVPlayerViewControllerDelega
     metadata.value = title as NSString
     item.externalMetadata = [metadata]
     controller.player = AVPlayer(playerItem: item)
+    playbackObservation = controller.player?.observe(\.timeControlStatus, options: [.new]) { player, _ in
+      // Waiting keeps the playback request alive through buffering and seeks.
+      if player.timeControlStatus != .waitingToPlayAtSpecifiedRate {
+        onPlaybackChange(player.timeControlStatus == .playing)
+      }
+    }
     controller.delegate = self
     controller.overrideUserInterfaceStyle = .dark
     controller.allowsPictureInPicturePlayback = false
@@ -65,7 +73,7 @@ final class KairoNativeVideoPresentation: NSObject, AVPlayerViewControllerDelega
     do {
       try audioSession.setCategory(.playback, mode: .moviePlayback)
     } catch {
-      NSLog("Kairo video audio session: %@", error.localizedDescription)
+      NSLog("T3 video audio session: %@", error.localizedDescription)
     }
     // AVKit exposes programmatic inline-to-full-screen entry through this selector.
     // This is the same guarded entry point used by expo-video's enterFullscreen().
@@ -148,19 +156,24 @@ final class KairoNativeVideoPresentation: NSObject, AVPlayerViewControllerDelega
       controller.removeFromParent()
     }
     itemObservation = nil
+    playbackObservation = nil
     controller.player = nil
     if let backgroundObserver { NotificationCenter.default.removeObserver(backgroundObserver) }
     backgroundObserver = nil
     let audioSession = AVAudioSession.sharedInstance()
+    // Still what present() set, allowing the .mixWithOthers flip expo-video
+    // makes when the inline players pause under this preview. A recorder that
+    // claimed the session since owns it.
     if let previousAudioSession, audioSession.category == .playback,
-      audioSession.mode == .moviePlayback, audioSession.categoryOptions.isEmpty {
-      // AVPlayer owns activation. Deactivating the shared session here could
-      // stop another player or recorder that was active before this preview.
+      audioSession.mode == .moviePlayback,
+      audioSession.categoryOptions.isSubset(of: [.mixWithOthers]) {
       try? audioSession.setCategory(
         previousAudioSession.category,
         mode: previousAudioSession.mode,
         options: previousAudioSession.options
       )
+      // Deactivating with notification lets interrupted apps resume.
+      try? audioSession.setActive(false, options: [.notifyOthersOnDeactivation])
     }
     completion(playbackError)
   }

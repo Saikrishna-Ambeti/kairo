@@ -10,8 +10,7 @@ import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import { KairoCloudClient } from "../cloud/KairoCloudClient.ts";
 import { COMPOSIO_ACCESS_TOKEN_SECRET } from "../composio/ComposioSecrets.ts";
 import { ServerEnvironment } from "../environment/ServerEnvironment.ts";
-import { makeManualOnlyProviderMaintenanceCapabilities } from "../provider/providerMaintenance.ts";
-import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
+import { ProviderRegistry } from "../provider/ProviderRegistry.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 import { KAIRO_CLOUD_ACCESS_TOKEN_SECRET } from "./SupermemorySecrets.ts";
 import { makeSupermemoryService, SupermemoryService } from "./SupermemoryService.ts";
@@ -44,9 +43,6 @@ const providerRegistry = Layer.mock(ProviderRegistry)({
   getProviders: Effect.succeed([]),
   refresh: () => Effect.succeed([]),
   refreshInstance: () => Effect.succeed([]),
-  getProviderMaintenanceCapabilitiesForInstance: (_instanceId, provider) =>
-    Effect.succeed(makeManualOnlyProviderMaintenanceCapabilities({ provider, packageName: null })),
-  setProviderMaintenanceActionState: () => Effect.succeed([]),
   streamChanges: Stream.empty,
 });
 

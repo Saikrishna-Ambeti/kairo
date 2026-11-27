@@ -11,9 +11,17 @@ class KairoTerminalModule : Module() {
     // logs so a stale native binary is distinguishable from a broken key pipeline.
     Constants(
       "hardwareKeyRevision" to 2,
+      "outputRevision" to 1,
     )
 
     View(KairoTerminalView::class) {
+      AsyncFunction("writeOutput") { view: KairoTerminalView, data: String, reset: Boolean ->
+        view.writeOutput(data, reset)
+      }
+
+      // The Android input field already clears after every change.
+      AsyncFunction("resetInput") { _: KairoTerminalView -> }
+
       Prop("terminalKey") { view: KairoTerminalView, terminalKey: String ->
         view.terminalKey = terminalKey
       }
@@ -28,6 +36,10 @@ class KairoTerminalModule : Module() {
 
       Prop("focusRequest") { view: KairoTerminalView, focusRequest: Double ->
         view.focusRequest = focusRequest
+      }
+
+      Prop("readOnly") { view: KairoTerminalView, readOnly: Boolean ->
+        view.readOnly = readOnly
       }
 
       Prop("autoFocus") { view: KairoTerminalView, autoFocus: Boolean ->
@@ -57,7 +69,15 @@ class KairoTerminalModule : Module() {
       Prop("captureRequest") { view: KairoTerminalView, request: Double ->
         view.captureRequest = request
       }
+
+      Prop("sharedGrid") { view: KairoTerminalView, sharedGrid: List<Int> ->
+        view.sharedGrid = sharedGrid
+      }
       Events("onInput", "onResize", "onCapture")
+
+      OnViewDidUpdateProps { view: KairoTerminalView ->
+        view.applyPendingBuffer()
+      }
 
       OnViewDestroys { view: KairoTerminalView ->
         view.cleanup()

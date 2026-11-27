@@ -7,10 +7,19 @@ public class KairoTerminalModule: Module {
     // Bumped when native hardware-keyboard handling changes; surfaced in the JS debug
     // logs so a stale native binary is distinguishable from a broken key pipeline.
     Constants([
-      "hardwareKeyRevision": 3,
+      "hardwareKeyRevision": 4,
+      "outputRevision": 1,
     ])
 
     View(KairoTerminalView.self) {
+      AsyncFunction("writeOutput") { (view: KairoTerminalView, data: String, reset: Bool) in
+        view.writeOutput(data, reset: reset)
+      }
+
+      AsyncFunction("resetInput") { (view: KairoTerminalView) in
+        view.resetInputField()
+      }
+
       Prop("terminalKey") { (view: KairoTerminalView, terminalKey: String) in
         view.terminalKey = terminalKey
       }
@@ -25,6 +34,10 @@ public class KairoTerminalModule: Module {
 
       Prop("focusRequest") { (view: KairoTerminalView, focusRequest: Double) in
         view.focusRequest = focusRequest
+      }
+
+      Prop("readOnly") { (view: KairoTerminalView, readOnly: Bool) in
+        view.readOnly = readOnly
       }
 
       Prop("autoFocus") { (view: KairoTerminalView, autoFocus: Bool) in
@@ -54,7 +67,15 @@ public class KairoTerminalModule: Module {
       Prop("captureRequest") { (view: KairoTerminalView, request: Double) in
         view.captureRequest = request
       }
-      Events("onInput", "onResize", "onCapture")
+
+      Prop("sharedGrid") { (view: KairoTerminalView, sharedGrid: [Int]) in
+        view.sharedGrid = sharedGrid
+      }
+      Events("onInput", "onResize", "onCapture", "onPaste")
+
+      OnViewDidUpdateProps { (view: KairoTerminalView) in
+        view.applyPendingBuffer()
+      }
     }
   }
 }

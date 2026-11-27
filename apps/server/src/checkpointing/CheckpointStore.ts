@@ -1,36 +1,41 @@
-/**
- * CheckpointStore - Repository interface for filesystem-backed workspace checkpoints.
- *
- * Owns hidden Git-ref checkpoint capture/restore and diff computation for a
- * workspace thread timeline. It does not store user-facing checkpoint metadata
- * and does not coordinate provider conversation rollback.
- *
- * The live adapter resolves the active VCS driver once per checkpoint operation
- * and delegates to the driver's optional checkpoint capability.
- *
- * Uses Effect `Context.Service` for dependency injection and exposes typed
- * domain errors for checkpoint storage operations.
- *
- * @module CheckpointStore
- */
-import { VcsUnsupportedOperationError, type CheckpointRef } from "@kairo/contracts";
+import { type CheckpointRef } from "@kairo/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import type { CheckpointStoreError } from "./Errors.ts";
-import type { VcsCheckpointOps } from "../vcs/VcsDriver.ts";
+import type { VcsCheckpointOps, VcsCheckpointRange } from "../vcs/VcsDriver.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 
 export interface CaptureCheckpointInput {
   readonly cwd: string;
   readonly checkpointRef: CheckpointRef;
+  /** The checkpoint this one follows, so a turn that switched branches starts where it landed. */
+  readonly previousCheckpointRef?: CheckpointRef;
+  /** Folders below `cwd` (relative, `/`-separated) that have their own checkpoints. */
+  readonly excludePaths?: ReadonlyArray<string>;
+}
+
+export type CheckpointRange = VcsCheckpointRange;
+
+export interface CaptureHeadCheckpointInput {
+  readonly cwd: string;
+  readonly checkpointRef: CheckpointRef;
+  /** A commit `resolveCleanHead` returned for this folder. */
+  readonly head: string;
+  /**
+   * When the folder was seen clean, in epoch seconds, if that was earlier than now. Commits made
+   * after a checkpoint count as the turn's own work, so a late snapshot must not postdate them.
+   */
+  readonly seenAt?: number;
 }
 
 export interface RestoreCheckpointInput {
   readonly cwd: string;
   readonly checkpointRef: CheckpointRef;
   readonly fallbackToHead?: boolean;
+  /** Folders below `cwd` the restore leaves as they are, as in a capture. */
+  readonly excludePaths?: ReadonlyArray<string>;
 }
 
 export interface DiffCheckpointsInput {
@@ -40,6 +45,22 @@ export interface DiffCheckpointsInput {
   readonly fallbackFromToHead?: boolean;
   readonly ignoreWhitespace: boolean;
   readonly format?: "patch" | "numstat";
+  /** Maximum bytes collected from the diff command. */
+  readonly maxOutputBytes?: number;
+  /** Limits the diff to these exact paths. An empty list yields an empty diff. */
+  readonly filePaths?: ReadonlyArray<string>;
+  /** Folders below `cwd` left out of the diff, as in a capture. */
+  readonly excludePaths?: ReadonlyArray<string>;
+  /** The refs' range as their capture returned it; the refs are then not read. */
+  readonly range?: VcsCheckpointRange;
+}
+
+export interface ListAuthoredPathsInput {
+  readonly cwd: string;
+  readonly fromCheckpointRef: CheckpointRef;
+  readonly toCheckpointRef: CheckpointRef;
+  /** The refs' range as their capture returned it; the refs are then not read. */
+  readonly range?: VcsCheckpointRange;
 }
 
 export interface DeleteCheckpointRefsInput {
@@ -47,125 +68,135 @@ export interface DeleteCheckpointRefsInput {
   readonly checkpointRefs: ReadonlyArray<CheckpointRef>;
 }
 
-/** Service tag for checkpoint persistence and restore operations. */
 export class CheckpointStore extends Context.Service<
   CheckpointStore,
   {
-    /** Check whether cwd is inside a Git worktree. */
     readonly isGitRepository: (cwd: string) => Effect.Effect<boolean, CheckpointStoreError>;
 
-    /**
-     * Capture a checkpoint commit and store it at the provided checkpoint ref.
-     *
-     * Uses an isolated temporary Git index and writes a hidden ref.
-     */
+    /** The range from `previousCheckpointRef`, or null when there is none to compare with. */
     readonly captureCheckpoint: (
       input: CaptureCheckpointInput,
+    ) => Effect.Effect<VcsCheckpointRange | null, CheckpointStoreError>;
+
+    /**
+     * HEAD's commit when the folder matches it exactly: nothing staged, modified or untracked.
+     * Null otherwise. One status, where a capture stages the whole worktree.
+     */
+    readonly resolveCleanHead: (cwd: string) => Effect.Effect<string | null, CheckpointStoreError>;
+
+    /** Snapshots a folder that was clean at `head` from that commit, without reading its files. */
+    readonly captureHeadCheckpoint: (
+      input: CaptureHeadCheckpointInput,
     ) => Effect.Effect<void, CheckpointStoreError>;
 
-    /** Check whether a checkpoint ref exists. */
     readonly hasCheckpointRef: (
       input: Omit<RestoreCheckpointInput, "fallbackToHead">,
     ) => Effect.Effect<boolean, CheckpointStoreError>;
 
-    /**
-     * Restore workspace and staging state to a checkpoint.
-     *
-     * Optionally falls back to current `HEAD` when the checkpoint ref is missing.
-     */
     readonly restoreCheckpoint: (
       input: RestoreCheckpointInput,
     ) => Effect.Effect<boolean, CheckpointStoreError>;
 
-    /**
-     * Compute a diff between two checkpoint refs. Defaults to a full patch.
-     *
-     * Numstat output has NUL-delimited paths for file summaries.
-     * Can optionally treat a missing "from" ref as `HEAD`.
-     */
     readonly diffCheckpoints: (
       input: DiffCheckpointsInput,
     ) => Effect.Effect<string, CheckpointStoreError>;
 
-    /**
-     * Delete the provided checkpoint refs.
-     *
-     * Best-effort delete: missing refs are tolerated.
-     */
+    /** Null means HEAD is unchanged or unrecorded; all changed paths then belong to the turn. */
+    readonly listAuthoredPaths: (
+      input: ListAuthoredPathsInput,
+    ) => Effect.Effect<ReadonlySet<string> | null, CheckpointStoreError>;
+
     readonly deleteCheckpointRefs: (
       input: DeleteCheckpointRefsInput,
     ) => Effect.Effect<void, CheckpointStoreError>;
   }
 >()("kairo/checkpointing/CheckpointStore") {}
 
-/** @public Service construction is part of the canonical Effect module API. */
+/** @public */
 export const make = Effect.gen(function* () {
   const vcsRegistry = yield* VcsDriverRegistry.VcsDriverRegistry;
 
   const resolveCheckpoints = Effect.fn("CheckpointStore.resolveCheckpoints")(function* (
-    operation: string,
     cwd: string,
   ) {
     const handle = yield* vcsRegistry.resolve({ cwd });
-    if (!handle.driver.checkpoints) {
-      return yield* new VcsUnsupportedOperationError({
-        operation,
-        kind: handle.kind,
-        detail: `${handle.kind} driver does not implement checkpoint operations.`,
-      });
-    }
     return handle.driver.checkpoints satisfies VcsCheckpointOps;
   });
 
-  const isGitRepository: CheckpointStore["Service"]["isGitRepository"] = (cwd) =>
-    vcsRegistry
-      .detect({ cwd, requestedKind: "git" })
-      .pipe(Effect.map((repository) => repository !== null));
+  // The registry reads an unreadable repository as none; ask Git again so that fails here.
+  const isGitRepository: CheckpointStore["Service"]["isGitRepository"] = Effect.fn(
+    "CheckpointStore.isGitRepository",
+  )(function* (cwd) {
+    if ((yield* vcsRegistry.detect({ cwd, requestedKind: "git" })) !== null) return true;
+    const git = yield* vcsRegistry.get("git");
+    return (yield* git.detectRepository(cwd)) !== null;
+  });
 
   const captureCheckpoint: CheckpointStore["Service"]["captureCheckpoint"] = Effect.fn(
     "captureCheckpoint",
   )(function* (input) {
-    const checkpoints = yield* resolveCheckpoints("CheckpointStore.captureCheckpoint", input.cwd);
+    const checkpoints = yield* resolveCheckpoints(input.cwd);
     return yield* checkpoints.captureCheckpoint(input);
+  });
+
+  const resolveCleanHead: CheckpointStore["Service"]["resolveCleanHead"] = Effect.fn(
+    "CheckpointStore.resolveCleanHead",
+  )(function* (cwd) {
+    const checkpoints = yield* resolveCheckpoints(cwd);
+    return yield* checkpoints.resolveCleanHead(cwd);
+  });
+
+  const captureHeadCheckpoint: CheckpointStore["Service"]["captureHeadCheckpoint"] = Effect.fn(
+    "CheckpointStore.captureHeadCheckpoint",
+  )(function* (input) {
+    const checkpoints = yield* resolveCheckpoints(input.cwd);
+    return yield* checkpoints.captureHeadCheckpoint(input);
   });
 
   const hasCheckpointRef: CheckpointStore["Service"]["hasCheckpointRef"] = Effect.fn(
     "hasCheckpointRef",
   )(function* (input) {
-    const checkpoints = yield* resolveCheckpoints("CheckpointStore.hasCheckpointRef", input.cwd);
+    const checkpoints = yield* resolveCheckpoints(input.cwd);
     return yield* checkpoints.hasCheckpointRef(input);
   });
 
   const restoreCheckpoint: CheckpointStore["Service"]["restoreCheckpoint"] = Effect.fn(
     "restoreCheckpoint",
   )(function* (input) {
-    const checkpoints = yield* resolveCheckpoints("CheckpointStore.restoreCheckpoint", input.cwd);
+    const checkpoints = yield* resolveCheckpoints(input.cwd);
     return yield* checkpoints.restoreCheckpoint(input);
   });
 
   const diffCheckpoints: CheckpointStore["Service"]["diffCheckpoints"] = Effect.fn(
     "diffCheckpoints",
   )(function* (input) {
-    const checkpoints = yield* resolveCheckpoints("CheckpointStore.diffCheckpoints", input.cwd);
+    const checkpoints = yield* resolveCheckpoints(input.cwd);
     return yield* checkpoints.diffCheckpoints(input);
+  });
+
+  const listAuthoredPaths: CheckpointStore["Service"]["listAuthoredPaths"] = Effect.fn(
+    "listAuthoredPaths",
+  )(function* (input) {
+    const checkpoints = yield* resolveCheckpoints(input.cwd);
+    return yield* checkpoints.listAuthoredPaths(input);
   });
 
   const deleteCheckpointRefs: CheckpointStore["Service"]["deleteCheckpointRefs"] = Effect.fn(
     "deleteCheckpointRefs",
   )(function* (input) {
-    const checkpoints = yield* resolveCheckpoints(
-      "CheckpointStore.deleteCheckpointRefs",
-      input.cwd,
-    );
+    const checkpoints = yield* resolveCheckpoints(input.cwd);
     return yield* checkpoints.deleteCheckpointRefs(input);
   });
 
   return CheckpointStore.of({
     isGitRepository,
     captureCheckpoint,
+    resolveCleanHead,
+    captureHeadCheckpoint,
     hasCheckpointRef,
     restoreCheckpoint,
     diffCheckpoints,
+    listAuthoredPaths,
     deleteCheckpointRefs,
   });
 });

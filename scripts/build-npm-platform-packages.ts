@@ -36,7 +36,7 @@ import {
   cliArchiveFileName,
   type CliArchivePlatformKey,
 } from "@kairo/shared/cliRelease";
-import { HostProcessPlatform } from "@kairo/shared/hostProcess";
+import { HostProcessPlatform } from "@kairo/shared/HostProcess";
 import { fromJsonStringPretty } from "@kairo/shared/schemaJson";
 import { isCommandAvailable } from "@kairo/shared/shell";
 import serverPackageJson from "../apps/server/package.json" with { type: "json" };

@@ -31,6 +31,9 @@ describe("orchestration protocol compatibility", () => {
     expect(socketUrl.searchParams.get("orchestrationProtocol")).toBe(
       String(ORCHESTRATION_PROTOCOL_VERSION),
     );
+    expect(socketUrl.searchParams.get("clientCapabilities")).toBe(
+      "settingsSecretReferences,httpUsageLimitSources",
+    );
     expect(socketUrl.searchParams.get("wsTicket")).toBe("secret");
     expect(socketUrl.searchParams.get("connectionMethod")).toBe("relay");
   });
@@ -50,5 +53,29 @@ describe("orchestration protocol compatibility", () => {
     );
     expect(error).toMatchObject({ reason: "unsupported" });
     expect(error?.message).toContain("This client is not supported");
+    expect(error).not.toHaveProperty("serverUpdateRequired");
+  });
+
+  it("offers a remote update only for an older host that can update itself", () => {
+    const older = descriptor(ORCHESTRATION_PROTOCOL_VERSION - 1);
+    const withCapabilities = (capabilities: ExecutionEnvironmentDescriptor["capabilities"]) =>
+      orchestrationProtocolCompatibilityError({ ...older, capabilities });
+
+    expect(
+      withCapabilities({ repositoryIdentity: true, serverSelfUpdate: "boot-service" }),
+    ).toMatchObject({ serverUpdateRequired: true });
+    expect(withCapabilities({ repositoryIdentity: true })).not.toHaveProperty(
+      "serverUpdateRequired",
+    );
+    expect(
+      withCapabilities({ repositoryIdentity: true, serverSelfUpdate: "desktop-managed" }),
+    ).not.toHaveProperty("serverUpdateRequired");
+    expect(
+      withCapabilities({
+        repositoryIdentity: true,
+        serverSelfUpdate: "desktop-managed",
+        desktopAppUpdate: true,
+      }),
+    ).toMatchObject({ serverUpdateRequired: true });
   });
 });

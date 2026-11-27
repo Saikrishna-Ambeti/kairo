@@ -37,7 +37,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: Installed kairo version or commit.
+      description: Version the bug happened on (not the `kairo triage` CLI version), or unknown.
       placeholder: 0.0.33
     validations:
       required: true

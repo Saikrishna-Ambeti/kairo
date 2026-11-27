@@ -1,50 +1,42 @@
 import type { EnvironmentId, ThreadId, WorktreeSetupSnapshot } from "@kairo/contracts";
-import {
-  findRecordedWorktreeSetup,
-  resolveVisibleWorktreeSetup,
-} from "@kairo/client-runtime/worktree-setup";
-import { useEffect, useState } from "react";
+import { resolveVisibleWorktreeSetup } from "@kairo/client-runtime/worktree-setup";
+import { useState } from "react";
 import { useEnvironmentQuery } from "../../state/query";
 import { vcsEnvironment } from "../../state/vcs";
+import { resolveWorktreeSetupSnapshot } from "./worktree-setup-state";
 
-/** Retain the last live snapshot when its subscription closes after setup. */
 export function useWorktreeSetup(input: {
   environmentId: EnvironmentId | null;
   threadId: ThreadId | null;
-  activities: ReadonlyArray<{ kind: string; payload: unknown }>;
   preparing: boolean;
-  turnStarted: boolean;
+  runs: Parameters<typeof resolveVisibleWorktreeSetup>[0]["runs"];
   followUpSent: boolean;
 }) {
   const key = JSON.stringify([input.environmentId, input.threadId]);
   const [held, setHeld] = useState<{ key: string; snapshot: WorktreeSetupSnapshot } | null>(null);
   const live = held?.key === key ? held.snapshot : null;
-  const recorded = input.threadId
-    ? findRecordedWorktreeSetup(input.activities, input.threadId)
-    : null;
-  const latest = resolveVisibleWorktreeSetup({
-    live,
-    recorded,
-    turnStarted: false,
-    followUpSent: false,
-  });
   const query = useEnvironmentQuery(
     input.environmentId &&
       input.threadId &&
-      (latest?.phase === "running" || (!latest && input.preparing))
+      (live?.phase === "running" || (!live && input.preparing))
       ? vcsEnvironment.worktreeSetup({
           environmentId: input.environmentId,
           input: { threadId: input.threadId },
         })
       : null,
   );
-  useEffect(() => {
-    if (query.data?.threadId === input.threadId) setHeld({ key, snapshot: query.data });
-  }, [key, input.threadId, query.data]);
-  return resolveVisibleWorktreeSetup({
-    live: query.data ?? live,
-    recorded,
-    turnStarted: input.turnStarted,
-    followUpSent: input.followUpSent,
-  });
+  const snapshot = resolveWorktreeSetupSnapshot(input.threadId, query.data, live);
+  // Hold the newest snapshot so it survives the subscription closing once setup stops running.
+  // Set during render so each emission commits once; the resolver returns `live` by identity
+  // on the next pass, which ends the update.
+  if (snapshot && snapshot !== live) setHeld({ key, snapshot });
+  return {
+    snapshot,
+    visible: resolveVisibleWorktreeSetup({
+      live: snapshot,
+      recorded: null,
+      runs: input.runs,
+      followUpSent: input.followUpSent,
+    }),
+  };
 }
