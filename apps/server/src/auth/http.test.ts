@@ -158,15 +158,6 @@ it.live("sets the selected browser session cookies through the HTTP route", () =
           expect(environmentBSession.status).toBe(200);
           expect(await environmentBSession.json()).toMatchObject({ authenticated: true });
 
-          const refusedPairing = await environmentA.handler(
-            postJson(
-              "/api/auth/pairing-token",
-              { scopes: ["orchestration:read"] },
-              { cookie: devCookieHeader },
-            ),
-            requestContext,
-          );
-          expect(refusedPairing.status).toBe(403);
           const restrictedResponse = await environmentA.handler(
             postJson("/api/auth/browser-session", { credential: pairing.credential }),
             requestContext,
@@ -176,6 +167,17 @@ it.live("sets the selected browser session cookies through the HTTP route", () =
           expect(restrictedCookies).toHaveLength(1);
           expect(restrictedCookies[0]).toMatch(/^kairo_session_/);
           expect(restrictedCookies[0]).not.toContain("kairo_dev_session_");
+
+          const restrictedCookieHeader = restrictedCookies[0]?.split(";", 1)[0] ?? "";
+          const refusedPairing = await environmentA.handler(
+            postJson(
+              "/api/auth/pairing-token",
+              { scopes: ["orchestration:read"] },
+              { cookie: restrictedCookieHeader },
+            ),
+            requestContext,
+          );
+          expect(refusedPairing.status).toBe(403);
         }),
       ([environmentA, environmentB]) =>
         Effect.promise(() => Promise.all([environmentA.dispose(), environmentB.dispose()])),
