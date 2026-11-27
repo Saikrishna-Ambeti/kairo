@@ -78,7 +78,7 @@ const turnItems = [
   item(5, { type: "assistant_message", text: "Done in /srv/checkouts/acme-app-7." }),
   item(6, {
     type: "dynamic_tool",
-    toolName: "mcp__t3-code__t3_thread_read",
+    toolName: "mcp__kairo-code__kairo_thread_read",
     status: "failed",
     startedAt: at(0),
     completedAt: at(1_500),
@@ -101,11 +101,15 @@ const turnItems = [
     ),
   ),
   item(6, { type: "dynamic_tool", toolName: "kairo-code.kairo_thread_read", status: "running" }),
-  item(5, { type: "dynamic_tool", toolName: "mcp__t3-code__t3_feedback", status: "running" }),
-  item(6, { type: "dynamic_tool", toolName: "mcp__t3-code__t3_feedback", status: "failed" }),
+  item(5, { type: "dynamic_tool", toolName: "mcp__kairo-code__kairo_feedback", status: "running" }),
+  item(6, { type: "dynamic_tool", toolName: "mcp__kairo-code__kairo_feedback", status: "failed" }),
   // The call making the card in the active run, as Claude names it and as OpenCode 2 does.
-  item(6, { type: "dynamic_tool", toolName: "mcp__t3-code__t3_feedback", status: "running" }),
-  item(6, { type: "dynamic_tool", toolName: "kairo-code-thread_1_t3_feedback", status: "running" }),
+  item(6, { type: "dynamic_tool", toolName: "mcp__kairo-code__kairo_feedback", status: "running" }),
+  item(6, {
+    type: "dynamic_tool",
+    toolName: "kairo-code-thread_1_kairo_feedback",
+    status: "running",
+  }),
 ];
 
 it("says so when the report asks for more turns than a trace can hold", () => {
@@ -424,7 +428,7 @@ it.effect("scrubs the caller's private values and sends only the event contract"
         cards,
         {
           kind: "other",
-          subject: "mcp__t3-code__t3_thread_read",
+          subject: "mcp__kairo-code__kairo_thread_read",
           expected: `Reading /srv/checkouts/acme-app-7 on acme/secret-launch as ${NodeOS.userInfo().username}`,
           actual:
             "git@github.com:acme/payments.git in Acme Payments with sk-proj-abcdefghij1234567890",
@@ -452,14 +456,14 @@ it.effect("scrubs the caller's private values and sends only the event contract"
       expect(closed.conversationTrace).toBeUndefined();
 
       yield* Ref.set(telemetry, true);
-      const sent = yield* feedback.submit({ ...input, subject: "t3 thread show" }, fromThread);
+      const sent = yield* feedback.submit({ ...input, subject: "kairo thread show" }, fromThread);
       expect("sent" in sent && sent.sent).toBe(true);
       expect(yield* Ref.get(events)).toEqual([
         [
           "agent.feedback",
           {
             kind: "bug",
-            subject: "t3 thread show",
+            subject: "kairo thread show",
             userRequested: false,
             trace: null,
             source: "mcp",
@@ -479,11 +483,11 @@ it.effect("scrubs the caller's private values and sends only the event contract"
           source: "cli",
         },
       ]);
-      yield* feedback.submit({ ...input, subject: "mcp__t3_code__t3_thread_read" }, fromThread);
-      // Codex's second server, for T3 tools kept out of Code Mode, in both of its forms.
+      yield* feedback.submit({ ...input, subject: "mcp__t3_code__kairo_thread_read" }, fromThread);
+      // Codex's second server, for Kairo tools kept out of Code Mode, in both of its forms.
       for (const subject of [
         "kairo-code-direct.kairo_thread_read",
-        "mcp__t3-code-direct__t3_thread_read",
+        "mcp__kairo-code-direct__kairo_thread_read",
       ])
         yield* feedback.submit({ ...input, subject }, { source: "cli" });
       expect(
@@ -498,7 +502,7 @@ it.effect("scrubs the caller's private values and sends only the event contract"
         { subject: "kairo_thread_read", userRequested: false, sent: true, threadId: null },
         { subject: "kairo_thread_read", userRequested: false, sent: true, threadId },
         { subject: "general", userRequested: false, sent: true, threadId: null },
-        { subject: "t3 thread show", userRequested: false, sent: true, threadId },
+        { subject: "kairo thread show", userRequested: false, sent: true, threadId },
         { subject: "kairo_thread_read", userRequested: true, sent: false, threadId },
       ]);
     }).pipe(Effect.provide(layer));
@@ -515,10 +519,10 @@ it.effect(
         const limited = Effect.flip(feedback.submit(input, fromThread)).pipe(
           Effect.map((error) => error._tag),
         );
-        for (const subject of ["", "acme payments roadmap", "mcp__other__t3_thread_read"]) {
+        for (const subject of ["", "acme payments roadmap", "mcp__other__kairo_thread_read"]) {
           const error = yield* Effect.flip(feedback.submit({ ...input, subject }, fromThread));
           expect(error.message).toBe(
-            "Set subject to the exact T3 tool name, the t3 command, or `general`.",
+            "Set subject to the exact Kairo tool name, the kairo command, or `general`.",
           );
         }
         const refused = (report: Partial<typeof input>, caller: Feedback.FeedbackCaller) =>

@@ -22,7 +22,7 @@ New to Kairo? Start with the **[User Guide & Index](./user/README.md)** for how 
 
 ### Remote, security & operations
 
-- [Remote access](./user/remote-access.md) · [Kairo Connect troubleshooting](./user/t3-connect-troubleshooting.md) · [Mobile notifications](./user/mobile-notifications.md) · [Guest links](./user/guest-links.md)
+- [Remote access](./user/remote-access.md) · [Kairo Connect troubleshooting](./user/kairo-connect-troubleshooting.md) · [Mobile notifications](./user/mobile-notifications.md) · [Guest links](./user/guest-links.md)
 - [Outside agents (MCP)](./user/outside-agents.md) · [Secrets](./user/secrets.md) ([1Password service account](./user/secrets-1password-service-account.md) · [1Password Connect](./user/secrets-1password-connect.md))
 - [Background service](./user/background-service.md) · [Updating Kairo](./user/updating.md) · [Usage and limits](./user/usage.md) · [Maintenance & diagnostics](./user/diagnostics.md)
 - [CLI reference (`kairo`)](./user/cli.md) · [Product usage data](./user/telemetry.md) · [Managed policy](./user/managed-policy.md) · [Triage an issue](./user/triage.md) · [V1 migration](./user/thread-migration.md) · [Portable handoffs](./user/portable-handoffs.md) · [Question attachments](./user/question-attachments.md) · [Open source licenses](./user/open-source-licenses.md)

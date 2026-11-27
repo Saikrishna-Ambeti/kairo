@@ -15,9 +15,17 @@ const ATTACHMENT_MENU_ACTIONS: MenuAction[] = [
   { id: "photos", title: msg("Photo Library"), image: "photo" },
   { id: "files", title: msg("Choose Files"), image: "folder" },
 ];
-const FILE_CREATION_MENU_ACTIONS: MenuAction[] = ARTIFACT_CREATION_COMMANDS.map(
-  ({ kind, label }) => ({ id: kind, title: `Create ${label.toLowerCase()}` }),
-);
+const FILE_CREATION_MENU_TITLES = {
+  document: msg("Create document"),
+  presentation: msg("Create presentation"),
+  spreadsheet: msg("Create spreadsheet"),
+  csv: msg("Create CSV file"),
+  pdf: msg("Create PDF"),
+} satisfies Record<ArtifactCreationKind, string>;
+const FILE_CREATION_MENU_ACTIONS: MenuAction[] = ARTIFACT_CREATION_COMMANDS.map(({ kind }) => ({
+  id: kind,
+  title: FILE_CREATION_MENU_TITLES[kind],
+}));
 
 export function ComposerAttachmentButton(props: {
   readonly disabled?: boolean;
@@ -60,7 +68,10 @@ export function ComposerAttachmentButton(props: {
       accessible
       accessibilityLabel={gt("Add attachment")}
       accessibilityRole="button"
-      actions={ATTACHMENT_MENU_ACTIONS.map((action) => ({ ...action, title: m(action.title) }))}
+      actions={[
+        ...ATTACHMENT_MENU_ACTIONS.filter((action) => action.id !== "files" || props.supportsFiles),
+        ...(props.onCreateFile ? FILE_CREATION_MENU_ACTIONS : []),
+      ].map((action) => ({ ...action, title: m(action.title) }))}
       onPressAction={({ nativeEvent }) => {
         if (nativeEvent.event === "photos") {
           void props.onPickMedia();

@@ -123,7 +123,7 @@ export class FeedbackStorageError extends Schema.TaggedError<FeedbackStorageErro
 /** The MCP client label `t3 feedback` signs in with, so its reports count as `cli`. */
 export const FEEDBACK_CLI_CLIENT_LABEL = "kairo feedback cli";
 
-/** Listed `t3` command paths a report may name. A CLI test keeps this in step with binCli. */
+/** Listed `kairo` command paths a report may name. A CLI test keeps this in step with binCli. */
 export const KAIRO_CLI_COMMANDS: ReadonlyArray<string> = [
   "kairo",
   "kairo help",
@@ -211,13 +211,14 @@ export type FeedbackInput = typeof FeedbackInput.Type;
 export type FeedbackReport = typeof FeedbackReport.Type;
 
 export const FEEDBACK_SUBJECT_MESSAGE =
-  "Set subject to the exact T3 tool name, the t3 command, or `general`.";
+  "Set subject to the exact Kairo tool name, the kairo command, or `general`.";
 
 // The shared resolver knows the presented tools; the prefix covers the rest, such as these.
-// Codex also registers `kairo-code-direct` for T3 tools it keeps out of Code Mode.
-const KAIRO_PREFIX = /^(?:mcp__t3[-_]?code(?:[-_]direct)?__|t3[-_]?code(?:[-_]direct)?[.:/])/iu;
+// Codex also registers `kairo-code-direct` for Kairo tools it keeps out of Code Mode.
+const KAIRO_PREFIX =
+  /^(?:mcp__(?:kairo|(?:kairo|t3)[-_]?code(?:[-_]direct)?)__|(?:kairo|t3)[-_]?code(?:[-_]direct)?[.:/])/iu;
 
-/** The bare name of a registered T3 tool however a provider prefixed it, else undefined. */
+/** The bare name of a registered Kairo tool however a provider prefixed it, else undefined. */
 export const resolveT3ToolName = (name: string, toolNames: ReadonlyArray<string>) => {
   const tool = resolveT3McpToolId(name) ?? name.replace(KAIRO_PREFIX, "");
   if (toolNames.includes(tool)) return tool;
@@ -228,7 +229,7 @@ export const resolveT3ToolName = (name: string, toolNames: ReadonlyArray<string>
     .toSorted((a, b) => b.length - a.length)[0];
 };
 
-/** The stored subject, or undefined when the value names no T3 tool, `t3` command, or `general`. */
+/** The stored subject, or undefined when the value names no Kairo tool, `kairo` command, or `general`. */
 export const resolveFeedbackSubject = (value: string, toolNames: ReadonlyArray<string>) => {
   const subject = value.trim();
   if (subject === "general" || KAIRO_CLI_COMMANDS.includes(subject)) return subject;

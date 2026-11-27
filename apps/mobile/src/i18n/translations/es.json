@@ -5700,5 +5700,10 @@
   "ad208e3e32c85029": "Ocultar todo",
   "3328503592789bed": "Zen",
   "856812e7e1fc445e": "Llamadas a herramientas en el chat",
-  "8d545d54c0a9e950": "Oculta los comandos, ediciones y búsquedas que ejecutan los agentes. Ocultar las correctas mantiene los fallos. Zen solo muestra las respuestas finales. Las aprobaciones, preguntas y errores siempre se muestran."
+  "8d545d54c0a9e950": "Oculta los comandos, ediciones y búsquedas que ejecutan los agentes. Ocultar las correctas mantiene los fallos. Zen solo muestra las respuestas finales. Las aprobaciones, preguntas y errores siempre se muestran.",
+  "e071d4ac1868e5a3": "Crear documento",
+  "cb670b540e611792": "Crear presentación",
+  "7a921edb4181ff29": "Crear hoja de cálculo",
+  "987bc18d266187b7": "Crear archivo CSV",
+  "b58b0686e00d73a0": "Crear PDF"
 }

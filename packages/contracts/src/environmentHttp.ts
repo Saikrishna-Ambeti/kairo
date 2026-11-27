@@ -516,12 +516,12 @@ export function formatConnectReachable(
 export const KAIRO_CONNECT_TROUBLESHOOTING_SECTIONS = [
   "the-hosts-tunnel-is-offline",
   "port-7844-is-blocked-on-the-host",
-  "the-tunnel-works-but-kairo-code-does-not-answer",
+  "the-tunnel-works-but-kairo-does-not-answer",
   "the-kairo-connect-address-does-not-resolve-or-answer",
   "this-device-cant-reach-kairo-connect",
   "sign-in-account-or-link-problems",
   "the-clock-is-off",
-  "the-host-runs-an-older-kairo-code",
+  "the-host-runs-an-older-kairo",
   "kairo-connect-returned-an-error",
 ] as const;
 export type T3ConnectTroubleshootingSection =
@@ -529,7 +529,7 @@ export type T3ConnectTroubleshootingSection =
 
 /** Clients, the CLI, and server logs link here as "More info". */
 export function kairoConnectTroubleshootingUrl(section: T3ConnectTroubleshootingSection): string {
-  return `https://github.com/pingdotgg/t3code/blob/main/docs/user/t3-connect-troubleshooting.md#${section}`;
+  return `https://github.com/Saikrishna-Ambeti/kairo/blob/main/docs/user/kairo-connect-troubleshooting.md#${section}`;
 }
 
 const REACHABILITY_SECTION = {
@@ -538,8 +538,8 @@ const REACHABILITY_SECTION = {
   connector_not_ready: "the-hosts-tunnel-is-offline",
   no_connector: "the-hosts-tunnel-is-offline",
   edge_unreachable: "port-7844-is-blocked-on-the-host",
-  origin_unreachable: "the-tunnel-works-but-kairo-code-does-not-answer",
-  unexpected_response: "the-tunnel-works-but-kairo-code-does-not-answer",
+  origin_unreachable: "the-tunnel-works-but-kairo-does-not-answer",
+  unexpected_response: "the-tunnel-works-but-kairo-does-not-answer",
   dns_failed: "the-kairo-connect-address-does-not-resolve-or-answer",
   timeout: "the-kairo-connect-address-does-not-resolve-or-answer",
 } satisfies Record<EnvironmentConnectReachabilityCause, T3ConnectTroubleshootingSection>;

@@ -114,7 +114,7 @@ it.effect("follows a pull request across a refused app token, reconnects, and re
       "https://api.github.com/event-subscriptions/2/events Bearer app-token",
     ]);
     assert.deepEqual(posts[0], {
-      resource_url: "https://github.com/pingdotgg/t3code/pull/15",
+      resource_url: "https://github.com/pingdotgg/kairo/pull/15",
       event_types: [
         "com.github.pull_request.review.submitted.v1",
         "com.github.pull_request.head.changed.v1",

@@ -310,7 +310,7 @@ function helpSection(
     case "offline":
       return "this-device-cant-reach-kairo-connect";
     case "outdated":
-      return "the-host-runs-an-older-kairo-code";
+      return "the-host-runs-an-older-kairo";
     case "clock_skew":
       return "the-clock-is-off";
     case "session_pending":
@@ -326,7 +326,7 @@ function helpSection(
       return "the-hosts-tunnel-is-offline";
     case "origin_unreachable":
     case "invalid_response":
-      return "the-tunnel-works-but-kairo-code-does-not-answer";
+      return "the-tunnel-works-but-kairo-does-not-answer";
     case "dns":
     case "tls":
     case "refused":
@@ -352,7 +352,7 @@ function helpSection(
     case "server":
       return failure?.reason === "authentication" || failure?.reason === "permission"
         ? "sign-in-account-or-link-problems"
-        : "the-tunnel-works-but-kairo-code-does-not-answer";
+        : "the-tunnel-works-but-kairo-does-not-answer";
   }
 }
 

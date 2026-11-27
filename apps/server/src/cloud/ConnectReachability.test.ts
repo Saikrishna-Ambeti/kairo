@@ -2,7 +2,10 @@
 import * as NodeFS from "node:fs";
 import * as NodeNet from "node:net";
 
-import { KAIRO_CONNECT_TROUBLESHOOTING_SECTIONS } from "@kairo/contracts";
+import {
+  KAIRO_CONNECT_TROUBLESHOOTING_SECTIONS,
+  kairoConnectTroubleshootingUrl,
+} from "@kairo/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
@@ -465,7 +468,11 @@ describe("Kairo Connect troubleshooting links", () => {
       ),
     );
     for (const section of KAIRO_CONNECT_TROUBLESHOOTING_SECTIONS) {
-      expect(anchors, section).toContain(section);
+      const help = new URL(kairoConnectTroubleshootingUrl(section));
+      expect(help.origin + help.pathname).toBe(
+        "https://github.com/Saikrishna-Ambeti/kairo/blob/main/docs/user/kairo-connect-troubleshooting.md",
+      );
+      expect(anchors, section).toContain(help.hash.slice(1));
     }
   });
 });

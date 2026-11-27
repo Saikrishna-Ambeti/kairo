@@ -1,3 +1,4 @@
+import { prependArtifactCreationPrompt } from "@kairo/client-runtime/artifact-creation";
 import { Button } from "../../components/ui/Button";
 import * as Dialog from "../../components/ui/Dialog";
 import type { ComposerTextPaste } from "../../native/KairoComposerEditor.types";
@@ -844,6 +845,15 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
                 supportsFiles={props.serverConfig !== null}
                 onPickMedia={props.onPickDraftMedia}
                 onPickFiles={props.onPickDraftFiles}
+                onCreateFile={(kind) => {
+                  if (isSubmissionLocked) return;
+                  props.onChangeDraftMessage(
+                    prependArtifactCreationPrompt(
+                      kind,
+                      getComposerDraftSnapshot(composerDraftKey).text,
+                    ),
+                  );
+                }}
               />
               <Animated.View
                 className="min-w-0 flex-1"

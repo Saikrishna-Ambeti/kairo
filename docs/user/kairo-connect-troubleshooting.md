@@ -52,7 +52,7 @@ The issue is on the client device's network:
 - **Kairo Connect disabled on host**: Turn on **Settings → Sharing & access → Kairo Connect** or run `kairo connect`.
 - **Link not yet applied**: Restart Kairo on the host (`kairo service restart` or restart desktop app).
 - **Expired session**: Sign out of Kairo Connect and sign back in.
-- **Waiting for device approval**: Approve the displayed code from an existing device or run `t3 auth connect-device approve <code>` on the host ([Approve new devices](./remote-access.md#approve-new-devices)).
+- **Waiting for device approval**: Approve the displayed code from an existing device or run `kairo auth connect-device approve <code>` on the host ([Approve new devices](./remote-access.md#approve-new-devices)).
 - **Machine limit reached**: Deregister an unused host or [link a paid T3 Chat account](./remote-access.md#more-machines-with-kairo-chat), then restart the host.
 
 ## The clock is off
@@ -77,7 +77,7 @@ After fixing a permanent error, restart the host (`kairo service restart` or res
 
 ## Report a problem
 
-Open an issue on [GitHub](https://github.com/pingdotgg/t3code/issues) with:
+Open an issue on [GitHub](https://github.com/Saikrishna-Ambeti/kairo/issues) with:
 
 - **Copy diagnostics** from the environment's **Details**
 - Output of `kairo connect status` on the host
