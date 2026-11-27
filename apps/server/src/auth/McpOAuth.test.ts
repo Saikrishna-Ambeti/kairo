@@ -1,8 +1,9 @@
+import { DEFAULT_HOSTED_APP_URL } from "@kairo/shared/connectAuth";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   AuthMcpClientAccess,
-  AuthStandardClientScopes,
+  AuthAdministrativeScopes,
   type AuthCreatePairingCredentialInput,
   type EnvironmentCloudLinkStateResult,
   EnvironmentHttpApi,
@@ -818,7 +819,7 @@ it.effect(
 
       const onTunnel = yield* handoff("box.example.ts.net");
       const hosted = new URL(onTunnel.location);
-      expect(`${hosted.origin}${hosted.pathname}`).toBe("https://app.kairo.codes/approve-agent");
+      expect(`${hosted.origin}${hosted.pathname}`).toBe(`${DEFAULT_HOSTED_APP_URL}/approve-agent`);
       expect(hosted.searchParams.get("environment")).toEqual(expect.any(String));
       hosted.searchParams.delete("environment");
       expect(hosted.searchParams.toString()).toBe(onTunnel.query);
@@ -852,7 +853,7 @@ it.live("one-click approves only access the browser session holds the scopes for
           Effect.flatMap(json<{ csrfToken?: string; oneClickAccess?: ReadonlyArray<string> }>),
         );
 
-      const admin = yield* browserCookie([...AuthStandardClientScopes]);
+      const admin = yield* browserCookie([...AuthAdministrativeScopes]);
       const adminDetails = yield* details(admin);
       expect(adminDetails.csrfToken).toEqual(expect.any(String));
       expect(adminDetails.oneClickAccess).toEqual([
@@ -901,7 +902,7 @@ it.live("one-click approves only access the browser session holds the scopes for
       expect(new URL(readOnly.redirectTo!).searchParams.get("code")).toEqual(expect.any(String));
 
       // The hosted app approves with the owner's Kairo Connect session, which sends no cookie.
-      const connect = `Bearer ${(yield* auth.issueSession({ scopes: [...AuthStandardClientScopes] })).token}`;
+      const connect = `Bearer ${(yield* auth.issueSession({ scopes: [...AuthAdministrativeScopes] })).token}`;
       const connectDetails = yield* details(connect);
       expect(connectDetails.oneClickAccess).toContain("full-access");
       const viaConnect = yield* decide(
@@ -915,7 +916,7 @@ it.live("one-click approves only access the browser session holds the scopes for
       // The hosted app may load and decide with two credentials minted for the same browser key.
       const key = makeDpopKey();
       const dpopSession = (thumbprint: string) =>
-        auth.issuePairingCredential({ scopes: [...AuthStandardClientScopes] }).pipe(
+        auth.issuePairingCredential({ scopes: [...AuthAdministrativeScopes] }).pipe(
           Effect.flatMap((pairing) =>
             auth.exchangeBootstrapCredentialForAccessToken(
               pairing.credential,

@@ -15,6 +15,8 @@ private val REVIEW_DIFF_EVENTS = arrayOf(
 )
 
 class KairoReviewDiffModule : Module() {
+  // Expo registers the view props, events, and functions in one definition.
+  @Suppress("LongMethod")
   override fun definition() = ModuleDefinition {
     Name("KairoReviewDiffSurface")
 

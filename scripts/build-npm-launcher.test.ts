@@ -13,11 +13,15 @@ import * as NodeCrypto from "node:crypto";
 import * as NodeEvents from "node:events";
 import * as NodeHttp from "node:http";
 
-import { npmReleaseDatabaseMigration } from "@kairo/shared/cliRelease";
+import { cliArchivePlatformKey, npmReleaseDatabaseMigration } from "@kairo/shared/cliRelease";
 
 import { buildNpmLauncher } from "./build-npm-launcher.ts";
 
 const VERSION = "1.2.3";
+const platform = HostProcess.Platform.defaultValue();
+const archiveKey = cliArchivePlatformKey(platform, HostProcess.Architecture.defaultValue());
+// These fixtures use a POSIX shell and require a published runtime for the current host.
+const cannotRunLauncherFixtures = platform === "win32" || archiveKey === undefined;
 const decodeManifest = Schema.decodeEffect(
   Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)),
 );
@@ -59,7 +63,7 @@ exit 7
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const key = `${yield* HostProcess.Platform}-${yield* HostProcess.Architecture}`;
-  const stem = `t3-${VERSION}-${key}`;
+  const stem = `kairo-${VERSION}-${key}`;
   const archiveName = `${stem}.tar.gz`;
   yield* fs.makeDirectory(path.join(root, "release", stem, "node_modules/native"), {
     recursive: true,
@@ -112,7 +116,7 @@ exit 7
 });
 
 it.layer(NodeServices.layer)("build-npm-launcher", (it) => {
-  it.effect.skipIf(HostProcess.Platform.defaultValue() === "win32")(
+  it.effect.skipIf(cannotRunLauncherFixtures)(
     "publishes a launcher that downloads, verifies, caches, and runs the release executable",
     () =>
       Effect.gen(function* () {
@@ -133,7 +137,7 @@ it.layer(NodeServices.layer)("build-npm-launcher", (it) => {
         );
         assert.equal(manifest.name, "kairo");
         assert.equal(manifest.version, VERSION);
-        assert.deepStrictEqual(manifest.bin, { t3: "./bin/t3.mjs" });
+        assert.deepStrictEqual(manifest.bin, { kairo: "./bin/t3.mjs" });
         assert.isUndefined(manifest.dependencies);
         assert.isUndefined(manifest.optionalDependencies);
         assert.isAbove(npmReleaseDatabaseMigration(manifest) ?? 0, 0);
@@ -242,7 +246,10 @@ it.layer(NodeServices.layer)("build-npm-launcher", (it) => {
         yield* fs.makeDirectory(staleDir, { recursive: true });
         yield* fs.writeFileString(path.join(staleDir, "kairo"), "");
         yield* fs.makeDirectory(peerDir);
-        yield* fs.writeFileString(path.join(peerDir, "kairo"), '#!/bin/sh\necho "peer $*"\nexit 7\n');
+        yield* fs.writeFileString(
+          path.join(peerDir, "kairo"),
+          '#!/bin/sh\necho "peer $*"\nexit 7\n',
+        );
         yield* fs.chmod(path.join(peerDir, "kairo"), 0o755);
         yield* fs.writeFileString(path.join(peerDir, ".install-complete"), `${VERSION}\n`);
         yield* fs.writeFileString(path.join(peerDir, "sidecar"), "peer sidecar");
@@ -258,7 +265,7 @@ const { readFileSync, renameSync, rmSync } = fs;
 let checking = false;
 let published = false;
 const checkPeer = () => {
-  const child = spawnSync(dir + "/t3", ["--version"], { encoding: "utf8" });
+  const child = spawnSync(dir + "/kairo", ["--version"], { encoding: "utf8" });
   let sidecar;
   try {
     sidecar = readFileSync(dir + "/sidecar", "utf8");
@@ -355,69 +362,67 @@ fs.readFileSync = (file, ...rest) => {
         );
       }),
   );
-  it.effect.skipIf(HostProcess.Platform.defaultValue() === "win32")(
-    "does not publish an unusable release",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        for (const executable of [
-          "#!/kairo-test-missing-loader\n",
-          '#!/bin/sh\necho "runtime loader failed" >&2\nexit 42\n',
-          "#!/bin/sh\nkill -TERM $$\n",
-          '#!/bin/sh\ntrap \'echo caught > "$KAIRO_TEST_TERM"; exit 42\' TERM\necho ready > "$KAIRO_TEST_READY"\nwhile :; do :; done\n',
-        ]) {
-          const root = yield* fs.makeTempDirectoryScoped({ prefix: "kairo-npm-validation-test-" });
-          const output = yield* buildNpmLauncher({
-            version: VERSION,
-            outputDir: path.join(root, "out"),
-          });
-          const release = yield* serveFakeRelease(root, executable);
-          const home = path.join(root, "home");
-          const dir = path.join(home, "runtime/versions", VERSION);
-          const probeTimeoutHook = path.join(root, "probe-timeout.mjs");
-          yield* fs.writeFileString(
-            probeTimeoutHook,
-            `import childProcess from "node:child_process";
+  it.effect.skipIf(cannotRunLauncherFixtures)("does not publish an unusable release", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      for (const executable of [
+        "#!/kairo-test-missing-loader\n",
+        '#!/bin/sh\necho "runtime loader failed" >&2\nexit 42\n',
+        "#!/bin/sh\nkill -TERM $$\n",
+        '#!/bin/sh\ntrap \'echo caught > "$KAIRO_TEST_TERM"; exit 42\' TERM\necho ready > "$KAIRO_TEST_READY"\nwhile :; do :; done\n',
+      ]) {
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "kairo-npm-validation-test-" });
+        const output = yield* buildNpmLauncher({
+          version: VERSION,
+          outputDir: path.join(root, "out"),
+        });
+        const release = yield* serveFakeRelease(root, executable);
+        const home = path.join(root, "home");
+        const dir = path.join(home, "runtime/versions", VERSION);
+        const probeTimeoutHook = path.join(root, "probe-timeout.mjs");
+        yield* fs.writeFileString(
+          probeTimeoutHook,
+          `import childProcess from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
 const { spawnSync } = childProcess;
 childProcess.spawnSync = (command, args, options) => spawnSync(command, args,
   options?.timeout === undefined ? options : { ...options, timeout: 500 });
 syncBuiltinESMExports();
 `,
-          );
-          const env = {
-            PATH: (yield* HostProcess.Environment).PATH,
-            KAIRO_HOME: home,
-            KAIRO_RELEASE_BASE_URL: release.baseUrl,
-            KAIRO_TEST_READY: path.join(root, "probe-ready"),
-            KAIRO_TEST_TERM: path.join(root, "probe-term"),
-          };
-          const launcher = path.join(output.packageDir, "bin/t3.mjs");
-          const failed = yield* run(
-            process.execPath,
-            ["--import", probeTimeoutHook, launcher, "serve"],
-            { cwd: root, env },
-          );
-          assert.equal(failed.exitCode, 1, failed.stderr);
-          assert.deepStrictEqual(yield* fs.readDirectory(path.dirname(dir)), [], failed.stderr);
-          assert.include(failed.stderr, "could not run");
-          if (executable.includes("runtime loader failed")) {
-            assert.include(failed.stderr, "runtime loader failed");
-          }
-          if (executable.includes("trap")) {
-            assert.isTrue(yield* fs.exists(env.KAIRO_TEST_READY));
-            assert.isFalse(yield* fs.exists(env.KAIRO_TEST_TERM));
-          }
-          if ((yield* HostProcess.Platform) === "linux") {
-            assert.include(failed.stderr, "glibc");
-            assert.include(failed.stderr, "musl");
-          }
+        );
+        const env = {
+          PATH: (yield* HostProcess.Environment).PATH,
+          KAIRO_HOME: home,
+          KAIRO_RELEASE_BASE_URL: release.baseUrl,
+          KAIRO_TEST_READY: path.join(root, "probe-ready"),
+          KAIRO_TEST_TERM: path.join(root, "probe-term"),
+        };
+        const launcher = path.join(output.packageDir, "bin/t3.mjs");
+        const failed = yield* run(
+          process.execPath,
+          ["--import", probeTimeoutHook, launcher, "serve"],
+          { cwd: root, env },
+        );
+        assert.equal(failed.exitCode, 1, failed.stderr);
+        assert.deepStrictEqual(yield* fs.readDirectory(path.dirname(dir)), [], failed.stderr);
+        assert.include(failed.stderr, "could not run");
+        if (executable.includes("runtime loader failed")) {
+          assert.include(failed.stderr, "runtime loader failed");
         }
-      }),
+        if (executable.includes("trap")) {
+          assert.isTrue(yield* fs.exists(env.KAIRO_TEST_READY));
+          assert.isFalse(yield* fs.exists(env.KAIRO_TEST_TERM));
+        }
+        if ((yield* HostProcess.Platform) === "linux") {
+          assert.include(failed.stderr, "glibc");
+          assert.include(failed.stderr, "musl");
+        }
+      }
+    }),
   );
 
-  it.effect.skipIf(HostProcess.Platform.defaultValue() === "win32")(
+  it.effect.skipIf(cannotRunLauncherFixtures)(
     "kills a runtime that ignores the forwarded SIGTERM, and its providers, so the launcher exits",
     () =>
       Effect.gen(function* () {

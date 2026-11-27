@@ -170,13 +170,13 @@ if (-not $version) {
   $version = $tag.Substring(1)
 }
 if ($version -match '-preview\.') {
-  Write-Warning "t3 $version is a preview build. Preview builds are cut by maintainers from unreleased branches to exercise the release pipeline. They can be broken, receive no fixes, and are never offered as updates. Set KAIRO_CHANNEL=stable (the default) for a supported build."
+  Write-Warning "kairo $version is a preview build. Preview builds are cut by maintainers from unreleased branches to exercise the release pipeline. They can be broken, receive no fixes, and are never offered as updates. Set KAIRO_CHANNEL=stable (the default) for a supported build."
   if ($channel -ne "preview" -and -not $env:KAIRO_VERSION) {
     Fail "refusing a preview build that was not explicitly requested"
   }
 }
 
-$stem = "t3-$version-win32-$arch"
+$stem = "kairo-$version-win32-$arch"
 $archive = "$stem.zip"
 $versionsDir = Join-Path $kairoHome "runtime\versions"
 $targetDir = Join-Path $versionsDir $version
@@ -197,7 +197,7 @@ if ((Test-Path $marker) -and ((Get-Content $marker -Raw).Trim() -eq $version)) {
     } catch {
       $status = $_.Exception.Response.StatusCode.value__
       if ($status -eq 404) {
-        Fail "t3 $version has no release archive for win32-$arch; releases before the self-contained CLI can only be installed with 'npm install -g kairo@$version'"
+        Fail "kairo $version has no release archive for win32-$arch; releases before the self-contained CLI can only be installed with 'npm install -g kairo@$version'"
       }
       throw
     }
@@ -233,10 +233,10 @@ if ((Test-Path $marker) -and ((Get-Content $marker -Raw).Trim() -eq $version)) {
   }
 }
 
-Step "Setting up the t3 command..."
+Step "Setting up the kairo command..."
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
 $shim = Join-Path $binDir "kairo.cmd"
-# Replace only a shim that runs a version in this home; never the desktop app's or another t3.
+# Replace only a shim that runs a version in this home; never the desktop app's or another kairo.
 if (Test-Path -LiteralPath $shim) {
   $existingTarget = ""
   # The shim is UTF-8 without a BOM; Windows PowerShell 5.1 reads files as ANSI by default.
@@ -248,9 +248,9 @@ if (Test-Path -LiteralPath $shim) {
   if ($existingTarget) { $existingTarget = [System.IO.Path]::GetFullPath($existingTarget) }
   # Exactly <version>\kairo.exe, never another program inside a version.
   $owned = $existingTarget.StartsWith($ownedPrefix, [System.StringComparison]::OrdinalIgnoreCase) -and
-    ($existingTarget.Substring($ownedPrefix.Length) -match '^[^\\/]+\\t3\.exe$')
+    ($existingTarget.Substring($ownedPrefix.Length) -match '^[^\\/]+\\kairo\.exe$')
   if (-not $owned) {
-    Fail "another t3 is already at $shim. Remove it and run this again, or run $(Join-Path $targetDir 'kairo.exe') directly."
+    Fail "another kairo is already at $shim. Remove it and run this again, or run $(Join-Path $targetDir 'kairo.exe') directly."
   }
 }
 # UTF-8 without a BOM: cmd.exe reads the shim as-is, and ASCII would corrupt
@@ -270,16 +270,16 @@ if ($binDir.Contains(";")) {
 } else {
   # Either side may end in a separator. Trim only here: a drive root keeps its `\` for Join-Path.
   $added = ($env:PATH -split ";" | ForEach-Object { $_.TrimEnd('\', '/') }) -notcontains $binDir.TrimEnd('\', '/')
-  # `irm | iex` runs in the user's own session, so t3 works in this window right away.
-  # Last, so it never shadows another t3.
+  # `irm | iex` runs in the user's own session, so kairo works in this window right away.
+  # Last, so it never shadows another kairo.
   if ($added) { $env:Path = "$env:Path;$binDir" }
-  # A t3 earlier on PATH runs instead, so name this one in full.
-  $first = Get-Command t3 -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+  # A kairo earlier on PATH runs instead, so name this one in full.
+  $first = Get-Command kairo -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
   if ($first -and [System.IO.Path]::GetFullPath($first.Source) -ne [System.IO.Path]::GetFullPath($shimPath)) {
-    Write-Host "  Another t3 at $($first.Source) runs first, so run ${bold}& '$($shim.Replace("'", "''"))'$reset to use this one.`n"
+    Write-Host "  Another kairo at $($first.Source) runs first, so run ${bold}& '$($shim.Replace("'", "''"))'$reset to use this one.`n"
   } elseif ($added) {
-    Write-Host "  Run ${bold}t3$reset to get started. For new windows, add $binDir to your PATH.`n"
+    Write-Host "  Run ${bold}kairo$reset to get started. For new windows, add $binDir to your PATH.`n"
   } else {
-    Write-Host "  Run ${bold}t3$reset to use Kairo here, or ${bold}t3 up$reset to use it from your other devices.`n"
+    Write-Host "  Run ${bold}kairo$reset to use Kairo here, or ${bold}kairo up$reset to use it from your other devices.`n"
   }
 }

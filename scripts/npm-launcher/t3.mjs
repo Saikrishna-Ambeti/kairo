@@ -76,9 +76,10 @@ async function download(url, file) {
 }
 
 async function install(dir, key) {
-  const archive = `t3-${version}-${key}.${process.platform === "win32" ? "zip" : "tar.gz"}`;
+  const archive = `kairo-${version}-${key}.${process.platform === "win32" ? "zip" : "tar.gz"}`;
   const base = (
-    process.env.KAIRO_RELEASE_BASE_URL || "https://github.com/pingdotgg/t3code/releases/download"
+    process.env.KAIRO_RELEASE_BASE_URL ||
+    "https://github.com/Saikrishna-Ambeti/kairo/releases/download"
   ).replace(/\/+$/, "");
   const sums = await (await get(`${base}/v${version}/SHA256SUMS`)).text();
   const expected = /^([0-9a-f]{64})\s+\*?(.+)$/im;
@@ -152,7 +153,7 @@ function publish(staging, dir) {
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
     throw new Error(
-      `another t3 is installing ${version}. If none is running, delete ${lock} and try again.`,
+      `another kairo is installing ${version}. If none is running, delete ${lock} and try again.`,
       { cause: error },
     );
   }
@@ -179,7 +180,7 @@ async function main() {
   if (!SUPPORTED.includes(key)) {
     throw new Error(
       `no Kairo CLI build is available for ${key} (supported: ${SUPPORTED.join(", ")}).\n` +
-        "The desktop app is at https://github.com/pingdotgg/t3code/releases",
+        "The desktop app is at https://github.com/Saikrishna-Ambeti/kairo/releases",
     );
   }
   const dir = path.join(kairoHome(), "runtime", "versions", version);
@@ -248,7 +249,7 @@ function executableError(key, detail) {
 }
 
 function fail(error) {
-  process.stderr.write(`t3: ${error.message}\n`);
+  process.stderr.write(`kairo: ${error.message}\n`);
   process.exit(1);
 }
 

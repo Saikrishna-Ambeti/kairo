@@ -244,6 +244,7 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
                         displayMode="panel"
                         scripts={props.activeProjectScripts}
                         fileScripts={kairoFile.scripts}
+                        onActionsMenuOpen={kairoFile.refresh}
                         preferredScriptId={props.preferredScriptId}
                         onRunScript={props.onRunProjectScript}
                         onAddScript={props.onAddProjectScript}

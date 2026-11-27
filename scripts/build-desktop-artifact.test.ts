@@ -1518,7 +1518,9 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     Effect.scoped(
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        const stageDistDir = yield* fs.makeTempDirectoryScoped({ prefix: "kairo-mac-payload-test-" });
+        const stageDistDir = yield* fs.makeTempDirectoryScoped({
+          prefix: "kairo-mac-payload-test-",
+        });
         const error = yield* validateMacPackagedPayload({ stageDistDir }).pipe(Effect.flip);
 
         assert.instanceOf(error, MacPackagedAppMissingError);
@@ -1530,7 +1532,9 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     Effect.scoped(
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        const stageDistDir = yield* fs.makeTempDirectoryScoped({ prefix: "kairo-mac-payload-test-" });
+        const stageDistDir = yield* fs.makeTempDirectoryScoped({
+          prefix: "kairo-mac-payload-test-",
+        });
         yield* fs.makeDirectory(`${stageDistDir}/mac-arm64/Kairo.app/Contents/Resources`, {
           recursive: true,
         });
@@ -1555,7 +1559,9 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         assert.instanceOf(error, BundleNotSelfContainedError);
         assert.include(error.output, "kairo-deliberately-missing-package");
 
-        const emptyStage = yield* fs.makeTempDirectoryScoped({ prefix: "kairo-linux-payload-test-" });
+        const emptyStage = yield* fs.makeTempDirectoryScoped({
+          prefix: "kairo-linux-payload-test-",
+        });
         const missing = yield* validateLinuxPackagedPayload({ stageDistDir: emptyStage }).pipe(
           Effect.flip,
         );
@@ -1692,7 +1698,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     );
     assert.match(
       entitlements,
-      /<key>keychain-access-groups<\/key>\s*<array>\s*<string>ABC1234567\.com\.t3tools\.kairo\.webauthn<\/string>\s*<\/array>/u,
+      /<key>keychain-access-groups<\/key>\s*<array>\s*<string>ABC1234567\.com\.kairo\.app\.webauthn<\/string>\s*<\/array>/u,
     );
     assert.match(
       entitlements,
@@ -2014,8 +2020,10 @@ it.effect.skipIf(!symlinksSupported)("preserves relative links when replacing di
 it("uses the DMG fallback only on older macOS hosts without an explicit override", () => {
   assert.isTrue(shouldUseHdiutilDmgbuildShim("mac", "darwin", "21.6.0", {}));
   assert.isFalse(shouldUseHdiutilDmgbuildShim("mac", "darwin", "22.0.0", {}));
-  assert.isFalse(shouldUseHdiutilDmgbuildShim("mac", "darwin", "21.6.0", {
-    CUSTOM_DMGBUILD_PATH: "/path/to/custom-dmgbuild",
-  }));
+  assert.isFalse(
+    shouldUseHdiutilDmgbuildShim("mac", "darwin", "21.6.0", {
+      CUSTOM_DMGBUILD_PATH: "/path/to/custom-dmgbuild",
+    }),
+  );
   assert.isFalse(shouldUseHdiutilDmgbuildShim("linux", "darwin", "21.6.0", {}));
 });

@@ -9,7 +9,6 @@ import type { EnvironmentShellStatus } from "@kairo/client-runtime/state/shell";
 import type { ThreadFamilyRead } from "@kairo/client-runtime/state/threads";
 import {
   CommandId,
-  DEFAULT_PROVIDER_INTERACTION_MODE,
   EnvironmentId,
   IsoDateTime,
   MessageId,
@@ -28,6 +27,7 @@ import {
 } from "@kairo/contracts";
 import * as Schema from "effect/Schema";
 
+import { resolveProviderInteractionMode } from "./interaction-mode";
 import { DraftComposerAttachmentSchema } from "../lib/composer-image-schema";
 import { withImplicitFastModeSelection } from "../lib/providerOptions";
 import type { ComposerDispatchMode } from "@kairo/client-runtime/state/composer-dispatch";
@@ -115,16 +115,6 @@ export interface ThreadSettingsSnapshot {
   readonly modelSelection: ModelSelectionType;
   readonly runtimeMode: RuntimeModeType;
   readonly interactionMode: ProviderInteractionModeType;
-}
-
-// Providers without a Build/Plan toggle always run in build mode.
-function resolveProviderInteractionMode(
-  provider: Pick<ServerProvider, "showInteractionModeToggle"> | undefined,
-  interactionMode: ProviderInteractionModeType,
-): ProviderInteractionModeType {
-  return provider?.showInteractionModeToggle === false
-    ? DEFAULT_PROVIDER_INTERACTION_MODE
-    : interactionMode;
 }
 
 export function resolveQueuedThreadSettings(

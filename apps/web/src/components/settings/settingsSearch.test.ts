@@ -217,9 +217,9 @@ describe("searchSettings", () => {
     expect(ids(true)).toContain("welcome-page");
   });
 
-  it("keeps hidden panel anchors out of sidebar search", () => {
-    expect(searchSettings("source control").some((item) => item.id === "source-control")).toBe(
-      false,
+  it("finds the source control settings page", () => {
+    expect(searchSettings("source control")).toContainEqual(
+      expect.objectContaining({ id: "source-control", to: "/settings/source-control" }),
     );
   });
 

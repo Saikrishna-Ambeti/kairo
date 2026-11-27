@@ -482,8 +482,8 @@ if [ -z "$KAIRO_ARCHIVE_VERSION" ]; then
   printf 'No kairo release version was provided for the remote runtime.\\n' >&2
   exit 1
 fi
-KAIRO_SYSTEM_EXECUTABLE="$(command -v t3 2>/dev/null || true)"
-if [ -n "$KAIRO_SYSTEM_EXECUTABLE" ] && KAIRO_SYSTEM_VERSION="$("$KAIRO_SYSTEM_EXECUTABLE" --version 2>/dev/null)" && [ "$KAIRO_SYSTEM_VERSION" = "t3 v$KAIRO_ARCHIVE_VERSION" ]; then
+KAIRO_SYSTEM_EXECUTABLE="$(command -v kairo 2>/dev/null || true)"
+if [ -n "$KAIRO_SYSTEM_EXECUTABLE" ] && KAIRO_SYSTEM_VERSION="$("$KAIRO_SYSTEM_EXECUTABLE" --version 2>/dev/null)" && [ "$KAIRO_SYSTEM_VERSION" = "kairo v$KAIRO_ARCHIVE_VERSION" ]; then
   # A matching host-provided runtime supports platforms such as musl Linux,
   # where the portable release archive cannot run.
   exec "$KAIRO_SYSTEM_EXECUTABLE" "$@"
@@ -546,7 +546,7 @@ if ! kairo_runtime_ready; then
     elif command -v wget >/dev/null 2>&1; then wget -q --timeout=30 --tries=1 "$1" -O "$2"
     else printf 'Remote host needs curl or wget to download %s.\\n' "$KAIRO_ARCHIVE" >&2; exit 1
     fi || {
-      printf 'Could not download t3 %s from %s. If this host cannot reach it, install t3 %s on it with https://kairo.codes/install.sh (KAIRO_VERSION=%s; KAIRO_RELEASE_BASE_URL selects a mirror).\\n' "$KAIRO_ARCHIVE_VERSION" "$1" "$KAIRO_ARCHIVE_VERSION" "$KAIRO_ARCHIVE_VERSION" >&2
+      printf 'Could not download Kairo %s from %s. If this host cannot reach it, install Kairo %s on it with https://kairo.codes/install.sh (KAIRO_VERSION=%s; KAIRO_RELEASE_BASE_URL selects a mirror).\\n' "$KAIRO_ARCHIVE_VERSION" "$1" "$KAIRO_ARCHIVE_VERSION" "$KAIRO_ARCHIVE_VERSION" >&2
       exit 1
     }
   }
@@ -572,7 +572,7 @@ if ! kairo_runtime_ready; then
   # Prove the binary runs here (libc, arch) before marking it ready, or every
   # later launch would exec a broken install instead of retrying.
   if ! "$KAIRO_STAGING/kairo" --version >/dev/null 2>&1; then
-    printf 'The t3 %s executable does not run on this host.\\n' "$KAIRO_ARCHIVE_VERSION" >&2; exit 1
+    printf 'The Kairo %s executable does not run on this host.\\n' "$KAIRO_ARCHIVE_VERSION" >&2; exit 1
   fi
   printf '%s\\n' "$KAIRO_ARCHIVE_VERSION" > "$KAIRO_STAGING/.install-complete"
   rm -rf "$KAIRO_RUNTIME_DIR"
@@ -1131,7 +1131,7 @@ export class SshInvalidArchiveVersionError extends Schema.TaggedError<SshInvalid
   { archiveVersion: Schema.String },
 ) {
   override get message(): string {
-    return `'${this.archiveVersion}' is not an exact t3 version and cannot name a runtime directory.`;
+    return `'${this.archiveVersion}' is not an exact Kairo version and cannot name a runtime directory.`;
   }
 }
 

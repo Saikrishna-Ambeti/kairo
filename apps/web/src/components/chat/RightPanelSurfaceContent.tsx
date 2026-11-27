@@ -32,6 +32,11 @@ import { ThreadPullRequestsPanel } from "../pullRequest/ThreadPullRequestsPanel"
 const PreviewPanel = lazy(() =>
   import("../preview/PreviewPanel").then((module) => ({ default: module.PreviewPanel })),
 );
+const ThreadArtifactsPanel = lazy(() =>
+  import("../artifacts/ThreadArtifactsPanel").then((module) => ({
+    default: module.ThreadArtifactsPanel,
+  })),
+);
 const DiffPanel = lazy(() => import("../DiffPanel"));
 const DevicePanel = lazy(() =>
   import("../device/DevicePanel").then((module) => ({ default: module.DevicePanel })),
@@ -229,6 +234,17 @@ export function RightPanelSurfaceContent(props: {
             });
           }}
         />
+      );
+    case "artifacts":
+      return (
+        <Suspense fallback={null}>
+          <ThreadArtifactsPanel
+            key={scopedThreadKey(threadRef)}
+            environmentId={threadRef.environmentId}
+            threadId={threadRef.threadId}
+            refreshToken={props.workspaceMutationId ?? ""}
+          />
+        </Suspense>
       );
     case "pull-requests":
       return <ThreadPullRequestsPanel threadRef={threadRef} />;

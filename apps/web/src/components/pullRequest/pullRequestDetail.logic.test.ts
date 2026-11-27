@@ -1698,9 +1698,9 @@ describe("pull request panel context beside a thread", () => {
   describe("the Pull request entry's target", () => {
     const legacy = (number: number) => ({
       projectId: ProjectId.make("proj-a"),
-      repository: "pingdotgg/kairo",
+      repository: "Saikrishna-Ambeti/kairo",
       number,
-      url: `https://github.com/pingdotgg/t3code/pull/${number}`,
+      url: `https://github.com/Saikrishna-Ambeti/kairo/pull/${number}`,
     });
 
     it("opens a linked pull request the legacy field never named, ahead of the branch PR", () => {
@@ -1719,7 +1719,9 @@ describe("pull request panel context beside a thread", () => {
       const onHost = (host: string) =>
         threadPullRequestPanelTarget({
           projectId: "proj-a",
-          pullRequests: [link(15046, { host, url: `https://${host}/pingdotgg/kairo/pull/15046` })],
+          pullRequests: [
+            link(15046, { host, url: `https://${host}/Saikrishna-Ambeti/kairo/pull/15046` }),
+          ],
           linkedPullRequest,
         });
       expect(onHost("github.com")).toBe(linkedPullRequest);

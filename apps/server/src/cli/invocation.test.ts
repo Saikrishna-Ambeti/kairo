@@ -58,7 +58,7 @@ it.layer(NodeServices.layer)("root CLI commands", (it) => {
     }),
   );
 
-  it.effect("keeps the arguments, so root runs setup on the same T3 home", () =>
+  it.effect("keeps the arguments, so root runs setup on the same Kairo home", () =>
     Effect.gen(function* () {
       const args = ["--base-dir", "/srv/t3 home"];
       expect(
@@ -70,12 +70,17 @@ it.layer(NodeServices.layer)("root CLI commands", (it) => {
         }),
       ).toBe(`sudo env "PATH=$PATH" kairo browser setup --base-dir '/srv/t3 home'`);
       expect(
-        yield* rootCommand({ node: "/opt/kairo/t3", entry: "/opt/kairo/t3", executable: true, args }),
+        yield* rootCommand({
+          node: "/opt/kairo/kairo",
+          entry: "/opt/kairo/kairo",
+          executable: true,
+          args,
+        }),
       ).toBe("sudo /opt/kairo/kairo browser setup --base-dir '/srv/t3 home'");
     }),
   );
 
-  it.effect("names this install's launcher when t3 is not on PATH", () =>
+  it.effect("names this install's launcher when kairo is not on PATH", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -91,12 +96,12 @@ it.layer(NodeServices.layer)("root CLI commands", (it) => {
 
       expect(yield* rootCommand(desktop)).toBe(`sudo '${shim}' browser setup`);
 
-      // An unrelated `t3` on PATH, such as an older npm global, is another install's CLI.
+      // An unrelated `kairo` on PATH, such as an older npm global, is another install's CLI.
       expect(yield* rootCommand({ ...desktop, path: yield* pathWithT3 })).toBe(
         `sudo '${shim}' browser setup`,
       );
 
-      // The link the app installs onto PATH leads to its own launcher, so plain `t3` is right.
+      // The link the app installs onto PATH leads to its own launcher, so plain `kairo` is right.
       const linked = yield* fs.makeTempDirectoryScoped();
       yield* fs.symlink(shim, path.join(linked, "kairo"));
       expect(yield* rootCommand({ ...desktop, path: linked })).toBe(
@@ -105,8 +110,8 @@ it.layer(NodeServices.layer)("root CLI commands", (it) => {
 
       expect(
         yield* rootCommand({
-          node: "/opt/kairo/t3",
-          entry: "/opt/kairo/t3",
+          node: "/opt/kairo/kairo",
+          entry: "/opt/kairo/kairo",
           executable: true,
         }),
       ).toBe("sudo /opt/kairo/kairo browser setup");
@@ -114,14 +119,14 @@ it.layer(NodeServices.layer)("root CLI commands", (it) => {
       // A standalone executable started directly (systemd, no launcher) is still this install.
       expect(
         yield* rootCommand({
-          node: "/opt/kairo/t3",
-          entry: "/opt/kairo/t3",
+          node: "/opt/kairo/kairo",
+          entry: "/opt/kairo/kairo",
           executable: true,
           path: yield* pathWithT3,
         }),
       ).toBe("sudo /opt/kairo/kairo browser setup");
 
-      // A global npm launcher runs the downloaded executable; PATH's `t3` is that launcher.
+      // A global npm launcher runs the downloaded executable; PATH's `kairo` is that launcher.
       const prefix = path.join(home, "npm");
       const npmLauncher = path.join(prefix, "lib/node_modules/kairo/bin/t3.mjs");
       yield* fs.makeDirectory(path.dirname(npmLauncher), { recursive: true });
@@ -131,11 +136,11 @@ it.layer(NodeServices.layer)("root CLI commands", (it) => {
         path.join(prefix, "lib/node_modules/kairo/package.json"),
         `{"name":"kairo","version":"${packageJson.version}"}`,
       );
-      yield* fs.symlink(npmLauncher, path.join(prefix, "bin/t3"));
+      yield* fs.symlink(npmLauncher, path.join(prefix, "bin/kairo"));
       expect(
         yield* rootCommand({
-          node: "/home/theo/.kairo/runtime/versions/1.0.0/t3",
-          entry: "/home/theo/.kairo/runtime/versions/1.0.0/t3",
+          node: "/home/theo/.kairo/runtime/versions/1.0.0/kairo",
+          entry: "/home/theo/.kairo/runtime/versions/1.0.0/kairo",
           executable: true,
           path: path.join(prefix, "bin"),
           env: { KAIRO_NPM_LAUNCHER_PATH: npmLauncher },
@@ -155,7 +160,7 @@ it.layer(NodeServices.layer)("host CLI commands", (it) => {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const home = yield* fs.makeTempDirectoryScoped();
-      const shim = path.join(home, "t3.cmd");
+      const shim = path.join(home, "kairo.cmd");
       yield* fs.writeFileString(shim, "@echo off\r\n");
       const hostCommand = (platform: NodeJS.Platform, env: Record<string, string>) =>
         resolveHostCliCommand("doctor", ["--base-dir", "C:\\Users\\Jane Doe\\.kairo"]).pipe(
@@ -172,7 +177,7 @@ it.layer(NodeServices.layer)("host CLI commands", (it) => {
         `& "${shim}" doctor "--base-dir" "C:\\Users\\Jane Doe\\.kairo"`,
       );
       expect((yield* hostCommand("win32", {})).command).toBe(
-        't3 doctor "--base-dir" "C:\\Users\\Jane Doe\\.kairo"',
+        'kairo doctor "--base-dir" "C:\\Users\\Jane Doe\\.kairo"',
       );
       expect(
         (yield* resolveHostCliCommand("doctor", ["--base-dir", "C:\\T3\\\u201CArchive\u201D"]).pipe(
@@ -182,7 +187,7 @@ it.layer(NodeServices.layer)("host CLI commands", (it) => {
           Effect.provideService(HostProcess.Arguments, ["C:\\kairo.exe", "C:\\bin.mjs"]),
           Effect.provideService(HostProcess.IsExecutable, false),
         )).command,
-      ).toBe('t3 doctor "--base-dir" "C:\\T3\\\u201C\u201CArchive\u201D\u201D"');
+      ).toBe('kairo doctor "--base-dir" "C:\\T3\\\u201C\u201CArchive\u201D\u201D"');
       expect((yield* hostCommand("linux", { KAIRO_CLI_PATH: shim })).command).toMatch(
         / doctor --base-dir 'C:\\Users\\Jane Doe\\\.kairo'$/,
       );
@@ -190,7 +195,7 @@ it.layer(NodeServices.layer)("host CLI commands", (it) => {
   );
 
   it.effect.skipIf(HostProcess.Platform.defaultValue() === "win32")(
-    "names the absolute path of a t3 found through a relative PATH entry",
+    "names the absolute path of a kairo command found through a relative PATH entry",
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -219,7 +224,7 @@ it.layer(NodeServices.layer)("host CLI commands", (it) => {
           command: `${hostShellWord("linux", path.join(bin, "kairo"))} doctor`,
           launcher: false,
         });
-        expect(yield* hostCommand(bin)).toEqual({ command: "t3 doctor", launcher: false });
+        expect(yield* hostCommand(bin)).toEqual({ command: "kairo doctor", launcher: false });
       }),
   );
 });
@@ -230,7 +235,7 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const root = yield* fs.makeTempDirectoryScoped();
-      const executable = path.join(root, ".kairo/runtime/versions/1.0.0/t3");
+      const executable = path.join(root, ".kairo/runtime/versions/1.0.0/kairo");
       yield* fs.makeDirectory(path.dirname(executable), { recursive: true });
       yield* fs.writeFileString(executable, "");
       for (const [relative, kind] of [
@@ -265,11 +270,11 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectoryScoped();
+      const root = yield* fs.realPath(yield* fs.makeTempDirectoryScoped());
       const prefix = path.join(root, "bunx-tools");
-      const packageRoot = path.join(prefix, "lib/node_modules/t3");
+      const packageRoot = path.join(prefix, "lib/node_modules/kairo");
       const entry = path.join(packageRoot, "dist/bin.mjs");
-      const globalBin = path.join(prefix, "bin/t3");
+      const globalBin = path.join(prefix, "bin/kairo");
       yield* fs.makeDirectory(path.dirname(entry), { recursive: true });
       yield* fs.makeDirectory(path.dirname(globalBin), { recursive: true });
       yield* fs.writeFileString(entry, "");
@@ -286,7 +291,7 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
       yield* fs.symlink(entry, globalBin);
       expect(yield* resolve).toEqual({ kind: "npm-global", prefix });
       yield* fs.remove(globalBin);
-      yield* fs.writeFileString(globalBin, "an unrelated t3 command");
+      yield* fs.writeFileString(globalBin, "an unrelated kairo command");
       expect(yield* resolve).toBeNull();
       expect(yield* resolve.pipe(Effect.provideService(HostProcess.Platform, "win32"))).toBeNull();
     }),
@@ -296,17 +301,17 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectoryScoped();
+      const root = yield* fs.realPath(yield* fs.makeTempDirectoryScoped());
       const prefix = path.join(root, "bunx-tools");
-      const packageRoot = path.join(prefix, "lib/node_modules/t3");
+      const packageRoot = path.join(prefix, "lib/node_modules/kairo");
       const launcher = path.join(packageRoot, "bin/t3.mjs");
-      const executable = path.join(root, ".kairo/runtime/versions/1.0.0/t3");
+      const executable = path.join(root, ".kairo/runtime/versions/1.0.0/kairo");
       yield* fs.makeDirectory(path.dirname(launcher), { recursive: true });
       yield* fs.makeDirectory(path.dirname(executable), { recursive: true });
       yield* fs.makeDirectory(path.join(prefix, "bin"));
       yield* fs.writeFileString(launcher, "");
       yield* fs.writeFileString(executable, "");
-      yield* fs.symlink(launcher, path.join(prefix, "bin/t3"));
+      yield* fs.symlink(launcher, path.join(prefix, "bin/kairo"));
       const resolve = resolveServerInstallation.pipe(
         Effect.provideService(HostProcess.ExecutablePath, executable),
         Effect.provideService(HostProcess.Arguments, [executable, executable]),
@@ -333,19 +338,19 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
       const path = yield* Path.Path;
       const root = yield* fs.realPath(yield* fs.makeTempDirectoryScoped());
       // The install script's launcher names ~/.kairo, which here links to a home elsewhere.
-      const executable = path.join(root, "data/kairo/runtime/versions/1.0.0/t3");
-      const launcher = path.join(root, "bin/t3");
+      const executable = path.join(root, "data/kairo/runtime/versions/1.0.0/kairo");
+      const launcher = path.join(root, "bin/kairo");
       const copy = path.join(root, "bin/kairo-copy");
       yield* fs.makeDirectory(path.dirname(executable), { recursive: true });
       yield* fs.makeDirectory(path.dirname(launcher), { recursive: true });
       yield* fs.writeFileString(executable, "", { mode: 0o755 });
       yield* fs.writeFileString(copy, "", { mode: 0o755 });
-      yield* fs.symlink(path.join(root, "data/t3"), path.join(root, ".kairo"));
-      yield* fs.symlink(path.join(root, ".kairo/runtime/versions/1.0.0/t3"), launcher);
-      // Earlier PATH entries hold a directory and a non-executable file named t3.
-      yield* fs.makeDirectory(path.join(root, "shadow-dir/t3"), { recursive: true });
+      yield* fs.symlink(path.join(root, "data/kairo"), path.join(root, ".kairo"));
+      yield* fs.symlink(path.join(root, ".kairo/runtime/versions/1.0.0/kairo"), launcher);
+      // Earlier PATH entries hold a directory and a non-executable file named kairo.
+      yield* fs.makeDirectory(path.join(root, "shadow-dir/kairo"), { recursive: true });
       yield* fs.makeDirectory(path.join(root, "shadow-file"));
-      yield* fs.writeFileString(path.join(root, "shadow-file/t3"), "");
+      yield* fs.writeFileString(path.join(root, "shadow-file/kairo"), "");
       const resolve = (invokedAs: string, PATH = "shadow-dir:shadow-file:bin") =>
         resolveServerInstallation.pipe(
           Effect.provideService(HostProcess.ExecutablePath, executable),
@@ -367,7 +372,7 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
       yield* fs.remove(launcher);
       yield* fs.writeFileString(
         launcher,
-        posixLauncherScript(path.join(root, ".kairo/runtime/versions/1.0.0/t3")),
+        posixLauncherScript(path.join(root, ".kairo/runtime/versions/1.0.0/kairo")),
         { mode: 0o755 },
       );
       expect(yield* resolve(executable, path.join(root, "bin"))).toEqual({
@@ -386,7 +391,7 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
       for (const relative of [
         "project/node_modules/kairo/dist/bin.mjs",
         "project/apps/server/dist/bin.mjs",
-        ".kairo/runtime/0.0.45/t3",
+        ".kairo/runtime/0.0.45/kairo",
         "missing/dist/bin.mjs",
       ]) {
         const entry = path.join(root, relative);

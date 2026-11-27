@@ -117,6 +117,10 @@
         "src/cloud/publicConfig.ts": ["duplicates"],
       },
     },
+    "infra/cloud-api": {
+      // Vercel loads API functions by path.
+      "entry": ["api/**/*.ts!"],
+    },
     "apps/marketing": {
       // `astro check` runs from the typecheck task in vite.config.ts, which knip does not read.
       "ignoreDependencies": ["@astrojs/check"],

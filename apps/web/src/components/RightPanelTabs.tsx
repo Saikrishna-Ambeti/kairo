@@ -49,6 +49,7 @@ import {
   ChevronRight,
   FileDiff,
   Files,
+  PackageOpenIcon,
   Globe2,
   MessagesSquare,
   Plus,
@@ -155,6 +156,7 @@ export interface RightPanelTabsProps {
   onAddTerminal: () => void;
   onAddDiff: () => void;
   onAddFiles: () => void;
+  onAddArtifacts?: (() => void) | undefined;
   onAddPullRequest: () => void;
   onAddPullRequests: () => void;
   onAddDevice: () => void;
@@ -336,6 +338,7 @@ function RightPanelEmptyState(props: {
   onAddTerminal: () => void;
   onAddDiff: () => void;
   onAddFiles: () => void;
+  onAddArtifacts?: (() => void) | undefined;
   onAddPullRequest: () => void;
   onAddPullRequests: () => void;
   onAddDevice: () => void;
@@ -380,6 +383,18 @@ function RightPanelEmptyState(props: {
       disabledReason: messages(SURFACE_UNAVAILABLE_HINTS.files),
       onClick: props.onAddFiles,
     },
+    ...(props.onAddArtifacts
+      ? [
+          {
+            label: msg("Artifacts"),
+            icon: PackageOpenIcon,
+            shortcut: "A",
+            available: true,
+            disabledReason: "",
+            onClick: props.onAddArtifacts,
+          },
+        ]
+      : []),
     {
       label: msg("Diff"),
       icon: FileDiff,
@@ -716,6 +731,8 @@ function SurfaceIcon({
           seed={pullRequestStatusSeed}
         />
       );
+    case "artifacts":
+      return <PackageOpenIcon className="size-3 shrink-0" />;
     case "pull-requests":
       return <PullRequestGlyph.link className="size-3 shrink-0" />;
     case "issue":
@@ -1185,6 +1202,18 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       disabledReason: messages(SURFACE_DISABLED_REASONS.files),
       onClick: props.onAddFiles,
     },
+    ...(props.onAddArtifacts
+      ? [
+          {
+            label: msg("Artifacts"),
+            icon: PackageOpenIcon,
+            shortcut: "A",
+            available: true,
+            disabledReason: "",
+            onClick: props.onAddArtifacts,
+          },
+        ]
+      : []),
     {
       label: msg("Diff"),
       icon: FileDiff,
@@ -1688,6 +1717,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddTerminal={props.onAddTerminal}
             onAddDiff={props.onAddDiff}
             onAddFiles={props.onAddFiles}
+            onAddArtifacts={props.onAddArtifacts}
             onAddPullRequest={props.onAddPullRequest}
             onAddPullRequests={props.onAddPullRequests}
             onAddDevice={props.onAddDevice}

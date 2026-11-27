@@ -2876,28 +2876,28 @@ export const readClaudeLaunchArgSettings = Effect.fn("ClaudeAdapterV2.readLaunch
   },
 );
 
-export const CLAUDE_T3_MCP_TOOL_WILDCARD = "mcp__t3-code__*";
+export const CLAUDE_T3_MCP_TOOL_WILDCARD = "mcp__kairo-code__*";
 
 // Keep in sync with OrchestratorToolkit Tool.Readonly annotations; ClaudeAdapterV2.test.ts checks this.
 export const CLAUDE_READ_ONLY_T3_MCP_ALLOWED_TOOLS: ReadonlyArray<string> = [
-  "mcp__t3-code__orchestrator_capabilities",
-  "mcp__t3-code__list_scheduled_tasks",
-  "mcp__t3-code__t3_background_wait",
-  "mcp__t3-code__t3_thread_list",
-  "mcp__t3-code__t3_thread_wait",
-  "mcp__t3-code__t3_worktree_status",
-  "mcp__t3-code__t3_worktree_list",
-  "mcp__t3-code__t3_project_list",
-  "mcp__t3-code__t3_project_read",
-  "mcp__t3-code__t3_thread_search",
-  "mcp__t3-code__t3_preview_list",
-  "mcp__t3-code__t3_environment_read",
-  "mcp__t3-code__t3_environment_links",
-  "mcp__t3-code__t3_theme_read",
-  "mcp__t3-code__html_preview",
-  "mcp__t3-code__html_render",
-  "mcp__t3-code__send_to_user",
-  "mcp__t3-code__t3_submit_output",
+  "mcp__kairo-code__orchestrator_capabilities",
+  "mcp__kairo-code__list_scheduled_tasks",
+  "mcp__kairo-code__kairo_background_wait",
+  "mcp__kairo-code__kairo_thread_list",
+  "mcp__kairo-code__kairo_thread_wait",
+  "mcp__kairo-code__kairo_worktree_status",
+  "mcp__kairo-code__kairo_worktree_list",
+  "mcp__kairo-code__kairo_project_list",
+  "mcp__kairo-code__kairo_project_read",
+  "mcp__kairo-code__kairo_thread_search",
+  "mcp__kairo-code__kairo_preview_list",
+  "mcp__kairo-code__kairo_environment_read",
+  "mcp__kairo-code__kairo_environment_links",
+  "mcp__kairo-code__kairo_theme_read",
+  "mcp__kairo-code__html_preview",
+  "mcp__kairo-code__html_render",
+  "mcp__kairo-code__send_to_user",
+  "mcp__kairo-code__kairo_submit_output",
 ];
 
 // The name this adapter registers T3's MCP server under, and so the one Claude gives for it.
@@ -9505,7 +9505,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             const { liveQuery, toolCall } = input;
             if (
               !toolCall.toolName.startsWith("mcp__") ||
-              toolCall.toolName.startsWith("mcp__t3-code__") ||
+              toolCall.toolName.startsWith("mcp__kairo-code__") ||
               !claudeSupportsMcpApps(liveQuery.capabilities)
             ) {
               return undefined;

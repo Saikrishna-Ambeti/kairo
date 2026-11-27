@@ -4,7 +4,7 @@ import type {
   DesktopUpdateActionResult,
   DesktopUpdateState,
 } from "@kairo/contracts";
-import { desktopUpdateChannelOf } from "@kairo/shared/cliRelease";
+import { CLI_RELEASES_PAGE_URL, desktopUpdateChannelOf } from "@kairo/shared/cliRelease";
 import { msg } from "gt-react";
 
 import { m, type MessageResolver } from "../i18n/messages";
@@ -12,7 +12,6 @@ import { channelSwitchLabel } from "./sidebar/updateEverything.logic";
 
 export type DesktopUpdateButtonAction = "download" | "install" | "none";
 
-const DEFAULT_DESKTOP_RELEASE_REPOSITORY = "pingdotgg/kairo";
 const GITHUB_REPOSITORY_SEGMENT = /^[A-Za-z0-9._-]+$/u;
 
 function isValidRepositorySegment(value: string | undefined): value is string {
@@ -24,11 +23,9 @@ function isValidRepositorySegment(value: string | undefined): value is string {
 function desktopReleaseRepositoryUrl(repository: string | undefined): string {
   const configuredRepository = repository?.trim() ?? "";
   const [owner, name, ...extra] = configuredRepository.split("/");
-  const releaseRepository =
-    isValidRepositorySegment(owner) && isValidRepositorySegment(name) && extra.length === 0
-      ? configuredRepository
-      : DEFAULT_DESKTOP_RELEASE_REPOSITORY;
-  return `https://github.com/${releaseRepository}/releases`;
+  return isValidRepositorySegment(owner) && isValidRepositorySegment(name) && extra.length === 0
+    ? `https://github.com/${configuredRepository}/releases`
+    : CLI_RELEASES_PAGE_URL;
 }
 
 /** The download RPC can beat the updater's downloadedVersion event; fall back to the requested version. */

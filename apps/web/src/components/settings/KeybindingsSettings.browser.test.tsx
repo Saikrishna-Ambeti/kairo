@@ -26,6 +26,9 @@ vi.mock(import("./SettingsScopeContext"), async (original) => ({
       serverConfig: {
         keybindings: compileResolvedKeybindingsConfig([
           { command: "composer.sendBackground", key: "mod+alt+enter", when: "false" },
+          { command: "terminal.toggle", key: "mod+j" },
+          { command: "terminal.previous", key: "cmd+shift+[", when: "terminalFocus && isMac" },
+          { command: "terminal.previous", key: "ctrl+alt+[", when: "terminalFocus && !isMac" },
         ]),
         keybindingsConfigPath: null,
         availableEditors: [],

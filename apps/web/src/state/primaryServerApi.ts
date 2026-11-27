@@ -9,7 +9,6 @@ import type {
   ServerProviderUpdateInput,
   TestComposioConnectionInput,
 } from "@kairo/contracts";
-import { useCallback } from "react";
 
 import { usePrimaryEnvironment } from "./environments";
 import { serverEnvironment } from "./server";
@@ -53,10 +52,10 @@ export function usePrimaryServerApi() {
     reportFailure: false,
   });
 
-  const requireEnvironmentId = useCallback(() => {
+  const requireEnvironmentId = () => {
     if (environmentId === null) throw new Error("No primary environment is connected.");
     return environmentId;
-  }, [environmentId]);
+  };
 
   return {
     refreshProviders: (input: { readonly instanceId?: ProviderInstanceId } = {}) =>

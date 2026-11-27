@@ -118,10 +118,7 @@ import * as ProviderEventLoggers from "@kairo/provider-core/server/ProviderEvent
 import { AGENT_FEEDBACK_INSTRUCTIONS } from "@kairo/provider-core/server/runtimeInstructions";
 import * as ProviderAdapter from "@kairo/provider-core/server/ProviderAdapter";
 import type * as ProviderContinuationRequests from "@kairo/provider-core/server/ProviderContinuationRequests";
-import {
-  makeProviderFailure,
-  PROVIDER_RETRY_BUDGET_MS,
-} from "@kairo/provider-core/server/failure";
+import { makeProviderFailure, PROVIDER_RETRY_BUDGET_MS } from "@kairo/provider-core/server/failure";
 import * as ClaudeAdapterV2 from "./ClaudeAdapterV2.ts";
 import * as IdAllocator from "@kairo/provider-core/server/IdAllocator";
 import * as ProviderInstallationGate from "../../provider/ProviderInstallationGate.ts";
@@ -833,11 +830,11 @@ describe("ClaudeAdapterV2 MCP query overrides", () => {
       ...Object.values(MessageToolkit.tools),
     ]
       .filter((tool) => Context.get(tool.annotations, Tool.Readonly))
-      .map((tool) => `mcp__t3-code__${tool.name}`)
+      .map((tool) => `mcp__kairo-code__${tool.name}`)
       .sort();
 
     // regression: #32022 Claude Plan mode asks before every non-read-only MCP call
-    assert.include(readOnlyToolNames, "mcp__t3-code__t3_background_wait");
+    assert.include(readOnlyToolNames, "mcp__kairo-code__kairo_background_wait");
     assert.deepEqual(
       [...ClaudeAdapterV2.CLAUDE_READ_ONLY_T3_MCP_ALLOWED_TOOLS].sort(),
       readOnlyToolNames,
@@ -897,7 +894,7 @@ describe("ClaudeAdapterV2 native protocol logging", () => {
       allowedTools: ["Read"],
     });
     assert.deepEqual(overrides, {
-      allowedTools: ["Read", "mcp__t3-code__*"],
+      allowedTools: ["Read", "mcp__kairo-code__*"],
       mcpServers: {
         "kairo-code": {
           type: "http",
@@ -1585,7 +1582,9 @@ describe("ClaudeAdapterV2 append-system-prompt-file launch argument", () => {
     Effect.scoped(
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
-        const cwd = yield* fileSystem.makeTempDirectoryScoped({ prefix: "kairo-claude-append-cwd-" });
+        const cwd = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "kairo-claude-append-cwd-",
+        });
         const plain = yield* startTurnWithLaunchArgs("", cwd);
         const { exit, opened } = yield* startTurnWithLaunchArgs(
           '--append-system-prompt "-- Always answer in English"',
@@ -5145,7 +5144,9 @@ describe("ClaudeAdapterV2 background wake turns", () => {
         const fileSystem = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const home = yield* fileSystem.makeTempDirectoryScoped({ prefix: "kairo-claude-remote-" });
-        const cwd = yield* fileSystem.makeTempDirectoryScoped({ prefix: "kairo-claude-remote-cwd-" });
+        const cwd = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "kairo-claude-remote-cwd-",
+        });
         const remoteFile = path.join(home, "remote-settings.json");
         const sdk = yield* Effect.promise(() =>
           vi.importActual<typeof ClaudeSdk>("@anthropic-ai/claude-agent-sdk"),
@@ -5241,7 +5242,9 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
         const home = yield* fileSystem.makeTempDirectoryScoped({ prefix: "kairo-claude-launch-" });
-        const cwd = yield* fileSystem.makeTempDirectoryScoped({ prefix: "kairo-claude-launch-cwd-" });
+        const cwd = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "kairo-claude-launch-cwd-",
+        });
         const sdk = yield* Effect.promise(() =>
           vi.importActual<typeof ClaudeSdk>("@anthropic-ai/claude-agent-sdk"),
         );
@@ -5327,7 +5330,9 @@ describe("ClaudeAdapterV2 background wake turns", () => {
           const home = yield* fileSystem.makeTempDirectoryScoped({
             prefix: "kairo-claude-auto-home-",
           });
-          const cwd = yield* fileSystem.makeTempDirectoryScoped({ prefix: "kairo-claude-auto-cwd-" });
+          const cwd = yield* fileSystem.makeTempDirectoryScoped({
+            prefix: "kairo-claude-auto-cwd-",
+          });
           yield* fileSystem.makeDirectory(path.join(cwd, ".claude"));
           if (file !== null) {
             yield* fileSystem.writeFileString(
@@ -5890,7 +5895,9 @@ describe("ClaudeAdapterV2 background wake turns", () => {
         );
 
         // Project settings beat user settings, and the process env applies only when no file sets it.
-        const project = yield* fileSystem.makeTempDirectoryScoped({ prefix: "kairo-claude-project-" });
+        const project = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "kairo-claude-project-",
+        });
         yield* fileSystem.makeDirectory(path.join(project, ".claude"));
         yield* fileSystem.writeFileString(
           path.join(project, ".claude", "settings.json"),
@@ -6354,7 +6361,9 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const homePath = yield* fs.makeTempDirectoryScoped({ prefix: "kairo-claude-skill-dispatch-" });
+        const homePath = yield* fs.makeTempDirectoryScoped({
+          prefix: "kairo-claude-skill-dispatch-",
+        });
         for (const [name, userOnly] of [
           ["interrogate", true],
           ["implement", true],
@@ -8320,8 +8329,12 @@ describe("ClaudeAdapterV2 background wake turns", () => {
           vi.importActual<typeof ClaudeSdk>("@anthropic-ai/claude-agent-sdk"),
         );
         vi.mocked(ClaudeSdk.resolveSettings).mockImplementation(sdk.resolveSettings);
-        const probeCwd = yield* fileSystem.makeTempDirectoryScoped({ prefix: "kairo-claude-probe-" });
-        const project = yield* fileSystem.makeTempDirectoryScoped({ prefix: "kairo-claude-project-" });
+        const probeCwd = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "kairo-claude-probe-",
+        });
+        const project = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "kairo-claude-project-",
+        });
         const overridden = yield* fileSystem.makeTempDirectoryScoped({
           prefix: "kairo-claude-local-",
         });
@@ -11841,7 +11854,9 @@ describe("ClaudeAdapterV2 background wake turns", () => {
         const fileSystem = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const home = yield* fileSystem.makeTempDirectoryScoped({ prefix: "kairo-claude-compact-" });
-        const project = yield* fileSystem.makeTempDirectoryScoped({ prefix: "kairo-claude-compact-" });
+        const project = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "kairo-claude-compact-",
+        });
         if (userSettings !== undefined) {
           yield* fileSystem.writeFileString(path.join(home, "settings.json"), userSettings);
         }
@@ -12121,7 +12136,9 @@ describe("ClaudeAdapterV2 background wake turns", () => {
     }) {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const configDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "kairo-claude-stale-" });
+      const configDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "kairo-claude-stale-",
+      });
       const projectDir = path.join(configDir, "projects", "-workspace");
       yield* fileSystem.makeDirectory(projectDir, { recursive: true });
       const transcriptOpened = yield* Deferred.make<void>();

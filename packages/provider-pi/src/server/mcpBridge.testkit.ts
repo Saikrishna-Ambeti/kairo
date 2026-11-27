@@ -100,7 +100,7 @@ export async function loadMcpBridge(
       "async function",
     ),
   );
-  await NodeVM.runInNewContext(`${source}\nt3McpExtension(pi)`, {
+  await NodeVM.runInNewContext(`${source}\nkairoMcpExtension(pi)`, {
     process: {
       env: {
         KAIRO_MCP_URL: "http://fixture.invalid/mcp",

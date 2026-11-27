@@ -1,7 +1,7 @@
 import {
   AuthRelayReadScope,
   AuthRelayWriteScope,
-  AuthAdministrativeClientScopes,
+  AuthAdministrativeScopes,
   AuthRelayConfigureScope,
   EnvironmentId,
   type EnvironmentCloudLinkStateResult,
@@ -149,7 +149,7 @@ function expectNoMutations() {
 }
 
 function setup() {
-  testState.scopes = new Set(AuthAdministrativeClientScopes);
+  testState.scopes = new Set([...AuthAdministrativeScopes, AuthRelayConfigureScope]);
   testState.snapshot = linkedState;
   testState.renderedSnapshot = linkedState;
   testState.relayProviderKind = null;

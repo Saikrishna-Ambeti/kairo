@@ -154,12 +154,12 @@ export function newestCliReleaseVersion(
 }
 
 const NpmReleaseMigrationManifest = Schema.Struct({
-  t3code: Schema.Struct({ databaseMigration: Schema.Int }),
+  kairo: Schema.Struct({ databaseMigration: Schema.Int }),
 });
 const decodeNpmReleaseMigrationManifest = Schema.decodeUnknownOption(NpmReleaseMigrationManifest);
 
-/** Highest database migration a release's server knows, from its npm `t3` manifest. */
+/** Highest database migration a release's server knows, from its npm `kairo` manifest. */
 export function npmReleaseDatabaseMigration(manifest: unknown): number | undefined {
-  return Option.getOrUndefined(decodeNpmReleaseMigrationManifest(manifest))?.t3code
+  return Option.getOrUndefined(decodeNpmReleaseMigrationManifest(manifest))?.kairo
     .databaseMigration;
 }

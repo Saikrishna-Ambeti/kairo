@@ -78,7 +78,7 @@ it.layer(NodeServices.layer)("build-cli-archive notarization", (it) => {
       const fs = yield* FileSystem.FileSystem;
       // Apple documents id and path for an unwaited submit; a pending status must not fail it.
       for (const submitted of [
-        '{"id":"new-id","message":"Successfully uploaded file","path":"t3.zip"}',
+        '{"id":"new-id","message":"Successfully uploaded file","path":"kairo.zip"}',
         '{"id":"new-id","status":"In Progress"}',
       ]) {
         const content = yield* makeContent();

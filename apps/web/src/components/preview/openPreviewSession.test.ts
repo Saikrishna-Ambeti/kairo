@@ -79,7 +79,7 @@ describe("openPreviewSession", () => {
       environmentId: threadRef.environmentId,
       input: {
         threadId: threadRef.threadId,
-        url: "https://t3.chat/",
+        url: "https://kairo.chat/",
         profileId: "work",
         viewport: source.viewport,
         runtime: "server",
@@ -166,7 +166,7 @@ describe("openPreviewSession", () => {
 
       if (entryPoint === "link") {
         vi.spyOn(previewRuntime, "previewRuntimeFor").mockReturnValue("server");
-        await openUrlInPreview({ openPreview, threadRef, url: "https://t3.chat/" });
+        await openUrlInPreview({ openPreview, threadRef, url: "https://kairo.chat/" });
       } else {
         await openPreviewSession({ openPreview, threadRef, runtime: "server" });
       }
@@ -193,7 +193,7 @@ describe("openUrlInPreview from a link", () => {
       });
 
       if (entryPoint === "link") {
-        await openUrlInPreview({ openPreview, threadRef: sideChatRef, url: "https://t3.chat/" });
+        await openUrlInPreview({ openPreview, threadRef: sideChatRef, url: "https://kairo.chat/" });
       } else {
         await openFileInPreview({
           threadRef: sideChatRef,
@@ -228,7 +228,7 @@ describe("openUrlInPreview from a link", () => {
     await openUrlInPreview({
       openPreview: async () => AsyncResult.success(snapshot),
       threadRef,
-      url: "https://t3.chat/",
+      url: "https://kairo.chat/",
       background: true,
     });
 
@@ -249,7 +249,7 @@ describe("openUrlInPreview from a link", () => {
         return AsyncResult.success(snapshot);
       },
       threadRef,
-      url: "https://t3.chat/",
+      url: "https://kairo.chat/",
       background: true,
     });
 

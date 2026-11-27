@@ -767,8 +767,7 @@ describe("rightPanelStore", () => {
 
   it.each([
     { kind: "plan", isOpen: true },
-    { kind: "agents", isOpen: true },
-    { kind: "agents", isOpen: false },
+    { kind: "plan", isOpen: false },
   ])("drops $kind with isOpen=$isOpen and falls back", ({ kind, isOpen }) => {
     expect(
       migratePersistedRightPanelState({
@@ -797,7 +796,7 @@ describe("rightPanelStore", () => {
         },
         "env-1:thread-B": {
           isOpen,
-          activeSurfaceId: "diff",
+          activeSurfaceId: isOpen ? "diff" : null,
           surfaces: [{ id: "diff", kind: "diff" }],
         },
       },

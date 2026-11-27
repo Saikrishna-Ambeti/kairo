@@ -1,3 +1,6 @@
+import { msg, T, useGT, useMessages } from "gt-react";
+import { m, type MessageResolver } from "../../i18n/messages";
+import { settlePromise, squashAtomCommandFailure } from "@kairo/client-runtime/state/runtime";
 import { ensureLocalApi } from "../../localApi";
 import { ClerkFailed, ClerkLoaded, ClerkLoading, useAuth, useClerk } from "@clerk/react";
 import { type ProviderInstanceId, type ServerProvider } from "@kairo/contracts";
@@ -13,7 +16,7 @@ import {
   UserRoundIcon,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 
 import { hasCloudIdentityConfig } from "../../cloud/publicConfig";
 import { isElectron } from "../../env";
@@ -55,11 +58,11 @@ const ONBOARDING_STEPS: ReadonlyArray<{
   readonly label: string;
   readonly icon: LucideIcon;
 }> = [
-  { key: "sign-in", label: "Sign in", icon: LogInIcon },
-  { key: "profession", label: "Profession", icon: UserRoundIcon },
-  { key: "setup", label: "Provider", icon: TerminalIcon },
-  { key: "memory", label: "Memory", icon: KeyRoundIcon },
-  { key: "apps", label: "Connected apps", icon: AppWindowIcon },
+  { key: "sign-in", label: msg("Sign in"), icon: LogInIcon },
+  { key: "profession", label: msg("Profession"), icon: UserRoundIcon },
+  { key: "setup", label: msg("Provider"), icon: TerminalIcon },
+  { key: "memory", label: msg("Memory"), icon: KeyRoundIcon },
+  { key: "apps", label: msg("Connected apps"), icon: AppWindowIcon },
 ];
 
 export function advanceOnboardingStep(step: OnboardingStep): OnboardingStep {
@@ -91,13 +94,13 @@ function agentBadgeVariant(provider: ServerProvider | undefined) {
   return "outline";
 }
 
-function agentStatusLabel(provider: ServerProvider | undefined): string {
-  if (!provider) return "Not configured";
-  if (!provider.enabled) return "Disabled";
-  if (!provider.installed) return "Not installed";
-  if (provider.auth.status === "authenticated") return "Ready";
+function agentStatusLabel(provider: ServerProvider | undefined, resolve: MessageResolver): string {
+  if (!provider) return resolve(msg("Not configured"));
+  if (!provider.enabled) return resolve(msg("Disabled"));
+  if (!provider.installed) return resolve(msg("Not installed"));
+  if (provider.auth.status === "authenticated") return resolve(msg("Ready"));
   if (provider.auth.status === "unauthenticated" || provider.auth.status === "unknown") {
-    return "Needs login";
+    return resolve(msg("Needs login"));
   }
   return statusText(provider.status);
 }
@@ -109,10 +112,12 @@ function OnboardingProgress({
   readonly activeStep: OnboardingStep;
   readonly onProfessionEdit?: (() => void) | undefined;
 }) {
+  const gt = useGT();
+  const messages = useMessages();
   const activeIndex = ONBOARDING_STEPS.findIndex((step) => step.key === activeStep);
 
   return (
-    <nav aria-label="Onboarding progress" className="grid gap-2 sm:grid-cols-5">
+    <nav aria-label={gt("Onboarding progress")} className="grid gap-2 sm:grid-cols-5">
       {ONBOARDING_STEPS.map((step, index) => {
         const Icon = step.icon;
         const active = step.key === activeStep;
@@ -124,7 +129,7 @@ function OnboardingProgress({
           complete && !active && "border-success/25 bg-success/8 text-success-foreground",
           !active && !complete && "border-border bg-background/55 text-muted-foreground",
           canEditProfession &&
-            "cursor-pointer hover:border-primary/35 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring",
+            "cursor-pointer hover:border-primary/35 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
         );
         const content = (
           <>
@@ -136,7 +141,7 @@ function OnboardingProgress({
             >
               {complete ? <CheckCircle2Icon className="size-4" /> : <Icon className="size-4" />}
             </span>
-            <span className="truncate font-medium">{step.label}</span>
+            <span className="truncate font-medium">{messages(step.label)}</span>
           </>
         );
 
@@ -164,13 +169,15 @@ function OnboardingFrame({
   readonly children: ReactNode;
 }) {
   return (
-    <div className="h-dvh overflow-auto bg-background text-foreground">
+    <div className="h-dvh overflow-auto scrollbar-gutter-both bg-background text-foreground">
       <div className="mx-auto flex min-h-dvh w-full max-w-4xl flex-col justify-center gap-4 px-4 py-5 sm:px-6 sm:py-6">
         <header className="space-y-4 rounded-xl border border-border/80 bg-card p-5 sm:p-6">
           <div className="space-y-2">
-            <h1 className="text-3xl font-semibold tracking-tight">Set up Kairo</h1>
+            <h1 className="text-3xl font-semibold tracking-tight">
+              <T>Set up Kairo</T>
+            </h1>
             <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-              Sign in, tell us how you work, then connect a coding agent.
+              <T>Sign in, tell us how you work, then connect a coding agent.</T>
             </p>
           </div>
           <OnboardingProgress activeStep={activeStep} onProfessionEdit={onProfessionEdit} />
@@ -194,18 +201,21 @@ function SignInStep({
   readonly onSignIn: () => void;
   readonly onContinue: () => void;
 }) {
+  const gt = useGT();
   if (!loading && !signedIn) {
     return (
       <section className="mx-auto flex min-h-48 max-w-lg flex-col items-center justify-center text-center">
         <span className="mb-4 flex size-11 items-center justify-center rounded-xl border border-primary/25 bg-primary/10 text-primary">
           <LogInIcon className="size-5" />
         </span>
-        <h2 className="text-2xl font-semibold tracking-tight">Sign in to continue</h2>
+        <h2 className="text-2xl font-semibold tracking-tight">
+          <T>Sign in to continue</T>
+        </h2>
         <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-          Clerk securely connects this device to your Kairo account.
+          <T>Clerk securely connects this device to your Kairo account.</T>
         </p>
         <Button className="mt-5 min-w-48" onClick={onSignIn}>
-          Continue with Clerk
+          <T>Continue with Clerk</T>
           <ArrowRightIcon className="size-4" />
         </Button>
       </section>
@@ -222,15 +232,15 @@ function SignInStep({
         )}
       </span>
       <h2 className="text-2xl font-semibold tracking-tight">
-        {loading ? "Checking your account" : "Account connected"}
+        {loading ? gt("Checking your account") : gt("Account connected")}
       </h2>
       <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
         {loading
-          ? "Loading secure sign-in."
-          : "Your Kairo account is ready. Next, tell us how you work."}
+          ? gt("Loading secure sign-in.")
+          : gt("Your Kairo account is ready. Next, tell us how you work.")}
       </p>
       <Button className="mt-5 min-w-40" disabled={loading} onClick={onContinue}>
-        Continue
+        <T>Continue</T>
         <ArrowRightIcon className="size-4" />
       </Button>
     </section>
@@ -243,12 +253,14 @@ function LocalSignInStep({ onContinue }: { readonly onContinue: () => void }) {
       <span className="mb-4 flex size-11 items-center justify-center rounded-xl border border-border bg-muted text-foreground">
         <LogInIcon className="size-5" />
       </span>
-      <h2 className="text-2xl font-semibold tracking-tight">Continue without an account</h2>
+      <h2 className="text-2xl font-semibold tracking-tight">
+        <T>Continue without an account</T>
+      </h2>
       <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-        Clerk is not configured in this self-hosted build. You can still finish local setup.
+        <T>Clerk is not configured in this self-hosted build. You can still finish local setup.</T>
       </p>
       <Button className="mt-5 min-w-40" onClick={onContinue}>
-        Continue
+        <T>Continue</T>
         <ArrowRightIcon className="size-4" />
       </Button>
     </section>
@@ -261,12 +273,14 @@ function ClerkLoadErrorStep({ onRetry }: { readonly onRetry: () => void }) {
       <span className="mb-4 flex size-11 items-center justify-center rounded-xl border border-destructive/25 bg-destructive/10 text-destructive">
         <RefreshCwIcon className="size-5" />
       </span>
-      <h2 className="text-2xl font-semibold tracking-tight">Sign-in could not load</h2>
+      <h2 className="text-2xl font-semibold tracking-tight">
+        <T>Sign-in could not load</T>
+      </h2>
       <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-        Check your connection, then retry. Your onboarding will stay here.
+        <T>Check your connection, then retry. Your onboarding will stay here.</T>
       </p>
       <Button className="mt-5 min-w-40" onClick={onRetry}>
-        Retry sign-in
+        <T>Retry sign-in</T>
         <RefreshCwIcon className="size-4" />
       </Button>
     </section>
@@ -291,9 +305,11 @@ function ProfessionStep({
   return (
     <section className="mx-auto max-w-4xl">
       <div className="mb-6 text-center">
-        <h2 className="text-2xl font-semibold tracking-tight">What best describes your work?</h2>
+        <h2 className="text-2xl font-semibold tracking-tight">
+          <T>What best describes your work?</T>
+        </h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          Choose one so Kairo can tailor setup guidance to the way you build.
+          <T>Choose one so Kairo can tailor setup guidance to the way you build.</T>
         </p>
       </div>
       <ProfessionalRolePicker
@@ -304,7 +320,7 @@ function ProfessionStep({
       />
       <div className="mt-6 flex justify-end">
         <Button disabled={!complete} onClick={onContinue}>
-          Continue
+          <T>Continue</T>
           <ArrowRightIcon className="size-4" />
         </Button>
       </div>
@@ -343,16 +359,22 @@ function ProviderSetupStep({
   readonly onRefresh: () => void;
   readonly onComplete: () => void;
 }) {
+  const gt = useGT();
+  const messages = useMessages();
   const hasUsableAgent = usableAgents.length > 0;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <section className="space-y-4">
         <div className="space-y-1">
-          <h2 className="text-2xl font-semibold tracking-tight">Connect a coding agent</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">
+            <T>Connect a coding agent</T>
+          </h2>
           <p className="text-sm leading-6 text-muted-foreground">
-            Install or sign in to one supported provider. Optional memory and connected apps come
-            next.
+            <T>
+              Install or sign in to one supported provider. Optional memory and connected apps come
+              next.
+            </T>
           </p>
         </div>
         <div className="grid gap-3">
@@ -380,7 +402,7 @@ function ProviderSetupStep({
                       {option.definition.label}
                     </span>
                     <Badge size="sm" variant={agentBadgeVariant(provider)}>
-                      {agentStatusLabel(provider)}
+                      {agentStatusLabel(provider, messages)}
                     </Badge>
                   </div>
                   <p
@@ -397,10 +419,14 @@ function ProviderSetupStep({
                         <span aria-live="polite" className="font-medium text-foreground">
                           {progressLabel}
                         </span>
-                        <span className="text-muted-foreground">Keep Kairo open</span>
+                        <span className="text-muted-foreground">
+                          <T>Keep Kairo open</T>
+                        </span>
                       </div>
                       <progress
-                        aria-label={`${option.definition.label} installation progress`}
+                        aria-label={gt("{provider} installation progress", {
+                          provider: option.definition.label,
+                        })}
                         className="h-1.5 w-full appearance-none overflow-hidden rounded-full bg-muted [&::-moz-progress-bar]:rounded-full [&::-moz-progress-bar]:bg-primary [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-value]:bg-primary"
                       />
                     </div>
@@ -410,7 +436,7 @@ function ProviderSetupStep({
                   {action === "detected" ? (
                     <Button size="sm" variant="outline" disabled>
                       <CheckCircle2Icon className="size-3.5" />
-                      Detected
+                      <T>Detected</T>
                     </Button>
                   ) : action === "login" ? (
                     <Button size="sm" disabled={busy !== null} onClick={() => onLogin(option)}>
@@ -419,7 +445,7 @@ function ProviderSetupStep({
                       ) : (
                         <KeyRoundIcon className="size-3.5" />
                       )}
-                      Sign in
+                      <T>Sign in</T>
                     </Button>
                   ) : action === "refresh" ? (
                     <Button
@@ -433,7 +459,7 @@ function ProviderSetupStep({
                       ) : (
                         <RefreshCwIcon className="size-3.5" />
                       )}
-                      Refresh
+                      <T>Refresh</T>
                     </Button>
                   ) : (
                     <Button
@@ -448,8 +474,8 @@ function ProviderSetupStep({
                       )}
                       {provider?.updateState?.status === "failed" ||
                       provider?.updateState?.status === "unchanged"
-                        ? "Retry install"
-                        : "Install"}
+                        ? gt("Retry install")
+                        : gt("Install")}
                     </Button>
                   )}
                 </div>
@@ -461,7 +487,7 @@ function ProviderSetupStep({
       <aside className="space-y-4 rounded-xl border border-border/80 bg-muted/25 p-4">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <AppWindowIcon className="size-4 text-muted-foreground" />
-          Provider status
+          <T>Provider status</T>
         </div>
         {hasUsableAgent ? (
           <div className="space-y-2 text-sm">
@@ -469,14 +495,14 @@ function ProviderSetupStep({
               <div className="flex items-center justify-between gap-3" key={provider.instanceId}>
                 <span className="truncate">{provider.displayName ?? provider.instanceId}</span>
                 <Badge size="sm" variant="success">
-                  Ready
+                  <T>Ready</T>
                 </Badge>
               </div>
             ))}
           </div>
         ) : (
           <p className="text-sm leading-6 text-muted-foreground">
-            Connect one provider to continue.
+            <T>Connect one provider to continue.</T>
           </p>
         )}
         <div className="grid gap-2">
@@ -486,10 +512,10 @@ function ProviderSetupStep({
             ) : (
               <RefreshCwIcon className="size-3.5" />
             )}
-            Refresh
+            <T>Refresh</T>
           </Button>
           <Button size="sm" disabled={!hasUsableAgent || busy !== null} onClick={onComplete}>
-            Continue
+            <T>Continue</T>
             <ArrowRightIcon className="size-3.5" />
           </Button>
         </div>
@@ -505,6 +531,7 @@ function ProviderSetupGate({
   readonly onProfessionEdit?: () => void;
   readonly onComplete: () => void;
 }) {
+  const gt = useGT();
   const [setupStep, setSetupStep] = useState<"setup" | "memory" | "apps">("setup");
   const serverApi = usePrimaryServerApi();
   const serverProviders = useServerProviders();
@@ -519,43 +546,45 @@ function ProviderSetupGate({
   );
   const didInitialLoadRef = useRef(false);
 
-  const agentOptions = useMemo<ReadonlyArray<AgentOption>>(
-    () =>
-      providerClients.definitions
-        .filter((definition) => ONBOARDING_CODING_AGENT_DRIVERS.has(definition.driverKind))
-        .map((definition) => ({
-          definition,
-          provider: providers.find((provider) => provider.driver === definition.driverKind),
-        })),
-    [providers],
-  );
-  const usableAgents = useMemo(() => providers.filter(isUsableOnboardingAgent), [providers]);
+  const agentOptions: ReadonlyArray<AgentOption> = providerClients.definitions
+    .filter((definition) => ONBOARDING_CODING_AGENT_DRIVERS.has(definition.driverKind))
+    .map((definition) => ({
+      definition,
+      provider: providers.find((provider) => provider.driver === definition.driverKind),
+    }));
+  const usableAgents = providers.filter(isUsableOnboardingAgent);
 
-  const refreshProviders = useCallback(async () => {
+  const refreshProviders = async () => {
     setBusy((current) => current ?? "refresh");
-    try {
+    const result = await settlePromise(async () => {
       const payload = await serverApi.refreshProviders();
       setProvidersOverride(payload.providers);
       return payload.providers;
-    } finally {
-      setBusy((current) => (current === "refresh" ? null : current));
-    }
-  }, [serverApi]);
+    });
+    setBusy((current) => (current === "refresh" ? null : current));
+    if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+    return result.value;
+  };
 
+  const loadProviders = useEffectEvent(() => {
+    void refreshProviders()
+      .catch((error) => showOnboardingError(m(msg("Provider status unavailable")), error))
+      .finally(() => setLoading(false));
+  });
+
+  // oxlint-disable-next-line kairo/no-unreasoned-state-sync -- reads installed provider status from the host when setup opens
   useEffect(() => {
     if (didInitialLoadRef.current) return;
     didInitialLoadRef.current = true;
-    void refreshProviders()
-      .catch((error) => showOnboardingError("Provider status unavailable", error))
-      .finally(() => setLoading(false));
-  }, [refreshProviders]);
+    loadProviders();
+  }, []);
 
   const installAgent = async (option: AgentOption) => {
     const provider = option.provider;
     if (!provider) return;
     setBusy("install-agent");
     setBusyProviderInstanceId(provider.instanceId);
-    try {
+    const result = await settlePromise(async () => {
       const next = await serverApi.updateProvider({
         provider: provider.driver,
         instanceId: provider.instanceId,
@@ -577,7 +606,7 @@ function ProviderSetupGate({
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: `Could not install ${option.definition.label}`,
+            title: m(msg("Could not install {provider}", { provider: option.definition.label })),
             description: outcome.description,
           }),
         );
@@ -587,18 +616,26 @@ function ProviderSetupGate({
             type: "warning",
             title:
               outcome.kind === "needs_login"
-                ? `${option.definition.label} installed. Sign in next.`
-                : `${option.definition.label} needs attention`,
+                ? m(
+                    msg("{provider} installed. Sign in next.", {
+                      provider: option.definition.label,
+                    }),
+                  )
+                : m(msg("{provider} needs attention", { provider: option.definition.label })),
             description: outcome.description,
           }),
         );
       }
-    } catch (error) {
-      showOnboardingError(`Could not install ${option.definition.label}`, error);
-    } finally {
-      setBusy(null);
-      setBusyProviderInstanceId(null);
+    });
+    if (result._tag === "Failure") {
+      const error = squashAtomCommandFailure(result);
+      showOnboardingError(
+        m(msg("Could not install {provider}", { provider: option.definition.label })),
+        error,
+      );
     }
+    setBusy(null);
+    setBusyProviderInstanceId(null);
   };
 
   const loginAgent = async (option: AgentOption) => {
@@ -606,7 +643,7 @@ function ProviderSetupGate({
     if (!provider) return;
     setBusy("login-agent");
     setBusyProviderInstanceId(provider.instanceId);
-    try {
+    const result = await settlePromise(async () => {
       const next = await serverApi.startProviderAuth({ instanceId: provider.instanceId });
       const interaction = next.interaction;
       if (interaction?.type === "browser" && !interaction.requiresConsent) {
@@ -625,17 +662,23 @@ function ProviderSetupGate({
             ? { type: "success", title: `${option.definition.label} ready` }
             : {
                 type: "warning",
-                title: `${option.definition.label} still needs attention`,
+                title: m(
+                  msg("{provider} still needs attention", { provider: option.definition.label }),
+                ),
                 description: outcome.description,
               },
         ),
       );
-    } catch (error) {
-      showOnboardingError(`Could not sign in to ${option.definition.label}`, error);
-    } finally {
-      setBusy(null);
-      setBusyProviderInstanceId(null);
+    });
+    if (result._tag === "Failure") {
+      const error = squashAtomCommandFailure(result);
+      showOnboardingError(
+        m(msg("Could not sign in to {provider}", { provider: option.definition.label })),
+        error,
+      );
     }
+    setBusy(null);
+    setBusyProviderInstanceId(null);
   };
 
   if (setupStep !== "setup") {
@@ -647,17 +690,17 @@ function ProviderSetupGate({
             variant="outline"
             onClick={() => setSetupStep(setupStep === "memory" ? "setup" : "memory")}
           >
-            Back
+            <T>Back</T>
           </Button>
           <div className="flex gap-2">
             <Button
               variant="ghost"
               onClick={() => (setupStep === "memory" ? setSetupStep("apps") : onComplete())}
             >
-              Skip for now
+              <T>Skip for now</T>
             </Button>
             <Button onClick={() => (setupStep === "memory" ? setSetupStep("apps") : onComplete())}>
-              {setupStep === "memory" ? "Continue" : "Finish setup"}
+              {setupStep === "memory" ? gt("Continue") : gt("Finish setup")}
             </Button>
           </div>
         </div>
@@ -673,7 +716,7 @@ function ProviderSetupGate({
           className="flex min-h-48 items-center justify-center text-sm text-muted-foreground"
         >
           <LoaderCircleIcon className="mr-2 size-4 animate-spin" />
-          Checking providers
+          <T>Checking providers</T>
         </div>
       ) : (
         <ProviderSetupStep
@@ -685,7 +728,7 @@ function ProviderSetupGate({
           onLogin={(option) => void loginAgent(option)}
           onRefresh={() =>
             void refreshProviders().catch((error) =>
-              showOnboardingError("Provider refresh failed", error),
+              showOnboardingError(gt("Provider refresh failed"), error),
             )
           }
           onComplete={() => setSetupStep("memory")}
@@ -698,15 +741,10 @@ function ProviderSetupGate({
 function useProfessionSelection() {
   const role = useClientSettings((settings) => settings.professionalRole);
   const otherRole = useClientSettings((settings) => settings.professionalRoleOther);
-  const updateSettings = updateClientSettings;
-  const setRole = useCallback(
-    (nextRole: ProfessionalRole) => updateSettings({ professionalRole: nextRole }),
-    [updateSettings],
-  );
-  const setOtherRole = useCallback(
-    (nextOtherRole: string) => updateSettings({ professionalRoleOther: nextOtherRole }),
-    [updateSettings],
-  );
+  const setRole = (nextRole: ProfessionalRole) =>
+    updateClientSettings({ professionalRole: nextRole });
+  const setOtherRole = (nextOtherRole: string) =>
+    updateClientSettings({ professionalRoleOther: nextOtherRole });
 
   return { role, setRole, otherRole, setOtherRole };
 }
@@ -718,11 +756,9 @@ function CloudOnboardingFlow({ onComplete }: { readonly onComplete: () => void }
   const [activeStep, setActiveStep] = useState<OnboardingStep>("sign-in");
   const [signInStarted, setSignInStarted] = useState(false);
 
-  useEffect(() => {
-    if (activeStep === "sign-in" && signInStarted && isSignedIn) {
-      setActiveStep("profession");
-    }
-  }, [activeStep, isSignedIn, signInStarted]);
+  if (activeStep === "sign-in" && signInStarted && isSignedIn) {
+    setActiveStep("profession");
+  }
 
   if (activeStep === "sign-in") {
     return (

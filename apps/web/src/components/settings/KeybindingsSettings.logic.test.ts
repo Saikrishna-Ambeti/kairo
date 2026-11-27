@@ -43,7 +43,7 @@ describe("KeybindingsSettings.logic", () => {
     );
   });
 
-  it("resets an edited shortcut to the built-in one its command no longer has", () => {
+  it("resets an edited shortcut to the built-in shortcut for its command", () => {
     const rows = buildKeybindingRows(
       mergeWithDefaultKeybindings(
         compileResolvedKeybindingsConfig([
@@ -57,7 +57,7 @@ describe("KeybindingsSettings.logic", () => {
         .filter((row) => row.command === "chat.new")
         .map(({ key, defaultKey }) => ({ key, defaultKey })),
     ).toEqual([
-      { key: "f8", defaultKey: "mod+shift+o" },
+      { key: "f8", defaultKey: "mod+n" },
       { key: "mod+n", defaultKey: "mod+n" },
     ]);
     const unassigned = buildKeybindingRows(

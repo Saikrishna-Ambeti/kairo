@@ -6,6 +6,7 @@ import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import { expect, it, vi } from "vite-plus/test";
 
 import { act, render } from "../../../test/render";
+import { configuredHostedAppUrl } from "../../hostedPairing";
 import { isMacPlatform } from "../../lib/utils";
 import { linkedThreadSurface } from "../../linkedThreadSurface";
 import {
@@ -307,7 +308,7 @@ it("keeps a linked environment thread label when copying a table", async () => {
   const table = screen.container.querySelector("table")!;
   expect(serializeTableElementToCsv(table)).toBe("Thread,Status\nLinked thread,ready");
   expect(serializeTableElementToMarkdown(table)).toBe(
-    "| Thread | Status |\n| --- | --- |\n| [Linked thread](https://app.kairo.codes/threads/linked-vm/there) | ready |",
+    `| Thread | Status |\n| --- | --- |\n| [Linked thread](${new URL("/threads/linked-vm/there", configuredHostedAppUrl())}) | ready |`,
   );
   expect(serializeTableElementToHtml(table)).toContain(">Linked thread</td>");
 });

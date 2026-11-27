@@ -259,7 +259,7 @@ export const MCP_APP_DOCUMENT_MESSAGE = "kairo-mcp-app-document";
  * acts on a message only once this document confirms it is alive.
  */
 export function injectMcpAppDocumentBootstrap(html: string): string {
-  const bootstrap = `<script>(function(){var host=window.parent,port=new MessageChannel(),own=port.port1;own.onmessage=function(event){var data=event.data;if(!data)return;if("alive" in data)own.postMessage({alive:data.alive});else window.dispatchEvent(new MessageEvent("message",{data:data.message,origin:data.origin,source:host}));};host.postMessage({t3:${JSON.stringify(MCP_APP_DOCUMENT_MESSAGE)}},"*",[port.port2]);})();</script>`;
+  const bootstrap = `<script>(function(){var host=window.parent,port=new MessageChannel(),own=port.port1;own.onmessage=function(event){var data=event.data;if(!data)return;if("alive" in data)own.postMessage({alive:data.alive});else window.dispatchEvent(new MessageEvent("message",{data:data.message,origin:data.origin,source:host}));};host.postMessage({kairo:${JSON.stringify(MCP_APP_DOCUMENT_MESSAGE)}},"*",[port.port2]);})();</script>`;
   // Preserve captured CSP ahead of executable code, including this bootstrap.
   const prefix =
     /^(?:\uFEFF?\s*<!doctype[^>]*>\s*)?(?:<meta http-equiv="Content-Security-Policy" content="[^"]*">)?/i.exec(

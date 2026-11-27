@@ -36,8 +36,6 @@ import Migration0044 from "../../persistence/Migrations/044_ClearAutomaticProjec
 import Migration0045 from "../../persistence/Migrations/045_ProjectionProjectsAutoPull.ts";
 import Migration0046 from "../../persistence/Migrations/046_RepairAutomaticSettlementTimestamps.ts";
 import Migration0047 from "../../persistence/Migrations/047_ProjectionProjectIcon.ts";
-import Migration0048 from "../../persistence/Migrations/051_ProjectionThreadBranchPullRequest.ts";
-import Migration0049 from "../../persistence/Migrations/052_ProjectionThreadsActiveOrderKey.ts";
 import { CodexProviderCapabilitiesV2 } from "../Adapters/CodexAdapterV2.ts";
 import * as EffectWorker from "../EffectWorker.ts";
 import * as EventSink from "../EventSink.ts";
@@ -109,8 +107,6 @@ const seedV1Database = (fixturePath: string, workspace: string) =>
         [45, "ProjectionProjectsAutoPull", Migration0045],
         [46, "RepairAutomaticSettlementTimestamps", Migration0046],
         [47, "ProjectionProjectIcon", Migration0047],
-        [48, "ProjectionThreadBranchPullRequest", Migration0048],
-        [49, "ProjectionThreadsActiveOrderKey", Migration0049],
       ] as const;
       for (const [id, name, migration] of tailMigrations) {
         yield* migration;
@@ -119,6 +115,7 @@ const seedV1Database = (fixturePath: string, workspace: string) =>
           VALUES (${id}, ${name})
         `;
       }
+      yield* runMigrations({ toMigrationInclusive: 52 });
 
       yield* sql`
         INSERT INTO projection_projects (

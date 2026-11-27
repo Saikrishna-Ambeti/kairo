@@ -633,7 +633,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: npm-launcher
-          path: npm-packages/t3.tgz
+          path: npm-packages/kairo.tgz
           if-no-files-found: error
           retention-days: 30
 
@@ -881,7 +881,7 @@ jobs:
           set -euo pipefail
           cd release-assets
           shopt -s nullglob
-          archives=(t3-*.tar.gz t3-*.zip)
+          archives=(kairo-*.tar.gz kairo-*.zip)
           if [[ ${#archives[@]} -eq 0 ]]; then
             echo "No CLI archives were produced." >&2
             exit 1
@@ -1111,7 +1111,7 @@ jobs:
     if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' && needs.release.result == 'success' && needs.preflight.outputs.release_channel != 'preview' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    # npm's trusted publisher for `t3` names this environment, which admits only
+    # npm's trusted publisher for `kairo` names this environment, which admits only
     # main and v* tags.
     environment: production
     permissions:
@@ -1157,9 +1157,9 @@ jobs:
         env:
           RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
         run: |
-          built="$(tar -xzOf npm-packages/t3.tgz package/package.json | jq -r .version)"
+          built="$(tar -xzOf npm-packages/kairo.tgz package/package.json | jq -r .version)"
           if [[ "$built" != "$RELEASE_VERSION" ]]; then
-            echo "::error::npm-launcher holds t3@$built, expected t3@$RELEASE_VERSION." >&2
+            echo "::error::npm-launcher holds kairo@$built, expected kairo@$RELEASE_VERSION." >&2
             exit 1
           fi
 
@@ -1168,8 +1168,8 @@ jobs:
           DIST_TAG: ${{ needs.preflight.outputs.cli_dist_tag }}
         run: |
           # The ./ keeps npm from reading the path as a GitHub owner/repo spec.
-          if ! npm publish --access public --tag "$DIST_TAG" --provenance ./npm-packages/t3.tgz; then
-            echo "::error::npm publish failed. Make sure package t3 has a trusted publisher registered for .github/workflows/release.yml (see docs/operations/03_release.md)." >&2
+          if ! npm publish --access public --tag "$DIST_TAG" --provenance ./npm-packages/kairo.tgz; then
+            echo "::error::npm publish failed. Make sure package kairo has a trusted publisher registered for .github/workflows/release.yml (see docs/operations/03_release.md)." >&2
             exit 1
           fi
 

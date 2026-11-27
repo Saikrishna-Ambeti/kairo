@@ -79,7 +79,7 @@ it.layer(NodeServices.layer)("service preflight database", (it) => {
         BUILD_MIGRATION_HEAD,
       );
 
-      // Startup reconciles this V2 preview history, so it must not block an update.
+      // Upstream previews use migration ids reserved for Kairo schema.
       const preview = path.join(path.dirname(databasePath), "preview.sqlite");
       const previewDb = new NodeSqlite.DatabaseSync(preview);
       previewDb.exec(
@@ -96,7 +96,7 @@ it.layer(NodeServices.layer)("service preflight database", (it) => {
       expect(
         runServicePreflight({ databasePath: preview, launcherProtocol: SERVICE_LAUNCHER_PROTOCOL })
           .status,
-      ).toBe("ready");
+      ).toBe("blocked");
 
       const newerId = Math.max(...migrationManifest.map(([id]) => id)) + 1;
       insert.run(newerId, "FromNightly");

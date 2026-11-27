@@ -19,20 +19,24 @@ const notOnPath = (launcherPath: string | null): DesktopCliCommandState => ({
 });
 
 describe("resolveTriageCommand", () => {
-  it("prefers t3 on PATH, then the desktop launcher", async () => {
-    const onPath = { ...notOnPath("/home/me/.kairo/bin/t3"), onPath: true };
-    await expect(resolveTriageCommand(desktopWith(async () => onPath))).resolves.toBe("kairo triage");
+  it("prefers kairo on PATH, then the desktop launcher", async () => {
+    const onPath = { ...notOnPath("/home/me/.kairo/bin/kairo"), onPath: true };
+    await expect(resolveTriageCommand(desktopWith(async () => onPath))).resolves.toBe(
+      "kairo triage",
+    );
     await expect(
-      resolveTriageCommand(desktopWith(async () => notOnPath("/home/me/.kairo/bin/t3"))),
+      resolveTriageCommand(desktopWith(async () => notOnPath("/home/me/.kairo/bin/kairo"))),
     ).resolves.toBe("/home/me/.kairo/bin/kairo triage");
   });
 
   it("quotes launcher paths for the shell that runs them", async () => {
     await expect(
-      resolveTriageCommand(desktopWith(async () => notOnPath("/Users/O'Neil/.kairo/bin/t3"))),
-    ).resolves.toBe(`'/Users/O'"'"'Neil/.kairo/bin/t3' triage`);
+      resolveTriageCommand(desktopWith(async () => notOnPath("/Users/O'Neil/.kairo/bin/kairo"))),
+    ).resolves.toBe(`'/Users/O'"'"'Neil/.kairo/bin/kairo' triage`);
     await expect(
-      resolveTriageCommand(desktopWith(async () => notOnPath("C:\\Users\\Me\\.kairo\\bin\\t3.cmd"))),
+      resolveTriageCommand(
+        desktopWith(async () => notOnPath("C:\\Users\\Me\\.kairo\\bin\\t3.cmd")),
+      ),
     ).resolves.toBe("C:\\Users\\Me\\.kairo\\bin\\t3.cmd triage");
     await expect(
       resolveTriageCommand(
