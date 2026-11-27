@@ -7,6 +7,7 @@ import * as NodeFS from "node:fs";
 import * as NodeModule from "node:module";
 import * as NodePath from "node:path";
 
+import { resolveAssetPath } from "./asset-path.mjs";
 import { findChrome } from "./chrome.mjs";
 
 const [file, text] = process.argv.slice(2);
@@ -19,15 +20,15 @@ const { chromium } = NodeModule.createRequire(NodePath.join(REPO, "scripts/packa
   "playwright-core",
 );
 const root = NodePath.dirname(NodePath.resolve(file));
-const server = NodeHttp.createServer((req, res) => {
-  NodeFS.readFile(
-    NodePath.join(root, decodeURIComponent(new URL(req.url, "http://x").pathname)),
-    (error, body) =>
-      error
-        ? res.writeHead(404).end()
-        : res
-            .writeHead(200, req.url.endsWith(".html") ? { "content-type": "text/html" } : {})
-            .end(body),
+const server = NodeHttp.createServer(async (req, res) => {
+  const asset = await resolveAssetPath(root, (req.url ?? "/").split("?")[0]);
+  if (asset === null) return void res.writeHead(404).end();
+  NodeFS.readFile(asset, (error, body) =>
+    error
+      ? res.writeHead(404).end()
+      : res
+          .writeHead(200, asset.endsWith(".html") ? { "content-type": "text/html" } : {})
+          .end(body),
   );
 }).listen(0, "127.0.0.1");
 await new Promise((resolve) => server.once("listening", resolve));

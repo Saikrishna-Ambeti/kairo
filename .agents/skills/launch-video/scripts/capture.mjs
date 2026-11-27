@@ -5,6 +5,7 @@ import * as NodeModule from "node:module";
 import * as NodeFS from "node:fs";
 import * as NodeHttp from "node:http";
 
+import { resolveAssetPath } from "./asset-path.mjs";
 import { findChrome } from "./chrome.mjs";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
@@ -51,9 +52,9 @@ const TYPES = {
   ".ttf": "font/ttf",
 };
 const root = NodePath.dirname(NodePath.resolve(html));
-const server = NodeHttp.createServer((req, res) => {
-  const file = NodePath.join(root, decodeURIComponent(new URL(req.url, "http://x").pathname));
-  if (!file.startsWith(root)) return void res.writeHead(403).end();
+const server = NodeHttp.createServer(async (req, res) => {
+  const file = await resolveAssetPath(root, (req.url ?? "/").split("?")[0]);
+  if (file === null) return void res.writeHead(404).end();
   NodeFS.readFile(file, (error, body) => {
     if (error) return void res.writeHead(404).end();
     res

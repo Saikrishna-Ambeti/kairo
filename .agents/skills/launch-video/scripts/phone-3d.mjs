@@ -7,6 +7,7 @@ import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
 import * as NodeChildProcess from "node:child_process";
 import * as NodeModule from "node:module";
+import { resolveAssetPath } from "./asset-path.mjs";
 import { findChrome } from "./chrome.mjs";
 
 const REPO = NodePath.resolve(
@@ -179,7 +180,7 @@ const HTML = `<!doctype html>
 </body>
 </html>`;
 
-const server = NodeHttp.createServer((req, res) => {
+const server = NodeHttp.createServer(async (req, res) => {
   const url = (req.url || "/").split("?")[0];
   if (url === "/") {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
@@ -192,16 +193,16 @@ const server = NodeHttp.createServer((req, res) => {
     return;
   }
   if (url.startsWith("/three/")) {
-    const file = NodePath.join(THREE_DIR, url.slice("/three/".length));
-    if (NodeFS.existsSync(file)) {
+    const file = await resolveAssetPath(THREE_DIR, url.slice("/three/".length));
+    if (file !== null) {
       res.writeHead(200, { "content-type": "application/javascript; charset=utf-8" });
       NodeFS.createReadStream(file).pipe(res);
       return;
     }
   }
   if (url.startsWith("/frames/")) {
-    const file = NodePath.join(FRAMES_DIR, url.slice("/frames/".length));
-    if (NodeFS.existsSync(file)) {
+    const file = await resolveAssetPath(FRAMES_DIR, url.slice("/frames/".length));
+    if (file !== null) {
       res.writeHead(200, { "content-type": "image/jpeg" });
       NodeFS.createReadStream(file).pipe(res);
       return;
