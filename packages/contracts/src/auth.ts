@@ -167,17 +167,21 @@ export const AuthStandardClientScopes = [
   AuthFilesystemWriteScope,
   AuthRelayReadScope,
 ] as const;
-export const AuthAdministrativeScopes = [
+const administrativeGrantScopes = [
   ...AuthStandardClientScopes,
   AuthTerminalOperateScope,
-  AuthReviewWriteScope,
   AuthAccessReadScope,
   AuthAccessWriteScope,
   AuthRelayWriteScope,
 ] as const;
 
+export const AuthAdministrativeScopes = [
+  ...administrativeGrantScopes,
+  AuthReviewWriteScope,
+] as const;
+
 export const AuthAdministrativeClientScopes = [
-  ...AuthStandardClientScopes,
+  ...administrativeGrantScopes,
   AuthRelayConfigureScope,
 ] as const;
 

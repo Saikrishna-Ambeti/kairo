@@ -14,10 +14,9 @@ model.
   carries: a pairing link, an MCP sign-in approval, a link code from a linked environment, and a
   guest link (which reads a thread). Revoking is not capped by the caller's scopes. Admitting a
   Kairo Connect device is not delegation; see [Kairo Connect](./06_t3-connect.md).
-- **Why the default grant includes management scopes.** `terminal:operate` and
-  `orchestration:operate` already grant OS-user execution (which can invoke `t3 auth session issue`),
-  so withholding access or relay management from the default grant would not be a real boundary.
-  Narrower clients receive explicit scopes.
+- **Management grants.** Desktop and startup bootstrap include access management, relay writes,
+  and `relay:configure`. Standard pairing grants relay reads by default. A caller with
+  `access:write` can explicitly delegate the management scopes it holds.
 - **No recoverable secrets in read models.** Only the creation response returns a raw pairing
   credential; access listings expose metadata only.
 - **DPoP binding.** Browser cookies, bearer tokens, and DPoP tokens share the scoped session model.

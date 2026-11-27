@@ -205,9 +205,9 @@ describe("browse entry filtering", () => {
   });
 
   it("matches substrings and subsequences, best match first", () => {
-    expect(names("code")).toEqual(["kairo", "Kairo-old", "my-kairo"]);
-    expect(names("t3c")).toEqual(["kairo", "Kairo-old", "my-kairo"]);
-    expect(names("tcd")).toEqual(["kairo", "Kairo-old", "my-kairo"]);
+    expect(names("airo")).toEqual(["kairo", "Kairo-old", "my-kairo"]);
+    expect(names("kai")).toEqual(["kairo", "Kairo-old", "my-kairo"]);
+    expect(names("kro")).toEqual(["kairo", "Kairo-old", "my-kairo"]);
     expect(names("xyz")).toEqual([]);
   });
 

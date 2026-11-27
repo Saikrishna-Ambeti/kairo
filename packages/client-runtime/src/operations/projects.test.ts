@@ -97,12 +97,12 @@ describe("add project shared logic", () => {
 
   it("clones the repository when given a page URL copied from the browser", () => {
     for (const [pageUrl, pageRoute, repository] of [
-      ["https://github.com/pingdotgg/t3code/tree/main", "/tree/", "kairo"],
+      ["https://github.com/pingdotgg/t3code/tree/main", "/tree/", "t3code"],
       ["https://gitlab.com/gitlab-org/gitlab-runner/-/tree/main", "/-/", "gitlab-runner"],
       ["https://git.cafe/pingdotgg/kairo/tree/main", "/tree/", "kairo"],
       ["https://gitlab.example.test/g/p/-/blob/main/src/branch/x", "/-/", "p"],
       ["https://code.company.test/g/p/-/tree/main", "/-/", "p"],
-      ["https://github.com/pingdotgg/t3code/tree/release.git", "/tree/", "kairo"],
+      ["https://github.com/pingdotgg/t3code/tree/release.git", "/tree/", "t3code"],
     ] as const) {
       const cloneUrl = normalizePastedCloneUrl(pageUrl);
       expect(cloneUrl).not.toContain(pageRoute);

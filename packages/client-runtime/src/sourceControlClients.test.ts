@@ -209,7 +209,7 @@ describe("sourceControlClients.isSameChangeRequest", () => {
     expect(
       sourceControlClients.isSameChangeRequest(
         linked,
-        "https://github.com/PingDotGG/Kairo/pull/42/files",
+        "https://github.com/PingDotGG/T3Code/pull/42/files",
       ),
     ).toBe(true);
   });

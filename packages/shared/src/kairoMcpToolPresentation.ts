@@ -116,6 +116,7 @@ const KAIRO_MCP_SERVER_ALIASES = new Set([
   "t3",
   "t3-code",
   "t3_code",
+  "t3code",
   "t3-code-direct",
   "t3_code_direct",
 ]);
