@@ -114,23 +114,23 @@ describe("AcpClientTerminals", () => {
       inheritedEnvironment.KAIRO_TEST_INHERITED = "refreshed";
 
       for (const [sessionId, expected] of [
-        ["session-a", "token-a||session-a|refreshed|KAIRO_TEST_OVERRIDE=request"],
-        ["session-b", "token-b||session-b|refreshed|KAIRO_TEST_OVERRIDE=request"],
-        ["unknown", "|||refreshed|KAIRO_TEST_OVERRIDE=inherited"],
+        ["session-a", "token-a|||session-a|refreshed|KAIRO_TEST_OVERRIDE=request"],
+        ["session-b", "token-b|||session-b|refreshed|KAIRO_TEST_OVERRIDE=request"],
+        ["unknown", "||||refreshed|KAIRO_TEST_OVERRIDE=inherited"],
       ] as const) {
         const created = yield* terminals.create({
           sessionId,
           command: process.execPath,
           args: [
             "-e",
-            "const env = process.env; process.stdout.write([env.KAIRO_ACP_MCP_AUTHORIZATION ?? '', env.t3_Acp_Mcp_Endpoint ?? '', env.KAIRO_THREAD_ID ?? '', env.KAIRO_TEST_INHERITED, ...Object.keys(env).filter((name) => name.toUpperCase() === 'KAIRO_TEST_OVERRIDE').map((name) => name + '=' + env[name])].join('|'))",
+            "const env = process.env; process.stdout.write([env.KAIRO_ACP_MCP_AUTHORIZATION ?? '', env.t3_Acp_Mcp_Endpoint ?? '', env.kairo_Acp_Mcp_Endpoint ?? '', env.KAIRO_THREAD_ID ?? '', env.KAIRO_TEST_INHERITED, ...Object.keys(env).filter((name) => name.toUpperCase() === 'KAIRO_TEST_OVERRIDE').map((name) => name + '=' + env[name])].join('|'))",
           ],
           ...(sessionId === "unknown"
             ? {}
             : {
                 env: [
                   { name: "KAIRO_TEST_OVERRIDE", value: "first" },
-                  { name: "t3_Test_Override", value: "second" },
+                  { name: "kairo_Test_Override", value: "second" },
                   { name: "KAIRO_TEST_OVERRIDE", value: "request" },
                 ],
               }),
@@ -143,7 +143,8 @@ describe("AcpClientTerminals", () => {
       Effect.provideService(HostProcess.Environment, {
         ...process.env,
         KAIRO_ACP_MCP_AUTHORIZATION: "launching-thread-token",
-        t3_Acp_Mcp_Endpoint: "launching-thread-endpoint",
+        t3_Acp_Mcp_Endpoint: "legacy-launching-thread-endpoint",
+        kairo_Acp_Mcp_Endpoint: "launching-thread-endpoint",
         KAIRO_THREAD_ID: "launching-thread",
         KAIRO_TEST_INHERITED: "kept",
         KAIRO_TEST_OVERRIDE: "inherited",
@@ -408,35 +409,42 @@ describe("AcpClientTerminals", () => {
     ),
   );
 
-  it.live("bounds unreleased terminal handles without invalidating existing ids", () =>
-    withTerminals((terminals) =>
-      Effect.gen(function* () {
-        const terminalIds: string[] = [];
-        for (let index = 0; index < 64; index += 1) {
-          const created = yield* terminals.create({
-            sessionId: "session",
-            command: process.execPath,
-            args: ["-e", `process.stdout.write('${index}');`],
-          });
-          yield* terminals.waitForExit({
-            sessionId: "session",
-            terminalId: created.terminalId,
-          });
-          terminalIds.push(created.terminalId);
-        }
+  it.effect("bounds unreleased terminal handles without invalidating existing ids", () =>
+    Effect.gen(function* () {
+      const child = ChildProcessSpawner.makeHandle({
+        pid: ChildProcessSpawner.ProcessId(1),
+        exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(0)),
+        isRunning: Effect.succeed(false),
+        kill: () => Effect.void,
+        stdin: Sink.drain,
+        stdout: Stream.empty,
+        stderr: Stream.empty,
+        all: Stream.empty,
+        getInputFd: () => Sink.drain,
+        getOutputFd: () => Stream.empty,
+        unref: Effect.succeed(Effect.void),
+      });
+      const terminals = yield* makeAcpClientTerminals({ defaultCwd: process.cwd() }).pipe(
+        Effect.provideService(
+          ChildProcessSpawner.ChildProcessSpawner,
+          ChildProcessSpawner.make(() => Effect.succeed(child)),
+        ),
+      );
+      yield* Effect.addFinalizer(() => terminals.disposeAll);
 
-        const rejected = yield* terminals
-          .create({
-            sessionId: "session",
-            command: process.execPath,
-            args: ["-e", ""],
-          })
-          .pipe(Effect.result);
-        expect(Result.isFailure(rejected)).toBe(true);
-        expect(terminals.readOutputSnapshot("session", terminalIds[0]!)).toBeDefined();
-        expect(terminals.readOutputSnapshot("session", terminalIds.at(-1)!)).toBeDefined();
-      }),
-    ),
+      const request = { sessionId: "session", command: "fixture" };
+      const terminalIds: string[] = [];
+      for (let index = 0; index < 64; index += 1) {
+        const created = yield* terminals.create(request);
+        yield* terminals.waitForExit({ sessionId: request.sessionId, ...created });
+        terminalIds.push(created.terminalId);
+      }
+
+      const rejected = yield* Effect.flip(terminals.create(request));
+      expect(rejected.message).toContain("64 unreleased terminals");
+      expect(terminals.readOutputSnapshot(request.sessionId, terminalIds[0]!)).toBeDefined();
+      expect(terminals.readOutputSnapshot(request.sessionId, terminalIds.at(-1)!)).toBeDefined();
+    }),
   );
 
   it.live("bounds aggregate output retained across unreleased terminals", () =>

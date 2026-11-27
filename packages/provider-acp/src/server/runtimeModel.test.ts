@@ -1733,8 +1733,10 @@ describe("extractMcpToolCallIdentity", () => {
       "kairo-code___delegate_task",
       "kairo-code-delegate_task",
       'mcp__t3_code__delegate_task: {"mode":"async"}',
+      'mcp__kairo_code__delegate_task: {"mode":"async"}',
       'kairo-code__delegate_task: {"mode":"async"}',
       "delegate_task_t3-code",
+      "delegate_task_kairo-code",
       "kairo-code/delegate_task",
       "delegate_task",
       'delegate_task: {"mode":"async"}',
@@ -1774,6 +1776,10 @@ describe("extractMcpToolCallIdentity", () => {
       );
 
     expect(identityFor("mcp__editor_t3_code_f6129534__html_render")).toEqual({
+      server: "kairo-code",
+      tool: "html_render",
+    });
+    expect(identityFor("mcp__editor_kairo_code_f6129534__html_render")).toEqual({
       server: "kairo-code",
       tool: "html_render",
     });

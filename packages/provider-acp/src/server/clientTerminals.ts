@@ -250,8 +250,8 @@ export const makeAcpClientTerminals = Effect.fn("makeAcpClientTerminals")(functi
           const inheritedEnvironment = Object.fromEntries(
             Object.entries(options.environment ?? (yield* HostProcess.Environment)).filter(
               ([name]) =>
-                !name.toUpperCase().startsWith("KAIRO_ACP_MCP_") &&
-                name.toUpperCase() !== "KAIRO_THREAD_ID",
+                !/^(?:KAIRO|T3)_ACP_MCP_/i.test(name) &&
+                !/^(?:KAIRO|T3CODE)_THREAD_ID$/i.test(name),
             ),
           );
           const sessionEnvironment = options.environmentForSession?.(request.sessionId);
