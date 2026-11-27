@@ -1,11 +1,5 @@
-import {
-  EMPTY_SHELL_STATE,
-  type EnvironmentShellSummary,
-} from "@kairo/client-runtime/state/shell";
-import {
-  BearerConnectionProfile,
-  BearerConnectionTarget,
-} from "@kairo/client-runtime/connection";
+import { EMPTY_SHELL_STATE, type EnvironmentShellSummary } from "@kairo/client-runtime/state/shell";
+import { BearerConnectionProfile, BearerConnectionTarget } from "@kairo/client-runtime/connection";
 import { EnvironmentId } from "@kairo/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Option from "effect/Option";

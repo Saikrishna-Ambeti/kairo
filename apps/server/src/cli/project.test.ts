@@ -142,7 +142,9 @@ it.effect(
 
       // Repositories inside the folder are found; `--track` adds one from outside it.
       const shared = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "kairo-v2-project-shared-"));
-      const homeShared = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "kairo-v2-project-home-"));
+      const homeShared = NodeFS.mkdtempSync(
+        NodePath.join(NodeOS.tmpdir(), "kairo-v2-project-home-"),
+      );
       NodeFS.mkdirSync(NodePath.join(workspaceRoot, "api", ".git"), { recursive: true });
       NodeFS.mkdirSync(NodePath.join(workspaceRoot, "notes"));
       // Names are cut to 128 UTF-16 units, never between the halves of an emoji.

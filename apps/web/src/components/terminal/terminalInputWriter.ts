@@ -1,8 +1,4 @@
-import {
-  chunkTerminalWrite,
-  terminalWritePhase,
-  type TerminalWriteInput,
-} from "@kairo/contracts";
+import { chunkTerminalWrite, terminalWritePhase, type TerminalWriteInput } from "@kairo/contracts";
 
 /** Sends one chunk of terminal input; resolves false when it failed and the rest should drop. */
 type SendTerminalChunk = (

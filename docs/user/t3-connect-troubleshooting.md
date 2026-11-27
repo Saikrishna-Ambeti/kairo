@@ -68,8 +68,8 @@ Update Kairo on the host machine ([Updating Kairo](./updating.md)).
 | Error                                            | Fix                                                                                                                           |
 | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
 | `environment_link_limit_exceeded` / tunnel limit | Deregister an unused host or link a paid T3 Chat account, then restart the host.                                              |
-| `auth_invalid` / `invalid_bearer`                | Run `kairo connect login` (or `kairo connect logout && kairo connect`), then restart the server.                                       |
-| Expired or invalid link proof                    | Sync system clock, update Kairo, and restart.                                                                               |
+| `auth_invalid` / `invalid_bearer`                | Run `kairo connect login` (or `kairo connect logout && kairo connect`), then restart the server.                              |
+| Expired or invalid link proof                    | Sync system clock, update Kairo, and restart.                                                                                 |
 | HTTP 403 (unrecognized)                          | If device approval is on, update the client and approve it; otherwise check proxies/firewalls and save any Cloudflare Ray ID. |
 | HTTP 408, 429, or 5xx                            | Temporary—wait a few minutes for automatic retry.                                                                             |
 

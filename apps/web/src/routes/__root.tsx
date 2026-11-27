@@ -250,10 +250,7 @@ function RootRouteBranch() {
           {appShell}
         </>
       ) : (
-        <FirstRunGate
-          enabled={false}
-          hostedStatic={authGateState.status === "hosted-static"}
-        >
+        <FirstRunGate enabled={false} hostedStatic={authGateState.status === "hosted-static"}>
           {appHosts}
           {primaryEnvironmentAuthenticated ? (
             <EventRouter skipInitialBootstrapNavigation={returningFromWelcome} />

@@ -49,10 +49,7 @@ import {
 } from "@kairo/contracts";
 import * as DateTime from "effect/DateTime";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
-import {
-  fromRunner,
-  decodeJsonReply,
-} from "@kairo/provider-core/server/textGenerationOperations";
+import { fromRunner, decodeJsonReply } from "@kairo/provider-core/server/textGenerationOperations";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";

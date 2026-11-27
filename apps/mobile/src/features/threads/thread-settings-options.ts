@@ -2,11 +2,7 @@ import {
   managedRuntimeModeDenial,
   providerRuntimeModeLimitMessage,
 } from "@kairo/client-runtime/contract-labels";
-import type {
-  ManagedPolicySummary,
-  ProviderRuntimeModeLimit,
-  RuntimeMode,
-} from "@kairo/contracts";
+import type { ManagedPolicySummary, ProviderRuntimeModeLimit, RuntimeMode } from "@kairo/contracts";
 import { msg } from "gt-react-native";
 
 import { m, type MessageResolver } from "../../i18n/messages";

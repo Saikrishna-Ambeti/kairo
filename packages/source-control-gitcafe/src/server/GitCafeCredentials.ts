@@ -1,7 +1,4 @@
-import {
-  requireSettingsSecretLiteral,
-  type SettingsSecretUnresolvedError,
-} from "@kairo/contracts";
+import { requireSettingsSecretLiteral, type SettingsSecretUnresolvedError } from "@kairo/contracts";
 import { normalizeHost } from "@kairo/source-control-core/server/pullRequestUtils";
 import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";

@@ -1,9 +1,6 @@
 import { msg } from "gt-react";
 import { m } from "~/i18n/messages";
-import {
-  ConnectionBlockedError,
-  ConnectionTransientError,
-} from "@kairo/client-runtime/connection";
+import { ConnectionBlockedError, ConnectionTransientError } from "@kairo/client-runtime/connection";
 import { EnvironmentRpcUnavailableError } from "@kairo/client-runtime/rpc";
 import * as Cause from "effect/Cause";
 import * as Schema from "effect/Schema";

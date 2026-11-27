@@ -1,8 +1,4 @@
-import {
-  ProviderDriverKind,
-  type ProviderInstanceId,
-  type ServerProvider,
-} from "@kairo/contracts";
+import { ProviderDriverKind, type ProviderInstanceId, type ServerProvider } from "@kairo/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 

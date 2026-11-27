@@ -25,7 +25,9 @@ test(
         return {
           fakeCodex: path.join(KAIRO_HOME, "bin/fake-codex"),
           settingsPath: path.join(KAIRO_HOME, "userdata/settings.json"),
-          originalSettings: yield* fs.readFileString(path.join(KAIRO_HOME, "userdata/settings.json")),
+          originalSettings: yield* fs.readFileString(
+            path.join(KAIRO_HOME, "userdata/settings.json"),
+          ),
         };
       }),
     );

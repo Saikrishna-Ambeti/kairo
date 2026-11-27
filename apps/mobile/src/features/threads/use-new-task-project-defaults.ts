@@ -53,7 +53,9 @@ export function useNewTaskProjectDefaults(project: EnvironmentProject | null) {
   );
   const kairoProjectFileData = kairoProjectFileQuery.data as ProjectReadFileResult | null;
   const kairoProjectFile =
-    kairoProjectFileData === null || kairoProjectFileData.exists === false || kairoProjectFileData.truncated
+    kairoProjectFileData === null ||
+    kairoProjectFileData.exists === false ||
+    kairoProjectFileData.truncated
       ? null
       : parseKairoProjectFile(kairoProjectFileData.contents);
   const projectSettings = resolveProjectSettings(

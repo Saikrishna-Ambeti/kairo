@@ -27,10 +27,7 @@ import {
   ScreenReaderAnnouncements,
   ToolCallVisibility,
 } from "@kairo/contracts/settings";
-import {
-  managedUpdatesDenial,
-  managedUpdatesMessage,
-} from "@kairo/client-runtime/contract-labels";
+import { managedUpdatesDenial, managedUpdatesMessage } from "@kairo/client-runtime/contract-labels";
 import { desktopUpdateChannelOf } from "@kairo/shared/cliRelease";
 import { createModelSelection, pickModelSelection } from "@kairo/shared/model";
 import { resolvePastedPath } from "@kairo/shared/path";

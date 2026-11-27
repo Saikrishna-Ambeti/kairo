@@ -1,8 +1,4 @@
-import type {
-  OtlpEndpointCheckInput,
-  OtlpEndpointCheckResult,
-  OtlpSignal,
-} from "@kairo/contracts";
+import type { OtlpEndpointCheckInput, OtlpEndpointCheckResult, OtlpSignal } from "@kairo/contracts";
 import { layerOtlpSerialization } from "@kairo/shared/observability";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";

@@ -369,7 +369,9 @@ export async function runAcpMcpCliFastPath(
   const endpoint = process.env.KAIRO_ACP_MCP_ENDPOINT;
   const authorization = process.env.KAIRO_ACP_MCP_AUTHORIZATION;
   if (endpoint === undefined || authorization === undefined) {
-    process.stderr.write(`${command} requires KAIRO_ACP_MCP_ENDPOINT and KAIRO_ACP_MCP_AUTHORIZATION.\n`);
+    process.stderr.write(
+      `${command} requires KAIRO_ACP_MCP_ENDPOINT and KAIRO_ACP_MCP_AUTHORIZATION.\n`,
+    );
     process.exitCode = 2;
     return;
   }

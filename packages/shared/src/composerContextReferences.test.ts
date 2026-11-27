@@ -63,8 +63,9 @@ describe("labels and reference links", () => {
         ?.label,
     ).toHaveLength(200);
     expect(
-      collectComposerContextReferences(`[${"x".repeat(199)}😀tail](kairo-context://v1/file/ctx_1)`)[0]
-        ?.label,
+      collectComposerContextReferences(
+        `[${"x".repeat(199)}😀tail](kairo-context://v1/file/ctx_1)`,
+      )[0]?.label,
     ).toBe("x".repeat(199));
   });
 
@@ -114,7 +115,9 @@ describe("labels and reference links", () => {
     const image = "![a.png](kairo-context://v1/image/ctx_1)";
     const file = "[notes.md](kairo-context://v1/file/ctx_3)";
     expect(isImageReferencesOnly(image)).toBe(true);
-    expect(isImageReferencesOnly(` ${image}\n![b.png](kairo-context://v1/image/ctx_2) `)).toBe(true);
+    expect(isImageReferencesOnly(` ${image}\n![b.png](kairo-context://v1/image/ctx_2) `)).toBe(
+      true,
+    );
     expect(isImageReferencesOnly(`${image} what is this?`)).toBe(false);
     expect(isImageReferencesOnly(file)).toBe(false);
     expect(isImageReferencesOnly(`${image} ${file}`)).toBe(false);

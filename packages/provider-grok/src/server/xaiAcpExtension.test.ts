@@ -394,7 +394,10 @@ describe("XAiAcpExtension", () => {
     });
     expect(rendered.data.rawInput).toMatchObject({ arguments: { path: "a.html" } });
     expect(
-      htmlRenderFromToolItem({ toolName: "kairo-code.html_render", output: rendered.data.rawOutput }),
+      htmlRenderFromToolItem({
+        toolName: "kairo-code.html_render",
+        output: rendered.data.rawOutput,
+      }),
     ).toEqual(page);
 
     const failed = grokCall(

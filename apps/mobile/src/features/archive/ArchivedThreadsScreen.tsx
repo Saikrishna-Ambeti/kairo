@@ -1,9 +1,6 @@
 import { NativeScrollView } from "../../native/NativeScrollViewMarker";
 import { Button } from "../../components/ui/Button";
-import type {
-  EnvironmentProject,
-  EnvironmentThreadShell,
-} from "@kairo/client-runtime/state/shell";
+import type { EnvironmentProject, EnvironmentThreadShell } from "@kairo/client-runtime/state/shell";
 import { LegendList } from "@legendapp/list/react-native";
 import {
   AuthOrchestrationOperateScope,

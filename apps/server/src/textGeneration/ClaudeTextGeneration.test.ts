@@ -85,7 +85,8 @@ function withFakeClaudeEnv<A, E, R>(
       KAIRO_FAKE_CLAUDE_REJECTS_NO_SESSION_PERSISTENCE: input.rejectsNoSessionPersistence
         ? "1"
         : undefined,
-      KAIRO_FAKE_CLAUDE_EXIT_CODE: input.exitCode === undefined ? undefined : String(input.exitCode),
+      KAIRO_FAKE_CLAUDE_EXIT_CODE:
+        input.exitCode === undefined ? undefined : String(input.exitCode),
       KAIRO_FAKE_CLAUDE_STDERR: input.stderr,
       KAIRO_FAKE_CLAUDE_EXPECTED_TOOLS: input.expectedTools,
       KAIRO_FAKE_CLAUDE_ARGS_MUST_CONTAIN: input.argsMustContain,

@@ -421,7 +421,11 @@ effectIt.effect("restores into a leftover worktree folder that cannot itself be 
 });
 
 it.each([
-  { label: "directly in the scratch root", folder: "/tmp/kairo-home/scratch/notes", recreated: true },
+  {
+    label: "directly in the scratch root",
+    folder: "/tmp/kairo-home/scratch/notes",
+    recreated: true,
+  },
   { label: "below another folder", folder: "/tmp/kairo-home/scratch/notes/deep", recreated: false },
   {
     label: "in another project",
@@ -2130,7 +2134,9 @@ effectIt.effect.each([
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const worktreesDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "kairo-restore-setup-" });
+    const worktreesDir = yield* fileSystem.makeTempDirectoryScoped({
+      prefix: "kairo-restore-setup-",
+    });
     const worktreePath = path.join(worktreesDir, "project", "restore");
     const setupStarted = yield* Deferred.make<void>();
     const setupDone = yield* Deferred.make<ProjectSetupScriptRunner.ProjectSetupScriptCompletion>();

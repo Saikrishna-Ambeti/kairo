@@ -1,7 +1,4 @@
-import type {
-  EnvironmentProject,
-  EnvironmentThreadShell,
-} from "@kairo/client-runtime/state/shell";
+import type { EnvironmentProject, EnvironmentThreadShell } from "@kairo/client-runtime/state/shell";
 import { EnvironmentId, ThreadId } from "@kairo/contracts";
 import { useNavigation, useNavigationState } from "@react-navigation/native";
 

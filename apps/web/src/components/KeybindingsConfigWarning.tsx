@@ -1,10 +1,6 @@
 import { m } from "../i18n/messages";
 import { thrownErrorMessage } from "@kairo/client-runtime/errors";
-import {
-  AuthOrchestrationOperateScope,
-  type EditorId,
-  type EnvironmentId,
-} from "@kairo/contracts";
+import { AuthOrchestrationOperateScope, type EditorId, type EnvironmentId } from "@kairo/contracts";
 import { squashAtomCommandFailure } from "@kairo/client-runtime/state/runtime";
 import { T, useGT, Var } from "gt-react";
 

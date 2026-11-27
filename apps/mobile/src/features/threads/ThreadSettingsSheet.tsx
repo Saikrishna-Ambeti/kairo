@@ -24,10 +24,7 @@ import type {
 import type { LegendListRenderItemProps } from "@legendapp/list/react-native";
 import { RegistryContext, useAtomMount, useAtomValue } from "@effect/atom-react";
 import { AnimatedLegendList } from "@legendapp/list/reanimated";
-import {
-  getProviderOptionCurrentLabel,
-  getProviderOptionCurrentValue,
-} from "@kairo/shared/model";
+import { getProviderOptionCurrentLabel, getProviderOptionCurrentValue } from "@kairo/shared/model";
 import {
   useNavigation,
   useRoute,

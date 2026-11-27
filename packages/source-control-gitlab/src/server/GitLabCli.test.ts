@@ -111,7 +111,9 @@ layer("GitLabCli.layer", (it) => {
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const bodyDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "kairo-gitlab-mr-body-" });
+      const bodyDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "kairo-gitlab-mr-body-",
+      });
       const bodyFile = path.join(bodyDir, "kairo-pr-body.md");
       yield* fileSystem.writeFileString(bodyFile, "## Summary\n\nFixes the thing.\n");
       mockedRun.mockReturnValueOnce(Effect.succeed(processOutput("{}")));
@@ -136,7 +138,9 @@ layer("GitLabCli.layer", (it) => {
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const bodyDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "kairo-gitlab-mr-body-" });
+      const bodyDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "kairo-gitlab-mr-body-",
+      });
       const glab = yield* GitLabCli.GitLabCli;
       const error = yield* glab
         .createMergeRequest({

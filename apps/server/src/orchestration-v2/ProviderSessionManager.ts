@@ -481,19 +481,23 @@ export const layerWithOptions = (
       const serverSettings = yield* Effect.serviceOption(ServerSettings.ServerSettingsService);
       const projectService = yield* Effect.serviceOption(ProjectService.ProjectService);
       const secretStore = yield* Effect.serviceOption(ServerSecretStore.ServerSecretStore);
-      const providerHasMemoryAccess = Effect.fnUntraced(function* (
-        providerInstanceId: ProviderInstanceId,
-      ) {
-        if (Option.isNone(secretStore) || Option.isNone(serverSettings)) return false;
-        const { memory } = yield* serverSettings.value.getSettings;
-        if (!memory.supermemory.enabled || !memory.supermemory.providerInstanceIds.includes(providerInstanceId)) {
-          return false;
-        }
-        const token = yield* getKairoCloudAccessToken().pipe(
-          Effect.provideService(ServerSecretStore.ServerSecretStore, secretStore.value),
-        );
-        return token !== null;
-      }, Effect.orElseSucceed(() => false));
+      const providerHasMemoryAccess = Effect.fnUntraced(
+        function* (providerInstanceId: ProviderInstanceId) {
+          if (Option.isNone(secretStore) || Option.isNone(serverSettings)) return false;
+          const { memory } = yield* serverSettings.value.getSettings;
+          if (
+            !memory.supermemory.enabled ||
+            !memory.supermemory.providerInstanceIds.includes(providerInstanceId)
+          ) {
+            return false;
+          }
+          const token = yield* getKairoCloudAccessToken().pipe(
+            Effect.provideService(ServerSecretStore.ServerSecretStore, secretStore.value),
+          );
+          return token !== null;
+        },
+        Effect.orElseSucceed(() => false),
+      );
       const eventSink = yield* EventSink.EventSinkV2;
       const commandOutput = yield* CommandOutputHub.CommandOutputHub;
       const promptSuggestionStore = yield* SubscriptionRef.make<

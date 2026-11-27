@@ -1,4 +1,8 @@
-import { ARTIFACT_CREATION_COMMANDS, isArtifactCreationKind, type ArtifactCreationKind } from "@kairo/client-runtime/artifact-creation";
+import {
+  ARTIFACT_CREATION_COMMANDS,
+  isArtifactCreationKind,
+  type ArtifactCreationKind,
+} from "@kairo/client-runtime/artifact-creation";
 import type { MenuAction } from "@react-native-menu/menu";
 import { msg, useGT, useMessages } from "gt-react-native";
 import { Pressable } from "react-native";

@@ -39,10 +39,7 @@ import { collectStreamAsString } from "@kairo/provider-core/server/snapshotProbe
 import * as NetService from "@kairo/shared/Net";
 import { AgentScope } from "@kairo/shared/AgentScope";
 import * as HostProcess from "@kairo/shared/HostProcess";
-import {
-  DEFAULT_VARIANT_CHOICE_ID,
-  getModelSelectionStringOptionValue,
-} from "@kairo/shared/model";
+import { DEFAULT_VARIANT_CHOICE_ID, getModelSelectionStringOptionValue } from "@kairo/shared/model";
 import { parseSemver } from "@kairo/shared/semver";
 import { resolveSpawnCommand } from "@kairo/shared/shell";
 const encodeUnknownJsonStringExit = Schema.encodeUnknownExit(Schema.fromJsonString(Schema.Unknown));

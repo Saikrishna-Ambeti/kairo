@@ -1,7 +1,10 @@
 import { mFallback, msg } from "gt-i18n";
 import type { MFunctionType } from "gt-i18n/types";
 
-import { resolveT3McpToolDefinition, type T3McpToolPresentation } from "./kairoMcpToolPresentation.ts";
+import {
+  resolveT3McpToolDefinition,
+  type T3McpToolPresentation,
+} from "./kairoMcpToolPresentation.ts";
 
 // Same English as each tool's displayName; a name missing here shows as authored.
 const DISPLAY_NAMES: ReadonlyMap<string, string> = new Map([

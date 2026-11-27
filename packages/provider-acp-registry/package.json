@@ -33,11 +33,11 @@
     "test": "vp test run --config ../../vite.config.ts --dir ."
   },
   "dependencies": {
-    "@noble/hashes": "catalog:",
     "@kairo/contracts": "workspace:*",
     "@kairo/provider-acp": "workspace:*",
     "@kairo/provider-core": "workspace:*",
     "@kairo/shared": "workspace:*",
+    "@noble/hashes": "catalog:",
     "effect": "catalog:"
   },
   "devDependencies": {

@@ -464,7 +464,11 @@ const storeDeleteCommand = Command.make("delete", {
     withThreadTools(
       { ...flags, json: false },
       Effect.fn("cli.workflow.store.delete")(function* (tools) {
-        yield* tools.call("kairo_workflow", { action: "store_delete", key: flags.key }, StoreResult);
+        yield* tools.call(
+          "kairo_workflow",
+          { action: "store_delete", key: flags.key },
+          StoreResult,
+        );
         yield* Console.log(`Deleted ${flags.key}.`);
       }),
     ).pipe(reportThreadErrors),

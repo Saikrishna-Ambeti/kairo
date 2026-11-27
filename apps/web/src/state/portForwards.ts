@@ -1,9 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import {
-  allowsPreviewTunnel,
-  type DesktopPortForward,
-  type EnvironmentId,
-} from "@kairo/contracts";
+import { allowsPreviewTunnel, type DesktopPortForward, type EnvironmentId } from "@kairo/contracts";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";

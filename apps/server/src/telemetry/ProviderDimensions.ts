@@ -1,8 +1,4 @@
-import type {
-  ModelSelection,
-  OrchestrationV2ThreadShell,
-  ServerProvider,
-} from "@kairo/contracts";
+import type { ModelSelection, OrchestrationV2ThreadShell, ServerProvider } from "@kairo/contracts";
 
 import { BUNDLED_MODEL_MANIFEST } from "../provider/ModelManifest.ts";
 

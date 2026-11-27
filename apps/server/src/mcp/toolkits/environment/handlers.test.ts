@@ -104,6 +104,8 @@ it("keeps agent feedback out of the preferences agents read and write", () => {
     }),
   ).not.toHaveProperty("agentFeedback");
   expect(
-    Object.keys(EnvironmentToolkit.tools.kairo_environment_preferences_update.parametersSchema.fields),
+    Object.keys(
+      EnvironmentToolkit.tools.kairo_environment_preferences_update.parametersSchema.fields,
+    ),
   ).not.toContain("agentFeedback");
 });

@@ -1,8 +1,5 @@
 import { squashAtomCommandFailure } from "@kairo/client-runtime/state/runtime";
-import {
-  findProjectByPath,
-  inferProjectTitleFromPath,
-} from "@kairo/client-runtime/state/projects";
+import { findProjectByPath, inferProjectTitleFromPath } from "@kairo/client-runtime/state/projects";
 import { useAtomValue } from "@effect/atom-react";
 import type { DesktopAppActivationRequest } from "@kairo/contracts";
 import { msg } from "gt-react";

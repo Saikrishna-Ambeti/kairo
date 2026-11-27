@@ -1,8 +1,4 @@
-import {
-  GitCommandError,
-  type OrchestrationV2ThreadShell,
-  type ProjectId,
-} from "@kairo/contracts";
+import { GitCommandError, type OrchestrationV2ThreadShell, type ProjectId } from "@kairo/contracts";
 import * as Effect from "effect/Effect";
 
 import * as GitWorkflowService from "./GitWorkflowService.ts";

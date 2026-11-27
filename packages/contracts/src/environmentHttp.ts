@@ -524,7 +524,8 @@ export const KAIRO_CONNECT_TROUBLESHOOTING_SECTIONS = [
   "the-host-runs-an-older-kairo-code",
   "kairo-connect-returned-an-error",
 ] as const;
-export type T3ConnectTroubleshootingSection = (typeof KAIRO_CONNECT_TROUBLESHOOTING_SECTIONS)[number];
+export type T3ConnectTroubleshootingSection =
+  (typeof KAIRO_CONNECT_TROUBLESHOOTING_SECTIONS)[number];
 
 /** Clients, the CLI, and server logs link here as "More info". */
 export function kairoConnectTroubleshootingUrl(section: T3ConnectTroubleshootingSection): string {

@@ -160,9 +160,7 @@ const layerCapabilities = Layer.effectContext(
           if (session === null) {
             return yield* new ConnectionBlockedError({
               reason: "authentication",
-              detail: m(
-                msg("Sign in to Kairo to use cloud services."),
-              ),
+              detail: m(msg("Sign in to Kairo to use cloud services.")),
             });
           }
           const token = yield* session.readClerkToken().pipe(

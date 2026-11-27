@@ -1,8 +1,4 @@
-import type {
-  EnvironmentId,
-  ProviderInstanceId,
-  ProviderRuntimeModeLimit,
-} from "@kairo/contracts";
+import type { EnvironmentId, ProviderInstanceId, ProviderRuntimeModeLimit } from "@kairo/contracts";
 import { createContext } from "react";
 
 import { useEnvironmentQuery } from "./query";

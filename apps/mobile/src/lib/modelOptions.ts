@@ -141,7 +141,10 @@ function selectionDriver(
 }
 
 /** Whether the environment's managed policy leaves this driver out; the server refuses its turns. */
-function isDriverDisallowed(config: KairoServerConfig | null | undefined, driver: string | undefined) {
+function isDriverDisallowed(
+  config: KairoServerConfig | null | undefined,
+  driver: string | undefined,
+) {
   return (
     driver !== undefined &&
     isProviderDriverKind(driver) &&

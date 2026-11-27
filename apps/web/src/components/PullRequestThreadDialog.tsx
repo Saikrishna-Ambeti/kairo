@@ -1,8 +1,4 @@
-import {
-  AuthOrchestrationOperateScope,
-  type EnvironmentId,
-  type ThreadId,
-} from "@kairo/contracts";
+import { AuthOrchestrationOperateScope, type EnvironmentId, type ThreadId } from "@kairo/contracts";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,

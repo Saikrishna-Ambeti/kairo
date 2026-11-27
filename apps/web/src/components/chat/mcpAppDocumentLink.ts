@@ -39,7 +39,8 @@ export function attachMcpAppDocumentLink(
       if (event.source === null || event.source !== frame.contentWindow) return;
       if (current.link === false) return;
       if (current.link === null) {
-        const port = event.data?.kairo === MCP_APP_DOCUMENT_MESSAGE ? (event.ports[0] ?? null) : null;
+        const port =
+          event.data?.kairo === MCP_APP_DOCUMENT_MESSAGE ? (event.ports[0] ?? null) : null;
         if (port === null) {
           current.link = false;
           current.onMissing();

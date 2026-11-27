@@ -7,7 +7,9 @@ import { hasCloudIdentityConfig, resolveCloudPublicConfig } from "./publicConfig
 
 const cloudConfig = resolveCloudPublicConfig();
 // Build-time constant: null when this build has no cloud config.
-const publishableKey = hasCloudIdentityConfig(cloudConfig) ? cloudConfig.clerk.publishableKey : null;
+const publishableKey = hasCloudIdentityConfig(cloudConfig)
+  ? cloudConfig.clerk.publishableKey
+  : null;
 
 if (publishableKey) {
   // The same native singleton ClerkProvider renders with, so the service

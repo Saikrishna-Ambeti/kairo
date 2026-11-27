@@ -1133,7 +1133,9 @@ function ResourceTelemetryDiagnosticsBody({
               value={allKairo ? formatBytes(allKairo.currentRssBytes) : "..."}
               detail={
                 allKairo
-                  ? gt("{bytes} combined process peaks", { bytes: formatBytes(allKairo.peakRssBytes) })
+                  ? gt("{bytes} combined process peaks", {
+                      bytes: formatBytes(allKairo.peakRssBytes),
+                    })
                   : undefined
               }
             />

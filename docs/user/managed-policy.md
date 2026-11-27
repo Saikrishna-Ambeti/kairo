@@ -35,11 +35,11 @@ A managed policy lets an administrator set defaults, lock settings, and restrict
 
 Use **one** source per machine (having both a native policy and a policy file prevents Kairo from starting):
 
-| OS          | Native policy                                                                     | Policy file (admin-writable only)                 |
-| ----------- | --------------------------------------------------------------------------------- | ------------------------------------------------- |
-| **macOS**   | Device configuration profile for `com.kairo.app`                             | `/Library/Application Support/Kairo/policy.json` |
+| OS          | Native policy                                                                    | Policy file (admin-writable only)                |
+| ----------- | -------------------------------------------------------------------------------- | ------------------------------------------------ |
+| **macOS**   | Device configuration profile for `com.kairo.app`                                 | `/Library/Application Support/Kairo/policy.json` |
 | **Windows** | GPO template or `Policy` (`REG_SZ`) under `HKLM\SOFTWARE\Policies\T3Tools\Kairo` | `C:\Program Files\Kairo\policy.json`             |
-| **Linux**   | —                                                                                 | `/etc/kairo/policy.json`                         |
+| **Linux**   | —                                                                                | `/etc/kairo/policy.json`                         |
 
 - **macOS profile**: Generate `macos/kairo.mobileconfig` with `t3 policy templates <dir> --policy policy.json` (or `plutil -convert xml1 -o com.kairo.app.plist policy.json`). Deploy as a single device profile (profiles cannot represent `null`; use a policy file if needed).
 - **Windows GPO**: Generate `windows/kairo.admx` and `windows/en-US/kairo.adml` with `t3 policy templates <dir>`, import into `PolicyDefinitions`/Intune under **Computer Configuration → Administrative Templates → Kairo**, set **Organization**, run `gpupdate /target:computer /force`, and restart Kairo.

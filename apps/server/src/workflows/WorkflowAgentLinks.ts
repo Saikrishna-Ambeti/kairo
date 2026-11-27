@@ -255,22 +255,32 @@ export const make = Effect.gen(function* () {
       let counted = turn.turnId;
       while (true) {
         const piece = Math.min(left, Duration.toMillis(WAIT_PIECE));
-        const waited = yield* call(environment, "kairo_thread_wait", OrchestratorMcpThreadWaitResult, {
-          threadId: turn.threadId,
-          runId: turn.turnId,
-          untilOutput: true,
-          timeoutMs: piece,
-        });
+        const waited = yield* call(
+          environment,
+          "kairo_thread_wait",
+          OrchestratorMcpThreadWaitResult,
+          {
+            threadId: turn.threadId,
+            runId: turn.turnId,
+            untilOutput: true,
+            timeoutMs: piece,
+          },
+        );
         if (waited.output !== undefined) return Option.some(waited.output);
         // An environment that does not know `untilOutput` answers at once: nothing to wait on.
         if (!waited.timedOut) return Option.none<Schema.Json>();
         left -= piece;
         if (left > 0) continue;
-        const read = yield* call(environment, "kairo_thread_read", OrchestratorMcpThreadReadResult, {
-          threadId: turn.threadId,
-          limit: 1,
-          runLimit: 1,
-        });
+        const read = yield* call(
+          environment,
+          "kairo_thread_read",
+          OrchestratorMcpThreadReadResult,
+          {
+            threadId: turn.threadId,
+            limit: 1,
+            runLimit: 1,
+          },
+        );
         const latest = read.recentRuns[0];
         if (latest === undefined || latest.runId === counted) return Option.none<Schema.Json>();
         // Quiet is counted from the thread's last turn: one under way, or one not yet counted.
@@ -279,11 +289,16 @@ export const make = Effect.gen(function* () {
       }
     });
     while (true) {
-      const waited = yield* call(environment, "kairo_thread_wait", OrchestratorMcpThreadWaitResult, {
-        threadId: turn.threadId,
-        runId: turn.turnId,
-        timeoutMs: Duration.toMillis(WAIT_PIECE),
-      });
+      const waited = yield* call(
+        environment,
+        "kairo_thread_wait",
+        OrchestratorMcpThreadWaitResult,
+        {
+          threadId: turn.threadId,
+          runId: turn.turnId,
+          timeoutMs: Duration.toMillis(WAIT_PIECE),
+        },
+      );
       if (waited.timedOut) continue;
       const read = yield* call(environment, "kairo_thread_read", OrchestratorMcpThreadReadResult, {
         threadId: turn.threadId,

@@ -397,9 +397,12 @@ export type RepositoryHooksPolicy =
   | { readonly _tag: "none" }
   | { readonly _tag: "approved-push"; readonly digest: string | null };
 
-export const RepositoryHooks = Context.Reference<RepositoryHooksPolicy>("kairo/vcs/RepositoryHooks", {
-  defaultValue: () => ({ _tag: "all" }),
-});
+export const RepositoryHooks = Context.Reference<RepositoryHooksPolicy>(
+  "kairo/vcs/RepositoryHooks",
+  {
+    defaultValue: () => ({ _tag: "all" }),
+  },
+);
 
 /** Set by background discovery so its Git commands run in their own small lane, not the user's. */
 export const BackgroundGitWork = Context.Reference<boolean>("kairo/vcs/BackgroundGitWork", {

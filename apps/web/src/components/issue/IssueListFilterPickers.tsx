@@ -1,10 +1,5 @@
 import type { IssueCandidatesTarget } from "@kairo/client-runtime/state/issues";
-import type {
-  EnvironmentId,
-  IssueInvolvement,
-  IssueListState,
-  ProjectId,
-} from "@kairo/contracts";
+import type { EnvironmentId, IssueInvolvement, IssueListState, ProjectId } from "@kairo/contracts";
 import { FolderGit2Icon, LayersIcon, ListFilterIcon, TagIcon, UserIcon } from "lucide-react";
 import { T, useGT } from "gt-react";
 import { useState } from "react";

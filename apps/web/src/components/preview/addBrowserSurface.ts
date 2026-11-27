@@ -1,7 +1,4 @@
-import {
-  mapAtomCommandResult,
-  type AtomCommandResult,
-} from "@kairo/client-runtime/state/runtime";
+import { mapAtomCommandResult, type AtomCommandResult } from "@kairo/client-runtime/state/runtime";
 import type { PreviewSessionSnapshot, ScopedThreadRef } from "@kairo/contracts";
 
 import type { BrowserSettingsReadError, OpenPreviewMutation } from "~/browser/openFileInPreview";

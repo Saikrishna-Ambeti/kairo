@@ -25,8 +25,7 @@ vi.mock("@effect/atom-react", async (importOriginal) => ({
 }));
 vi.mock("../rpc/atomRegistry", () => ({ appAtomRegistry: registry }));
 vi.mock("@kairo/client-runtime/state/pull-requests", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@kairo/client-runtime/state/pull-requests")>();
+  const actual = await importOriginal<typeof import("@kairo/client-runtime/state/pull-requests")>();
   return {
     ...actual,
     createPullRequestEnvironmentAtoms: (

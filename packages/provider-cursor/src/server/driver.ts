@@ -1,8 +1,4 @@
-import {
-  ProviderDriverKind,
-  ProviderSetupError,
-  type ServerProviderModel,
-} from "@kairo/contracts";
+import { ProviderDriverKind, ProviderSetupError, type ServerProviderModel } from "@kairo/contracts";
 import { CursorSettings } from "../settings.ts";
 import type { SDKModel } from "@cursor/sdk";
 import * as Effect from "effect/Effect";

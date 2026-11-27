@@ -295,10 +295,7 @@ describe("collectChannelSwitchTargets", () => {
       ],
       ["old-desktop", "change the update track on that machine"],
       ["behind-desktop", "update Kairo on that machine"],
-      [
-        "no-nightly",
-        "Example Corp manages Kairo updates. Only stable releases can be installed.",
-      ],
+      ["no-nightly", "Example Corp manages Kairo updates. Only stable releases can be installed."],
     ]);
   });
 });

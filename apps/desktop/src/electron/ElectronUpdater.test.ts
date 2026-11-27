@@ -53,7 +53,9 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")(
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const dir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "kairo-appimage-install-" });
+        const dir = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "kairo-appimage-install-",
+        });
         const appImagePath = path.join(dir, "T3-Code.AppImage");
         const stagedPath = path.join(dir, "Kairo-1.0.1.AppImage");
         const fdReportPath = path.join(dir, "relaunched-fds.txt");

@@ -1,12 +1,7 @@
 import { msg } from "gt-react";
 import { thrownErrorMessage } from "@kairo/client-runtime/errors";
 import { m } from "~/i18n/messages";
-import type {
-  KeybindingCommand,
-  ProjectId,
-  ProjectScript,
-  EnvironmentId,
-} from "@kairo/contracts";
+import type { KeybindingCommand, ProjectId, ProjectScript, EnvironmentId } from "@kairo/contracts";
 import { AuthSettingsWriteScope, EnvironmentAuthorizationError } from "@kairo/contracts";
 import type { UnifiedSettings } from "@kairo/contracts/settings";
 import {

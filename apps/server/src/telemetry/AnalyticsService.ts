@@ -162,8 +162,7 @@ export const make = Effect.gen(function* () {
     if (!enabledAtStartup || !policyAllows || isDoNotTrackSet(hostEnvironment))
       return Effect.succeed(false);
     if (!awaitingShellConsent) return Effect.succeed(true);
-    if (hostEnvironment.KAIRO_DESKTOP_SHELL_DISCOVERY_PENDING === "1")
-      return Effect.succeed(false);
+    if (hostEnvironment.KAIRO_DESKTOP_SHELL_DISCOVERY_PENDING === "1") return Effect.succeed(false);
     const preference = hostEnvironment.KAIRO_TELEMETRY_ENABLED;
     return Config.Boolean("KAIRO_TELEMETRY_ENABLED").pipe(
       Config.withDefault(enabledByDefault),

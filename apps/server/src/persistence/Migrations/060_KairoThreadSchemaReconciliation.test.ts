@@ -56,7 +56,9 @@ it.effect(
       assert.isFalse(before.some((column) => column.name === "branch_pull_request_json"));
       assert.isFalse(before.some((column) => column.name === "active_order_key"));
 
-      assert.deepEqual(yield* runMigrations({ toMigrationInclusive: 60 }), [[60, "KairoThreadSchemaReconciliation"]]);
+      assert.deepEqual(yield* runMigrations({ toMigrationInclusive: 60 }), [
+        [60, "KairoThreadSchemaReconciliation"],
+      ]);
       const threads = yield* sql<{
         readonly title: string;
         readonly branch_pull_request_json: string | null;

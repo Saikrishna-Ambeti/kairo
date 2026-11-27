@@ -77,7 +77,8 @@ export function resolveProviderCompatibility(
   kairoCodeVersion = packageJson.version,
 ): ServerProviderCompatibilityAdvisory | undefined {
   const policy = policies?.find(
-    (entry) => entry.driver === driver && satisfiesSemverRange(kairoCodeVersion, entry.kairoCodeRange),
+    (entry) =>
+      entry.driver === driver && satisfiesSemverRange(kairoCodeVersion, entry.kairoCodeRange),
   );
   if (!policy) return undefined;
   const unprefixed = version?.replace(/^v/, "");

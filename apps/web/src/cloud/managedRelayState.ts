@@ -189,7 +189,8 @@ export function useManagedTunnelUsage() {
       : (environments.data?.filter(
           (environment) => environment.endpoint.providerKind === "cloudflare_tunnel",
         ).length ?? null);
-  const cap = kairoChat.accountId !== null && kairoChat.data ? managedTunnelCap(kairoChat.data) : null;
+  const cap =
+    kairoChat.accountId !== null && kairoChat.data ? managedTunnelCap(kairoChat.data) : null;
   const firstLoad = (query: { accountId: string | null; data: unknown; isPending: boolean }) =>
     query.accountId !== null && query.data === null && query.isPending;
   return {

@@ -1,9 +1,6 @@
 import * as Schema from "effect/Schema";
 import { splitFilePathPosition } from "@kairo/shared/fileLinks";
-import {
-  audioMimeTypeFromExtension,
-  mediaMimeTypeFromExtension,
-} from "@kairo/shared/mediaPreview";
+import { audioMimeTypeFromExtension, mediaMimeTypeFromExtension } from "@kairo/shared/mediaPreview";
 import {
   extractInlineCodeSpans,
   extractMarkdownLinkHrefs,

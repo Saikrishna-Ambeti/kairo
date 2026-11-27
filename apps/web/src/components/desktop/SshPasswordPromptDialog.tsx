@@ -177,8 +177,8 @@ function ActiveSshPasswordPrompt({
               <code>
                 <Var>{target}</Var>
               </code>
-              . Kairo passes your response to the local SSH process and keeps it in memory to
-              reuse for this host. Kairo does not write it to disk.
+              . Kairo passes your response to the local SSH process and keeps it in memory to reuse
+              for this host. Kairo does not write it to disk.
             </T>
           </DialogDescription>
         </DialogHeader>

@@ -27,12 +27,12 @@ In the desktop app, change **Settings → About → Update track** to switch con
 
 ## Update a connected server manually
 
-| Situation                           | Action                                                                                                |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Background service / desktop server | Click **Update server** in **Settings → Environments** (desktop hosts relaunch automatically).        |
+| Situation                           | Action                                                                                                      |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Background service / desktop server | Click **Update server** in **Settings → Environments** (desktop hosts relaunch automatically).              |
 | Installed `t3` CLI                  | Run `kairo update <version>` on the host (then `kairo service restart` if you declined the restart prompt). |
-| `npx` server                        | Stop the server and relaunch with `npx kairo@<version>` and your usual flags.                            |
-| Package manager (Nix, AUR)          | Update via your package manager.                                                                      |
+| `npx` server                        | Stop the server and relaunch with `npx kairo@<version>` and your usual flags.                               |
+| Package manager (Nix, AUR)          | Update via your package manager.                                                                            |
 
 Each server checks npm/Homebrew/pnpm using its own local registry and proxy settings.
 

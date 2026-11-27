@@ -1,8 +1,5 @@
 import { fitImageAttachmentSize } from "@kairo/client-runtime/image-attachment-size";
-import {
-  IMAGE_DIMENSIONS_HEADER_BYTES,
-  readImageDimensions,
-} from "@kairo/shared/imageDimensions";
+import { IMAGE_DIMENSIONS_HEADER_BYTES, readImageDimensions } from "@kairo/shared/imageDimensions";
 
 // Canvas work shared by the main thread and imageCompression.worker.ts, so it imports no UI code.
 

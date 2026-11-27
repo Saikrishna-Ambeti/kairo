@@ -3,11 +3,7 @@ import {
   isAtomCommandInterrupted,
   runAtomCommand,
 } from "@kairo/client-runtime/state/runtime";
-import type {
-  EnvironmentId,
-  PullRequestFilesViewedResult,
-  PullRequestRef,
-} from "@kairo/contracts";
+import type { EnvironmentId, PullRequestFilesViewedResult, PullRequestRef } from "@kairo/contracts";
 
 import { msg } from "gt-react";
 

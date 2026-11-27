@@ -168,7 +168,9 @@ function managedCapabilityDeniedMessage(
         }),
       );
     case "connect":
-      return resolve(msg("{organization}'s policy does not allow Kairo Connect.", { organization }));
+      return resolve(
+        msg("{organization}'s policy does not allow Kairo Connect.", { organization }),
+      );
     case "webhookTasks":
       return resolve(
         msg("{organization}'s policy does not allow webhook tasks.", { organization }),

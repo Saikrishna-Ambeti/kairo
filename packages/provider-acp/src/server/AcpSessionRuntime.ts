@@ -2011,7 +2011,8 @@ export const make = Effect.fn("AcpSessionRuntime.make")(function* (
       meta !== null &&
       typeof meta === "object" &&
       !Array.isArray(meta) &&
-      (meta as { readonly kairoSessionLoadReady?: unknown }).kairoSessionLoadReady === "replay_idle";
+      (meta as { readonly kairoSessionLoadReady?: unknown }).kairoSessionLoadReady ===
+        "replay_idle";
     const extractedModelConfigId = extractModelConfigId(sessionSetupResult);
     const nextModelConfigId =
       extractedModelConfigId ?? (syntheticReplayIdle ? current.modelConfigId : undefined);

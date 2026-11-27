@@ -10,12 +10,7 @@ import {
 } from "@kairo/client-runtime/workflows";
 import { scopeThreadRef } from "@kairo/client-runtime/environment";
 import { resolveLinkedThreadOpen } from "@kairo/client-runtime/linked-thread";
-import {
-  EnvironmentId,
-  ThreadId,
-  type ScopedThreadRef,
-  type WorkflowStep,
-} from "@kairo/contracts";
+import { EnvironmentId, ThreadId, type ScopedThreadRef, type WorkflowStep } from "@kairo/contracts";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,

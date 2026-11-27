@@ -9,10 +9,7 @@ import {
   snoozeWakeLabel,
   threadWokeAt,
 } from "@kairo/client-runtime/state/thread-settled";
-import {
-  hasUnseenRunFailure,
-  type SnoozePreset,
-} from "@kairo/client-runtime/state/thread-settled";
+import { hasUnseenRunFailure, type SnoozePreset } from "@kairo/client-runtime/state/thread-settled";
 import type { EnvironmentThreadShell } from "@kairo/client-runtime/state/shell";
 import { resolveThreadProviderStack } from "@kairo/client-runtime/state/models";
 import {

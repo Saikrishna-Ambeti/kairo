@@ -8,11 +8,7 @@ import * as NodeNet from "node:net";
 
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as HostProcess from "@kairo/shared/HostProcess";
-import type {
-  PullRequestListInput,
-  PullRequestListResult,
-  PullRequestRef,
-} from "@kairo/contracts";
+import type { PullRequestListInput, PullRequestListResult, PullRequestRef } from "@kairo/contracts";
 import * as Clock from "effect/Clock";
 import * as Console from "effect/Console";
 import * as Duration from "effect/Duration";

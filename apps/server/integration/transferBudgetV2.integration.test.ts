@@ -645,9 +645,7 @@ it.live("reports V2 thread HTTP and WebSocket transfer budgets", () =>
     const outputPaths = yield* Config.all({
       report: Config.String("KAIRO_TRANSFER_BUDGET_REPORT_PATH").pipe(Config.withDefault("")),
       result: Config.String("KAIRO_TRANSFER_BUDGET_RESULT_PATH").pipe(Config.withDefault("")),
-      scenarios: Config.String("KAIRO_TRANSFER_BUDGET_SCENARIOS_PATH").pipe(
-        Config.withDefault(""),
-      ),
+      scenarios: Config.String("KAIRO_TRANSFER_BUDGET_SCENARIOS_PATH").pipe(Config.withDefault("")),
     });
     for (const [path, contents] of [
       [outputPaths.report, report],

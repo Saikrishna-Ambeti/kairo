@@ -6,10 +6,7 @@ import { useGT, useMessages } from "gt-react-native";
 import { AsyncResult } from "effect/reactivity";
 import * as Cause from "effect/Cause";
 import { AuthFilesystemReadScope, AuthSourceControlWriteScope } from "@kairo/contracts";
-import type {
-  EnvironmentProject,
-  EnvironmentThreadShell,
-} from "@kairo/client-runtime/state/shell";
+import type { EnvironmentProject, EnvironmentThreadShell } from "@kairo/client-runtime/state/shell";
 import { useEnvironmentQuery } from "../../state/query";
 import { useEnvironmentScope } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";

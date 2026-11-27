@@ -26,7 +26,8 @@ if (hostPlatform !== "darwin") {
   const sources = ["AppleSpeech.swift", "AppleSpeechEngine.swift"].map((file) =>
     NodePath.resolve(root, file),
   );
-  const output = values.output ?? NodePath.resolve(root, "build", values.arch, "kairo-apple-speech");
+  const output =
+    values.output ?? NodePath.resolve(root, "build", values.arch, "kairo-apple-speech");
   let current = false;
   try {
     current =

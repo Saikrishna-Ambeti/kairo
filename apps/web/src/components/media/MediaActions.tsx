@@ -4,10 +4,7 @@ import {
   formatFilePathForClipboard,
   type MediaActionId,
 } from "@kairo/client-runtime/media-actions";
-import {
-  mediaReferenceFileName,
-  type MediaReference,
-} from "@kairo/client-runtime/media-reference";
+import { mediaReferenceFileName, type MediaReference } from "@kairo/client-runtime/media-reference";
 import { resolveAssetUrl } from "@kairo/client-runtime/state/assets";
 import { settlePromise, squashAtomCommandFailure } from "@kairo/client-runtime/state/runtime";
 import {

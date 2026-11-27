@@ -38,8 +38,8 @@ Enable Clerk's Native API, add `kairo-dev://app/` and `kairo://app/` to the SSO 
 
 In Clerk **Native applications > Allowlist for mobile SSO redirect**, allow each variant's callback:
 
-| Variant     | Callback                                      |
-| ----------- | --------------------------------------------- |
+| Variant     | Callback                                 |
+| ----------- | ---------------------------------------- |
 | Development | `clerk://com.kairo.app.dev.callback`     |
 | Preview     | `clerk://com.kairo.app.preview.callback` |
 | Production  | `clerk://com.kairo.app.callback`         |

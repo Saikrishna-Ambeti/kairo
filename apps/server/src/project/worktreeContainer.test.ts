@@ -30,7 +30,9 @@ it.layer(ProcessRunner.layer.pipe(Layer.provideMerge(NodeServices.layer)))(
         const fileSystem = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const isWorktreeContainer = yield* makeIsWorktreeContainer;
-        const fixture = yield* fileSystem.makeTempDirectoryScoped({ prefix: "kairo-container-test-" });
+        const fixture = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "kairo-container-test-",
+        });
 
         const source = path.join(fixture, "source");
         yield* fileSystem.makeDirectory(source);
@@ -130,7 +132,9 @@ it.layer(ProcessRunner.layer.pipe(Layer.provideMerge(NodeServices.layer)))(
             ),
           ),
         );
-        const fixture = yield* fileSystem.makeTempDirectoryScoped({ prefix: "kairo-container-test-" });
+        const fixture = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "kairo-container-test-",
+        });
         const source = path.join(fixture, "source");
         yield* fileSystem.makeDirectory(source);
         yield* git(source, "init", "-b", "develop");

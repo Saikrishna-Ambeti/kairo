@@ -35,9 +35,12 @@ describe("resolveT3McpToolPresentation", () => {
 
   it("matches OpenCode 2's per-thread server names, whose thread ids hold underscores", () => {
     expect(
-      resolveT3McpToolPresentation("kairo-code-thread_opencode2-adapter_delegate_task")?.displayName,
+      resolveT3McpToolPresentation("kairo-code-thread_opencode2-adapter_delegate_task")
+        ?.displayName,
     ).toBe("Delegate a child task");
-    expect(resolveT3McpToolPresentation("kairo-code-thread_opencode2-adapter_not_a_tool")).toBeNull();
+    expect(
+      resolveT3McpToolPresentation("kairo-code-thread_opencode2-adapter_not_a_tool"),
+    ).toBeNull();
   });
 });
 
@@ -46,9 +49,9 @@ describe("resolveT3McpToolDefinition", () => {
     expect(
       resolveT3McpToolDefinition("mcp__t3-code__preview_act", { action: "type" })?.labels,
     ).toEqual(resolveT3McpToolDefinition("preview_type")?.labels);
-    expect(resolveT3McpToolDefinition("kairo_thread_transfer", { action: "fork" })?.displayName).toBe(
-      resolveT3McpToolDefinition("kairo_thread_fork")?.displayName,
-    );
+    expect(
+      resolveT3McpToolDefinition("kairo_thread_transfer", { action: "fork" })?.displayName,
+    ).toBe(resolveT3McpToolDefinition("kairo_thread_fork")?.displayName);
     expect(resolveT3McpToolDefinition("preview_act", { action: "unknown" })?.labels[2]).toBe(
       "Used",
     );

@@ -1,8 +1,4 @@
-import {
-  chunkTerminalWrite,
-  terminalWritePhase,
-  type TerminalWriteInput,
-} from "@kairo/contracts";
+import { chunkTerminalWrite, terminalWritePhase, type TerminalWriteInput } from "@kairo/contracts";
 
 import { encodeTerminalPaste } from "./terminalInput";
 

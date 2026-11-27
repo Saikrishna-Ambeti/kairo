@@ -157,7 +157,7 @@ Call these directly in the workflow body with `yield*`. Every named primitive st
 | Option            | Applies to | Meaning                                                                                                                                             |
 | ----------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `brief`           | All        | Full task instructions. The agent sees only this brief and its project.                                                                             |
-| `project`         | New thread | Project id (from `kairo_project_list`) or absolute folder path.                                                                                        |
+| `project`         | New thread | Project id (from `kairo_project_list`) or absolute folder path.                                                                                     |
 | `thread`          | Continue   | `thread` returned by an earlier `agent` step. Continues it as it started, so the New thread options are refused alongside it.                       |
 | `returns`         | All        | Optional `Schema`. Completes only when the agent submits valid data (up to 2 correction prompts).                                                   |
 | `model`           | New thread | `{ instanceId, model, options? }`; `options` is `[{ id, value }]` (e.g. `[{ id: "reasoningEffort", value: "high" }]`). Defaults to project default. |

@@ -736,7 +736,9 @@ function ConfiguredCloudLinkRow({
                     "Sign in to make this environment available to your other devices through Kairo Connect.",
                   )
                 : linkRevoked
-                  ? gt("This environment was removed from Kairo Connect. Turn it on to link it again.")
+                  ? gt(
+                      "This environment was removed from Kairo Connect. Turn it on to link it again.",
+                    )
                   : managedTunnelActive
                     ? reachability?.status === "unreachable"
                       ? gt("Kairo Connect is on, but other devices cannot reach this environment.")
@@ -791,7 +793,9 @@ function ConfiguredCloudLinkRow({
           description={
             signedOut
               ? gt("Sign in to send activity to mobile notifications and Live Activities.")
-              : gt("Send activity to mobile notifications and Live Activities without Kairo Connect.")
+              : gt(
+                  "Send activity to mobile notifications and Live Activities without Kairo Connect.",
+                )
           }
           managed={connectDenial}
           control={

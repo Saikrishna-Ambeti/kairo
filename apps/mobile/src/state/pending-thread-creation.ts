@@ -1,7 +1,4 @@
-import {
-  presentThreadShell,
-  type EnvironmentThreadShell,
-} from "@kairo/client-runtime/state/shell";
+import { presentThreadShell, type EnvironmentThreadShell } from "@kairo/client-runtime/state/shell";
 import type { LocalThreadMessage } from "../lib/threadActivity";
 import { DEFAULT_PROVIDER_INTERACTION_MODE, DEFAULT_RUNTIME_MODE } from "@kairo/contracts";
 import { threadKey } from "@kairo/client-runtime/state/entities";

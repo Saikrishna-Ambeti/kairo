@@ -3,10 +3,7 @@ import {
   resolveLinkPullRequestInput,
 } from "@kairo/client-runtime/pull-request-link-input";
 import { errorDisplayMessage } from "@kairo/client-runtime/errors";
-import type {
-  EnvironmentProject,
-  EnvironmentThreadShell,
-} from "@kairo/client-runtime/state/shell";
+import type { EnvironmentProject, EnvironmentThreadShell } from "@kairo/client-runtime/state/shell";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,

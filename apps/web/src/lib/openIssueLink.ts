@@ -1,8 +1,4 @@
-import type {
-  EnvironmentId,
-  IssueTrackerConnectionList,
-  ScopedThreadRef,
-} from "@kairo/contracts";
+import type { EnvironmentId, IssueTrackerConnectionList, ScopedThreadRef } from "@kairo/contracts";
 import { resolveIssueLinkTarget } from "@kairo/client-runtime/issue-links";
 import { useNavigate } from "@tanstack/react-router";
 import type { MouseEvent } from "react";

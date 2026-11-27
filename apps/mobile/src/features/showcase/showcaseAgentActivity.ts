@@ -1,10 +1,7 @@
 import { msg } from "gt-react-native";
 
 import { m } from "../../i18n/messages";
-import type {
-  EnvironmentProject,
-  EnvironmentThreadShell,
-} from "@kairo/client-runtime/state/shell";
+import type { EnvironmentProject, EnvironmentThreadShell } from "@kairo/client-runtime/state/shell";
 
 import type {
   AgentActivityPhase,

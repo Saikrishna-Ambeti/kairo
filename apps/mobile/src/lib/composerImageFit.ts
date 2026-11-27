@@ -3,10 +3,7 @@ import {
   downscalableImageMimeType,
   fitImageAttachmentSize,
 } from "@kairo/client-runtime/image-attachment-size";
-import {
-  IMAGE_DIMENSIONS_HEADER_BYTES,
-  readImageDimensions,
-} from "@kairo/shared/imageDimensions";
+import { IMAGE_DIMENSIONS_HEADER_BYTES, readImageDimensions } from "@kairo/shared/imageDimensions";
 import { estimateBase64ByteSize } from "./base64";
 
 const PHOTO_JPEG_QUALITY = 0.85;

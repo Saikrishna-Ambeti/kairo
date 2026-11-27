@@ -1,4 +1,8 @@
-import { type EnvironmentId, KAIRO_PROJECT_FILE_NAME, type KairoProjectFile } from "@kairo/contracts";
+import {
+  type EnvironmentId,
+  KAIRO_PROJECT_FILE_NAME,
+  type KairoProjectFile,
+} from "@kairo/contracts";
 import { parseKairoProjectFile } from "@kairo/shared/kairoProjectFile";
 import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult, Atom } from "effect/reactivity";

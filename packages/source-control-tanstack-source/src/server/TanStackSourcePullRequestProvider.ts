@@ -784,10 +784,7 @@ export const make = Effect.gen(function* () {
           yield* send(input.action, input, { method: "DELETE", path: `${path}/auto-merge` });
           return;
         default:
-          return yield* failure(
-            input.action,
-            `TanStack Source cannot ${input.action} from Kairo.`,
-          );
+          return yield* failure(input.action, `TanStack Source cannot ${input.action} from Kairo.`);
       }
     }),
 

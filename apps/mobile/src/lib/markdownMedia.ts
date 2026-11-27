@@ -2,10 +2,7 @@ import {
   classifyMarkdownImageSource,
   markdownImageSourceFragment,
 } from "@kairo/client-runtime/markdown-images";
-import {
-  audioMimeTypeFromExtension,
-  mediaMimeTypeFromExtension,
-} from "@kairo/shared/mediaPreview";
+import { audioMimeTypeFromExtension, mediaMimeTypeFromExtension } from "@kairo/shared/mediaPreview";
 import { splitFilePathPosition } from "@kairo/shared/fileLinks";
 import { parseMarkdownFileLink } from "@kairo/shared/markdownLinks";
 import {

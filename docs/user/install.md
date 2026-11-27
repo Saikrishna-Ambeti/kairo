@@ -29,12 +29,12 @@ line to add. Set `KAIRO_CHANNEL=nightly` to install the nightly train, or
 | Task                          | Command                                                                 |
 | ----------------------------- | ----------------------------------------------------------------------- |
 | Start server and open web app | `t3` (or `t3 ./my-project`)                                             |
-| Start server without browser  | `kairo serve`                                                              |
-| Set up remote access          | `kairo up` ([Remote access](./remote-access.md))                           |
-| Run in the background         | `kairo service install` ([Background service](./background-service.md))    |
-| Update                        | `kairo update`                                                             |
+| Start server without browser  | `kairo serve`                                                           |
+| Set up remote access          | `kairo up` ([Remote access](./remote-access.md))                        |
+| Run in the background         | `kairo service install` ([Background service](./background-service.md)) |
+| Update                        | `kairo update`                                                          |
 | Reclaim database space        | `t3 doctor` ([Details](./background-service.md#reclaim-database-space)) |
-| Uninstall                     | `kairo uninstall`                                                          |
+| Uninstall                     | `kairo uninstall`                                                       |
 
 If `t3` reports a server is already running, connect with `kairo pair` or pass a separate `--base-dir`. Run `kairo --help` for all commands.
 
@@ -52,13 +52,13 @@ node apps/server/dist/bin.mjs
 
 Download from [GitHub Releases](https://github.com/pingdotgg/t3code/releases) or install via a package manager:
 
-| Platform                | Command                                                          |
-| ----------------------- | ---------------------------------------------------------------- |
-| macOS                   | `brew install --cask kairo-code`                                    |
+| Platform                | Command                                                        |
+| ----------------------- | -------------------------------------------------------------- |
+| macOS                   | `brew install --cask kairo-code`                               |
 | Windows                 | `winget install T3Tools.Kairo` or `scoop install extras/kairo` |
-| Debian / Ubuntu         | `sudo apt install ./T3-Code-*.deb`                               |
+| Debian / Ubuntu         | `sudo apt install ./T3-Code-*.deb`                             |
 | Arch Linux              | `yay -S kairo-bin` (or `yay -S kairo-nightly-bin`)             |
-| Nix (flakes, Nix 2.30+) | `nix profile add github:NixOS/nixpkgs/nixos-unstable#kairo`     |
+| Nix (flakes, Nix 2.30+) | `nix profile add github:NixOS/nixpkgs/nixos-unstable#kairo`    |
 
 - **Linux AppImage**: `chmod +x ./T3-Code-*.AppImage && ./T3-Code-*.AppImage` (x86_64 and ARM64). `.deb` self-updates with a password prompt; update AUR packages via your AUR helper (`yay -Syu`).
 - **NixOS / Home Manager**: Add `pkgs.kairo` to `environment.systemPackages` or `home.packages` (`kairo-desktop` launches the app; `t3` is included). Update via Nix rather than the in-app updater.
@@ -110,8 +110,8 @@ If a working CLI times out during Kairo's readiness check, increase its probe de
 KAIRO_CODEX_PROBE_TIMEOUT_MS=60000 KAIRO_CLAUDE_PROBE_TIMEOUT_MS=60000 kairo serve
 ```
 
-| Provider     | Environment variable                   |
-| ------------ | -------------------------------------- |
+| Provider     | Environment variable                  |
+| ------------ | ------------------------------------- |
 | Codex        | `KAIRO_CODEX_PROBE_TIMEOUT_MS`        |
 | Claude       | `KAIRO_CLAUDE_PROBE_TIMEOUT_MS`       |
 | Cursor       | `KAIRO_CURSOR_PROBE_TIMEOUT_MS`       |

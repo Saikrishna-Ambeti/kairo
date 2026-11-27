@@ -2448,8 +2448,7 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
         // One reader: the runtime's event queue hands each event to only one taker.
         const launchSeen = yield* Deferred.make<void>();
         const marked = yield* Deferred.make<boolean | undefined>();
-        const settled =
-          yield* Deferred.make<import("@kairo/contracts").OrchestrationV2TurnItem>();
+        const settled = yield* Deferred.make<import("@kairo/contracts").OrchestrationV2TurnItem>();
         yield* runtime.events.pipe(
           Stream.tap((e) =>
             e.type === "turn_item.updated" &&
@@ -5423,7 +5422,11 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
                   input: { html: pages[0]!.html, width: 728 },
                 },
                 { tool: `${server}.html_render`, status: "completed", input: pages[0] },
-                { tool: "kairo-code-thread_other.html_render", status: "completed", input: pages[1] },
+                {
+                  tool: "kairo-code-thread_other.html_render",
+                  status: "completed",
+                  input: pages[1],
+                },
                 { tool: `${server}.html_render`, status: "completed", input: pages[1] },
               ],
               truncated: false,
@@ -6914,7 +6917,11 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
         replyData("session.form.list", []),
         ...promptInto(SESSION, "msg_recorded_turn_a"),
         ...steerInto(SESSION, "msg_recorded_steer_a"),
-        out("session.instructions.entry.put", { sessionID: OTHER, key: "kairo-code", value: "<any>" }),
+        out("session.instructions.entry.put", {
+          sessionID: OTHER,
+          key: "kairo-code",
+          value: "<any>",
+        }),
         reply("session.instructions.entry.put", null),
         ...promptInto(OTHER, "msg_recorded_turn_b"),
         ...steerInto(OTHER, "msg_recorded_steer_b"),
@@ -6987,7 +6994,11 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
         out("session.form.list", { sessionID: OTHER }),
         replyData("session.form.list", []),
         ...promptInto(SESSION, "msg_recorded_turn_a"),
-        out("session.instructions.entry.put", { sessionID: OTHER, key: "kairo-code", value: "<any>" }),
+        out("session.instructions.entry.put", {
+          sessionID: OTHER,
+          key: "kairo-code",
+          value: "<any>",
+        }),
         reply("session.instructions.entry.put", null),
         ...promptInto(OTHER, "msg_recorded_turn_b"),
         event("session.execution.succeeded", { sessionID: SESSION }),
@@ -7483,7 +7494,11 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
           permissions: [
             { action: "*", resource: "*", effect: "allow" },
             { action: "kairo-code-*", resource: "*", effect: "deny" },
-            { action: "kairo-code-thread_opencode2-adapter_fork_*", resource: "*", effect: "allow" },
+            {
+              action: "kairo-code-thread_opencode2-adapter_fork_*",
+              resource: "*",
+              effect: "allow",
+            },
           ],
         }),
         reply("session.update", null),

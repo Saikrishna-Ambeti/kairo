@@ -1,7 +1,4 @@
-import {
-  IMAGE_DIMENSIONS_HEADER_BYTES,
-  readImageDimensions,
-} from "@kairo/shared/imageDimensions";
+import { IMAGE_DIMENSIONS_HEADER_BYTES, readImageDimensions } from "@kairo/shared/imageDimensions";
 
 export async function officeImageBitmap(blob: Blob) {
   const bytes = new Uint8Array(await blob.slice(0, IMAGE_DIMENSIONS_HEADER_BYTES).arrayBuffer());

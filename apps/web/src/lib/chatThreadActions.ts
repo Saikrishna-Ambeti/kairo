@@ -1,11 +1,6 @@
 import { scopeProjectRef } from "@kairo/client-runtime/environment";
 import type { EnvironmentThreadShell } from "@kairo/client-runtime/state/shell";
-import type {
-  EnvironmentId,
-  ModelSelection,
-  ProjectId,
-  ScopedProjectRef,
-} from "@kairo/contracts";
+import type { EnvironmentId, ModelSelection, ProjectId, ScopedProjectRef } from "@kairo/contracts";
 import type { ComposerThreadDraftState, DraftThreadEnvMode } from "../composerDraftStore";
 
 type ComposerModelSelectionState = Pick<

@@ -1899,7 +1899,11 @@ describe("extractMcpToolCallIdentity", () => {
       kind: "other",
       title: "unrelated display title",
       status: "pending",
-      _meta: { toolName: "mcp::kairo-code::kairo_thread_send", serverId: "kairo-code", provenance: "mcp" },
+      _meta: {
+        toolName: "mcp::kairo-code::kairo_thread_send",
+        serverId: "kairo-code",
+        provenance: "mcp",
+      },
     });
 
     expect(extractMcpToolCallIdentity(toolCall)).toEqual({

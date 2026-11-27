@@ -29,10 +29,10 @@
     "test": "vp test run --config ../../vite.config.ts --dir ."
   },
   "dependencies": {
-    "@muse-code/sdk": "1.4.6",
     "@kairo/contracts": "workspace:*",
     "@kairo/provider-core": "workspace:*",
     "@kairo/shared": "workspace:*",
+    "@muse-code/sdk": "1.4.6",
     "effect": "catalog:"
   },
   "devDependencies": {

@@ -37,7 +37,9 @@ const layerFor = (state: TaskFoldersTestState, policy?: ManagedPolicyDocument) =
   layerTaskFoldersWithGit(state, policy).pipe(
     Layer.provideMerge(
       GitVcsDriver.layer.pipe(
-        Layer.provideMerge(ServerConfig.layerTest(process.cwd(), { prefix: "kairo-task-folders-" })),
+        Layer.provideMerge(
+          ServerConfig.layerTest(process.cwd(), { prefix: "kairo-task-folders-" }),
+        ),
         Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
       ),
     ),

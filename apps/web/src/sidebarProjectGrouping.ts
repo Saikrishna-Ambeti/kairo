@@ -1,8 +1,4 @@
-import type {
-  EnvironmentId,
-  ScopedProjectRef,
-  SidebarProjectGroupingMode,
-} from "@kairo/contracts";
+import type { EnvironmentId, ScopedProjectRef, SidebarProjectGroupingMode } from "@kairo/contracts";
 import {
   buildProjectGroups,
   derivePhysicalProjectKey,

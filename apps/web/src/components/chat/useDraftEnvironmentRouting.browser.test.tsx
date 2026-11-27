@@ -13,12 +13,7 @@ import {
 } from "@kairo/client-runtime/environment";
 import { createModelSelection } from "@kairo/shared/model";
 import { DEFAULT_UNIFIED_SETTINGS } from "@kairo/contracts/settings";
-import {
-  EnvironmentId,
-  ProjectId,
-  ProviderDriverKind,
-  ProviderInstanceId,
-} from "@kairo/contracts";
+import { EnvironmentId, ProjectId, ProviderDriverKind, ProviderInstanceId } from "@kairo/contracts";
 import { expect, it, vi } from "vite-plus/test";
 
 import { act, render } from "../../../test/render";

@@ -5,10 +5,7 @@ import { ChevronsLeftRightEllipsisIcon, PlusIcon, TerminalIcon } from "lucide-re
 import { useAtomValue } from "@effect/atom-react";
 import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { T, useGT, useMessages, Var } from "gt-react";
-import {
-  type DesktopDiscoveredSshHost,
-  type DesktopSshEnvironmentTarget,
-} from "@kairo/contracts";
+import { type DesktopDiscoveredSshHost, type DesktopSshEnvironmentTarget } from "@kairo/contracts";
 import {
   RelayConnectionRegistration,
   RelayConnectionTarget,

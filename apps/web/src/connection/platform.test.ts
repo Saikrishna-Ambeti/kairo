@@ -11,10 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import { afterEach, vi } from "vite-plus/test";
 import { ClientCapabilities } from "@kairo/client-runtime/platform";
-import {
-  ConnectionBlockedError,
-  ConnectionTransientError,
-} from "@kairo/client-runtime/connection";
+import { ConnectionBlockedError, ConnectionTransientError } from "@kairo/client-runtime/connection";
 
 import {
   canRetainCachedPlatformRegistrationAfterRefreshFailure,

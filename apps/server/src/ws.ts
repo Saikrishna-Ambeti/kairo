@@ -302,10 +302,7 @@ import {
   splitLargeSocketFrames,
 } from "@kairo/shared/socketFrameParts";
 import { isTelemetryIdHash } from "@kairo/shared/telemetryId";
-import {
-  sameUsageLimitCommandCoverage,
-  withUsageLimitsCommands,
-} from "@kairo/shared/usageLimits";
+import { sameUsageLimitCommandCoverage, withUsageLimitsCommands } from "@kairo/shared/usageLimits";
 import * as AgentSessionScanner from "./project/AgentSessionScanner.ts";
 import * as AgentSessionImporter from "./project/AgentSessionImporter.ts";
 import * as UsageLimitSources from "./usage/UsageLimitSources.ts";
@@ -2908,33 +2905,33 @@ export const layerWsRpc = (
           const kinds = input.kinds ?? ["document", "presentation", "spreadsheet", "csv", "pdf"];
           const normalizedQuery = input.query?.trim().toLowerCase() ?? "";
           return artifactMetadata
-              .list({
-                threadId: input.threadId ?? null,
-                queryLike: normalizedQuery.length === 0 ? null : `%${normalizedQuery}%`,
-                includeDocuments: kinds.includes("document") ? 1 : 0,
-                includePresentations: kinds.includes("presentation") ? 1 : 0,
-                includeSpreadsheets: kinds.includes("spreadsheet") ? 1 : 0,
-                includeCsv: kinds.includes("csv") ? 1 : 0,
-                includePdfs: kinds.includes("pdf") ? 1 : 0,
-                limit: input.limit ?? 200,
-              })
-              .pipe(
-                Effect.flatMap((artifacts) =>
-                  DateTime.now.pipe(
-                    Effect.map((indexedAt) => ({
-                      artifacts,
-                      indexedAt: DateTime.formatIso(indexedAt),
-                    })),
-                  ),
+            .list({
+              threadId: input.threadId ?? null,
+              queryLike: normalizedQuery.length === 0 ? null : `%${normalizedQuery}%`,
+              includeDocuments: kinds.includes("document") ? 1 : 0,
+              includePresentations: kinds.includes("presentation") ? 1 : 0,
+              includeSpreadsheets: kinds.includes("spreadsheet") ? 1 : 0,
+              includeCsv: kinds.includes("csv") ? 1 : 0,
+              includePdfs: kinds.includes("pdf") ? 1 : 0,
+              limit: input.limit ?? 200,
+            })
+            .pipe(
+              Effect.flatMap((artifacts) =>
+                DateTime.now.pipe(
+                  Effect.map((indexedAt) => ({
+                    artifacts,
+                    indexedAt: DateTime.formatIso(indexedAt),
+                  })),
                 ),
-                Effect.mapError(
-                  (cause) =>
-                    new ArtifactLibraryReadError({
-                      detail: "Artifact metadata could not be read.",
-                      cause,
-                    }),
-                ),
-              );
+              ),
+              Effect.mapError(
+                (cause) =>
+                  new ArtifactLibraryReadError({
+                    detail: "Artifact metadata could not be read.",
+                    cause,
+                  }),
+              ),
+            );
         },
         [WS_METHODS.serverRefreshUsageRates]: (_input) => usage.refreshRates,
         [WS_METHODS.serverRetryResourceTelemetry]: (_input) => resourceTelemetry.retry,

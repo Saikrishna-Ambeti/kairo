@@ -2,11 +2,7 @@ import { errorDisplayMessage } from "@kairo/client-runtime/errors";
 import { msg, useGT, useMessages } from "gt-react-native";
 import * as Dialog from "../../components/ui/Dialog";
 import { managedCapabilityDenial } from "@kairo/client-runtime/contract-labels";
-import {
-  AuthRelayConfigureScope,
-  AuthRelayWriteScope,
-  type EnvironmentId,
-} from "@kairo/contracts";
+import { AuthRelayConfigureScope, AuthRelayWriteScope, type EnvironmentId } from "@kairo/contracts";
 import { readEnvironmentScope } from "../../state/session";
 import { appAtomRegistry } from "../../state/atom-registry";
 import { serverEnvironment } from "../../state/server";

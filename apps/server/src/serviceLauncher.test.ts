@@ -819,7 +819,9 @@ process.exit(0);
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectoryScoped({ prefix: "kairo-service-launcher-repoint-" });
+        const root = yield* fs.makeTempDirectoryScoped({
+          prefix: "kairo-service-launcher-repoint-",
+        });
         const statePath = path.join(root, "runtime", "service-state.json");
         yield* writeFakeRuntime(
           fs,
@@ -1638,7 +1640,9 @@ if (context.update?.status === "pending") {
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectoryScoped({ prefix: "kairo-service-launcher-online-" });
+        const root = yield* fs.makeTempDirectoryScoped({
+          prefix: "kairo-service-launcher-online-",
+        });
         const statePath = path.join(root, "runtime", "service-state.json");
         const databasePath = path.join(root, "userdata", "state.sqlite");
         const observationsPath = path.join(root, "observations.json");

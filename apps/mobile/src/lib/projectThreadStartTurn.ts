@@ -9,10 +9,7 @@ import {
   type ProviderInteractionMode,
   type RuntimeMode,
 } from "@kairo/contracts";
-import {
-  deriveThreadTitleSeed,
-  threadTitleTextFromPrompt,
-} from "@kairo/client-runtime/operations";
+import { deriveThreadTitleSeed, threadTitleTextFromPrompt } from "@kairo/client-runtime/operations";
 import { splitsSurrogatePair } from "@kairo/shared/assistantCitations";
 import { msg } from "gt-react-native";
 

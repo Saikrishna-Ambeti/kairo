@@ -1,9 +1,6 @@
 import type { EnvironmentProject } from "@kairo/client-runtime/state/shell";
 import type { VcsRef } from "@kairo/client-runtime/state/vcs";
-import {
-  type AtomCommandResult,
-  mapAtomCommandResult,
-} from "@kairo/client-runtime/state/runtime";
+import { type AtomCommandResult, mapAtomCommandResult } from "@kairo/client-runtime/state/runtime";
 import type {
   VcsListRefsInput,
   VcsListRefsResult,

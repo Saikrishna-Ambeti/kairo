@@ -1036,7 +1036,7 @@ describe("downloadContentDisposition", () => {
   it("sets safe content disposition for document artifacts", () => {
     expect(
       assetResponseHeaders("/workspace/My Study Guide.docx", { disposition: "attachment" }),
-    ).toHaveProperty("Content-Disposition", "attachment; filename=\"My Study Guide.docx\"");
+    ).toHaveProperty("Content-Disposition", 'attachment; filename="My Study Guide.docx"');
     expect(assetResponseHeaders("/workspace/guide.pdf", { disposition: "inline" })).toHaveProperty(
       "Content-Disposition",
       "inline",

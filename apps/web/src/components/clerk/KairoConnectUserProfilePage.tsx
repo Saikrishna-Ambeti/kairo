@@ -99,8 +99,9 @@ export function KairoConnectEnvironmentRow(props: {
               </p>
               <p className="mt-4 max-w-xl text-xs leading-4.5 text-muted-foreground">
                 <T>
-                  Kairo Connect access will be revoked, any managed tunnel will be removed, and a host
-                  space will become available. Local connections on your devices are not changed.
+                  Kairo Connect access will be revoked, any managed tunnel will be removed, and a
+                  host space will become available. Local connections on your devices are not
+                  changed.
                 </T>
               </p>
               <div className="mt-4 flex justify-end gap-2">

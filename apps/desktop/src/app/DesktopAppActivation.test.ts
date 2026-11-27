@@ -86,7 +86,9 @@ describe("desktop app control server", () => {
       const platform = yield* HostProcess.Platform;
       const userId = yield* HostProcess.UserId;
       yield* Effect.promise(async () => {
-        const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "kairo-app-cancel-test-"));
+        const root = await NodeFSP.mkdtemp(
+          NodePath.join(NodeOS.tmpdir(), "kairo-app-cancel-test-"),
+        );
         const target = makeTarget(NodePath.join(root, "userdata"), platform, userId);
         let resolveCanceled: (requestId: string) => void = () => undefined;
         const canceled = new Promise<string>((resolve) => {
@@ -125,7 +127,9 @@ describe("desktop app control server", () => {
       const userId = yield* HostProcess.UserId;
       if (platform === "win32") return;
       yield* Effect.promise(async () => {
-        const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "kairo-app-takeover-test-"));
+        const root = await NodeFSP.mkdtemp(
+          NodePath.join(NodeOS.tmpdir(), "kairo-app-takeover-test-"),
+        );
         const target = makeTarget(NodePath.join(root, "userdata"), platform, userId);
         const older = await startOkServer(target, userId);
         await startOkServer(target, userId);
@@ -146,7 +150,9 @@ describe("desktop app control server", () => {
       const userId = yield* HostProcess.UserId;
       if (platform === "win32") return;
       yield* Effect.promise(async () => {
-        const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "kairo-app-reclaim-test-"));
+        const root = await NodeFSP.mkdtemp(
+          NodePath.join(NodeOS.tmpdir(), "kairo-app-reclaim-test-"),
+        );
         const target = makeTarget(NodePath.join(root, "userdata"), platform, userId);
         const server = await startOkServer(target, userId);
 

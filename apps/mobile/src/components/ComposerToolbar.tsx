@@ -99,7 +99,9 @@ export function ComposerInlineControl(props: {
           >
             <Text
               className={cn(
-                props.size === "large" ? "text-base font-kairo-medium" : "text-sm font-kairo-medium",
+                props.size === "large"
+                  ? "text-base font-kairo-medium"
+                  : "text-sm font-kairo-medium",
                 props.tone === "warning"
                   ? "text-warning-foreground"
                   : props.emphasized || props.selected

@@ -52,8 +52,8 @@ For custom workspace generation (e.g., per-thread build dirs or submodule setup)
 
 `create` runs in the project folder (10-minute timeout, serialized per project) with these environment variables:
 
-| Variable                   | Value                                         |
-| -------------------------- | --------------------------------------------- |
+| Variable                      | Value                                         |
+| ----------------------------- | --------------------------------------------- |
 | `KAIRO_PROJECT_ROOT`          | The project folder.                           |
 | `KAIRO_WORKTREE_ROOT`         | Empty folder to populate for this thread.     |
 | `KAIRO_WORKTREE_PROJECT_PATH` | Target path for the project folder inside it. |

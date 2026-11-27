@@ -34,7 +34,9 @@ const withStore = <A, E>(
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const directory = yield* fileSystem.makeTempDirectoryScoped({ prefix: "kairo-workflow-store-" });
+    const directory = yield* fileSystem.makeTempDirectoryScoped({
+      prefix: "kairo-workflow-store-",
+    });
     const database = NodeSqliteClient.layer({ filename: path.join(directory, "state.sqlite") });
     const migrated = Layer.effectDiscard(
       Effect.andThen(WorkflowsMigration, WorkflowSkippedRunsMigration).pipe(

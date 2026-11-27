@@ -69,7 +69,10 @@ describe("pi T3 MCP injection", () => {
     assert.equal(launch.env[KAIRO_MCP_URL_ENV], "http://127.0.0.1:43123/mcp");
     assert.equal(launch.env[KAIRO_MCP_BEARER_ENV], "secret-pi-token");
     assert.equal(launch.env[KAIRO_PI_RUNTIME_MODE_ENV], "approval-required");
-    assert.equal(launch.env[KAIRO_PI_MCP_EXTENSION_PATH_ENV], "/tmp/cache/pi-kairo-mcp-extension.ts");
+    assert.equal(
+      launch.env[KAIRO_PI_MCP_EXTENSION_PATH_ENV],
+      "/tmp/cache/pi-kairo-mcp-extension.ts",
+    );
 
     const permissionOnly = buildPiRpcLaunch({
       launchArgs: [],

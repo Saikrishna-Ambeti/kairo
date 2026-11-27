@@ -1,8 +1,4 @@
-import type {
-  EnvironmentId,
-  ServerSettingsPatch,
-  UsageModelPriceOverride,
-} from "@kairo/contracts";
+import type { EnvironmentId, ServerSettingsPatch, UsageModelPriceOverride } from "@kairo/contracts";
 import { msg } from "gt-react";
 
 import { m } from "~/i18n/messages";

@@ -9,10 +9,7 @@ import {
 import * as Equal from "effect/Equal";
 import { shallow } from "zustand/vanilla/shallow";
 import { claudeResumeCompactionAge } from "@kairo/shared/claudeCompaction";
-import {
-  IDLE_COMPACTING_LABELS,
-  IDLE_COMPACTION_TITLES,
-} from "@kairo/client-runtime/user-message";
+import { IDLE_COMPACTING_LABELS, IDLE_COMPACTION_TITLES } from "@kairo/client-runtime/user-message";
 import type { HandoffTimelineRun } from "@kairo/client-runtime/handoff";
 import { renderCodexDirectivesForCopy } from "~/markdown/markdownText";
 import {

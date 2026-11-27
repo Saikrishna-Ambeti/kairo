@@ -72,9 +72,7 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("AUR release", 
           : [
               {
                 name:
-                  failure === "version"
-                    ? "Kairo-1.2.2-arm64.AppImage"
-                    : `${prefix}-arm64.AppImage`,
+                  failure === "version" ? "Kairo-1.2.2-arm64.AppImage" : `${prefix}-arm64.AppImage`,
                 digest: failure === "digest" ? "invalid" : `sha256:${"b".repeat(64)}`,
               },
             ]),

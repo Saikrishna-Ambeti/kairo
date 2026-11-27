@@ -375,7 +375,10 @@ function PairingScanCard(props: {
                 weight="light"
               />
               <Text
-                className={cn("font-kairo-medium text-sm", light ? "text-black/70" : "text-white/80")}
+                className={cn(
+                  "font-kairo-medium text-sm",
+                  light ? "text-black/70" : "text-white/80",
+                )}
               >
                 <T>Tap to scan</T>
               </Text>

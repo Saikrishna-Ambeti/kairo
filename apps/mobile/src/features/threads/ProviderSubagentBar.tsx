@@ -50,7 +50,10 @@ export function ProviderSubagentBar(props: {
               size={16}
             />
           ) : null}
-          <Text numberOfLines={1} className="min-w-0 shrink font-kairo-bold text-sm text-foreground">
+          <Text
+            numberOfLines={1}
+            className="min-w-0 shrink font-kairo-bold text-sm text-foreground"
+          >
             {props.modelLabel}
           </Text>
           {props.effortLabel === null ? null : (

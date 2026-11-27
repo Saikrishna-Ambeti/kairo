@@ -18,13 +18,13 @@ describe("Azure DevOps change request URLs", () => {
       number: 17,
       repositoryUrl: "https://dev.azure.com/acme/platform/_git/kairo",
     });
-    expect(
-      parse("https://acme.visualstudio.com/platform/_git/kairo/pullrequest/17"),
-    ).toMatchObject({
-      host: "acme.visualstudio.com",
-      repository: "platform/_git/kairo",
-      number: 17,
-    });
+    expect(parse("https://acme.visualstudio.com/platform/_git/kairo/pullrequest/17")).toMatchObject(
+      {
+        host: "acme.visualstudio.com",
+        repository: "platform/_git/kairo",
+        number: 17,
+      },
+    );
   });
 
   it("keeps Azure DevOps Server ports in the authority, on any hostname", () => {

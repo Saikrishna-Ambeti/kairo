@@ -1,9 +1,5 @@
 import type { ClientSettings } from "@kairo/contracts/settings";
-import type {
-  AssistantCitation,
-  EnvironmentId,
-  ResolvedKeybindingsConfig,
-} from "@kairo/contracts";
+import type { AssistantCitation, EnvironmentId, ResolvedKeybindingsConfig } from "@kairo/contracts";
 import type { ComposerPathSearchTarget } from "@kairo/client-runtime/state/threads";
 import {
   serializeAssistantCitation,

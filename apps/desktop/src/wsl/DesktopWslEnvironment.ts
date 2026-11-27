@@ -1335,16 +1335,20 @@ export const layer = Layer.effect(
       windowsToWslPath,
       getUserHome,
       getDistroIp,
-      prepareRuntime: Effect.fn("desktop.wsl.prepareRuntime")(function (distro, archive, kairoHome) {
-        return provideSpawner(
-          prepareWslRuntimeImpl(distro, archive, kairoHome, windowsToWslPath).pipe(
-            Effect.provideService(FileSystem.FileSystem, fileSystem),
-          ),
-        );
-      }),
-      pruneRuntimes: Effect.fn("desktop.wsl.pruneRuntimes")(function (distro, runtimeId, kairoHome) {
-        return provideSpawner(pruneWslRuntimesImpl(distro, runtimeId, kairoHome));
-      }),
+      prepareRuntime: Effect.fn("desktop.wsl.prepareRuntime")(
+        function (distro, archive, kairoHome) {
+          return provideSpawner(
+            prepareWslRuntimeImpl(distro, archive, kairoHome, windowsToWslPath).pipe(
+              Effect.provideService(FileSystem.FileSystem, fileSystem),
+            ),
+          );
+        },
+      ),
+      pruneRuntimes: Effect.fn("desktop.wsl.pruneRuntimes")(
+        function (distro, runtimeId, kairoHome) {
+          return provideSpawner(pruneWslRuntimesImpl(distro, runtimeId, kairoHome));
+        },
+      ),
       probeRuntime: Effect.fn("desktop.wsl.probeRuntime")(function (distro) {
         return provideSpawner(probeWslRuntimeImpl(distro));
       }),

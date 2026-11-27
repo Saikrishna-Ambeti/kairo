@@ -1,10 +1,7 @@
 import { msg } from "gt-react";
 import { thrownErrorMessage } from "@kairo/client-runtime/errors";
 import { m } from "~/i18n/messages";
-import type {
-  EnvironmentProject,
-  EnvironmentThreadShell,
-} from "@kairo/client-runtime/state/shell";
+import type { EnvironmentProject, EnvironmentThreadShell } from "@kairo/client-runtime/state/shell";
 import type { Dispatch } from "react";
 import type { ComposerHandleRef } from "../../composerHandleContext";
 import type { selectThreadTerminalUiState } from "../../terminalUiStateStore";

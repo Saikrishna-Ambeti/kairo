@@ -6,15 +6,15 @@ Run Kairo as a background user service on Linux, macOS, or Windows so your host 
 
 Install the `t3` CLI first ([Command line](./install.md#command-line)), then run these commands on the host machine:
 
-| Task                                    | Command                                                   |
-| --------------------------------------- | --------------------------------------------------------- |
-| Set up access from other devices        | `kairo up`                                                   |
-| Check how other devices reach it        | `t3 status`                                               |
-| Install and start (or repair)           | `kairo service install`                                      |
-| Check status and log path               | `kairo service status`                                       |
-| Update to a newer release               | `kairo update`                                               |
-| Restart                                 | `kairo service restart`                                      |
-| Stop and remove from startup            | `kairo service uninstall`                                    |
+| Task                                    | Command                                                         |
+| --------------------------------------- | --------------------------------------------------------------- |
+| Set up access from other devices        | `kairo up`                                                      |
+| Check how other devices reach it        | `t3 status`                                                     |
+| Install and start (or repair)           | `kairo service install`                                         |
+| Check status and log path               | `kairo service status`                                          |
+| Update to a newer release               | `kairo update`                                                  |
+| Restart                                 | `kairo service restart`                                         |
+| Stop and remove from startup            | `kairo service uninstall`                                       |
 | Remove service, launcher, and downloads | `kairo uninstall` (keeps `~/.kairo/userdata` and `service.env`) |
 
 - Pairing codes are never written to logs; run `kairo pair` or `kairo up` on the host to connect a device.
@@ -58,13 +58,13 @@ It previews system changes, asks for confirmation and `sudo`, and optionally pro
 
 Run `kairo service status` on the host to see the log path and health checks:
 
-| Status                                 | Fix                                                                                                                                             |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status                                 | Fix                                                                                                                                           |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | `linger-disabled`                      | Run `sudo loginctl enable-linger "$(id -un)"` (or `ssh -t your-server '...'`), then retry setup as your normal user. Never run Kairo as root. |
-| `linger-unavailable`                   | Check `loginctl show-user "$(id -un)" --property=Linger` and verify `systemd-logind`.                                                           |
-| `user-manager-unavailable`             | Run `systemctl --user status` in a login session to verify systemd user support.                                                                |
-| `service-disabled` / `service-stopped` | Check the log and `systemctl --user status kairo.service`, then run `kairo service install`.                                                      |
-| `restart-pending`                      | Run `kairo service restart` to switch to the newly installed version.                                                                              |
+| `linger-unavailable`                   | Check `loginctl show-user "$(id -un)" --property=Linger` and verify `systemd-logind`.                                                         |
+| `user-manager-unavailable`             | Run `systemctl --user status` in a login session to verify systemd user support.                                                              |
+| `service-disabled` / `service-stopped` | Check the log and `systemctl --user status kairo.service`, then run `kairo service install`.                                                  |
+| `restart-pending`                      | Run `kairo service restart` to switch to the newly installed version.                                                                         |
 
 For Kairo Connect issues, see [Kairo Connect troubleshooting](./kairo-connect-troubleshooting.md).
 

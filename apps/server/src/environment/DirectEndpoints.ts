@@ -17,11 +17,7 @@ import * as NodeNet from "node:net";
 import * as NodeOS from "node:os";
 
 import * as HostProcess from "@kairo/shared/HostProcess";
-import {
-  formatHostForUrl,
-  isTailnetHost,
-  isWildcardHost,
-} from "@kairo/shared/hostClassification";
+import { formatHostForUrl, isTailnetHost, isWildcardHost } from "@kairo/shared/hostClassification";
 
 import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "./ServerEnvironment.ts";

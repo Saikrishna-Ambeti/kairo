@@ -9,10 +9,7 @@ import {
   type ScopedProjectRef,
   type ScopedThreadRef,
 } from "@kairo/contracts";
-import {
-  presentThreadShell,
-  type EnvironmentThreadShell,
-} from "@kairo/client-runtime/state/shell";
+import { presentThreadShell, type EnvironmentThreadShell } from "@kairo/client-runtime/state/shell";
 import {
   deriveLatestThreadRun,
   deriveThreadRuntime,

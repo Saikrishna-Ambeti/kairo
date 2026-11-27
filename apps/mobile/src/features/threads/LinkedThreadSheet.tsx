@@ -188,7 +188,9 @@ function FailureCard(props: {
       accessibilityLiveRegion="polite"
       className="gap-1 rounded-2xl border border-danger-border bg-danger px-3.5 py-3"
     >
-      <Text className="font-kairo-medium text-sm text-danger-foreground">{props.failure.title}</Text>
+      <Text className="font-kairo-medium text-sm text-danger-foreground">
+        {props.failure.title}
+      </Text>
       <Text className="text-sm text-danger-foreground">
         {props.failure.detail}
         {props.stale ? ` ${gt("Showing what was read before.")}` : ""}

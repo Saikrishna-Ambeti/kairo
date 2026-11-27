@@ -1247,7 +1247,9 @@ describe("AcpSessionRuntime", () => {
         sessionLoadReplayIdleReadiness: true,
       });
       const started = yield* runtime.start();
-      expect(started.sessionSetupResult._meta).toMatchObject({ kairoSessionLoadReady: "replay_idle" });
+      expect(started.sessionSetupResult._meta).toMatchObject({
+        kairoSessionLoadReady: "replay_idle",
+      });
 
       yield* runtime.getEvents().pipe(
         Stream.filter((event) => event._tag === "ConfigOptionsUpdated"),
@@ -1680,7 +1682,10 @@ describe("AcpSessionRuntime", () => {
         let promptsStarted = 0;
         const runtime = yield* AcpSessionRuntime.make({
           ...mockRuntimeOptions,
-          spawn: { ...mockRuntimeOptions.spawn, env: { KAIRO_ACP_REQUEST_LOG_PATH: requestLogPath } },
+          spawn: {
+            ...mockRuntimeOptions.spawn,
+            env: { KAIRO_ACP_REQUEST_LOG_PATH: requestLogPath },
+          },
           interruptPromptOnCancel: false,
           // The cancel spends a test-clock second in its outgoing record, the window in which the
           // next prompt could overtake it.

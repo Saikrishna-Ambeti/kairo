@@ -10,10 +10,7 @@ import {
 } from "@kairo/contracts";
 import { waitForHttpReady } from "@kairo/shared/httpReadiness";
 import * as HostProcess from "@kairo/shared/HostProcess";
-import {
-  resolveNodeExecutable,
-  type NodeRuntimeUnavailableError,
-} from "@kairo/shared/nodeRuntime";
+import { resolveNodeExecutable, type NodeRuntimeUnavailableError } from "@kairo/shared/nodeRuntime";
 import * as NetService from "@kairo/shared/Net";
 import { isCommandAvailable } from "@kairo/shared/shell";
 import * as Clock from "effect/Clock";

@@ -308,7 +308,9 @@ function RunBody(props: { readonly environmentId: EnvironmentId; readonly node: 
     >
       <View className="gap-1 px-1">
         <View className="flex-row items-start gap-3">
-          <Text className="min-w-0 flex-1 font-kairo-bold text-lg text-foreground">{run.title}</Text>
+          <Text className="min-w-0 flex-1 font-kairo-bold text-lg text-foreground">
+            {run.title}
+          </Text>
           <Text className={cn("font-kairo-medium text-sm", WORKFLOW_TONE_CLASS[state.tone])}>
             {state.word}
           </Text>

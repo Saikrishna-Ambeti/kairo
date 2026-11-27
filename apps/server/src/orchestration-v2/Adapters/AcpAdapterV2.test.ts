@@ -2516,7 +2516,9 @@ describe("AcpAdapterV2", () => {
     return Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const directory = yield* fileSystem.makeTempDirectoryScoped({ prefix: "kairo-registry-form-" });
+      const directory = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "kairo-registry-form-",
+      });
       const statusPath = path.join(directory, "status.json");
       const expectedResult = typeof result === "function" ? result(directory) : result;
       let preparedAnswers: ProviderUserInputAnswers | undefined = answers;
@@ -2781,7 +2783,10 @@ describe("AcpAdapterV2", () => {
     {
       // Without a `mode` category, T3 derives no mode state and only the config option switches.
       modeIds: "Copilot URL collaboration_mode",
-      environment: { KAIRO_ACP_COPILOT_MODES: "1", KAIRO_ACP_MODE_OPTION_CATEGORY: "collaboration_mode" },
+      environment: {
+        KAIRO_ACP_COPILOT_MODES: "1",
+        KAIRO_ACP_MODE_OPTION_CATEGORY: "collaboration_mode",
+      },
       planModeId: "https://agentclientprotocol.com/protocol/session-modes#plan",
       buildModeId: "https://agentclientprotocol.com/protocol/session-modes#agent",
     },
@@ -3414,7 +3419,9 @@ describe("AcpAdapterV2", () => {
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const directory = yield* fileSystem.makeTempDirectoryScoped({ prefix: "kairo-acp-mode-only-" });
+      const directory = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "kairo-acp-mode-only-",
+      });
       const statusPath = path.join(directory, "status.json");
       const sessionId = "mode-only-session";
       const modeOption = (currentValue: string) => ({
@@ -6341,7 +6348,9 @@ describe("AcpAdapterV2", () => {
       Effect.gen(function* () {
         const harness = yield* makePromptInactivityHarness({
           environment: (runtimeOrdinal) =>
-            runtimeOrdinal === 1 ? { KAIRO_ACP_EMIT_TRACKED_TOOL_CALL_KIND_THEN_HANG: "execute" } : {},
+            runtimeOrdinal === 1
+              ? { KAIRO_ACP_EMIT_TRACKED_TOOL_CALL_KIND_THEN_HANG: "execute" }
+              : {},
         });
         yield* harness.startTurn(1);
         yield* harness.runtime.events.pipe(
@@ -8099,8 +8108,9 @@ describe("AcpAdapterV2", () => {
           ? replacementMcpServer.env
           : undefined;
       assert.equal(
-        replacementMcpEnvironment?.find((variable) => variable.name === "KAIRO_ACP_MCP_AUTHORIZATION")
-          ?.value,
+        replacementMcpEnvironment?.find(
+          (variable) => variable.name === "KAIRO_ACP_MCP_AUTHORIZATION",
+        )?.value,
         "Bearer rollback-target-token",
       );
       const snapshotAfterRollback = yield* runtime.readThreadSnapshot({

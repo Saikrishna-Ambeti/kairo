@@ -1,7 +1,4 @@
-import {
-  RelayAgentActivityAggregateState,
-  RelayAgentAwarenessPhase,
-} from "@kairo/contracts/relay";
+import { RelayAgentActivityAggregateState, RelayAgentAwarenessPhase } from "@kairo/contracts/relay";
 import { stableStringify } from "@kairo/shared/relaySigning";
 import * as Mac from "effect/crypto/Mac";
 import * as DateTime from "effect/DateTime";

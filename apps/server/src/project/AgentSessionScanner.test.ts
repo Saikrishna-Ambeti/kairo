@@ -1092,9 +1092,7 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
 
         // Not offered: the config is unreadable, so the repository could be bare; and
         // the main checkout is reached through a symlink into T3's own state.
-        const configBaseDir = yield* fileSystem.realPath(
-          yield* makeTempDir("kairo-scanner-base-"),
-        );
+        const configBaseDir = yield* fileSystem.realPath(yield* makeTempDir("kairo-scanner-base-"));
         const links = yield* makeTempDir("kairo-workspace-links-");
         const unknown = yield* makeTempDir("kairo-workspace-unknown-");
         yield* fileSystem.makeDirectory(path.join(configBaseDir, "state-repo"));
@@ -1298,26 +1296,28 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
       }),
     );
 
-    it.effect("excludes sandboxes under the configured worktrees dir without .kairo in the path", () =>
-      Effect.gen(function* () {
-        const path = yield* Path.Path;
-        const claudeHomePath = yield* makeTempDir("kairo-claude-home-");
-        const codexHomePath = yield* makeTempDir("kairo-codex-home-");
-        const configBaseDir = yield* makeTempDir("kairo-scanner-base-");
-        const fileSystem = yield* FileSystem.FileSystem;
+    it.effect(
+      "excludes sandboxes under the configured worktrees dir without .kairo in the path",
+      () =>
+        Effect.gen(function* () {
+          const path = yield* Path.Path;
+          const claudeHomePath = yield* makeTempDir("kairo-claude-home-");
+          const codexHomePath = yield* makeTempDir("kairo-codex-home-");
+          const configBaseDir = yield* makeTempDir("kairo-scanner-base-");
+          const fileSystem = yield* FileSystem.FileSystem;
 
-        const worktreeCwd = path.join(configBaseDir, "worktrees", "kairo", "wt-2");
-        yield* fileSystem.makeDirectory(worktreeCwd, { recursive: true });
-        yield* writeTranscript({
-          filePath: path.join(claudeHomePath, "projects", "-slug", "a.jsonl"),
-          contents: claudeSessionLine(worktreeCwd),
-          mtimeMs: Date.parse("2026-01-01T00:00:00.000Z"),
-        });
+          const worktreeCwd = path.join(configBaseDir, "worktrees", "kairo", "wt-2");
+          yield* fileSystem.makeDirectory(worktreeCwd, { recursive: true });
+          yield* writeTranscript({
+            filePath: path.join(claudeHomePath, "projects", "-slug", "a.jsonl"),
+            contents: claudeSessionLine(worktreeCwd),
+            mtimeMs: Date.parse("2026-01-01T00:00:00.000Z"),
+          });
 
-        const result = yield* runScan({ claudeHomePath, codexHomePath, configBaseDir });
+          const result = yield* runScan({ claudeHomePath, codexHomePath, configBaseDir });
 
-        expect(result.candidates).toEqual([]);
-      }),
+          expect(result.candidates).toEqual([]);
+        }),
     );
 
     it.effect("excludes sandboxes reached through a symlink into the worktrees dir", () =>
@@ -1376,9 +1376,7 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
         const fileSystem = yield* FileSystem.FileSystem;
         const claudeHomePath = yield* makeTempDir("kairo-claude-home-");
         const codexHomePath = yield* makeTempDir("kairo-codex-home-");
-        const projectDir = yield* fileSystem.realPath(
-          yield* makeTempDir("kairo-scanner-project-"),
-        );
+        const projectDir = yield* fileSystem.realPath(yield* makeTempDir("kairo-scanner-project-"));
         const realBaseDir = yield* fileSystem.realPath(yield* makeTempDir("kairo-scanner-base-"));
         const linkParent = yield* makeTempDir("kairo-scanner-links-");
         const configBaseDir = path.join(linkParent, "kairo-home");

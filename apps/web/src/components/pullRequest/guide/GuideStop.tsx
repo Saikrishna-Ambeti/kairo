@@ -1,8 +1,5 @@
 import type { FileDiffContentsLoader, FileDiffMetadata } from "@pierre/diffs";
-import type {
-  PullRequestReviewGuideAttention,
-  PullRequestReviewGuideStop,
-} from "@kairo/contracts";
+import type { PullRequestReviewGuideAttention, PullRequestReviewGuideStop } from "@kairo/contracts";
 import {
   ArrowRightIcon,
   ChevronDownIcon,

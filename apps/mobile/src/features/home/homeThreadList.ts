@@ -3,10 +3,7 @@ import {
   pickableProjectGroups,
   resolveScratchProjectScopeKey,
 } from "@kairo/client-runtime/state/project-grouping";
-import type {
-  EnvironmentProject,
-  EnvironmentThreadShell,
-} from "@kairo/client-runtime/state/shell";
+import type { EnvironmentProject, EnvironmentThreadShell } from "@kairo/client-runtime/state/shell";
 import {
   getThreadSortTimestamp,
   toSortableTimestamp,

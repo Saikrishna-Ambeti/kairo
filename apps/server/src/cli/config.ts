@@ -7,7 +7,11 @@ import {
 } from "@kairo/shared/observability";
 import * as OtelEnvironment from "@kairo/shared/otelEnvironment";
 import { parsePersistedServerObservabilitySettings } from "@kairo/shared/serverSettings";
-import { DEFAULT_PRODUCT_SURFACE_CONFIG, DesktopBackendBootstrap, PortSchema } from "@kairo/contracts";
+import {
+  DEFAULT_PRODUCT_SURFACE_CONFIG,
+  DesktopBackendBootstrap,
+  PortSchema,
+} from "@kairo/contracts";
 import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -99,9 +103,7 @@ export const traceFileConfig = Config.String("KAIRO_TRACE_FILE").pipe(
   Config.option,
   Config.map(Option.getOrUndefined),
 );
-export const traceMaxFilesConfig = Config.Int("KAIRO_TRACE_MAX_FILES").pipe(
-  Config.withDefault(10),
-);
+export const traceMaxFilesConfig = Config.Int("KAIRO_TRACE_MAX_FILES").pipe(Config.withDefault(10));
 
 const EnvServerConfig = Config.all({
   logLevel: Config.LogLevel("KAIRO_LOG_LEVEL").pipe(Config.withDefault("Info")),

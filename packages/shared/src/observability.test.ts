@@ -558,7 +558,9 @@ describe("observability", () => {
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const tempDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "kairo-local-tracer-" });
+        const tempDir = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "kairo-local-tracer-",
+        });
         const tracePath = path.join(tempDir, "shared.trace.ndjson");
 
         yield* Effect.scoped(
@@ -614,7 +616,9 @@ describe("observability", () => {
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const tempDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "kairo-local-tracer-" });
+        const tempDir = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "kairo-local-tracer-",
+        });
         const tracePath = path.join(tempDir, "shared.trace.ndjson");
 
         yield* Effect.scoped(

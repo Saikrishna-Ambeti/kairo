@@ -15,10 +15,7 @@ import {
   EnvironmentAuthorizationError,
   type GitRunStackedActionResult,
 } from "@kairo/contracts";
-import {
-  dedupeRemoteBranchesWithLocalMatches,
-  sanitizeFeatureBranchName,
-} from "@kairo/shared/git";
+import { dedupeRemoteBranchesWithLocalMatches, sanitizeFeatureBranchName } from "@kairo/shared/git";
 import * as Cause from "effect/Cause";
 import { msg } from "gt-react-native";
 import { m } from "../i18n/messages";

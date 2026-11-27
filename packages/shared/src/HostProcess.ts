@@ -16,28 +16,22 @@ export const Architecture = Context.Reference<NodeJS.Architecture>(
   },
 );
 
-export const KernelRelease = Context.Reference<string>(
-  "@kairo/shared/HostProcess/KernelRelease",
-  {
-    defaultValue: () => NodeOS.release(),
-  },
-);
+export const KernelRelease = Context.Reference<string>("@kairo/shared/HostProcess/KernelRelease", {
+  defaultValue: () => NodeOS.release(),
+});
 
-export const LinuxLibc = Context.Reference<"gnu" | "musl">(
-  "@kairo/shared/HostProcess/LinuxLibc",
-  {
-    defaultValue: () => {
-      try {
-        const report = process.report?.getReport() as
-          | { header?: { glibcVersionRuntime?: unknown } }
-          | undefined;
-        return typeof report?.header?.glibcVersionRuntime === "string" ? "gnu" : "musl";
-      } catch {
-        return "musl";
-      }
-    },
+export const LinuxLibc = Context.Reference<"gnu" | "musl">("@kairo/shared/HostProcess/LinuxLibc", {
+  defaultValue: () => {
+    try {
+      const report = process.report?.getReport() as
+        | { header?: { glibcVersionRuntime?: unknown } }
+        | undefined;
+      return typeof report?.header?.glibcVersionRuntime === "string" ? "gnu" : "musl";
+    } catch {
+      return "musl";
+    }
   },
-);
+});
 
 export const Hostname = Context.Reference<string>("@kairo/shared/HostProcess/Hostname", {
   defaultValue: () => NodeOS.hostname(),
@@ -53,12 +47,9 @@ export const Username = Context.Reference<string | null>("@kairo/shared/HostProc
   },
 });
 
-export const HomeDirectory = Context.Reference<string>(
-  "@kairo/shared/HostProcess/HomeDirectory",
-  {
-    defaultValue: () => NodeOS.homedir(),
-  },
-);
+export const HomeDirectory = Context.Reference<string>("@kairo/shared/HostProcess/HomeDirectory", {
+  defaultValue: () => NodeOS.homedir(),
+});
 
 export const Environment = Context.Reference<NodeJS.ProcessEnv>(
   "@kairo/shared/HostProcess/Environment",

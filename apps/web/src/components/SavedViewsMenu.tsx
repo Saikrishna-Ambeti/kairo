@@ -2,10 +2,7 @@ import { T, useGT, useMessages } from "gt-react";
 import { BookmarkIcon, CheckIcon, ChevronDownIcon, PlusIcon } from "lucide-react";
 import { useId, useState } from "react";
 import type * as Schema from "effect/Schema";
-import {
-  SAVED_VIEW_NAME_MAX_LENGTH,
-  savedViewNameError,
-} from "@kairo/client-runtime/saved-views";
+import { SAVED_VIEW_NAME_MAX_LENGTH, savedViewNameError } from "@kairo/client-runtime/saved-views";
 
 import { getLocalStorageItem, useLocalStorage } from "../hooks/useLocalStorage";
 import { randomUUID } from "../lib/utils";
