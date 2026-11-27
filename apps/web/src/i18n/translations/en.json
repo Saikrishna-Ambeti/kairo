@@ -8014,15 +8014,14 @@
   "e1fcc4b74faaae02": "Remove shortcut…",
   "efa55bbb1d3aa45e": "Review changes",
   "3e02b74615e20d82": "Manual setup",
-  "235c3d13e17ea640": [
+  "792b76bc4ab4b1f7": [
     "Turn capture off in Kairo to stop it. Remove the shortcut from ",
     {
       "i": 1,
       "k": "_gt_value_1",
       "v": "v"
     },
-    " ",
-    "to free up the keys."
+    " to free up the keys."
   ],
   "4bf700ad94c0c486": "I've added the shortcut",
   "bcdea6ebe1a65e63": "ChatGPT account to connect",

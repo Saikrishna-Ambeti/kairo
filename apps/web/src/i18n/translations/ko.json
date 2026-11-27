@@ -7974,15 +7974,14 @@
   "e1fcc4b74faaae02": "단축키 제거…",
   "efa55bbb1d3aa45e": "변경 사항 검토",
   "3e02b74615e20d82": "수동 설정",
-  "235c3d13e17ea640": [
+  "792b76bc4ab4b1f7": [
     "Turn capture off in Kairo to stop it. Remove the shortcut from ",
     {
       "i": 1,
       "k": "_gt_value_1",
       "v": "v"
     },
-    " ",
-    "to free up the keys."
+    " to free up the keys."
   ],
   "4bf700ad94c0c486": "단축키를 추가했습니다",
   "bcdea6ebe1a65e63": "연결할 ChatGPT 계정",

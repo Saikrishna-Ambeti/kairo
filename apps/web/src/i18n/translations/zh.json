@@ -8023,15 +8023,14 @@
   "e1fcc4b74faaae02": "移除快捷键…",
   "efa55bbb1d3aa45e": "查看更改",
   "3e02b74615e20d82": "手动设置",
-  "235c3d13e17ea640": [
+  "792b76bc4ab4b1f7": [
     "Turn capture off in Kairo to stop it. Remove the shortcut from ",
     {
       "i": 1,
       "k": "_gt_value_1",
       "v": "v"
     },
-    " ",
-    "to free up the keys."
+    " to free up the keys."
   ],
   "4bf700ad94c0c486": "我已添加快捷键",
   "bcdea6ebe1a65e63": "要连接的 ChatGPT 账户",

@@ -8008,15 +8008,14 @@
   "e1fcc4b74faaae02": "Supprimer le raccourci…",
   "efa55bbb1d3aa45e": "Vérifier les modifications",
   "3e02b74615e20d82": "Configuration manuelle",
-  "235c3d13e17ea640": [
+  "792b76bc4ab4b1f7": [
     "Turn capture off in Kairo to stop it. Remove the shortcut from ",
     {
       "i": 1,
       "k": "_gt_value_1",
       "v": "v"
     },
-    " ",
-    "to free up the keys."
+    " to free up the keys."
   ],
   "4bf700ad94c0c486": "J’ai ajouté le raccourci",
   "bcdea6ebe1a65e63": "Compte ChatGPT à connecter",

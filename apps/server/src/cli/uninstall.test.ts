@@ -213,7 +213,7 @@ it.layer(NodeServices.layer)("kairo uninstall launcher", (it) => {
 
       // On Windows, only the shim exactly as written is ours; a user's wrapper stays.
       const shimDir = path.join(root, "win-bin");
-      const shim = path.join(shimDir, "t3.cmd");
+      const shim = path.join(shimDir, "kairo.cmd");
       yield* fs.makeDirectory(shimDir);
       const windowsOwner = (contents: string) =>
         fs
@@ -233,16 +233,16 @@ it.layer(NodeServices.layer)("kairo uninstall launcher", (it) => {
       const scriptThroughAlias = path.join(scriptDir, "kairo-alias");
       const prunedScript = path.join(scriptDir, "kairo-pruned");
       yield* fs.symlink(root, path.join(root, "alias"));
-      yield* fs.symlink(path.join(root, "alias/runtime/versions/1.0.0/t3"), throughAlias);
-      yield* fs.symlink(path.join(versionsDir, "0.9.0/t3"), pruned);
+      yield* fs.symlink(path.join(root, "alias/runtime/versions/1.0.0/kairo"), throughAlias);
+      yield* fs.symlink(path.join(versionsDir, "0.9.0/kairo"), pruned);
       yield* fs.writeFileString(
         scriptThroughAlias,
-        posixLauncherScript(path.join(root, "alias/runtime/versions/1.0.0/t3")),
+        posixLauncherScript(path.join(root, "alias/runtime/versions/1.0.0/kairo")),
         { mode: 0o755 },
       );
       yield* fs.writeFileString(
         prunedScript,
-        posixLauncherScript(path.join(versionsDir, "0.9.0/t3")),
+        posixLauncherScript(path.join(versionsDir, "0.9.0/kairo")),
         { mode: 0o755 },
       );
       // Another program inside a version is not a launcher.
@@ -275,8 +275,8 @@ it.layer(NodeServices.layer)("kairo uninstall launcher", (it) => {
         ]);
       }
 
-      // On Windows only an unedited t3.cmd is ours; a hand-edited wrapper belongs to the user.
-      const cmd = path.join(root, "bin/t3.cmd");
+      // On Windows only an unedited kairo.cmd is ours; a hand-edited wrapper belongs to the user.
+      const cmd = path.join(root, "bin/kairo.cmd");
       const edited = path.join(root, "bin/edited.cmd");
       yield* fs.writeFileString(cmd, `@echo off\r\n"${exe}" %*`);
       yield* fs.writeFileString(edited, `@echo off\r\nset "KAIRO_HOME=D:\\other"\r\n"${exe}" %*`);
