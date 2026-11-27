@@ -2,6 +2,7 @@ import { assert, describe, it } from "vite-plus/test";
 import {
   compileResolvedKeybindingsConfig,
   DEFAULT_RESOLVED_KEYBINDINGS,
+  DEVELOPER_DEFAULT_KEYBINDINGS,
   mergeWithDefaultKeybindings,
 } from "@kairo/shared/keybindings";
 
@@ -427,7 +428,7 @@ describe("model picker navigation helpers", () => {
 });
 
 describe("chat/editor shortcuts", () => {
-  it("toggles the thread panel by default without taking terminal keystrokes", () => {
+  it("uses the thread panel shortcut in each keybinding profile", () => {
     for (const platform of ["MacIntel", "Win32", "Linux"]) {
       const input = event({
         key: "b",
@@ -442,11 +443,22 @@ describe("chat/editor shortcuts", () => {
         }),
         "threadPanel.toggle",
       );
-      assert.isNull(
+      assert.strictEqual(
         resolveShortcutCommand(input, DEFAULT_RESOLVED_KEYBINDINGS, {
           platform,
           context: { terminalFocus: true },
         }),
+        "threadPanel.toggle",
+      );
+      assert.isNull(
+        resolveShortcutCommand(
+          input,
+          compileResolvedKeybindingsConfig(DEVELOPER_DEFAULT_KEYBINDINGS),
+          {
+            platform,
+            context: { terminalFocus: true },
+          },
+        ),
       );
     }
   });
@@ -661,14 +673,15 @@ describe("resolveShortcutCommand", () => {
   });
 
   it("uses terminal cycling shortcuts without changing bracket history shortcuts", () => {
+    const bindings = compileResolvedKeybindingsConfig(DEVELOPER_DEFAULT_KEYBINDINGS);
     const back = event({ key: "[", code: "BracketLeft", metaKey: true });
     const forward = event({ key: "]", code: "BracketRight", ctrlKey: true });
     assert.strictEqual(
-      resolveShortcutCommand(back, DEFAULT_RESOLVED_KEYBINDINGS, { platform: "MacIntel" }),
+      resolveShortcutCommand(back, bindings, { platform: "MacIntel" }),
       "navigation.back",
     );
     assert.strictEqual(
-      resolveShortcutCommand(forward, DEFAULT_RESOLVED_KEYBINDINGS, { platform: "Linux" }),
+      resolveShortcutCommand(forward, bindings, { platform: "Linux" }),
       "navigation.forward",
     );
     for (const platform of ["MacIntel", "Win32", "Linux"]) {
@@ -686,7 +699,7 @@ describe("resolveShortcutCommand", () => {
           shiftKey: mac,
         });
         assert.strictEqual(
-          resolveShortcutCommand(shortcut, DEFAULT_RESOLVED_KEYBINDINGS, {
+          resolveShortcutCommand(shortcut, bindings, {
             platform,
             context: { terminalFocus: true },
           }),
@@ -694,7 +707,7 @@ describe("resolveShortcutCommand", () => {
         );
         if (mac) {
           assert.strictEqual(
-            resolveShortcutCommand(shortcut, DEFAULT_RESOLVED_KEYBINDINGS, {
+            resolveShortcutCommand(shortcut, bindings, {
               platform,
               context: { terminalFocus: false },
             }),
@@ -704,20 +717,16 @@ describe("resolveShortcutCommand", () => {
       }
       if (mac) {
         for (const key of ["[", "]"]) {
-          const command = resolveShortcutCommand(
-            event({ key, metaKey: true }),
-            DEFAULT_RESOLVED_KEYBINDINGS,
-            {
-              platform,
-              context: { terminalFocus: true },
-            },
-          );
+          const command = resolveShortcutCommand(event({ key, metaKey: true }), bindings, {
+            platform,
+            context: { terminalFocus: true },
+          });
           assert.notStrictEqual(command, "terminal.previous");
           assert.notStrictEqual(command, "terminal.next");
         }
       }
       assert.isNull(
-        resolveShortcutCommand(event({ key: "[", ctrlKey: true }), DEFAULT_RESOLVED_KEYBINDINGS, {
+        resolveShortcutCommand(event({ key: "[", ctrlKey: true }), bindings, {
           platform,
           context: { terminalFocus: true },
         }),
@@ -975,16 +984,17 @@ describe("isSidebarToggleShortcut", () => {
 
 describe("composer and pull request shortcuts", () => {
   it("uses the dictation chord outside the terminal and preserves terminal split", () => {
+    const bindings = compileResolvedKeybindingsConfig(DEVELOPER_DEFAULT_KEYBINDINGS);
     const chord = event({ key: "d", ctrlKey: true, shiftKey: true });
     assert.strictEqual(
-      resolveShortcutCommand(chord, DEFAULT_RESOLVED_KEYBINDINGS, {
+      resolveShortcutCommand(chord, bindings, {
         platform: "Linux",
         context: { terminalFocus: false },
       }),
       "composer.dictation",
     );
     assert.strictEqual(
-      resolveShortcutCommand(chord, DEFAULT_RESOLVED_KEYBINDINGS, {
+      resolveShortcutCommand(chord, bindings, {
         platform: "Linux",
         context: { terminalFocus: true },
       }),

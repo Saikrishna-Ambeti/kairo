@@ -43,7 +43,9 @@ class KairoSecretInputModule : Module() {
       Prop("fontSize") { view: KairoSecretInputView, value: Float ->
         view.input.setTextSize(TypedValue.COMPLEX_UNIT_DIP, value)
       }
-      Prop("editable") { view: KairoSecretInputView, value: Boolean -> view.input.isEnabled = value }
+      Prop("editable") { view: KairoSecretInputView, value: Boolean ->
+        view.input.isEnabled = value
+      }
       Prop("revealed") { view: KairoSecretInputView, value: Boolean -> view.setRevealed(value) }
       Prop("returnKey") { view: KairoSecretInputView, value: String ->
         view.input.imeOptions =
@@ -61,7 +63,10 @@ class KairoSecretInputModule : Module() {
  * credential autofill, so password managers offer logins above the keyboard; this view owns the
  * EditText so it can.
  */
-class KairoSecretInputView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
+class KairoSecretInputView(
+  context: Context,
+  appContext: AppContext
+) : ExpoView(context, appContext) {
   // Yoga sizes this view; the EditText inside is laid out by Android.
   override val shouldUseAndroidLayout = true
 

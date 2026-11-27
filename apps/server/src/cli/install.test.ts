@@ -23,7 +23,7 @@ const setup = Effect.gen(function* () {
   const executable = path.join(runtimeDir, "versions", VERSION, "kairo");
   yield* fs.makeDirectory(path.dirname(executable), { recursive: true });
   yield* fs.writeFileString(executable, "");
-  const npmPackage = path.join(root, ".npm/_npx/abc/node_modules/t3");
+  const npmPackage = path.join(root, ".npm/_npx/abc/node_modules/kairo");
   yield* fs.makeDirectory(path.join(npmPackage, "bin"), { recursive: true });
   yield* fs.writeFileString(
     path.join(npmPackage, "package.json"),
@@ -40,7 +40,7 @@ const setup = Effect.gen(function* () {
         PATH: "/usr/bin",
         SHELL: "/bin/zsh",
         KAIRO_INSTALL_BIN_DIR: binDir,
-        KAIRO_NPM_LAUNCHER_PATH: path.join(npmPackage, "bin/t3.mjs"),
+        KAIRO_NPM_LAUNCHER_PATH: path.join(npmPackage, "bin/kairo.mjs"),
         ...env,
       }),
     );
@@ -48,13 +48,13 @@ const setup = Effect.gen(function* () {
 });
 
 it.layer(NodeServices.layer)("kairo install", (it) => {
-  it.effect("installs the running runtime, records it, and never replaces another t3", () =>
+  it.effect("installs the running runtime, records it, and never replaces another kairo", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const { root, runtimeDir, executable, link, provide } = yield* setup;
 
-      const older = path.join(runtimeDir, "versions/0.0.1/t3");
+      const older = path.join(runtimeDir, "versions/0.0.1/kairo");
       yield* fs.makeDirectory(path.dirname(link), { recursive: true });
       yield* fs.symlink(older, link);
       const installed = yield* provide(installCli());
@@ -69,7 +69,7 @@ it.layer(NodeServices.layer)("kairo install", (it) => {
       yield* fs.symlink(path.join(alias, "runtime/versions", VERSION, "kairo"), link);
       const onPath = yield* provide(installCli(), { PATH: `/usr/bin:${path.join(root, "bin")}/` });
       assert.isTrue(onPath.onPath);
-      // Another t3 earlier on PATH still runs first, so `t3` would not run this one.
+      // Another kairo earlier on PATH still runs first, so `kairo` would not run this one.
       const binDir = path.join(root, "bin");
       const otherBin = path.join(root, "other-bin");
       yield* fs.makeDirectory(otherBin);
@@ -108,22 +108,22 @@ it.layer(NodeServices.layer)("kairo install", (it) => {
       assert.isTrue(directory.onPath);
       assert.isUndefined(directory.shadowedBy);
       const recorded = yield* fs.readFileString(path.join(runtimeDir, "launchers"));
-      assert.equal(recorded, `\n${yield* fs.realPath(path.join(root, "bin"))}/t3\n`);
+      assert.equal(recorded, `\n${yield* fs.realPath(path.join(root, "bin"))}/kairo\n`);
 
       yield* fs.remove(link);
       yield* fs.writeFileString(link, "#!/bin/sh\n");
       const error = yield* provide(installCli()).pipe(Effect.flip);
-      assert.include(error.message, "Another t3 is already at");
+      assert.include(error.message, "Another kairo is already at");
       assert.equal(yield* fs.readFileString(link), "#!/bin/sh\n");
 
-      // Only `<version>/t3` is ours, not another program inside a version.
+      // Only `<version>/kairo` is ours, not another program inside a version.
       yield* fs.remove(link);
       yield* fs.symlink(path.join(runtimeDir, "versions/0.0.1/node"), link);
       const sibling = yield* provide(installCli()).pipe(Effect.flip);
-      assert.include(sibling.message, "Another t3 is already at");
+      assert.include(sibling.message, "Another kairo is already at");
       // This home's desktop launcher is replaced, as install.sh does.
       yield* fs.remove(link);
-      yield* fs.symlink(path.join(root, ".kairo/bin/t3"), link);
+      yield* fs.symlink(path.join(root, ".kairo/bin/kairo"), link);
       yield* provide(installCli());
       assert.equal(yield* fs.readFileString(link), posixLauncherScript(executable));
 
@@ -147,15 +147,14 @@ it.layer(NodeServices.layer)("kairo install", (it) => {
       assert.equal(yield* fs.readFileString(link), "#!/bin/sh\necho raced\n");
       yield* fs.remove(link);
 
-      // Windows writes a t3.cmd: only over its own, and only for paths cmd can run.
-      const shim = path.join(root, "bin", "t3.cmd");
+      // Windows writes a kairo.cmd: only over its own, and only for paths cmd can run.
+      const shim = path.join(root, "bin", "kairo.cmd");
       const windows = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         provide(effect.pipe(Effect.provideService(HostProcess.Platform, "win32")));
-      const desktopShim =
-        '@echo off\r\nrem Written by Kairo\r\n"C:\\Kairo\\Kairo.exe" "x" %*\r\n';
+      const desktopShim = '@echo off\r\nrem Written by Kairo\r\n"C:\\Kairo\\Kairo.exe" "x" %*\r\n';
       yield* fs.writeFileString(shim, desktopShim);
       const foreignShim = yield* windows(installCli()).pipe(Effect.flip);
-      assert.include(foreignShim.message, "Another t3 is already at");
+      assert.include(foreignShim.message, "Another kairo is already at");
       assert.equal(yield* fs.readFileString(shim), desktopShim);
       // A user's wrapper that also runs a managed kairo.exe is still theirs.
       const wrapper = `@echo off\r\nset FOO=1\r\n"${path.join(runtimeDir, "versions/0.0.1/kairo.exe")}" %*`;
@@ -181,7 +180,7 @@ it.layer(NodeServices.layer)("kairo install", (it) => {
         installCli().pipe(
           Effect.provideService(
             HostProcess.ExecutablePath,
-            path.join(runtimeDir, "versions/100%/t3"),
+            path.join(runtimeDir, "versions/100%/kairo"),
           ),
         ),
       ).pipe(Effect.flip);
@@ -189,131 +188,136 @@ it.layer(NodeServices.layer)("kairo install", (it) => {
     }),
   );
 
-  it.effect("asks npx users without a t3 command once per minor release and installs on yes", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const { root, npmPackage, runtimeDir, executable, link, provide } = yield* setup;
-      let asked = 0;
-      const offer = (
-        answer: boolean | undefined | Effect.Effect<boolean>,
-        options: {
-          readonly args?: ReadonlyArray<string>;
-          readonly env?: NodeJS.ProcessEnv;
-          readonly interactive?: boolean;
-          readonly foreground?: boolean;
-        } = {},
-      ) =>
-        provide(
-          offerCliInstall({
-            args: options.args ?? ["connect"],
-            interactive: options.interactive ?? true,
-            foreground: Effect.succeed(options.foreground ?? true),
-            confirm: Effect.andThen(
-              Effect.sync(() => (asked += 1)),
-              Effect.isEffect(answer) ? answer : Effect.succeed(answer),
-            ),
-          }),
-          options.env,
+  it.effect(
+    "asks npx users without a kairo command once per minor release and installs on yes",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const { root, npmPackage, runtimeDir, executable, link, provide } = yield* setup;
+        let asked = 0;
+        const offer = (
+          answer: boolean | undefined | Effect.Effect<boolean>,
+          options: {
+            readonly args?: ReadonlyArray<string>;
+            readonly env?: NodeJS.ProcessEnv;
+            readonly interactive?: boolean;
+            readonly foreground?: boolean;
+          } = {},
+        ) =>
+          provide(
+            offerCliInstall({
+              args: options.args ?? ["connect"],
+              interactive: options.interactive ?? true,
+              foreground: Effect.succeed(options.foreground ?? true),
+              confirm: Effect.andThen(
+                Effect.sync(() => (asked += 1)),
+                Effect.isEffect(answer) ? answer : Effect.succeed(answer),
+              ),
+            }),
+            options.env,
+          );
+
+        // Scripts, CI, sudo, dumb terminals, background jobs, and help never ask.
+        yield* offer(false, { interactive: false });
+        yield* offer(false, { env: { CI: "true" } });
+        yield* offer(false, { env: { SUDO_USER: "theo" } });
+        yield* offer(false, { env: { TERM: "dumb" } });
+        yield* offer(false, { env: { npm_config_yes: "true" } });
+        yield* offer(false, { args: ["--completions", "zsh"] });
+        yield* offer(false, { foreground: false });
+        yield* offer(false, { args: ["connect", "--help"] });
+        yield* offer(false, { args: ["--log-level", "debug", "install"] });
+        yield* offer(false, { args: ["status", "--json"] });
+        yield* offer(false, { args: ["up", "--yes"] });
+        yield* offer(false, { args: ["status", "--json=true"] });
+        const globalBin = path.join(root, "global-bin");
+        yield* fs.makeDirectory(globalBin);
+        yield* fs.writeFileString(path.join(globalBin, "kairo"), "");
+        yield* fs.chmod(path.join(globalBin, "kairo"), 0o755);
+        yield* offer(false, { env: { PATH: globalBin } });
+        assert.equal(asked, 0);
+        assert.isFalse(yield* fs.exists(link));
+
+        // A directory or non-executable file named `kairo` on PATH is not an installed kairo.
+        const dirBin = path.join(root, "dir-bin");
+        yield* fs.makeDirectory(path.join(dirBin, "kairo"), { recursive: true });
+        const nonExecBin = path.join(root, "non-exec-bin");
+        yield* fs.makeDirectory(nonExecBin);
+        yield* fs.writeFileString(path.join(nonExecBin, "kairo"), "");
+        assert.isFalse(yield* offer(undefined, { env: { PATH: dirBin } }));
+        assert.equal(asked, 1);
+        assert.isFalse(yield* offer(undefined, { env: { PATH: nonExecBin } }));
+        assert.equal(asked, 2);
+        asked = 0;
+
+        // A runner's own .bin on PATH, even found through a bare launcher record, is not an installed kairo.
+        const npxBin = path.join(npmPackage, "../.bin");
+        const pnpmBin = path.join(root, ".cache/pnpm/dlx/abc/node_modules/.bin");
+        for (const bin of [npxBin, pnpmBin]) {
+          yield* fs.makeDirectory(bin, { recursive: true });
+          yield* fs.writeFileString(path.join(bin, "kairo"), "");
+          yield* fs.chmod(path.join(bin, "kairo"), 0o755);
+        }
+        yield* fs.writeFileString(path.join(runtimeDir, "launchers"), "kairo\n");
+        assert.isFalse(yield* offer(undefined, { env: { PATH: `${npxBin}:${pnpmBin}` } }));
+        assert.equal(asked, 1);
+        assert.isFalse(yield* fs.exists(path.join(runtimeDir, "install-prompt-declined")));
+        asked = 0;
+
+        // `service install` is not `kairo install`; it still leaves the command unlinked.
+        yield* offer(false, { args: ["service", "install"] });
+        assert.equal(asked, 1);
+        yield* offer(false);
+        assert.equal(asked, 1);
+        assert.isFalse(yield* fs.exists(link));
+
+        yield* fs.writeFileString(
+          path.join(runtimeDir, "install-prompt-declined"),
+          "0.0-previous\n",
         );
+        yield* offer(true);
+        assert.equal(asked, 2);
+        assert.equal(yield* fs.readFileString(link), posixLauncherScript(executable));
 
-      // Scripts, CI, sudo, dumb terminals, background jobs, and help never ask.
-      yield* offer(false, { interactive: false });
-      yield* offer(false, { env: { CI: "true" } });
-      yield* offer(false, { env: { SUDO_USER: "theo" } });
-      yield* offer(false, { env: { TERM: "dumb" } });
-      yield* offer(false, { env: { npm_config_yes: "true" } });
-      yield* offer(false, { args: ["--completions", "zsh"] });
-      yield* offer(false, { foreground: false });
-      yield* offer(false, { args: ["connect", "--help"] });
-      yield* offer(false, { args: ["--log-level", "debug", "install"] });
-      yield* offer(false, { args: ["status", "--json"] });
-      yield* offer(false, { args: ["up", "--yes"] });
-      yield* offer(false, { args: ["status", "--json=true"] });
-      const globalBin = path.join(root, "global-bin");
-      yield* fs.makeDirectory(globalBin);
-      yield* fs.writeFileString(path.join(globalBin, "kairo"), "");
-      yield* fs.chmod(path.join(globalBin, "kairo"), 0o755);
-      yield* offer(false, { env: { PATH: globalBin } });
-      assert.equal(asked, 0);
-      assert.isFalse(yield* fs.exists(link));
+        yield* fs.remove(path.join(runtimeDir, "install-prompt-declined"));
+        yield* offer(true);
+        assert.equal(asked, 2);
 
-      // A directory or non-executable file named `t3` on PATH is not an installed t3.
-      const dirBin = path.join(root, "dir-bin");
-      yield* fs.makeDirectory(path.join(dirBin, "kairo"), { recursive: true });
-      const nonExecBin = path.join(root, "non-exec-bin");
-      yield* fs.makeDirectory(nonExecBin);
-      yield* fs.writeFileString(path.join(nonExecBin, "kairo"), "");
-      assert.isFalse(yield* offer(undefined, { env: { PATH: dirBin } }));
-      assert.equal(asked, 1);
-      assert.isFalse(yield* offer(undefined, { env: { PATH: nonExecBin } }));
-      assert.equal(asked, 2);
-      asked = 0;
+        // A yes that cannot install, and no answer at all, also wait for the next minor release.
+        const declined = path.join(runtimeDir, "install-prompt-declined");
+        yield* fs.remove(link);
+        yield* fs.remove(path.join(runtimeDir, "launchers"));
+        yield* fs.writeFileString(link, "#!/bin/sh\necho mine\n");
+        asked = 0;
+        assert.isTrue(yield* offer(true));
+        assert.equal(yield* fs.readFileString(link), "#!/bin/sh\necho mine\n");
+        assert.equal(
+          (yield* fs.readFileString(declined)).trim(),
+          VERSION.split(".").slice(0, 2).join("."),
+        );
+        yield* offer(true);
+        assert.equal(asked, 1);
 
-      // A runner's own .bin on PATH, even found through a bare launcher record, is not an installed t3.
-      const npxBin = path.join(npmPackage, "../.bin");
-      const pnpmBin = path.join(root, ".cache/pnpm/dlx/abc/node_modules/.bin");
-      for (const bin of [npxBin, pnpmBin]) {
-        yield* fs.makeDirectory(bin, { recursive: true });
-        yield* fs.writeFileString(path.join(bin, "kairo"), "");
-        yield* fs.chmod(path.join(bin, "kairo"), 0o755);
-      }
-      yield* fs.writeFileString(path.join(runtimeDir, "launchers"), "t3\n");
-      assert.isFalse(yield* offer(undefined, { env: { PATH: `${npxBin}:${pnpmBin}` } }));
-      assert.equal(asked, 1);
-      assert.isFalse(yield* fs.exists(path.join(runtimeDir, "install-prompt-declined")));
-      asked = 0;
-
-      // `service install` is not `kairo install`; it still leaves the command unlinked.
-      yield* offer(false, { args: ["service", "install"] });
-      assert.equal(asked, 1);
-      yield* offer(false);
-      assert.equal(asked, 1);
-      assert.isFalse(yield* fs.exists(link));
-
-      yield* fs.writeFileString(path.join(runtimeDir, "install-prompt-declined"), "0.0\n");
-      yield* offer(true);
-      assert.equal(asked, 2);
-      assert.equal(yield* fs.readFileString(link), posixLauncherScript(executable));
-
-      yield* fs.remove(path.join(runtimeDir, "install-prompt-declined"));
-      yield* offer(true);
-      assert.equal(asked, 2);
-
-      // A yes that cannot install, and no answer at all, also wait for the next minor release.
-      const declined = path.join(runtimeDir, "install-prompt-declined");
-      yield* fs.remove(link);
-      yield* fs.remove(path.join(runtimeDir, "launchers"));
-      yield* fs.writeFileString(link, "#!/bin/sh\necho mine\n");
-      asked = 0;
-      assert.isTrue(yield* offer(true));
-      assert.equal(yield* fs.readFileString(link), "#!/bin/sh\necho mine\n");
-      assert.equal(
-        (yield* fs.readFileString(declined)).trim(),
-        VERSION.split(".").slice(0, 2).join("."),
-      );
-      yield* offer(true);
-      assert.equal(asked, 1);
-
-      yield* fs.remove(declined);
-      yield* fs.remove(link);
-      const waiting = yield* Deferred.make<void>();
-      const unanswered = yield* offer(
-        Effect.andThen(Deferred.succeed(waiting, undefined), Effect.never),
-      ).pipe(Effect.forkChild);
-      yield* Deferred.await(waiting);
-      yield* TestClock.adjust("30 seconds");
-      assert.isTrue(yield* Fiber.join(unanswered));
-      assert.isTrue(yield* fs.exists(declined));
-      assert.isFalse(yield* fs.exists(link));
-    }),
+        yield* fs.remove(declined);
+        yield* fs.remove(link);
+        const waiting = yield* Deferred.make<void>();
+        const unanswered = yield* offer(
+          Effect.andThen(Deferred.succeed(waiting, undefined), Effect.never),
+        ).pipe(Effect.forkChild);
+        yield* Deferred.await(waiting);
+        yield* TestClock.adjust("30 seconds");
+        assert.isTrue(yield* Fiber.join(unanswered));
+        assert.isTrue(yield* fs.exists(declined));
+        assert.isFalse(yield* fs.exists(link));
+      }),
   );
 
   it.effect("reads the terminal's foreground group from /proc and ps", () =>
     Effect.sync(() => {
       // The command name can hold spaces and parentheses.
       const stat = (pgrp: number, tpgid: number) =>
-        `4242 (t3 (serve) x) S 100 ${pgrp} 100 34816 ${tpgid} 4194560 0 0`;
+        `4242 (kairo (serve) x) S 100 ${pgrp} 100 34816 ${tpgid} 4194560 0 0`;
       assert.isTrue(isForegroundProcStat(stat(4242, 4242)));
       assert.isFalse(isForegroundProcStat(stat(4242, 4300)));
       assert.isFalse(isForegroundProcStat(stat(4242, -1)));

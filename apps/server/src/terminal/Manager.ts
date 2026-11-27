@@ -3026,7 +3026,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
               shellResolver,
               platform,
               baseEnv,
-              session.runtimeEnv?.T3CODE_TERMINAL_SHELL ?? baseEnv.T3CODE_TERMINAL_SHELL,
+              session.runtimeEnv?.KAIRO_TERMINAL_SHELL ?? baseEnv.KAIRO_TERMINAL_SHELL,
             ).pipe(
               Effect.provideService(FileSystem.FileSystem, fileSystem),
               withShellPreparationTimeout,

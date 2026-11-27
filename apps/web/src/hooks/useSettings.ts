@@ -164,7 +164,10 @@ async function hydrateClientSettings(): Promise<void> {
       let hydratedSettings = persistedSettings
         ? { ...DEFAULT_CLIENT_SETTINGS, ...persistedSettings }
         : DEFAULT_CLIENT_SETTINGS;
-      if (hydratedSettings.professionalRole === null) {
+      if (
+        hydratedSettings.professionalRole === null &&
+        typeof globalThis.localStorage !== "undefined"
+      ) {
         const legacyRole = getLocalStorageItem(
           PROFESSIONAL_ROLE_STORAGE_KEY,
           ProfessionalRoleSchema,

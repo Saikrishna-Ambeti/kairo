@@ -77,11 +77,11 @@ const MODE_ARGS = {
     "run",
     "--filter=@kairo/contracts",
     "--filter=@kairo/web",
-    "--filter=t3",
+    "--filter=kairo",
     "--parallel",
     "dev",
   ],
-  "dev:server": ["run", "--filter=t3", "dev"],
+  "dev:server": ["run", "--filter=kairo", "dev"],
   "dev:web": ["run", "--filter=@kairo/web", "dev"],
   "dev:desktop": ["run", "--filter=@kairo/desktop", "--filter=@kairo/web", "dev"],
 } as const satisfies Record<string, ReadonlyArray<string>>;
@@ -91,7 +91,7 @@ const MODE_ARGS = {
 const BUILT_DEV_ARGS = [
   "run",
   "--filter=@kairo/web",
-  "--filter=t3",
+  "--filter=kairo",
   "--parallel",
   "dev:built",
 ] as const;
@@ -648,7 +648,12 @@ const prepareFirstStart = Effect.fn("dev-runner.prepareFirstStart")(function* (i
         );
       }
     }
-    const source = path.join(yield* HostProcess.HomeDirectory, ".kairo", "userdata", "statev2.sqlite");
+    const source = path.join(
+      yield* HostProcess.HomeDirectory,
+      ".kairo",
+      "userdata",
+      "statev2.sqlite",
+    );
     // A V1 state.sqlite counts as data too: the server imports it only while
     // statev2.sqlite is missing, so seeding would hide it.
     if (
@@ -682,7 +687,9 @@ const prepareFirstStart = Effect.fn("dev-runner.prepareFirstStart")(function* (i
   if (input.mode !== "dev:web") {
     const crate = path.join(repoRoot, "native/resource-monitor");
     const binary =
-      (yield* HostProcess.Platform) === "win32" ? "kairo-resource-monitor.exe" : "kairo-resource-monitor";
+      (yield* HostProcess.Platform) === "win32"
+        ? "kairo-resource-monitor.exe"
+        : "kairo-resource-monitor";
     if (
       !(yield* exists(path.join(crate, "target/release", binary))) &&
       !(yield* exists(path.join(crate, "target/debug", binary)))
@@ -887,10 +894,7 @@ export const runDevRunnerWithInput = Effect.fn("dev-runner.runDevRunnerWithInput
         // The app is reached from the tailnet origin. Vite already allows
         // *.ts.net hosts; the backend needs the origin for credentialed
         // requests that bypass the proxy (desktop renderer, direct calls).
-        env.KAIRO_DEV_ALLOWED_ORIGINS = [
-          env.KAIRO_DEV_ALLOWED_ORIGINS,
-          new URL(shared.url).origin,
-        ]
+        env.KAIRO_DEV_ALLOWED_ORIGINS = [env.KAIRO_DEV_ALLOWED_ORIGINS, new URL(shared.url).origin]
           .filter((entry) => entry && entry.length > 0)
           .join(",");
         if (input.devUrl === undefined) {

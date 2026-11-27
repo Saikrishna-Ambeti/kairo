@@ -9,7 +9,7 @@ it.layer(NodeSqliteClient.layer({ filename: ":memory:" }))("116_ForkHistoryMembe
   it.effect("preserves historical boundary runs when earlier lifecycle evidence was pruned", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      yield* runMigrations({ toMigrationInclusive: 96 });
+      yield* runMigrations({ toMigrationInclusive: 103 });
       const forkedAt = "2026-11-10T12:02:00.000Z";
       const rewoundAt = "2026-11-10T12:03:00.000Z";
       for (const [id, status, ordinal] of [

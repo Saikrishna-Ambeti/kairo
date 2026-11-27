@@ -88,7 +88,9 @@ class KairoWorkspaceNavigationModule : Module() {
       }
       Prop("rail") { view: KairoWorkspaceNavigationView, value: Boolean -> view.rail = value }
       Prop("dark") { view: KairoWorkspaceNavigationView, value: Boolean -> view.dark = value }
-      Prop("textScale") { view: KairoWorkspaceNavigationView, value: Float -> view.textScale = value }
+      Prop("textScale") { view: KairoWorkspaceNavigationView, value: Float ->
+        view.textScale = value
+      }
       Prop("newEnabled") { view: KairoWorkspaceNavigationView, value: Boolean ->
         view.newEnabled = value
       }

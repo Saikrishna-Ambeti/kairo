@@ -106,7 +106,7 @@ it("reads the served T3 home and log back out of a rendered unit, plist, or task
 
 it("protects the server unit from agents under CPU and memory pressure", () => {
   const unit = BootService.renderBootServiceUnit({
-    program: ["/home/theo/.kairo/runtime/versions/1.2.3/t3", "__service-launcher"],
+    program: ["/home/theo/.kairo/runtime/versions/1.2.3/kairo", "__service-launcher"],
     baseDir: "/home/theo/.kairo",
     logPath: "/home/theo/.kairo/userdata/logs/boot-service.log",
     unitPath: "/home/theo/.config/systemd/user/kairo.service",
@@ -138,7 +138,7 @@ it.each([
       BootService.renderBootServiceTask(plan, windowsTaskOptions),
   ],
 ] as const)("reads the launcher back out of %s", (_, baseDir, render) => {
-  const program = `${baseDir}/runtime/versions/1.2.3/t3`;
+  const program = `${baseDir}/runtime/versions/1.2.3/kairo`;
   expect(
     BootService.bootServiceProgramOf(
       render({ program: [program, "__service-launcher"], baseDir, logPath: "/log", unitPath: "" }),
@@ -156,7 +156,7 @@ it.each([
   let unit: string;
   try {
     unit = BootService.renderBootServiceUnit({
-      program: [`${baseDir}/runtime/versions/1.2.3/t3`, "__service-launcher"],
+      program: [`${baseDir}/runtime/versions/1.2.3/kairo`, "__service-launcher"],
       baseDir,
       logPath: `${baseDir}/userdata/logs/boot-service.log`,
       unitPath: "/home/theo/.config/systemd/user/kairo.service",
@@ -382,7 +382,7 @@ const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
     cliVersion = "1.2.3",
     serviceBaseDir = baseDir,
     insideService = false,
-    hostExecPath = "/usr/bin/t3",
+    hostExecPath = "/usr/bin/kairo",
     underSudo = false,
     serviceInstallBinDir: string | null | undefined = installBinDir,
   ) =>
@@ -948,7 +948,7 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
                 "systemctl --user restart kairo.service",
               ]
             : [
-                "launchctl bootout --wait gui/501/com.kairotools.kairo.service",
+                "launchctl bootout --wait gui/501/com.kairo.app.service",
                 `launchctl bootstrap gui/501 ${plan.unitPath}`,
               ],
         );
@@ -1013,7 +1013,7 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
           protocol: SERVICE_LAUNCHER_PROTOCOL,
           activeVersion: "1.2.4",
         });
-        expect(yield* fs.readFileString(plan.unitPath)).toContain("versions/1.2.4/t3");
+        expect(yield* fs.readFileString(plan.unitPath)).toContain("versions/1.2.4/kairo");
         expect(
           commands.filter(
             (command) =>
@@ -1035,7 +1035,7 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
           protocol: SERVICE_LAUNCHER_PROTOCOL,
           activeVersion: "1.2.5",
         });
-        expect(yield* fs.readFileString(plan.unitPath)).toContain("versions/1.2.5/t3");
+        expect(yield* fs.readFileString(plan.unitPath)).toContain("versions/1.2.5/kairo");
         expect((yield* latest.status).current).toBe(true);
         expect(
           yield* fs.exists(path.join(path.dirname(statePath), SERVICE_RESTART_PENDING_FILE)),
@@ -1053,7 +1053,7 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
         const unit = yield* fs.readFileString(plan.unitPath);
         yield* fs.writeFileString(
           plan.unitPath,
-          unit.replace("versions/1.2.3/t3", "versions/1.2.2/t3"),
+          unit.replace("versions/1.2.3/kairo", "versions/1.2.2/kairo"),
         );
         yield* fs.writeFileString(
           statePath,
@@ -1181,7 +1181,7 @@ process.disconnect();
           protocol: SERVICE_LAUNCHER_PROTOCOL,
           activeVersion: "1.2.4",
         });
-        expect(yield* fs.readFileString(plan.unitPath)).toContain("versions/1.2.4/t3");
+        expect(yield* fs.readFileString(plan.unitPath)).toContain("versions/1.2.4/kairo");
         expect(
           yield* fs.readFileString(
             path.join(path.dirname(statePath), SERVICE_RESTART_PENDING_FILE),
@@ -1550,9 +1550,7 @@ process.disconnect();
       const plan = yield* service.install();
 
       expect(
-        plan.unitPath.endsWith(
-          path.join("Library", "LaunchAgents", "com.kairotools.kairo.service.plist"),
-        ),
+        plan.unitPath.endsWith(path.join("Library", "LaunchAgents", "com.kairo.app.service.plist")),
       ).toBe(true);
       expect(yield* fs.readFileString(plan.unitPath)).toContain(
         `    <key>PATH</key>\n    <string>${macInstallerPath}:/usr/local/bin:/usr/sbin:/sbin</string>`,
@@ -1810,7 +1808,7 @@ process.disconnect();
     Effect.gen(function* () {
       const { service, control } = yield* makeHarness("darwin");
       yield* service.install();
-      control.failCommand = "launchctl bootout --wait gui/501/com.kairotools.kairo.service";
+      control.failCommand = "launchctl bootout --wait gui/501/com.kairo.app.service";
 
       yield* service.install();
       expect((yield* service.status).current).toBe(true);

@@ -30,7 +30,7 @@ export class CliInstallError extends Schema.TaggedError<CliInstallError>()("CliI
   }
 }
 
-/** `<T3 home>/runtime/versions/<version>/t3`: the layout the install scripts and npm launcher share. */
+/** `<T3 home>/runtime/versions/<version>/kairo`: the layout the install scripts and npm launcher share. */
 const standaloneRuntime = Effect.gen(function* () {
   const path = yield* Path.Path;
   if (!(yield* HostProcess.IsExecutable)) return Option.none();
@@ -43,7 +43,7 @@ const standaloneRuntime = Effect.gen(function* () {
   return Option.some({ executable, versionsDir, runtimeDir });
 });
 
-/** Installs this runtime as the `t3` command the way the install scripts do, replacing only our own launcher. */
+/** Installs this runtime as the `kairo` command the way the install scripts do, replacing only our own launcher. */
 export const installCli = Effect.fn("cli.install.install")(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -57,21 +57,21 @@ export const installCli = Effect.fn("cli.install.install")(function* () {
       ? "irm https://kairo.codes/install.ps1 | iex"
       : "curl -fsSL https://kairo.codes/install.sh | sh";
     return yield* new CliInstallError({
-      reason: `Only the standalone t3 can install itself. Use \`${script}\`, or Settings in the desktop app.`,
+      reason: `Only the standalone kairo can install itself. Use \`${script}\`, or Settings in the desktop app.`,
     });
   }
   const { executable, versionsDir, runtimeDir } = runtime.value;
   // cmd.exe expands `%` and reads the shim in the OEM code page, so such a path would not run.
   if (windows && /[%\u0080-\uffff]/.test(executable)) {
     return yield* new CliInstallError({
-      reason: `A t3.cmd cannot run ${executable}, because the path has % or non-ASCII characters. Keep using npx kairo.`,
+      reason: `A kairo.cmd cannot run ${executable}, because the path has % or non-ASCII characters. Keep using npx kairo.`,
     });
   }
   // Absolute, so the PATH hint never adds a folder that changes with the working directory.
   const binDir = path.resolve(
     environment.KAIRO_INSTALL_BIN_DIR?.trim() || path.join(home, ".local", "bin"),
   );
-  const name = windows ? "t3.cmd" : "kairo";
+  const name = windows ? "kairo.cmd" : "kairo";
   const link = path.join(binDir, name);
   const failed = (reason: string) => (cause: unknown) => new CliInstallError({ reason, cause });
 
@@ -108,7 +108,7 @@ export const installCli = Effect.fn("cli.install.install")(function* () {
     )
   ) {
     return yield* new CliInstallError({
-      reason: `Another t3 is already at ${link}. Remove it, then run this again.`,
+      reason: `Another kairo is already at ${link}. Remove it, then run this again.`,
     });
   }
 
@@ -149,7 +149,7 @@ export const installCli = Effect.fn("cli.install.install")(function* () {
   const rawPath = environment.PATH ?? environment.Path ?? "";
   const entries = rawPath === "" ? [] : rawPath.split(windows ? ";" : ":");
   let cwd = yield* Effect.catchDefect(HostProcess.WorkingDirectory, () => Effect.undefined);
-  // A t3 earlier on PATH runs instead, and an added folder goes last. Runner caches (npx's own
+  // A kairo earlier on PATH runs instead, and an added folder goes last. Runner caches (npx's own
   // .bin) are not installs.
   const firstOther = Effect.gen(function* () {
     for (const entry of entries) {
@@ -157,7 +157,7 @@ export const installCli = Effect.fn("cli.install.install")(function* () {
       if ((windows || absolute) && same(entry)) return null;
       const dir = absolute ? entry : windows || !cwd ? undefined : path.resolve(cwd, entry);
       if (dir === undefined || detectCliRunner(`${dir}/`) !== null) continue;
-      for (const name of windows ? ["t3.cmd", "kairo.exe"] : ["kairo"]) {
+      for (const name of windows ? ["kairo.cmd", "kairo.exe"] : ["kairo"]) {
         const candidate = path.join(dir, name);
         if (!(yield* resolveCommandPath(candidate, { env: environment }))) continue;
         if (windows) return candidate;
@@ -169,7 +169,7 @@ export const installCli = Effect.fn("cli.install.install")(function* () {
     }
     return undefined;
   });
-  // null: this launcher runs first; a path: another t3 does; undefined: no t3 on PATH.
+  // null: this launcher runs first; a path: another kairo does; undefined: no kairo on PATH.
   const found = yield* firstOther;
   return {
     link,
@@ -199,30 +199,30 @@ export const installCli = Effect.fn("cli.install.install")(function* () {
 const reportInstalled = Effect.fn("cli.install.report")(function* (
   installed: Effect.Success<ReturnType<typeof installCli>>,
 ) {
-  yield* Console.log(`Installed t3 ${packageJson.version} at ${installed.link}.`);
+  yield* Console.log(`Installed kairo ${packageJson.version} at ${installed.link}.`);
   if (installed.shadowedBy !== undefined) {
     return yield* Console.log(
-      `Another t3 at ${installed.shadowedBy} runs first, so run ${installed.link} to use this one.`,
+      `Another kairo at ${installed.shadowedBy} runs first, so run ${installed.link} to use this one.`,
     );
   }
-  if (installed.onPath) return yield* Console.log("Run `t3` to get started.");
+  if (installed.onPath) return yield* Console.log("Run `kairo` to get started.");
   if (installed.pathCommand === undefined) {
-    return yield* Console.log(`Add ${installed.binDir} to your PATH, then run \`t3\`.`);
+    return yield* Console.log(`Add ${installed.binDir} to your PATH, then run \`kairo\`.`);
   }
   if ((yield* HostProcess.Platform) === "win32") {
     yield* Console.log(
       `${installed.binDir} is not on your PATH yet. In this PowerShell window, run:`,
     );
     yield* Console.log(`  ${installed.pathCommand}`);
-    return yield* Console.log("Then run `t3`. For new windows, add the folder to your PATH.");
+    return yield* Console.log("Then run `kairo`. For new windows, add the folder to your PATH.");
   }
   yield* Console.log(`${installed.binDir} is not on your PATH yet. Add it with:`);
   yield* Console.log(`  ${installed.pathCommand}`);
-  yield* Console.log("Then open a new terminal and run `t3`.");
+  yield* Console.log("Then open a new terminal and run `kairo`.");
 });
 
 export const installCommand = Command.make("install").pipe(
-  Command.withDescription("Install this version as the `t3` command."),
+  Command.withDescription("Install this version as the `kairo` command."),
   Command.withHandler(() => installCli().pipe(Effect.flatMap(reportInstalled))),
 );
 
@@ -295,7 +295,7 @@ export const inTerminalForeground = Effect.gen(function* () {
 });
 
 /**
- * Before a command run through npx, pnpm dlx, or bunx at a terminal, asks to install the `t3`
+ * Before a command run through npx, pnpm dlx, or bunx at a terminal, asks to install the `kairo`
  * command. Yes is the default. No, no answer, or a failed install is saved in the T3 home until
  * the next minor release. Returns false when the user quits the prompt, so the command does not run.
  */
@@ -323,16 +323,16 @@ export const offerCliInstall = Effect.fn("cli.install.offer")(function* <E, R, E
   if (Option.isNone(runtime)) return true;
   const { runtimeDir } = runtime.value;
 
-  // Any t3 already installed means no prompt: ours (even when off PATH) or another on PATH.
+  // Any kairo already installed means no prompt: ours (even when off PATH) or another on PATH.
   // Runners put their own cache's node_modules/.bin on PATH, so skip those.
   const windows = platform === "win32";
-  const names = windows ? ["t3.cmd", "kairo.exe"] : ["kairo"];
+  const names = windows ? ["kairo.cmd", "kairo.exe"] : ["kairo"];
   const launchers = yield* fs
     .readFileString(path.join(runtimeDir, "launchers"))
     .pipe(Effect.orElseSucceed(() => ""));
   const candidates = [
     ...launchers.split(/\r?\n/).filter((launcher) => path.isAbsolute(launcher)),
-    path.join(path.dirname(runtimeDir), "bin", windows ? "t3.cmd" : "kairo"),
+    path.join(path.dirname(runtimeDir), "bin", windows ? "kairo.cmd" : "kairo"),
     ...(environment.PATH ?? environment.Path ?? "")
       .split(windows ? ";" : ":")
       .filter(
@@ -355,7 +355,7 @@ export const offerCliInstall = Effect.fn("cli.install.offer")(function* <E, R, E
   const answer = yield* input.confirm.pipe(Effect.timeoutOption(PROMPT_TIMEOUT));
   if (Option.isNone(answer)) {
     yield* saveDecline;
-    yield* Console.log(`\nNo answer, so t3 was not installed. ${installHint}\n`);
+    yield* Console.log(`\nNo answer, so kairo was not installed. ${installHint}\n`);
     return true;
   }
   if (answer.value === undefined) return false;
@@ -367,7 +367,7 @@ export const offerCliInstall = Effect.fn("cli.install.offer")(function* <E, R, E
   yield* installCli().pipe(
     Effect.flatMap(reportInstalled),
     Effect.catch((error) =>
-      Effect.andThen(saveDecline, Console.error(`Could not install t3: ${error.message}`)),
+      Effect.andThen(saveDecline, Console.error(`Could not install kairo: ${error.message}`)),
     ),
   );
   yield* Console.log("");
@@ -376,7 +376,7 @@ export const offerCliInstall = Effect.fn("cli.install.offer")(function* <E, R, E
 
 export const confirmCliInstall = Prompt.run(
   Prompt.Confirm({
-    message: "Install the t3 command? Then you can run `t3` directly.",
+    message: "Install the kairo command? Then you can run `kairo` directly.",
     initial: true,
   }),
 ).pipe(Effect.catchTags({ QuitError: () => Effect.void }));

@@ -179,7 +179,7 @@ jobs:
       - name: Setup dependencies
         uses: ./.github/actions/setup-ci-deps
         with:
-          install-args: --filter=@kairo/desktop... --filter=t3... --filter=@kairo/scripts...
+          install-args: --filter=@kairo/desktop... --filter=kairo... --filter=@kairo/scripts...
           save-pnpm-store: ${{ inputs.save_pnpm_store }}
         env:
           pnpm_config_cache_dir: ${{ runner.temp }}/pnpm-metadata

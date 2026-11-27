@@ -113,6 +113,11 @@ const KAIRO_MCP_SERVER_ALIASES = new Set([
   "kairo",
   "kairo-code-direct",
   "kairo_code_direct",
+  "t3",
+  "t3-code",
+  "t3_code",
+  "t3-code-direct",
+  "t3_code_direct",
 ]);
 
 const KAIRO_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
@@ -248,7 +253,10 @@ const KAIRO_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
     ["Hand off", "Handing off", "Handed off", "thread to a git worktree"],
     "worktree-handoff",
   ),
-  kairo_worktree_status: tool(["Get", "Getting", "Got", "thread worktree status"], "worktree-status"),
+  kairo_worktree_status: tool(
+    ["Get", "Getting", "Got", "thread worktree status"],
+    "worktree-status",
+  ),
   preview_status: tool(["Get", "Getting", "Got", "preview browser status"], "browser", "browser"),
   preview_open: tool(
     ["Open", "Opening", "Opened", "a page in the preview browser"],
@@ -368,7 +376,10 @@ const KAIRO_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
     ["Cancel", "Canceling", "Requested cancellation of", "a queued run"],
     "queue-cancel",
   ),
-  kairo_queue_reorder: tool(["Reorder", "Reordering", "Reordered", "a queued run"], "queue-reorder"),
+  kairo_queue_reorder: tool(
+    ["Reorder", "Reordering", "Reordered", "a queued run"],
+    "queue-reorder",
+  ),
   kairo_queue_promote_to_steer: tool(
     ["Steer with", "Steering with", "Requested steering with", "a queued message"],
     "queue-steer",
@@ -377,7 +388,10 @@ const KAIRO_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
     ["List", "Listing", "Listed", "pending questions"],
     "question-list",
   ),
-  kairo_pending_request_read: tool(["Read", "Reading", "Read", "pending questions"], "question-read"),
+  kairo_pending_request_read: tool(
+    ["Read", "Reading", "Read", "pending questions"],
+    "question-read",
+  ),
   kairo_pending_request_respond: tool(
     ["Answer", "Answering", "Answered", "pending questions"],
     "question-respond",
@@ -386,7 +400,10 @@ const KAIRO_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
     ["Read", "Reading", "Read", "thread configuration"],
     "thread-configuration",
   ),
-  kairo_thread_configure: tool(["Use", "Using", "Used", "thread model settings"], "thread-configure"),
+  kairo_thread_configure: tool(
+    ["Use", "Using", "Used", "thread model settings"],
+    "thread-configure",
+  ),
   kairo_thread_transfer: tool(["Use", "Using", "Used", "thread transfers"], "thread-fork"),
   kairo_thread_fork: tool(["Fork", "Forking", "Requested a fork of", "this thread"], "thread-fork"),
   kairo_thread_merge_back: tool(
@@ -395,8 +412,14 @@ const KAIRO_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   ),
   kairo_thread_search: tool(["Search", "Searching", "Searched", "thread content"], "thread-search"),
   kairo_thread_transfers: tool(["Read", "Reading", "Read", "thread transfers"], "thread-transfers"),
-  kairo_thread_organize: tool(["Organize", "Organizing", "Organized", "a thread"], "thread-organize"),
-  kairo_thread_update: tool(["Update", "Updating", "Updated", "T3 thread metadata"], "thread-update"),
+  kairo_thread_organize: tool(
+    ["Organize", "Organizing", "Organized", "a thread"],
+    "thread-organize",
+  ),
+  kairo_thread_update: tool(
+    ["Update", "Updating", "Updated", "T3 thread metadata"],
+    "thread-update",
+  ),
   kairo_worktree_list: tool(["List", "Listing", "Listed", "workspace branches"], "worktree-list"),
   kairo_preview_list: tool(["List", "Listing", "Listed", "preview tabs"], "browser", "browser"),
   kairo_preview_close: tool(["Close", "Closing", "Closed", "a preview tab"], "browser", "browser"),
@@ -422,10 +445,16 @@ const KAIRO_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   ),
   kairo_theme_read: tool(["Read", "Reading", "Read", "themes"], "theme-read"),
   kairo_theme_set: tool(["Set", "Setting", "Set", "the theme"], "theme-set"),
-  kairo_thread_launch: tool(["Launch", "Launching", "Launched", "a project thread"], "thread-create"),
+  kairo_thread_launch: tool(
+    ["Launch", "Launching", "Launched", "a project thread"],
+    "thread-create",
+  ),
   kairo_project_list: tool(["List", "Listing", "Listed", "projects"], "project-list"),
   kairo_project_read: tool(["Read", "Reading", "Read", "a project"], "project-read"),
-  kairo_project_create: tool(["Register", "Registering", "Registered", "a project"], "project-create"),
+  kairo_project_create: tool(
+    ["Register", "Registering", "Registered", "a project"],
+    "project-create",
+  ),
   kairo_project_update: tool(["Update", "Updating", "Updated", "a project"], "project-update"),
   kairo_project_delete: tool(["Delete", "Deleting", "Deleted", "a project"], "project-delete"),
   kairo_project_clone: tool(["Clone", "Cloning", "Cloned", "a repository"], "project-clone"),
@@ -437,7 +466,10 @@ const KAIRO_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
     ["Discard", "Discarding", "Discarded", "a pending attachment"],
     "attachment-discard",
   ),
-  kairo_thread_send_attachments: tool(["Send", "Sending", "Sent", "attachments"], "attachment-send"),
+  kairo_thread_send_attachments: tool(
+    ["Send", "Sending", "Sent", "attachments"],
+    "attachment-send",
+  ),
   html_preview: tool(["Preview", "Previewing", "Previewed", "an HTML page"], "html-preview"),
   html_render: tool(["Render", "Rendering", "Rendered", "an HTML page"], "html-render"),
   send_to_user: tool(["Send", "Sending", "Sent", "a message"], "send-to-user"),
@@ -514,9 +546,11 @@ const ACTION_TOOLS: Readonly<Record<string, (action: string) => string | undefin
   kairo_queue: (action) => `kairo_queue_${action}`,
   kairo_pending_request: (action) => `kairo_pending_request_${action}`,
   kairo_thread_transfer: (action) =>
-    ({ fork: "kairo_thread_fork", merge_back: "kairo_thread_merge_back", status: "kairo_thread_transfers" })[
-      action
-    ],
+    ({
+      fork: "kairo_thread_fork",
+      merge_back: "kairo_thread_merge_back",
+      status: "kairo_thread_transfers",
+    })[action],
 };
 
 /** Pass the call's input so an action tool resolves to the labels and summary of its action. */

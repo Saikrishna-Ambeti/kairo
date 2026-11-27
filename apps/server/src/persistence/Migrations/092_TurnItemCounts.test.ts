@@ -11,7 +11,7 @@ layer("085_TurnItemCounts", (it) => {
   it.effect("backfills item counts, then follows upserts, moves, and deletes", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      yield* runMigrations({ toMigrationInclusive: 84 });
+      yield* runMigrations({ toMigrationInclusive: 91 });
       const upsert = (id: string, threadId: string, runId: string | null) => sql`
         INSERT INTO orchestration_v2_projection_turn_items (
           turn_item_id, thread_id, run_id, ordinal, type, status, updated_at, payload_json

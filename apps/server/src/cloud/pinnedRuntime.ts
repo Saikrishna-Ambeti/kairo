@@ -586,10 +586,10 @@ export function isVersionExecutable(
 ): boolean {
   const relative = path.relative(versionsDir, path.resolve(candidate));
   // On another Windows drive, relative() returns the absolute path, like `D:\kairo.exe`.
-  return !path.isAbsolute(relative) && /^(?!\.\.)[^\\/]+[\\/]t3(?:\.exe)?$/i.test(relative);
+  return !path.isAbsolute(relative) && /^(?!\.\.)[^\\/]+[\\/]kairo(?:\.exe)?$/i.test(relative);
 }
 
-/** The executable a `t3.cmd` shim written by the install script or `kairo update` runs. */
+/** The executable a `kairo.cmd` shim written by the install script or `kairo update` runs. */
 export const windowsShimTarget = (contents: string) => /^"([^"]+)"/m.exec(contents)?.[1];
 
 /** Like {@link windowsShimTarget}, but only for a shim exactly as written; never a user's wrapper. */
@@ -707,7 +707,7 @@ const shellLauncherTargets = Effect.fn("cloud.pinned_runtime.shell_launcher_targ
   const platform = yield* HostProcess.Platform;
   const environment = yield* HostProcess.Environment;
   const home = yield* HostProcess.HomeDirectory;
-  const launcherName = platform === "win32" ? "t3.cmd" : "kairo";
+  const launcherName = platform === "win32" ? "kairo.cmd" : "kairo";
   const launchersFile = path.join(baseDir, PINNED_RUNTIME_DIR, PINNED_RUNTIME_LAUNCHERS_FILE);
   const recorded = (yield* fs.readFileString(launchersFile).pipe(Effect.orElseSucceed(() => "")))
     .split(/\r?\n/)
@@ -771,7 +771,7 @@ const shellLauncherTargets = Effect.fn("cloud.pinned_runtime.shell_launcher_targ
 /**
  * Resolved executables rather than command lines: a server started through the `t3` symlink
  * shows up as `kairo serve`, possibly from another T3 home that runs this home's runtimes. Windows
- * has no symlink launcher, and its `t3.cmd` shim runs the absolute path, so command lines do there.
+ * has no symlink launcher, and its `kairo.cmd` shim runs the absolute path, so command lines do there.
  */
 const runningExecutables = Effect.fn("cloud.pinned_runtime.running_executables")(function* () {
   const fs = yield* FileSystem.FileSystem;

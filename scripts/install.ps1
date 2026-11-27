@@ -235,7 +235,7 @@ if ((Test-Path $marker) -and ((Get-Content $marker -Raw).Trim() -eq $version)) {
 
 Step "Setting up the t3 command..."
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
-$shim = Join-Path $binDir "t3.cmd"
+$shim = Join-Path $binDir "kairo.cmd"
 # Replace only a shim that runs a version in this home; never the desktop app's or another t3.
 if (Test-Path -LiteralPath $shim) {
   $existingTarget = ""

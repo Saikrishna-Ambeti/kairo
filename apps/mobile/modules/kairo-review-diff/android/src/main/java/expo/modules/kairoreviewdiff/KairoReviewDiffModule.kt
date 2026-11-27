@@ -34,7 +34,10 @@ class KairoReviewDiffModule : Module() {
       Prop("selectedRowIdsJson") { view: KairoReviewDiffView, selectedRowIdsJson: String ->
         view.setSelectedRowIdsJson(selectedRowIdsJson)
       }
-      Prop("collapsedCommentIdsJson") { view: KairoReviewDiffView, collapsedCommentIdsJson: String ->
+      Prop("collapsedCommentIdsJson") {
+          view: KairoReviewDiffView,
+          collapsedCommentIdsJson: String
+        ->
         view.setCollapsedCommentIdsJson(collapsedCommentIdsJson)
       }
       Prop("appearanceScheme") { view: KairoReviewDiffView, appearanceScheme: String ->
@@ -66,13 +69,21 @@ class KairoReviewDiffModule : Module() {
 
       Events(REVIEW_DIFF_EVENTS)
 
-      AsyncFunction("scrollToFile") { view: KairoReviewDiffView, fileId: String, animated: Boolean ->
+      AsyncFunction("scrollToFile") {
+          view: KairoReviewDiffView,
+          fileId: String,
+          animated: Boolean
+        ->
         view.scrollToFile(fileId, animated)
       }
       AsyncFunction("scrollToTop") { view: KairoReviewDiffView, animated: Boolean ->
         view.scrollToTop(animated)
       }
-      AsyncFunction("setRowsJson") { view: KairoReviewDiffView, rowsJson: String, resetKey: String ->
+      AsyncFunction("setRowsJson") {
+          view: KairoReviewDiffView,
+          rowsJson: String,
+          resetKey: String
+        ->
         view.setContentResetKey(resetKey)
         view.setRowsJson(rowsJson)
       }

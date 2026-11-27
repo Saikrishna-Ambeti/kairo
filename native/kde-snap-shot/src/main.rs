@@ -71,12 +71,12 @@ struct Bounds {
     height: u32,
 }
 
-const REPLY: &str = "/com/t3tools/KdeCapture";
+const REPLY: &str = "/com/kairo/KdeCapture";
 
 /// KWin's bus name and the channel of the script call in flight. `None` between calls.
 #[derive(Default)]
 struct ScriptReply(Option<(String, mpsc::SyncSender<String>)>);
-#[zbus::interface(name = "com.t3tools.KdeCapture")]
+#[zbus::interface(name = "com.kairo.KdeCapture")]
 impl ScriptReply {
     fn reply(
         &self,
