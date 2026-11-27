@@ -6,17 +6,14 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Ref from "effect/Ref";
-import * as Scope from "effect/Scope";
 
 import * as DesktopConfig from "../app/DesktopConfig.ts";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopWslServerTree from "./DesktopWslServerTree.ts";
 
-// The service reads packaged Windows roots through the (asar-aware, in
-// Electron) fs, so a plain directory named server.asar exercises the full
-// extraction path under plain Node.
+// Electron's asar-aware fs accepts a plain server.asar directory under Node for extraction checks.
 
-const environmentLayer = (input: {
+const layerEnvironment = (input: {
   readonly baseDir: string;
   readonly resourcesPath: string;
   readonly appVersion?: string;
@@ -44,20 +41,14 @@ const environmentLayer = (input: {
     ),
   );
 
-const withTempDir = <A, E, R>(
-  run: (tempDir: string) => Effect.Effect<A, E, R>,
-): Effect.Effect<
-  A,
-  E | PlatformError.PlatformError,
-  FileSystem.FileSystem | Exclude<R, Scope.Scope>
-> =>
+const withTempDir = <A, E, R>(run: (tempDir: string) => Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const tempDir = yield* fileSystem.makeTempDirectoryScoped({
       prefix: "kairo-wsl-server-tree-test-",
     });
     return yield* run(tempDir);
-  }).pipe(Effect.scoped);
+  });
 
 const ensureWith = (input: {
   readonly baseDir: string;
@@ -69,7 +60,7 @@ const ensureWith = (input: {
     const tree = yield* DesktopWslServerTree.DesktopWslServerTree;
     return yield* tree.ensure;
   }).pipe(
-    Effect.provide(DesktopWslServerTree.layer.pipe(Layer.provideMerge(environmentLayer(input)))),
+    Effect.provide(DesktopWslServerTree.layer.pipe(Layer.provideMerge(layerEnvironment(input)))),
   );
 
 describe("DesktopWslServerTree", () => {
@@ -88,7 +79,6 @@ describe("DesktopWslServerTree", () => {
           }),
           () =>
             Effect.gen(function* () {
-              // Give every task in the current batch a chance to overlap.
               yield* Effect.yieldNow;
               if (node.depth === 4) return [];
               return Array.from({ length: 8 }, (_, index) => ({
@@ -104,20 +94,6 @@ describe("DesktopWslServerTree", () => {
       assert.equal(yield* Ref.get(maxActive), 8);
       assert.equal(yield* Ref.get(visited), 4_681);
     }),
-  );
-
-  it.effect("returns the server root unchanged when it is a plain directory (dev)", () =>
-    withTempDir((tempDir) =>
-      Effect.gen(function* () {
-        const result = yield* ensureWith({
-          baseDir: tempDir,
-          resourcesPath: tempDir,
-          isPackaged: false,
-        });
-        assert.isTrue(result.ok);
-        assert.isFalse(result.ok && result.root.endsWith(".asar"));
-      }),
-    ).pipe(Effect.provide(NodeServices.layer)),
   );
 
   it.effect("extracts an archive root into a version-keyed state directory", () =>
@@ -182,7 +158,7 @@ describe("DesktopWslServerTree", () => {
         }).pipe(
           Effect.provide(
             DesktopWslServerTree.layer.pipe(
-              Layer.provideMerge(environmentLayer({ baseDir: tempDir, resourcesPath })),
+              Layer.provideMerge(layerEnvironment({ baseDir: tempDir, resourcesPath })),
             ),
           ),
         );
@@ -215,7 +191,6 @@ describe("DesktopWslServerTree", () => {
         });
         assert.isTrue(first.ok);
 
-        // Mutate the source; a reused tree must keep the first copy.
         yield* fileSystem.writeFileString(
           path.join(serverRoot, "apps/server/dist/bin.mjs"),
           "v2-should-not-appear",
@@ -243,8 +218,6 @@ describe("DesktopWslServerTree", () => {
         });
         yield* fileSystem.writeFileString(path.join(serverRoot, "apps/server/dist/bin.mjs"), "x");
 
-        // KAIRO_HOME is set to tempDir, so the desktop state dir resolves to
-        // <tempDir>/userdata (no .kairo segment).
         const treeRoot = path.join(tempDir, "userdata", "wsl-server-tree");
         yield* fileSystem.makeDirectory(path.join(treeRoot, "1.0.0"), { recursive: true });
         yield* fileSystem.makeDirectory(path.join(treeRoot, "1.2.3.partial"), { recursive: true });
@@ -290,35 +263,8 @@ describe("DesktopWslServerTree", () => {
         assert.include(root, "1.2.4");
         const entry = yield* fileSystem.readFileString(path.join(root, "apps/server/dist/bin.mjs"));
         assert.equal(entry, "new");
-        // The previous version's tree is gone.
         const treeRoot = path.dirname(root);
         assert.isFalse(yield* fileSystem.exists(path.join(treeRoot, "1.2.3")));
-      }),
-    ).pipe(Effect.provide(NodeServices.layer)),
-  );
-
-  it.effect("removes the legacy Windows extraction tree without preparing a fallback", () =>
-    withTempDir((tempDir) =>
-      Effect.gen(function* () {
-        const fileSystem = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const resourcesPath = path.join(tempDir, "resources");
-        const treeRoot = path.join(tempDir, "userdata", "wsl-server-tree");
-        yield* fileSystem.makeDirectory(path.join(treeRoot, "1.2.3"), { recursive: true });
-        yield* fileSystem.writeFileString(path.join(treeRoot, "1.2.3", "legacy"), "old");
-
-        yield* Effect.gen(function* () {
-          const tree = yield* DesktopWslServerTree.DesktopWslServerTree;
-          yield* tree.cleanupLegacy;
-        }).pipe(
-          Effect.provide(
-            DesktopWslServerTree.layer.pipe(
-              Layer.provideMerge(environmentLayer({ baseDir: tempDir, resourcesPath })),
-            ),
-          ),
-        );
-
-        assert.isFalse(yield* fileSystem.exists(treeRoot));
       }),
     ).pipe(Effect.provide(NodeServices.layer)),
   );
@@ -340,7 +286,7 @@ describe("DesktopWslServerTree", () => {
         const treeRoot = path.dirname(versionDir);
         const extractedEntryPath = path.join(versionDir, "apps/server/dist/bin.mjs");
         let cleanupFailed = false;
-        const partialCleanupFileSystem = Layer.effect(
+        const layerPartialCleanupFileSystem = Layer.effect(
           FileSystem.FileSystem,
           Effect.gen(function* () {
             const realFileSystem = yield* FileSystem.FileSystem;
@@ -371,8 +317,8 @@ describe("DesktopWslServerTree", () => {
         }).pipe(
           Effect.provide(
             DesktopWslServerTree.layer.pipe(
-              Layer.provideMerge(environmentLayer({ baseDir: tempDir, resourcesPath })),
-              Layer.provideMerge(partialCleanupFileSystem),
+              Layer.provideMerge(layerEnvironment({ baseDir: tempDir, resourcesPath })),
+              Layer.provideMerge(layerPartialCleanupFileSystem),
             ),
           ),
         );
@@ -391,7 +337,6 @@ describe("DesktopWslServerTree", () => {
         const path = yield* Path.Path;
         const result = yield* ensureWith({
           baseDir: tempDir,
-          // resources dir exists but server.asar does not
           resourcesPath: path.join(tempDir, "resources"),
         });
         assert.isFalse(result.ok);

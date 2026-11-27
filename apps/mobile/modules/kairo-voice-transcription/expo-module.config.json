@@ -1,0 +1,10 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["KairoVoiceTranscriptionModule"],
+    "podspecPath": "ios/KairoVoiceTranscription.podspec"
+  },
+  "android": {
+    "modules": ["expo.modules.kairovoicetranscription.KairoVoiceTranscriptionModule"]
+  }
+}

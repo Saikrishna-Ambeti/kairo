@@ -1,3 +1,5 @@
+import { msg } from "gt-react";
+import { m, type MessageResolver } from "../../i18n/messages";
 import {
   ProviderDriverKind,
   isProviderAvailable,
@@ -49,30 +51,39 @@ function appendRecovery(message: string | undefined, recovery: string): string {
   return `${message} ${recovery}`;
 }
 
-export function getOnboardingAgentDescription(provider: ServerProvider | undefined): string {
+export function getOnboardingAgentDescription(
+  provider: ServerProvider | undefined,
+  resolve: MessageResolver = m,
+): string {
   const action = getOnboardingAgentAction(provider);
   if (action === "login") {
-    return appendRecovery(provider?.message, "Sign in, then refresh detection.");
+    return appendRecovery(provider?.message, resolve(msg("Sign in, then refresh detection.")));
   }
   if (action === "refresh") {
-    return appendRecovery(provider?.message, "Fix the CLI issue, then refresh detection.");
+    return appendRecovery(
+      provider?.message,
+      resolve(msg("Fix the CLI issue, then refresh detection.")),
+    );
   }
   if (action === "install") {
     const updateState = provider?.updateState;
     if (updateState?.status === "failed") {
-      return appendRecovery(updateState.message ?? undefined, "Fix the installer error and retry.");
+      return appendRecovery(
+        updateState.message ?? undefined,
+        resolve(msg("Fix the installer error and retry.")),
+      );
     }
     if (updateState?.status === "unchanged") {
       return appendRecovery(
         updateState.message ?? undefined,
-        "Check the install command and retry.",
+        resolve(msg("Check the install command and retry.")),
       );
     }
   }
   return (
     provider?.versionAdvisory?.updateCommand ??
     provider?.message ??
-    "Checking installer availability."
+    resolve(msg("Checking installer availability."))
   );
 }
 
@@ -80,45 +91,57 @@ export function getOnboardingAgentProgressLabel(
   provider: ServerProvider | undefined,
   installRequested: boolean,
   providerLabel: string,
+  resolve: MessageResolver = m,
 ): string | null {
-  if (provider?.updateState?.status === "queued") return "Waiting for installer";
-  if (provider?.updateState?.status === "running") return `Installing ${providerLabel}`;
-  return installRequested ? "Starting installer" : null;
+  if (provider?.updateState?.status === "queued") return resolve(msg("Waiting for installer"));
+  if (provider?.updateState?.status === "running")
+    return resolve(msg("Installing {provider}"), { provider: providerLabel });
+  return installRequested ? resolve(msg("Starting installer")) : null;
 }
 
 export function resolveOnboardingAgentReadiness(
   provider: ServerProvider | undefined,
+  resolve: MessageResolver = m,
 ): OnboardingAgentReadiness {
   if (!provider || !provider.installed) {
     return {
       kind: "missing",
-      description: "Kairo still cannot find the CLI. Check PATH, then retry detection.",
+      description: resolve(
+        msg("Kairo still cannot find the CLI. Check PATH, then retry detection."),
+      ),
     };
   }
   if (isUsableOnboardingAgent(provider)) return { kind: "ready" };
   if (provider.auth.status === "unauthenticated" || provider.auth.status === "unknown") {
     return {
       kind: "needs_login",
-      description: appendRecovery(provider.message, "Sign in, then refresh detection."),
+      description: appendRecovery(
+        provider.message,
+        resolve(msg("Sign in, then refresh detection.")),
+      ),
     };
   }
   return {
     kind: "needs_attention",
-    description: appendRecovery(provider.message, "Fix the CLI issue, then refresh detection."),
+    description: appendRecovery(
+      provider.message,
+      resolve(msg("Fix the CLI issue, then refresh detection.")),
+    ),
   };
 }
 
 export function resolveOnboardingAgentInstallOutcome(
   provider: ServerProvider | undefined,
+  resolve: MessageResolver = m,
 ): OnboardingAgentInstallOutcome {
   const updateState = provider?.updateState;
   if (updateState?.status === "failed") {
     return {
       kind: "failed",
       description: [
-        updateState.message ?? "Install command failed.",
+        updateState.message ?? resolve(msg("Install command failed.")),
         updateState.output,
-        "Fix the installer error, then retry.",
+        resolve(msg("Fix the installer error, then retry.")),
       ]
         .filter((part): part is string => Boolean(part))
         .join("\n\n"),
@@ -129,11 +152,11 @@ export function resolveOnboardingAgentInstallOutcome(
       kind: "failed",
       description: appendRecovery(
         updateState.message ?? undefined,
-        "Check the install command, then retry.",
+        resolve(msg("Check the install command, then retry.")),
       ),
     };
   }
-  return resolveOnboardingAgentReadiness(provider);
+  return resolveOnboardingAgentReadiness(provider, resolve);
 }
 
 export function findOnboardingProvider(

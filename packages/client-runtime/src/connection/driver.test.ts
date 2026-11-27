@@ -1,104 +1,111 @@
-import { EnvironmentId, WS_METHODS } from "@kairo/contracts";
+import { EnvironmentId } from "@kairo/contracts";
 import { describe, expect, it } from "@effect/vitest";
-import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Stream from "effect/Stream";
+import * as Ref from "effect/Ref";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
-import { make, provisionMemoryAccess } from "./driver.ts";
-import { BearerConnectionTarget, PrimaryConnectionTarget } from "./model.ts";
-import { ConnectionResolver } from "./resolver.ts";
+import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
 import { CloudSession } from "../platform/capabilities.ts";
-import { type RpcSession, RpcSessionFactory } from "../rpc/session.ts";
+import * as RpcSession from "../rpc/session.ts";
+import type { ConnectionCatalogEntry } from "./catalog.ts";
+import * as ConnectionDriver from "./driver.ts";
+import {
+  ConnectionBlockedError,
+  ConnectionTransientError,
+  SshConnectionTarget,
+  type PreparedConnection,
+} from "./model.ts";
+import * as ConnectionResolver from "./resolver.ts";
 
-describe("ConnectionDriver memory provisioning", () => {
-  it.effect("provisions direct and Tailscale connections with the Clerk token", () =>
+const sshTarget = (connectionId: string) =>
+  new SshConnectionTarget({
+    environmentId: EnvironmentId.make("environment-1"),
+    label: "Test environment",
+    connectionId,
+  });
+
+const ENTRY: ConnectionCatalogEntry = {
+  target: sshTarget("ssh-first"),
+  profile: Option.none(),
+  enabled: true,
+  alternateRoutes: [{ target: sshTarget("ssh-second"), profile: Option.none() }],
+};
+
+describe("ConnectionDriver", () => {
+  it.effect("reports preparing before each route it prepares", () =>
     Effect.gen(function* () {
-      const targets = [
-        new PrimaryConnectionTarget({
-          environmentId: EnvironmentId.make("direct-environment"),
-          label: "Direct environment",
-          httpBaseUrl: "http://127.0.0.1:3773",
-          wsBaseUrl: "ws://127.0.0.1:3773/ws",
-        }),
-        new BearerConnectionTarget({
-          environmentId: EnvironmentId.make("tailscale-environment"),
-          label: "Tailscale environment",
-          connectionId: "tailscale-connection",
-        }),
-      ] as const;
-      const provisioned = yield* Deferred.make<ReadonlyArray<string>>();
-      const tokens: string[] = [];
-      const resolver = ConnectionResolver.of({
-        prepare: (entry) =>
-          Effect.succeed({
-            environmentId: entry.target.environmentId,
-            label: entry.target.label,
-            httpBaseUrl: "https://machine.tailnet.example",
-            socketUrl: "wss://machine.tailnet.example/ws",
-            httpAuthorization: null,
-            target: entry.target,
-          }),
-      });
-      const session = {
-        client: {
-          [WS_METHODS.serverProvisionMemoryAccess]: ({ clerkToken }: { clerkToken: string }) =>
-            Effect.gen(function* () {
-              tokens.push(clerkToken);
-              if (tokens.length === targets.length) {
-                yield* Deferred.succeed(provisioned, [...tokens]);
-              }
-              return {};
+      const stages = yield* Ref.make<ReadonlyArray<string>>([]);
+      const driver = yield* ConnectionDriver.make.pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Layer.mock(ConnectionResolver.ConnectionResolver)({
+              prepare: (entry) =>
+                Effect.succeed({
+                  environmentId: entry.target.environmentId,
+                  label: entry.target.label,
+                  httpBaseUrl: "http://127.0.0.1:1",
+                  socketUrl: "ws://127.0.0.1:1/ws",
+                  httpAuthorization: null,
+                  target: entry.target,
+                } satisfies PreparedConnection),
             }),
-        } as unknown as RpcSession["client"],
-        initialConfig: Effect.die("unused"),
-        subscribeServerConfig: () => Stream.never,
-        ready: Effect.void,
-        probe: Effect.void,
-        closed: Effect.never,
-      } satisfies RpcSession;
-      const driver = yield* make.pipe(
-        Effect.provideService(ConnectionResolver, resolver),
-        Effect.provideService(
-          RpcSessionFactory,
-          RpcSessionFactory.of({ connect: () => Effect.succeed(session) }),
-        ),
-        Effect.provideService(
-          CloudSession,
-          CloudSession.of({
-            identity: Effect.succeed(Option.none()),
-            clerkToken: Effect.succeed("clerk-session"),
-          }),
+            Layer.mock(RpcSession.RpcSessionFactory)({
+              connect: () =>
+                Effect.fail(
+                  new ConnectionTransientError({ reason: "transport", detail: "Socket closed." }),
+                ),
+            }),
+            Layer.mock(RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization)({}),
+            Layer.mock(CloudSession, { identity: Effect.succeedNone }),
+            // SSH routes have no HTTP check, so the driver never sends a request.
+            FetchHttpClient.layer,
+          ),
         ),
       );
 
-      yield* Effect.forEach(
-        targets,
-        (target) =>
-          driver.connect({ target, profile: Option.none(), enabled: true }, () => Effect.void),
-        { discard: true },
-      );
+      yield* driver
+        .connect(ENTRY, (progress) => Ref.update(stages, (all) => [...all, progress.stage]))
+        .pipe(Effect.scoped, Effect.flip);
 
-      expect(yield* Deferred.await(provisioned)).toEqual(["clerk-session", "clerk-session"]);
-    }).pipe(Effect.scoped),
+      expect(yield* Ref.get(stages)).toEqual([
+        "preparing",
+        "preparing",
+        "opening",
+        "preparing",
+        "opening",
+      ]);
+    }),
   );
 
-  it.effect("sends the Clerk token without blocking connection failures", () =>
+  it.effect("a silent route's network failure does not hide an answered route's refusal", () =>
     Effect.gen(function* () {
-      const tokens: string[] = [];
-      yield* provisionMemoryAccess(Effect.succeed("clerk_session"), (clerkToken) =>
-        Effect.sync(() => {
-          tokens.push(clerkToken);
-        }),
-      );
-      yield* provisionMemoryAccess(Effect.fail({ reason: "signed-out" }), () =>
-        Effect.die("must not provision"),
-      );
-      yield* provisionMemoryAccess(Effect.succeed("clerk_refresh"), () =>
-        Effect.fail({ reason: "older-server" }),
-      );
+      const refused = new ConnectionBlockedError({
+        reason: "authentication",
+        hop: "server",
+        detail: "Session token revoked.",
+      });
+      const attempted: Array<string> = [];
+      const error = yield* ConnectionDriver.connectOverRoutes(
+        ENTRY,
+        (route) =>
+          Effect.succeed<ConnectionDriver.RouteCheck>(
+            route.target === ENTRY.target ? "answered" : "silent",
+          ),
+        (route) => {
+          attempted.push(route.target.label);
+          return route.target === ENTRY.target
+            ? Effect.fail(refused)
+            : Effect.fail(
+                new ConnectionTransientError({ reason: "transport", detail: "Timed out." }),
+              );
+        },
+      ).pipe(Effect.scoped, Effect.flip);
 
-      expect(tokens).toEqual(["clerk_session"]);
+      // A refusal does not retry, so the silent route still gets its chance to connect.
+      expect(attempted).toHaveLength(2);
+      expect(error).toBe(refused);
     }),
   );
 });

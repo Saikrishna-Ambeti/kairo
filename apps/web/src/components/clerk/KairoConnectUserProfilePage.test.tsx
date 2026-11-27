@@ -3,7 +3,10 @@ import type { RelayClientEnvironmentRecord } from "@kairo/contracts/relay";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vite-plus/test";
 
+import { GTProvider, initializeGT } from "gt-react";
 import { KairoConnectEnvironmentRow } from "./KairoConnectUserProfilePage";
+
+initializeGT({ defaultLocale: "en", locales: ["en"] });
 
 const environment: RelayClientEnvironmentRecord = {
   environmentId: "environment-1" as EnvironmentId,
@@ -24,13 +27,15 @@ function renderRow({
   readonly mutationPending?: boolean;
 } = {}) {
   return renderToStaticMarkup(
-    <KairoConnectEnvironmentRow
-      environment={environment}
-      confirmationOpen={confirmationOpen}
-      mutationPending={mutationPending}
-      onConfirmationChange={vi.fn()}
-      onDeregister={vi.fn()}
-    />,
+    <GTProvider locale="en" translations={{}}>
+      <KairoConnectEnvironmentRow
+        environment={environment}
+        confirmationOpen={confirmationOpen}
+        mutationPending={mutationPending}
+        onConfirmationChange={vi.fn()}
+        onDeregister={vi.fn()}
+      />
+    </GTProvider>,
   );
 }
 

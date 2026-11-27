@@ -6,12 +6,13 @@ import * as Clock from "effect/Clock";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
 import * as RelayConfiguration from "../src/Config.ts";
 import * as WebCrypto from "../src/WebCrypto.ts";
 import * as FcmAssertionSigner from "../src/agentActivity/FcmAssertionSigner.ts";
 import * as FcmClient from "../src/agentActivity/FcmClient.ts";
+import { androidRecipientData } from "../src/agentActivity/fcmPayloads.ts";
 
 const Device = Schema.Struct({
   token: Schema.NonEmptyString,
@@ -102,8 +103,7 @@ const main = Effect.gen(function* () {
         alert: title !== null,
         data: {
           kairo_kind: "agent_activity",
-          device_id: device.deviceId,
-          user_id: device.userId,
+          ...androidRecipientData(device.userId, device.deviceId, null),
           updated_at: String(now),
           active: String(active),
           activity_title: active

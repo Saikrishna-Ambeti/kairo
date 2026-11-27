@@ -1,97 +1,84 @@
 # Running Kairo in the background
 
-On Linux and macOS, Kairo can run as a service for your user so you do not need
-to keep a terminal open.
+Run Kairo as a background user service on Linux, macOS, or Windows so your host stays reachable without keeping a terminal open.
 
 ## Manage the service
 
-Install the `kairo` CLI first ([Install Kairo](./install.md#command-line)), then
-run these commands on the machine that will host Kairo:
+Install the `t3` CLI first ([Command line](./install.md#command-line)), then run these commands on the host machine:
 
-| Task                            | Command                   |
-| ------------------------------- | ------------------------- |
-| Install and start               | `kairo service install`   |
-| Inspect status and log location | `kairo service status`    |
-| Move to a newer release         | `kairo update`            |
-| Restart                         | `kairo service restart`   |
-| Stop and remove from startup    | `kairo service uninstall` |
+| Task                                    | Command                                                         |
+| --------------------------------------- | --------------------------------------------------------------- |
+| Set up access from other devices        | `kairo up`                                                      |
+| Check how other devices reach it        | `t3 status`                                                     |
+| Install and start (or repair)           | `kairo service install`                                         |
+| Check status and log path               | `kairo service status`                                          |
+| Update to a newer release               | `kairo update`                                                  |
+| Restart                                 | `kairo service restart`                                         |
+| Stop and remove from startup            | `kairo service uninstall`                                       |
+| Remove service, launcher, and downloads | `kairo uninstall` (keeps `~/.kairo/userdata` and `service.env`) |
 
-Uninstalling the service leaves your projects, threads, and settings intact.
-Running `kairo service install` again repairs a service that `kairo service status`
-reports as broken.
+- Pairing codes are never written to logs; run `kairo pair` or `kairo up` on the host to connect a device.
+- `kairo update` asks before restarting (pass `--yes` in scripts). Pin a version with `kairo update 0.0.42`, switch tracks with `--channel nightly`, or downgrade with `--allow-downgrade`.
 
-`kairo update` downloads the newest release on your channel and switches `kairo`
-and the service to it. Restarting interrupts running agent turns, terminals,
-and remote clients, so it asks first; answer no and the service keeps running
-the old version until you run `kairo service restart`. Pass `--yes` from a
-script. A server you started by hand is left running; stop and start it again
-to pick up the new version. Wait for any remote update already in progress
-before updating; to match a remote client's version, follow
-[Updating Kairo](./updating.md).
+## Local network access
 
-Pass an exact version (`kairo update 0.0.42`) to pin one, `--channel nightly` to
-switch trains, or `--allow-downgrade` to move backwards. `preview` is a
-maintainers' test train: its builds can be broken and are never offered as
-updates, so the installer and `kairo update` ask for confirmation before
-installing one.
+New services bind to localhost only. Run `kairo up --lan` (sets `KAIRO_LAN=true` in `service.env`) to listen on LAN and Tailscale addresses for direct desktop/mobile connections, or `kairo up --no-lan` to disable it. Anyone on that network can reach the port (gated by pairing). `KAIRO_HOST` overrides `KAIRO_LAN`. Hosted `app.kairo.codes` always uses Kairo Connect.
 
-`kairo uninstall` removes the background service, the `kairo` launcher, and the
-downloaded versions after showing you the list and asking once. Your projects,
-threads, and settings under `~/.kairo/userdata` are kept. Pass `--yes` from a
-script.
+## Configure the service environment
+
+Add `KEY=VALUE` entries to `service.env` in your T3 home directory (`~/.kairo/service.env` by default). Values are literal (quote spaces or `#`; no shell expansion) and survive installs and updates.
+
+```dotenv
+KAIRO_PORT=3773
+KAIRO_HOST=127.0.0.1
+```
+
+- `PATH`, `KAIRO_HOME`, `KAIRO_BOOT_SERVICE_UNIT`, and `KAIRO_SERVICE_LAUNCHER_CONTEXT` cannot be overridden here.
+- Run `kairo service restart` after editing (and `chmod 600 ~/.kairo/service.env` if it holds secrets).
 
 ## Platform support
 
-Linux needs systemd user services. Setup enables lingering so Kairo starts at
-boot and keeps running after logout. If this needs administrator permission,
-setup prints a recovery command before changing the service.
+- **Linux**: Requires systemd user services with lingering enabled so Kairo starts at boot and survives logout.
+- **macOS**: Starts at login, stops at logout. Keep the Mac logged in and awake for unattended access. If agents can't read Desktop/Documents/Downloads, grant Full Disk Access to the `t3` path in `~/Library/LaunchAgents/com.kairo.app.service.plist`.
+- **Windows**: Runs windowless via Task Scheduler (`kairo-<domain>-<user>`) while signed in and auto-restarts on exit. Lock the screen instead of signing out for unattended access.
 
-macOS starts the service when you log in and stops it when you log out. Keep the
-Mac logged in and awake for unattended remote access. Installing over SSH while
-nobody is logged in at the Mac's screen can fail at the final start step; the
-service is still installed and will start at the next login.
+> Note: Signing out of Kairo Connect does not stop or uninstall the background service.
 
-Windows background services are not supported.
+## Keep the server responsive under memory pressure (Linux)
 
-Kairo Connect can offer service installation during setup, but the two are managed
-separately. Signing out of Kairo Connect does not stop or uninstall the service.
+On Linux, agents run at lower priority than the server, but heavy memory use can still trigger the OOM killer. Run as your normal user:
+
+```sh
+t3 service protect
+```
+
+It previews system changes, asks for confirmation and `sudo`, and optionally protects Tailscale and SSH too. Run `kairo service restart` for OOM-killer protection to take effect, or `kairo service protect --undo` to remove it.
 
 ## Troubleshooting
 
-Start with `kairo service status` on the host. It prints the log path and, on Linux,
-checks whether the installed service is running, enabled, and allowed to survive
-logout.
+Run `kairo service status` on the host to see the log path and health checks:
 
-If it stops when your SSH session closes, check for `linger-disabled`. An
-administrator can enable lingering with:
+| Status                                 | Fix                                                                                                                                           |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `linger-disabled`                      | Run `sudo loginctl enable-linger "$(id -un)"` (or `ssh -t your-server '...'`), then retry setup as your normal user. Never run Kairo as root. |
+| `linger-unavailable`                   | Check `loginctl show-user "$(id -un)" --property=Linger` and verify `systemd-logind`.                                                         |
+| `user-manager-unavailable`             | Run `systemctl --user status` in a login session to verify systemd user support.                                                              |
+| `service-disabled` / `service-stopped` | Check the log and `systemctl --user status kairo.service`, then run `kairo service install`.                                                  |
+| `restart-pending`                      | Run `kairo service restart` to switch to the newly installed version.                                                                         |
+
+For Kairo Connect issues, see [Kairo Connect troubleshooting](./kairo-connect-troubleshooting.md).
+
+## Reclaim database space
+
+Kairo automatically prunes old internal history while keeping conversations. Older databases that still hold freed space show a **Reclaim** button in **Settings → Maintenance** when at least 1 GiB is reclaimable (pauses the server/agents during repair).
+
+For manually started servers (or CLI use), stop any hand-started server or desktop app and run:
 
 ```sh
-sudo loginctl enable-linger "$(id -un)"
+t3 doctor          # Interactive repair (auto-stops/restarts a background service)
+t3 doctor --dry-run
+t3 doctor --fix    # Non-interactive recommended repairs
 ```
 
-Over SSH, allow sudo to prompt:
-
-```sh
-ssh -t your-server 'sudo loginctl enable-linger "$(id -un)"'
-```
-
-Then retry service setup as your normal user. Run only the `loginctl` command
-with sudo; running Kairo as root creates a separate installation and Connect
-identity. Without administrator access, run `kairo serve` in a terminal and keep
-that session open.
-
-| Status problem                          | Next step                                                                                                                      |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `linger-unavailable`                    | Run `loginctl show-user "$(id -un)" --property=Linger` and check that systemd-logind is available.                             |
-| `user-manager-unavailable`              | Run `systemctl --user status` in a login session for the service user; check your distribution's systemd user-session support. |
-| `service-disabled` or `service-stopped` | Read the log and `systemctl --user status kairo.service`, then use the repair command printed by Kairo.                        |
-| `restart-pending`                       | A newer version is installed but the service still runs the previous one. Run `kairo service restart`.                         |
-
-On macOS, check **System Settings → General → Login Items** if the service no
-longer starts at login. If agent work cannot access Desktop, Documents, or
-Downloads, it may need Full Disk Access for the `kairo` executable listed in
-`ProgramArguments` in
-`~/Library/LaunchAgents/com.kairo.app.service.plist`.
-
-For failures after signing in to Kairo Connect, see
-[connection troubleshooting](./remote-access.md#kairo-connect-troubleshooting).
+- Needs free disk space of ~2× active data size (in `TMPDIR`/`/var/tmp` and beside the database). Large databases can take over an hour.
+- `t3 doctor` optionally offers to remove the legacy pre-0.1.0 `state.sqlite` backup only when all active projects and threads exist in the current database (`--fix` never deletes it automatically).

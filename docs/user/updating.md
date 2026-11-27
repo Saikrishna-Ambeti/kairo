@@ -1,77 +1,53 @@
 # Updating Kairo
 
-The app you use and the server running your agents can be on different machines.
-When a server is behind your web or desktop app, an update notice appears in the
-conversation and **Settings → Connections**. Update the machine named in that
-notice.
+Kairo clients and servers can run on different machines and must share a compatible orchestration protocol. When a server or provider is behind, the sidebar update button and **Settings → Environments** handle updates.
 
-## Before you update
+## Update everything at once
 
-Server updates restart the connection and can interrupt active agents and
-terminal commands. Saved threads, settings, and project files remain.
+Click the **Update** button at the bottom of the sidebar (web or desktop) to update outdated providers, behind servers, and the desktop app in one step.
 
-**Settings → General → Continue threads after restarts** is off by default.
-Enable it to resume supported active threads after an update, crash, or machine
-restart. Changes are saved to connected environments that support this setting;
-update older servers first. If a supported environment was offline or has a
-different value, use **Apply to all** in Settings after it connects.
-Kairo must start again on that machine;
-the setting does not enable automatic startup. Terminal commands may still be
-interrupted, and threads without saved provider resume state need a new message.
-If you previously enabled continuation for updates, enable this setting once
-to allow recovery without a connected client.
+- Hover to preview what will update; click while running to view per-machine progress or retry failures.
+- Confirmation dialogs show which machines are skipped (offline or manual-only) and how many active threads will pause/resume.
+- Choose **Later** on the desktop restart countdown to restart when ready.
 
-## Update a connected server
+## Switch between Stable and Nightly
 
-The offered action depends on how the server runs:
+In the desktop app, change **Settings → About → Update track** to switch connected machines together.
 
-| Action                     | What to do                                                                                                                                                                                      |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Update server**          | Keep the client open while it installs and reconnects. Supported background services update remotely. For a desktop-hosted server, this also closes and relaunches the desktop app on the host. |
-| **Update the desktop app** | Update the desktop app on the machine running the server, then reopen it if needed.                                                                                                             |
-| **Copy update command**    | Stop the command-line server on its host and relaunch with the copied command, keeping your usual startup options.                                                                              |
+- Moving a background service to an older Stable release requires running `kairo update --channel stable --allow-downgrade` on that host.
+- A switch is blocked if the machine's database has schema changes the target track doesn't support yet. macOS desktop apps must switch on that Mac.
 
-On the host, run:
+## Continue threads after restarts
 
-```sh
-kairo update <client-version>
-```
+**Settings → Maintenance → Continue threads after restarts** is enabled by default. After an update, crash, or reboot (once Kairo starts again), supported active threads automatically resume—and threads waiting on subagents or monitors are woken and notified that background work stopped.
 
-Replace `<client-version>` with the version shown in the notice. The command
-asks before restarting the background service; if you decline, run
-`kairo service restart` when you are ready. For a server you started by hand,
-stop it and start it again afterwards with your usual options such as `--host`
-or `--tailscale-serve`.
+- Threads waiting for your approval/answer/secret—or archived, snoozed, or settled—are not auto-resumed.
+- After 3 consecutive crash recoveries of an unfinished turn, the thread waits for your next message.
+- Updating from V1? Read [Threads from older Kairo versions](./thread-migration.md).
 
-If you run the server with `npx` rather than an installed `kairo`, there is
-nothing to update on the host: stop the server and relaunch it as
-`npx kairo@<client-version>` with the same subcommand and options.
+## Update a connected server manually
 
-## If an update fails
+| Situation                           | Action                                                                                                      |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Background service / desktop server | Click **Update server** in **Settings → Environments** (desktop hosts relaunch automatically).              |
+| Installed `t3` CLI                  | Run `kairo update <version>` on the host (then `kairo service restart` if you declined the restart prompt). |
+| `npx` server                        | Stop the server and relaunch with `npx kairo@<version>` and your usual flags.                               |
+| Package manager (Nix, AUR)          | Update via your package manager.                                                                            |
 
-Keep the client open until it reconnects or reports a failure. A failed service
-update can roll back to the previous version. If the update still fails:
+Each server checks npm/Homebrew/pnpm using its own local registry and proxy settings.
 
-1. Retry the offered action once.
-2. Check that you updated the server's machine, not only the device you are using.
-3. For a command-line server, stop it and relaunch the exact version shown in the notice.
+## Update providers
+
+Open **Settings → Providers** and click **Update now** on individual providers or **Update all** across connected environments. Running chats keep using their current CLI until they end; new sessions and model catalogs refresh automatically. (Provider update checks in **Settings → Maintenance** must be enabled to fetch model catalog updates.)
 
 ## Mobile updates
 
-To update an environment from your phone, open **Settings → Environments** and
-select it. **Check for updates** finds the latest release on that environment's
-current release channel. Keep the app open while the environment updates and
-reconnects. Hosts that cannot update remotely show instructions for updating on
-the machine instead.
+- Update connected environments and providers from **Settings → Environments** on mobile.
+- Update the mobile app via the App Store or Google Play (background over-the-air updates apply on next app switch and preserve drafts/queued messages).
 
-The same page lets you refresh provider status and update supported providers.
-These controls require a connected environment and permission to operate it.
-Provider update checks and restart continuation preferences are in
-**Settings → Maintenance**. If provider update checks are disabled, enable them
-there before refreshing to find newer versions.
+## Troubleshooting
 
-Install App Store or Google Play releases as usual. The mobile app can also
-download updates in the background and apply them when you next leave the app.
-It saves drafts and queued messages before restarting. If you keep the app open
-for a long time, it may ask to install immediately; choosing **Later** leaves the
-update queued for the next suitable moment.
+- **Version mismatch**: Update whichever side (app or server) the connection notice names.
+- **Failed update**: Retry once; confirm you updated the host machine (not just the client) and that only one server owns the T3 home directory.
+- **macOS Alpha → Beta**: Open `/Applications/Kairo (Beta).app` manually and re-pin it to the Dock.
+- **Desktop won't start**: Use the recovery window's **Update** button, install the linked last-working version, or **Copy details** for a bug report.

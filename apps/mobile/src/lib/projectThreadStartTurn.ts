@@ -2,25 +2,19 @@ import {
   CommandId,
   MessageId,
   ThreadId,
+  type ChatAttachment,
   type ModelSelection,
   type OrchestrationMessageContext,
   type ProjectId,
   type ProviderInteractionMode,
   type RuntimeMode,
 } from "@kairo/contracts";
-import { assistantCitationsToPlainText } from "@kairo/shared/assistantCitations";
+import { deriveThreadTitleSeed, threadTitleTextFromPrompt } from "@kairo/client-runtime/operations";
+import { splitsSurrogatePair } from "@kairo/shared/assistantCitations";
+import { msg } from "gt-react-native";
 
+import { m } from "../i18n/messages";
 import type { UploadedMobileAttachment } from "./attachmentUpload";
-
-export function deriveThreadTitleFromPrompt(value: string): string {
-  const trimmed = assistantCitationsToPlainText(value).trim();
-  if (trimmed.length === 0) {
-    return "New thread";
-  }
-
-  const compact = trimmed.replace(/\s+/g, " ");
-  return compact.length <= 72 ? compact : `${compact.slice(0, 69).trimEnd()}...`;
-}
 
 export interface ProjectThreadStartTurnSpec {
   readonly projectId: ProjectId;
@@ -30,9 +24,9 @@ export interface ProjectThreadStartTurnSpec {
   readonly messageId: string;
   readonly createdAt: string;
   readonly text: string;
+  readonly titleText?: string;
   readonly context?: OrchestrationMessageContext;
-  /** Wire attachments from `prepareTurnAttachments`, in composer order. */
-  readonly uploadedAttachments: ReadonlyArray<UploadedMobileAttachment>;
+  readonly uploadedAttachments: ReadonlyArray<UploadedMobileAttachment | ChatAttachment>;
   readonly modelSelection: ModelSelection;
   readonly runtimeMode: RuntimeMode;
   readonly interactionMode: ProviderInteractionMode;
@@ -40,20 +34,20 @@ export interface ProjectThreadStartTurnSpec {
   readonly branch: string | null;
   readonly worktreePath: string | null;
   readonly startFromOrigin: boolean;
-  /** Generated temp branch for worktree mode; unused for local mode. */
+  /** Tracked repositories a new worktree takes, by path; absent leaves the choice to the server. */
+  readonly worktreeRepositories?: ReadonlyArray<string>;
   readonly worktreeBranchName: string;
 }
 
-/**
- * Single source of the `thread.turn.start` bootstrap payload used to create a
- * thread from a project draft — shared by the immediate send path and the
- * offline outbox drain so both deliver identical commands.
- */
 export function buildProjectThreadStartTurnInput(spec: ProjectThreadStartTurnSpec) {
-  const title = deriveThreadTitleFromPrompt(spec.text);
+  const title = deriveThreadTitleSeed(
+    { text: spec.titleText ?? spec.text, attachments: spec.uploadedAttachments },
+    m,
+  );
   const isWorktree = spec.workspaceMode === "worktree";
   return {
     commandId: CommandId.make(spec.commandId),
+    creationSource: "mobile" as const,
     threadId: ThreadId.make(spec.threadId),
     message: {
       messageId: MessageId.make(spec.messageId),
@@ -81,9 +75,13 @@ export function buildProjectThreadStartTurnInput(spec: ProjectThreadStartTurnSpe
         ? {
             prepareWorktree: {
               projectCwd: spec.projectCwd,
-              baseBranch: spec.branch!,
+              // The launch needs a base ref; the server ignores it for a plain project folder.
+              baseBranch: spec.branch ?? "HEAD",
               branch: spec.worktreeBranchName,
               ...(spec.startFromOrigin ? { startFromOrigin: true } : {}),
+              ...(spec.worktreeRepositories === undefined
+                ? {}
+                : { repositories: spec.worktreeRepositories.map((path) => ({ path })) }),
             },
             runSetupScript: true,
           }
@@ -91,4 +89,11 @@ export function buildProjectThreadStartTurnInput(spec: ProjectThreadStartTurnSpe
     },
     createdAt: spec.createdAt,
   };
+}
+
+export function deriveThreadTitleFromPrompt(value: string): string {
+  const title = threadTitleTextFromPrompt(value, m) || m(msg("New thread"));
+  if (title.length <= 72) return title;
+  const end = splitsSurrogatePair(title, 69) ? 68 : 69;
+  return `${title.slice(0, end).trimEnd()}...`;
 }

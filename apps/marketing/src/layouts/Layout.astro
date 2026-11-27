@@ -1,21 +1,32 @@
 ---
 import { GITHUB_REPOSITORY_URL } from "../lib/site";
+import { type JsonLd, jsonLdGraph, organizationJsonLd, websiteJsonLd } from "../lib/seo";
+import type { Locale, LocalizedPath } from "../i18n/locales";
 
 interface Props {
   title?: string;
   description?: string;
   pageClass?: string;
+  jsonLd?: ReadonlyArray<JsonLd>;
+  noindex?: boolean;
+  locale?: Locale;
+  localizedPath?: LocalizedPath;
 }
 
 const {
   title = "Kairo",
   description = "Kairo. The open-source control plane for coding agents.",
   pageClass,
+  jsonLd = [],
+  noindex = false,
+  locale = "en",
 } = Astro.props;
+const canonicalUrl = new URL(Astro.url.pathname, Astro.site);
+const structuredData = jsonLdGraph([organizationJsonLd(), websiteJsonLd(), ...jsonLd]);
 ---
 
 <!doctype html>
-<html lang="en" class="dark">
+<html lang={locale} class="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -42,6 +53,8 @@ const {
     />
     <link rel="icon" type="image/png" href="/logo.png" />
     <link rel="apple-touch-icon" href="/logo.png" />
+    {noindex ? <meta name="robots" content="noindex" /> : <link rel="canonical" href={canonicalUrl} />}
+    <script is:inline type="application/ld+json" set:html={structuredData} />
     <title>{title}</title>
   </head>
   <body class={pageClass}>

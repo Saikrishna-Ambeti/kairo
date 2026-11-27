@@ -1,9 +1,22 @@
 package expo.modules.kairoreviewdiff
 
+import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
+private val REVIEW_DIFF_EVENTS = arrayOf(
+  "onDebug",
+  "onVisibleFileChange",
+  "onToggleFile",
+  "onToggleViewedFile",
+  "onPressLine",
+  "onToggleComment",
+  "onPressNotice",
+)
+
 class KairoReviewDiffModule : Module() {
+  // Expo registers the view props, events, and functions in one definition.
+  @Suppress("LongMethod")
   override fun definition() = ModuleDefinition {
     Name("KairoReviewDiffSurface")
 
@@ -41,21 +54,22 @@ class KairoReviewDiffModule : Module() {
       Prop("rowHeight") { view: KairoReviewDiffView, rowHeight: Double ->
         view.setRowHeight(rowHeight.toFloat())
       }
-      Prop("contentWidth") { view: KairoReviewDiffView, contentWidth: Double ->
-        view.setContentWidth(contentWidth.toFloat())
+      // Accept the shared prop while deriving Android's scroll range from the drawn text.
+      Prop("contentWidth") { _: KairoReviewDiffView, _: Double -> }
+      Prop("contentInsetBottom") { view: KairoReviewDiffView, value: Double ->
+        view.setContentInsetBottom(value.toFloat())
+      }
+      Prop("scrollEnabled") { view: KairoReviewDiffView, enabled: Boolean ->
+        view.setScrollEnabled(enabled)
       }
       Prop("initialRowIndex") { view: KairoReviewDiffView, initialRowIndex: Double ->
         view.setInitialRowIndex(initialRowIndex)
       }
+      Prop("initialFileId") { view: KairoReviewDiffView, fileId: String ->
+        view.setInitialFileId(fileId)
+      }
 
-      Events(
-        "onDebug",
-        "onVisibleFileChange",
-        "onToggleFile",
-        "onToggleViewedFile",
-        "onPressLine",
-        "onToggleComment",
-      )
+      Events(REVIEW_DIFF_EVENTS)
 
       AsyncFunction("scrollToFile") {
           view: KairoReviewDiffView,
@@ -67,14 +81,23 @@ class KairoReviewDiffModule : Module() {
       AsyncFunction("scrollToTop") { view: KairoReviewDiffView, animated: Boolean ->
         view.scrollToTop(animated)
       }
-      AsyncFunction("setRowsJson") { view: KairoReviewDiffView, rowsJson: String ->
+      AsyncFunction("setRowsJson") {
+          view: KairoReviewDiffView,
+          rowsJson: String,
+          resetKey: String
+        ->
+        view.setContentResetKey(resetKey)
         view.setRowsJson(rowsJson)
       }
       AsyncFunction("setTokensJson") { view: KairoReviewDiffView, tokensJson: String ->
         view.setTokensJson(tokensJson)
       }
-      AsyncFunction("setTokensPatchJson") { view: KairoReviewDiffView, tokensPatchJson: String ->
-        view.setTokensPatchJson(tokensPatchJson)
+      AsyncFunction("setTokensPatchJson") {
+          view: KairoReviewDiffView,
+          tokensPatchJson: String,
+          promise: Promise
+        ->
+        view.setTokensPatchJson(tokensPatchJson) { accepted -> promise.resolve(accepted) }
       }
 
       OnViewDestroys { view: KairoReviewDiffView ->

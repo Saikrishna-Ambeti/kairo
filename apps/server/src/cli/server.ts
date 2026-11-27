@@ -1,36 +1,92 @@
+import * as HostProcess from "@kairo/shared/HostProcess";
 import * as Effect from "effect/Effect";
-import { Command, GlobalFlag } from "effect/unstable/cli";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import { Command, GlobalFlag } from "effect/cli";
+import * as CliError from "effect/cli/CliError";
 
-import { ServerConfig, type StartupPresentation } from "../config.ts";
-import { runServer } from "../server.ts";
+import { awaitServiceLauncherStop } from "../cloud/serviceLauncherClient.ts";
+import * as ServerConfig from "../config.ts";
+import { stopOnLauncherLoss } from "../launcherWatch.ts";
+import * as DatabaseMaintenance from "../persistence/DatabaseMaintenance.ts";
+import * as ProcessRunner from "../processRunner.ts";
+import * as AutomaticPort from "./automaticPort.ts";
 import { type CliServerFlags, resolveServerConfig, sharedServerCommandFlags } from "./config.ts";
 
-export const runServerCommand = (
+const encodeCommand = Schema.encodeEffect(Schema.fromJsonString(Schema.String));
+
+// Untraced: a span that lasts the whole process would parent everything the server does.
+const runServerCommand = Effect.fnUntraced(function* (
   flags: CliServerFlags,
   options?: {
-    readonly startupPresentation?: StartupPresentation;
+    readonly startupPresentation?: ServerConfig.StartupPresentation;
     readonly forceAutoBootstrapProjectFromCwd?: boolean;
+    readonly rejectRunningServer?: boolean;
   },
-) =>
-  Effect.gen(function* () {
-    const logLevel = yield* GlobalFlag.LogLevel;
-    const config = yield* resolveServerConfig(flags, logLevel, options);
-    return yield* runServer.pipe(Effect.provideService(ServerConfig, config));
-  });
+) {
+  // Before config resolution, which claims a port and creates directories.
+  const { runServer } = yield* Effect.promise(() => import("../server.ts"));
+  const logLevel = yield* GlobalFlag.LogLevel;
+  const selectAutomaticPort = yield* AutomaticPort.make.pipe(Effect.provide(ProcessRunner.layer));
+  const config = yield* resolveServerConfig(flags, logLevel, { ...options, selectAutomaticPort });
+  const run = Effect.raceFirst(
+    runServer.pipe(Effect.provideService(ServerConfig.ServerConfig, config)),
+    awaitServiceLauncherStop().pipe(Effect.andThen(Effect.interrupt)),
+  ).pipe(
+    // Settings' Reclaim stops the server; repair once the database is closed, before the restart.
+    Effect.ensuring(
+      DatabaseMaintenance.runRequestedReclaim(config.dbPath).pipe(
+        Effect.provide(DatabaseMaintenance.layer),
+      ),
+    ),
+  );
+  if (config.mode !== "desktop" || config.desktopBootstrapToken === undefined) return yield* run;
+  return yield* stopOnLauncherLoss(run);
+});
+
+export const runDefaultServerCommand = Effect.fnUntraced(function* (flags: CliServerFlags) {
+  if (Option.isSome(flags.cwd)) {
+    const cwd = flags.cwd.value.trim();
+    const fs = yield* FileSystem.FileSystem;
+    const platform = yield* HostProcess.Platform;
+    const explicitPath =
+      cwd === "." ||
+      cwd === ".." ||
+      cwd === "~" ||
+      /[/\\]/.test(cwd) ||
+      (platform === "win32" && /^[a-z]:/i.test(cwd));
+    if (!explicitPath && (!(yield* fs.exists(cwd)) || (yield* fs.stat(cwd)).type !== "Directory")) {
+      return yield* new CliError.UserError({
+        cause: cwd,
+        userMessage: `Unknown command ${yield* encodeCommand(cwd)}. Use "kairo --help" for commands or an explicit path such as "t3 ./my-project" for a new directory.`,
+      });
+    }
+  }
+  return yield* runServerCommand(flags, { rejectRunningServer: true });
+});
 
 export const startCommand = Command.make("start", { ...sharedServerCommandFlags }).pipe(
-  Command.withDescription("Run the Kairo server."),
-  Command.withHandler((flags) => runServerCommand(flags)),
+  Command.withDescription("Same as `t3`."),
+  Command.unlisted,
+  Command.withHandler((flags) => runServerCommand(flags, { rejectRunningServer: true })),
 );
 
-export const serveCommand = Command.make("serve", { ...sharedServerCommandFlags }).pipe(
+// Serve never bootstraps a project, so it does not offer the flag that asks for one.
+const { autoBootstrapProjectFromCwd: _, ...serveCommandFlags } = sharedServerCommandFlags;
+
+export const serveCommand = Command.make("serve", serveCommandFlags).pipe(
+  Command.withShortDescription("Run Kairo in this terminal, with no browser."),
   Command.withDescription(
-    "Run the Kairo server without opening a browser and print headless pairing details.",
+    "Run Kairo in this terminal without opening a browser, and print pairing details. The background service runs this too, without printing them: pair with `kairo pair`. To set up access from your other devices, run `kairo up`.",
   ),
   Command.withHandler((flags) =>
-    runServerCommand(flags, {
-      startupPresentation: "headless",
-      forceAutoBootstrapProjectFromCwd: false,
-    }),
+    runServerCommand(
+      { ...flags, autoBootstrapProjectFromCwd: Option.none() },
+      {
+        startupPresentation: "headless",
+        forceAutoBootstrapProjectFromCwd: false,
+      },
+    ),
   ),
 );

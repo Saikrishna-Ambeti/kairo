@@ -1,9 +1,9 @@
 import { View } from "react-native";
 
+import { useBarOverlap } from "../../components/ui/useBarInset";
 import { MediaVideoPlayer } from "../../components/MediaVideoPlayer";
 import type { MediaVideoPreviewSource } from "../../lib/videoPreviewSource";
 
-/** Uses the signed progressive URL directly; choosing a file never preloads its video bytes as text. */
 export function WorkspaceFileVideoPreview(props: {
   readonly name: string;
   readonly thumbnailKey: string;
@@ -12,14 +12,19 @@ export function WorkspaceFileVideoPreview(props: {
   readonly resolvePlaybackUri: () => Promise<string | null>;
 }) {
   const uri = props.uri;
+  const barOverlap = useBarOverlap();
 
   return (
-    <View className="flex-1 items-center justify-center bg-sheet p-4">
+    <View
+      className="flex-1 items-center justify-center bg-sheet p-4"
+      style={{ marginTop: barOverlap }}
+    >
       <MediaVideoPlayer
         uri={uri}
         resolvePlaybackUri={props.resolvePlaybackUri}
         name={props.name}
         thumbnailKey={props.thumbnailKey}
+        fitToVideo
         actionsSource={props.source?.actionsSource}
       />
     </View>

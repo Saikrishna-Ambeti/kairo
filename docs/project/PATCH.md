@@ -13,20 +13,16 @@ Behavioral specification of the Kairo changes applied on top of upstream T3 Code
 - Canonical specification: `docs/project/PATCH.md`. Maintain this file in place; do not create a competing root specification.
 - Upstream URL: https://github.com/pingdotgg/t3code.git
 - Upstream remote: `upstream`. `origin` is the Kairo fork.
-- Target: latest upstream default branch, resolved live to an exact commit each update. Cached default branch at setup: `main`.
-- Integration: merge into a new local review branch in a separate worktree using `--no-ff --no-commit`. Leave uncommitted by default; the user authorized a local review commit for this attempt so Greptile can review committed changes.
+- Target: the requested upstream tag, branch, or commit. When no target is specified, resolve the upstream default branch live.
+- Integration: merge into a local review branch in a separate worktree with `--no-ff --no-commit`. Prefer the upstream implementation for overlapping features. A review stays uncommitted unless the user authorizes a commit.
 - Preserve the behavior below and other local work. Reuse equivalent upstream implementations when the same acceptance checks pass.
 - Preserve existing Git state. Record a verified candidate separately from the landed baseline; failed or pending checks never advance the verified baseline.
 
 ## Upstream baseline
 
-- Observed integrated upstream commit in the original checkout: `d29c56a5c404cb0f58d3b2ac41762fa0d0ac28d4`. It is the second parent of merge `0235375fae757e104ea4f02b6873204cafe229f9`, which is an ancestor of starting HEAD. The September review was committed and subsequently merged into the fork.
-- Review branch integration: local merge `46981394bcd9830d4265bb3300fbca5cef097375` has starting HEAD and target `bd89c1302026255c62cc09278207bfaf2664da4a` as parents. The original checkout has not advanced.
-- Observed local HEAD at setup: `b2f0ac9752eacb18fd2b1c4a751b0e561263aaf2` on `t3code/upstream-sync-patch`.
-- Last behaviorally verified baseline: unknown. Existing baseline records integration history, not a new test result.
-- The Kairo behavior described below remains the source of truth when resolving upstream changes.
-- Equivalent upstream behavior is reused instead of maintained twice. The desktop launcher now uses upstream launcher version 19 in the review candidate, which already preserves framework symlinks.
-- Generated web routing includes the connected-app settings page at `/settings/integrations/apps`.
+- The original checkout integrates `bd89c1302026255c62cc09278207bfaf2664da4a`. It is the second parent of `46981394bcd9830d4265bb3300fbca5cef097375`, which landed in [PR #38](https://github.com/Saikrishna-Ambeti/kairo/pull/38). The startup and Clerk fixes in PRs #39 and #40 are also in the starting revision.
+- Starting revision and rollback reference: `38329344ac633fe11d0b67fe43320e6d392cb26d`.
+- Last fully behaviorally verified baseline: unknown. The v0.1.13 candidate uses a separate worktree.
 
 ### P001: Product identity
 
@@ -148,14 +144,15 @@ Use focused tests from the repo root, selected according to changed behavior:
 
 Use the workspace-local `./node_modules/.bin/vp` for verification. The globally installed runner used Vitest 4.1.10 against workspace dependencies requiring 5.0.1 and failed before executing tests. The local runner executes the focused suites successfully. Web unit tests run from `apps/web` with `../../node_modules/.bin/vp test run --project unit <files>`.
 
-The review candidate declares Electron `44.4.2`. Effect moves to `4.0.0-rc.115`, TypeScript remains `7.0.2`, and Vite+ moves to `1.0.0`. Claude Agent SDK remains exactly pinned, now at `0.3.276` to match upstream adapter APIs. The workspace lockfile was regenerated with `vp install --lockfile-only`, followed by installation. Dependency declarations do not prove graphics or older-macOS runtime compatibility.
+The October review candidate declared Electron `44.4.2`. Effect moves to `4.0.0-rc.115`, TypeScript remains `7.0.2`, and Vite+ moves to `1.0.0`. Claude Agent SDK remains exactly pinned, now at `0.3.276` to match upstream adapter APIs. The workspace lockfile was regenerated with `vp install --lockfile-only`, followed by installation. Dependency declarations do not prove graphics or older-macOS runtime compatibility.
 
 ### P007: Existing data and local features
 
 - Status: active; migration and focused service checks pass in the candidate.
 - Purpose: Preserve Kairo data and committed behavior beyond the original six patch entries.
-- Keep migration IDs 48, 49, and 50 assigned to Kairo reconciliation, artifact metadata, and scheduled tasks. Previously integrated upstream migrations use IDs 51 through 53. This update allocates incoming message context, title state, viewed pull-request files, and auto-settle migrations to IDs 54 through 57. Existing databases must retain scheduled tasks and artifacts while gaining upstream pull-request and thread-order fields.
-- Preserve study mode, deep research, artifact panels, scheduled tasks, source-control visibility preferences, notification sound, desktop Clerk headers, cloud identity, and Kairo marketing designs.
+- Preserve migration IDs 48 through 60. Migration 61 archives the old scheduled-task tables ahead of orchestration V2. Incoming V2 migrations occupy IDs 62 through 126. Migration 127 imports schedules whose timing and permissions can carry forward. It imports expired one-time schedules paused so they cannot run on upgrade.
+- Use the upstream scheduler for all active tasks. Remove Kairo's scheduler, editor, and RPCs. Keep the old task definitions, revisions, events, and run receipts in the database archive. Tasks with cron, calendar, email, GitHub, or other unsupported triggers or policies stay archived.
+- Preserve study mode, deep research, artifact panels, source-control visibility preferences, notification sound, desktop Clerk headers, cloud identity, and Kairo marketing designs.
 - Implementation hints: `apps/server/src/persistence/Migrations.ts`, provider services, chat and settings components, desktop Clerk integration, and marketing pages.
 - Verification: migration reconciliation test, scheduled-task and provider-service tests, affected client typechecks, and manual feature acceptance when authorized.
 - Retirement: Upstream supplies equivalent behavior and data migration with matching acceptance evidence, or the user changes the requirement.
@@ -169,6 +166,20 @@ The review candidate declares Electron `44.4.2`. Effect moves to `4.0.0-rc.115`,
 - Browser checks and application launches require explicit user authorization under `AGENTS.md`. Headless web checks were later authorized and completed as recorded below. DMG creation on older macOS and target-hardware graphics remain pending; CI results are tracked in PR #38.
 
 ## Latest attempt
+
+- Date: 2026-11-27.
+- State: [PR #41](https://github.com/Saikrishna-Ambeti/kairo/pull/41) targets Kairo main. Merge commit `b214a96651a9e0edb90a6ff4eab1c5b1f472145b` integrates the exact release. The original checkout is clean. CI and manual acceptance are open.
+- Target: [T3 Code v0.1.13](https://github.com/pingdotgg/t3code/releases/tag/v0.1.13), commit `bc0f04da94f64b5e487c598761a43b4cf06b2ac9`. The tag was fetched from `upstream`. The previous baseline is its ancestor, 9,595 commits back.
+- Local review branch: `review/upstream-v0.1.13`. Worktree: `/Users/saikrishnaambeti/Documents/projects/kairo-upstream-v0.1.13`.
+- Validation: pnpm 12.14.0 regenerated the lockfile under Node 26.13.1 and installed dependencies with lifecycle scripts disabled. Seven focused server suites passed 28 tests covering migration registration, the startup repair, task import and archiving, scheduler timing, Supermemory, and Composio. The older-macOS DMG fallback unit test passed. TanStack Router regenerated the web route tree. These checks leave integrated builds and runtime acceptance pending.
+- Scheduler: the server, web, and mobile use the v0.1.13 implementation with Kairo branding. The old scheduler RPCs, editor, and composer command parser are removed. The old web URL redirects to Settings. The archive migration preserves all four legacy tables. The import test checks compatible one-time and weekly schedules and verifies the original definitions and run records for cron, calendar, email, and GitHub tasks.
+- Scheduler checks: migration and timing passed 3 tests. Upstream scheduler service and webhook tests passed 106 tests. Web scheduling settings passed 28 tests. Mobile draft, presentation, and editor tests passed 35 tests. Focused migration and redirect lint passed. The reconciliation rerun passed 51 CLI, migration, and scheduler tests, 41 WebSocket tests, 82 web tests covering scheduling, navigation, and notification sounds, and 13 memory, Composio, and pull-request tests.
+- CI opened the seeded thread in the built desktop app and booted the built web client. Follow-up local checks passed for update launchers, legacy scheduler import, checkpoint cleanup, client runtime, and the server, client-runtime, web, and marketing typechecks.
+- The CI fixes passed 104 focused server, relay, web, and client-runtime tests, scoped lint and formatting, and web and mobile typechecks. New web and mobile catalog entries use English until translated.
+- Reviews used the `personal` profile. CodeRabbit requires reauthentication. Greptile hit `spawnSync git ENOBUFS` on the merge, and the follow-up CLI review requires a different billing plan.
+- Evidence: `/private/tmp/kairo-v0.1.13-evidence/` holds focused test, typecheck, and review logs. The desktop, web, and mobile package typechecks passed in local runs. Full CI, integrated builds, and manual acceptance remain pending. Study Mode and Deep Research still need client entry points restored against the new composer.
+
+## October 2026 attempt
 
 - Date: 2026-10-01.
 - State: draft PR [#38](https://github.com/Saikrishna-Ambeti/kairo/pull/38) published; upstream merge and verified review fixes committed under the user's review-commit approval; focused validation passed. Required review coverage is incomplete: CodeRabbit reached its included-review limit and Greptile repeatedly failed at the service. Manual acceptance remains pending.

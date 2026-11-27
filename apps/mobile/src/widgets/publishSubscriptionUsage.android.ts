@@ -1,8 +1,30 @@
 import { requireOptionalNativeModule } from "expo";
+import { tryOpenExternalUrl } from "../lib/openExternalUrl";
 import type { SubscriptionUsageSnapshot } from "./subscriptionUsageSnapshot";
 
-export function publishSubscriptionUsage(snapshot: SubscriptionUsageSnapshot) {
-  requireOptionalNativeModule<{ updateSnapshot: (snapshot: string) => void }>(
-    "KairoSubscriptionWidget",
-  )?.updateSnapshot(JSON.stringify(snapshot));
+let tapUrl: string | undefined;
+let listening = false;
+
+export async function publishSubscriptionUsage(snapshot: SubscriptionUsageSnapshot) {
+  if (!requireOptionalNativeModule("ExpoWidgets")) return;
+  const [{ default: widget }, { addUserInteractionListener }] = await Promise.all([
+    import("./SubscriptionUsage"),
+    import("expo-widgets"),
+  ]);
+  tapUrl = snapshot.url;
+  if (!listening) {
+    // expo-widgets lacks Android widgetURL. Button events need a live JS runtime to open the app.
+    listening = true;
+    addUserInteractionListener((event) => {
+      if (event.source === "SubscriptionUsage" && tapUrl) void tryOpenExternalUrl(tapUrl);
+    });
+  }
+  widget.updateSnapshot(snapshot);
+  // Android lacks timelines; alarms re-render snapshots at expiry to mark readings stale.
+  requireOptionalNativeModule<{ schedule: (name: string, deadlines: number[]) => void }>(
+    "KairoWidgetExpiry",
+  )?.schedule(
+    "SubscriptionUsage",
+    snapshot.providers.map((provider) => provider.expiresAt).filter((at) => at > 0),
+  );
 }

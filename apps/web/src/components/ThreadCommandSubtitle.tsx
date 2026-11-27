@@ -1,4 +1,5 @@
 import type { ProviderDriverKind } from "@kairo/contracts";
+import { T } from "gt-react";
 import { FolderGit2Icon, FolderIcon, GitBranchIcon } from "lucide-react";
 import { ProjectFavicon, type ProjectFaviconProject } from "./ProjectFavicon";
 import { ProviderInstanceIcon } from "./chat/ProviderInstanceIcon";
@@ -6,12 +7,6 @@ import { cn } from "~/lib/utils";
 
 import { MiddleTruncate } from "./ui/middle-truncate";
 
-/**
- * Flip this while reviewing command-palette thread subtitles.
- * - favicon-workspace-harness: favicon + Folder/FolderGit2 + branch + harness (default)
- * - favicon-workspace: same without harness
- * - favicon-branch-harness: GitBranch for local, FolderGit2 for worktrees, + harness
- */
 export type ThreadCommandSubtitleVariant =
   | "favicon-workspace-harness"
   | "favicon-workspace"
@@ -44,6 +39,8 @@ export function ThreadCommandSubtitle(props: {
   isCurrent: boolean;
   driverKind?: ProviderDriverKind | null;
   providerDisplayName?: string | null;
+  acpRegistryAgentId?: string | undefined;
+  acpRegistryIconUrl?: string | undefined;
   variant?: ThreadCommandSubtitleVariant;
   className?: string;
 }) {
@@ -97,6 +94,8 @@ export function ThreadCommandSubtitle(props: {
           <ProviderInstanceIcon
             driverKind={props.driverKind}
             displayName={props.providerDisplayName ?? props.driverKind}
+            acpRegistryAgentId={props.acpRegistryAgentId}
+            acpRegistryIconUrl={props.acpRegistryIconUrl}
             iconClassName="size-3 shrink-0 opacity-70"
           />
         </>
@@ -105,7 +104,9 @@ export function ThreadCommandSubtitle(props: {
       {props.isCurrent ? (
         <>
           {projectLabel || branchLabel || showHarness ? <CommandPaletteMetaDot /> : null}
-          <span className="shrink-0">Current thread</span>
+          <span className="shrink-0">
+            <T>Current thread</T>
+          </span>
         </>
       ) : null}
     </span>

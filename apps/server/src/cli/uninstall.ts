@@ -1,27 +1,31 @@
 // @effect-diagnostics nodeBuiltinImport:off
-// The Windows cleanup shell must outlive this process (it deletes the
-// directory this executable runs from), which Effect's scoped ChildProcess
-// cannot express: it kills the child when the scope closes.
+// Windows cleanup must outlive this executable to delete its directory; scoped ChildProcess kills children on exit.
 import * as NodeChildProcess from "node:child_process";
+import * as NodePath from "node:path";
 
-import {
-  HostProcessEnvironment,
-  HostProcessIsExecutable,
-  HostProcessPlatform,
-} from "@kairo/shared/hostProcess";
+import * as HostProcess from "@kairo/shared/HostProcess";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import { Command, Flag, GlobalFlag, Prompt } from "effect/unstable/cli";
+import { Command, Flag, GlobalFlag, Prompt } from "effect/cli";
 
 import * as BootService from "../cloud/bootService.ts";
-import { pinnedRuntimeVersionsDir } from "../cloud/pinnedRuntime.ts";
+import {
+  findPosixLauncher,
+  generatedWindowsShimTarget,
+  isVersionExecutable,
+  pinnedRuntimeVersionsDir,
+  readPosixLauncherTarget,
+  resolveLauncherPath,
+} from "../cloud/pinnedRuntime.ts";
 import { projectLocationFlags, resolveCliAuthConfig } from "./config.ts";
-import { bootServiceLayer } from "./service.ts";
-import { findWindowsShim, launcherOwnsVersionsDir, resolveLauncherPath } from "./update.ts";
+import * as CliService from "./service.ts";
+import { awaitDetachedSpawn } from "../process/windowsVerbatimSpawn.ts";
+import { windowsSystem32Path } from "@kairo/shared/windowsSystem";
+import { findWindowsShim } from "./update.ts";
 
 export class CliUninstallError extends Schema.TaggedError<CliUninstallError>()(
   "CliUninstallError",
@@ -32,48 +36,120 @@ export class CliUninstallError extends Schema.TaggedError<CliUninstallError>()(
   }
 }
 
-/**
- * What `kairo uninstall` would remove for one T3 home. Computed before anything
- * is touched so the user sees the whole plan in one place.
- */
 export interface UninstallPlan {
-  /** The background service serves this home and will be stopped and removed. */
   readonly service: boolean;
-  /** The `kairo` launcher (symlink or `.cmd` shim) that points into this home's runtime tree. */
-  readonly launcher: string | undefined;
-  /** `<home>/runtime`, holding every downloaded version, when it exists. */
+  readonly otherHomeService: string | undefined;
+  readonly versionsDir: string;
+  readonly launchers: ReadonlyArray<string>;
   readonly runtimeDir: string | undefined;
-  /** `<home>/userdata`, which is never removed; shown so the user knows where it is. */
   readonly userdataDir: string;
 }
 
-/**
- * Finds the launcher this install left on PATH. Only a launcher that points
- * into this home's `runtime/versions` is claimed: a plain copy of the
- * executable, or a launcher for another home, is not ours to delete.
- */
+/** Delete only launchers targeting this home's runtime/versions. */
 export const findOwnedLauncher = Effect.fn("cli.uninstall.find_launcher")(function* (input: {
   readonly launchedAs: string | undefined;
   readonly versionsDir: string;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const platform = yield* HostProcessPlatform;
+  const platform = yield* HostProcess.Platform;
   if (input.launchedAs === undefined) return undefined;
   if (platform === "win32") {
     const shimPath = yield* findWindowsShim(input.launchedAs);
     if (shimPath === undefined) return undefined;
     const contents = yield* fs.readFileString(shimPath).pipe(Effect.option);
-    const target = Option.isSome(contents) ? /^"([^"]+)"/m.exec(contents.value)?.[1] : undefined;
-    return target !== undefined && launcherOwnsVersionsDir(path, input.versionsDir, target)
+    const target = Option.isSome(contents) ? generatedWindowsShimTarget(contents.value) : undefined;
+    return target !== undefined && isVersionExecutable(path, input.versionsDir, target)
       ? shimPath
       : undefined;
   }
-  const linkTarget = yield* fs.readLink(input.launchedAs).pipe(Effect.option);
-  if (Option.isNone(linkTarget)) return undefined;
-  const resolved = path.resolve(path.dirname(input.launchedAs), linkTarget.value);
-  return launcherOwnsVersionsDir(path, input.versionsDir, resolved) ? input.launchedAs : undefined;
+  return yield* findPosixLauncher({ launchedAs: input.launchedAs, versionsDir: input.versionsDir });
 });
+
+/** Whether `launcher` is a link, unedited `t3` script, or unedited `t3.cmd` into this home's runtime/versions. */
+const ownsLauncher = Effect.fn("cli.uninstall.owns_launcher")(function* (
+  launcher: string,
+  versionsDir: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const platform = yield* HostProcess.Platform;
+  const realVersionsDir = yield* fs
+    .realPath(versionsDir)
+    .pipe(Effect.orElseSucceed(() => versionsDir));
+  const scriptTarget = platform === "win32" ? undefined : yield* readPosixLauncherTarget(launcher);
+  // The link or script text keeps a pruned (dangling) target; the real path sees through a
+  // symlinked T3 home.
+  const targets =
+    platform === "win32"
+      ? [
+          yield* fs.readFileString(launcher).pipe(
+            Effect.map(generatedWindowsShimTarget),
+            Effect.orElseSucceed(() => undefined),
+          ),
+        ]
+      : [
+          yield* fs.readLink(launcher).pipe(
+            Effect.map((link) => path.resolve(path.dirname(launcher), link)),
+            Effect.orElseSucceed(() => undefined),
+          ),
+          yield* fs.realPath(launcher).pipe(Effect.orElseSucceed(() => undefined)),
+          scriptTarget,
+          scriptTarget !== undefined
+            ? yield* fs.realPath(scriptTarget).pipe(Effect.orElseSucceed(() => undefined))
+            : undefined,
+        ];
+  return targets.some(
+    (target) =>
+      target !== undefined &&
+      (isVersionExecutable(path, versionsDir, target) ||
+        isVersionExecutable(path, realVersionsDir, target)),
+  );
+});
+
+/**
+ * Launchers recorded in `runtime/launchers` by the install scripts and `kairo install` that still
+ * point into this home's runtime/versions. npx can run a different version than the installed
+ * one, so the launcher this process started from does not always name them.
+ */
+export const findRecordedLaunchers = Effect.fn("cli.uninstall.find_recorded_launchers")(function* (
+  versionsDir: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const recorded = yield* fs
+    .readFileString(path.join(path.dirname(versionsDir), "launchers"))
+    .pipe(Effect.orElseSucceed(() => ""));
+  const owned: Array<string> = [];
+  for (const launcher of recorded.split(/\r?\n/).filter(Boolean)) {
+    if (yield* ownsLauncher(launcher, versionsDir)) owned.push(launcher);
+  }
+  return owned;
+});
+
+// cmd.exe needs verbatim quoting and literal paths, with delayed expansion disabled. The shell
+// starts in System32 and runs ping from there, whatever directory `kairo uninstall` was run in.
+export function spawnWindowsRemoval(environment: NodeJS.ProcessEnv, dir: string) {
+  const ping = windowsSystem32Path(environment, "ping.exe");
+  return NodeChildProcess.spawn(
+    environment["ComSpec"] ?? environment["COMSPEC"] ?? windowsSystem32Path(environment, "cmd.exe"),
+    [
+      "/d",
+      "/v:off",
+      "/s",
+      "/c",
+      '""%KAIRO_UNINSTALL_PING%" -n 3 127.0.0.1 >nul & rmdir /s /q "%KAIRO_UNINSTALL_RUNTIME%""',
+    ],
+    {
+      cwd: NodePath.win32.dirname(ping),
+      env: { ...process.env, KAIRO_UNINSTALL_PING: ping, KAIRO_UNINSTALL_RUNTIME: dir },
+      windowsVerbatimArguments: true,
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    },
+  );
+}
 
 const planUninstall = Effect.fn("cli.uninstall.plan")(function* (input: {
   readonly baseDir: string;
@@ -82,15 +158,23 @@ const planUninstall = Effect.fn("cli.uninstall.plan")(function* (input: {
   const path = yield* Path.Path;
   const service = yield* BootService.BootService;
   const status = yield* service.status;
-  const servesThisHome =
-    status.installedBaseDir !== undefined &&
-    path.resolve(status.installedBaseDir) === path.resolve(input.baseDir);
+  const installedBaseDir =
+    status.supported && status.installed ? status.installedBaseDir : undefined;
+  const servesThisHome = installedBaseDir !== undefined && status.otherBaseDir === undefined;
   const versionsDir = pinnedRuntimeVersionsDir(path, input.baseDir);
   const runtimeDir = path.dirname(versionsDir);
-  const launchedAs = (yield* HostProcessIsExecutable) ? yield* resolveLauncherPath : undefined;
+  const launchedAs = (yield* HostProcess.IsExecutable) ? yield* resolveLauncherPath : undefined;
+  const launchedFrom = yield* findOwnedLauncher({ launchedAs, versionsDir });
   const plan: UninstallPlan = {
-    service: status.supported && status.installed && servesThisHome,
-    launcher: yield* findOwnedLauncher({ launchedAs, versionsDir }),
+    service: servesThisHome,
+    otherHomeService: servesThisHome ? undefined : installedBaseDir,
+    versionsDir,
+    launchers: [
+      ...new Set([
+        ...(launchedFrom === undefined ? [] : [launchedFrom]),
+        ...(yield* findRecordedLaunchers(versionsDir)),
+      ]),
+    ],
     runtimeDir: (yield* fs.exists(runtimeDir).pipe(Effect.orElseSucceed(() => false)))
       ? runtimeDir
       : undefined,
@@ -117,35 +201,43 @@ export const uninstallCommand = Command.make("uninstall", {
       const logLevel = yield* GlobalFlag.LogLevel;
       const config = yield* resolveCliAuthConfig(flags, logLevel);
       return yield* runUninstall({ baseDir: config.baseDir, assumeYes: flags.yes }).pipe(
-        Effect.provide(bootServiceLayer(config)),
+        Effect.provide(CliService.layer(config)),
       );
     }),
   ),
 );
+
+const logOtherHomeService = (plan: UninstallPlan) =>
+  plan.otherHomeService === undefined
+    ? Effect.void
+    : Console.log(
+        `The Kairo service serves ${plan.otherHomeService}, so it was not removed. Pass \`${BootService.formatBootServiceBaseDirOption(plan.otherHomeService)}\` to remove it.`,
+      );
 
 const runUninstall = Effect.fn("cli.uninstall.run")(function* (input: {
   readonly baseDir: string;
   readonly assumeYes: boolean;
 }) {
   const fs = yield* FileSystem.FileSystem;
-  const platform = yield* HostProcessPlatform;
-  const environment = yield* HostProcessEnvironment;
+  const platform = yield* HostProcess.Platform;
+  const environment = yield* HostProcess.Environment;
   const service = yield* BootService.BootService;
   const plan = yield* planUninstall({ baseDir: input.baseDir });
 
-  if (!plan.service && plan.launcher === undefined && plan.runtimeDir === undefined) {
-    yield* Console.log(`Nothing to remove: kairo is not installed for ${input.baseDir}.`);
-    if (!(yield* HostProcessIsExecutable)) {
+  if (!plan.service && plan.launchers.length === 0 && plan.runtimeDir === undefined) {
+    yield* Console.log(`Nothing to remove: t3 is not installed for ${input.baseDir}.`);
+    if (!(yield* HostProcess.IsExecutable)) {
       yield* Console.log(
         "  This kairo runs from a Node script, so it was installed by npm or built from source. Remove it the same way (`npm uninstall -g kairo`, or delete the checkout).",
       );
     }
+    yield* logOtherHomeService(plan);
     return;
   }
 
   yield* Console.log("This will remove:");
   if (plan.service) yield* Console.log("  the background service (stopping it first)");
-  if (plan.launcher !== undefined) yield* Console.log(`  the launcher at ${plan.launcher}`);
+  for (const launcher of plan.launchers) yield* Console.log(`  the launcher at ${launcher}`);
   if (plan.runtimeDir !== undefined) {
     yield* Console.log(`  every downloaded version under ${plan.runtimeDir}`);
   }
@@ -161,51 +253,47 @@ const runUninstall = Effect.fn("cli.uninstall.run")(function* (input: {
       });
     }
     const confirmed = yield* Prompt.run(
-      Prompt.Confirm({ message: "Remove kairo from this machine?", initial: false }),
-    ).pipe(Effect.catchTag("QuitError", () => Effect.succeed(false)));
+      Prompt.Confirm({ message: "Remove t3 from this machine?", initial: false }),
+    ).pipe(Effect.catchTags({ QuitError: () => Effect.succeed(false) }));
     if (!confirmed) {
       yield* Console.log("Left as is.");
       return;
     }
   }
 
-  if (plan.service) {
+  // The prompt can wait a long time; keep a service or launcher that changed hands meanwhile.
+  if (plan.service && (yield* service.status).otherBaseDir !== undefined) {
+    yield* Console.log("Left the background service: it now serves another T3 home.");
+  } else if (plan.service) {
     yield* service.uninstall;
     yield* Console.log("Removed the background service.");
   }
-  if (plan.launcher !== undefined) {
+  for (const launcher of plan.launchers) {
+    if (!(yield* ownsLauncher(launcher, plan.versionsDir))) {
+      yield* Console.log(`Left ${launcher}: it no longer runs this t3.`);
+      continue;
+    }
     yield* fs
-      .remove(plan.launcher, { force: true })
+      .remove(launcher, { force: true })
       .pipe(
         Effect.mapError(
-          () =>
-            new CliUninstallError({ reason: `Could not remove the launcher at ${plan.launcher}.` }),
+          () => new CliUninstallError({ reason: `Could not remove the launcher at ${launcher}.` }),
         ),
       );
-    yield* Console.log(`Removed ${plan.launcher}.`);
+    yield* Console.log(`Removed ${launcher}.`);
   }
   if (plan.runtimeDir !== undefined) {
-    // This process runs from inside runtimeDir. POSIX unlinks a running
-    // executable fine; Windows refuses, so the tree is removed after this
-    // process exits by a detached shell, and the user is told either way.
+    // Windows refuses to unlink this running executable; a detached shell removes it after exit.
     if (platform === "win32") {
       const runtimeDir = plan.runtimeDir;
-      const comspec = environment["ComSpec"] ?? environment["COMSPEC"] ?? "cmd.exe";
-      yield* Effect.try({
-        try: () => {
-          const child = NodeChildProcess.spawn(
-            comspec,
-            ["/d", "/c", `ping -n 3 127.0.0.1 >nul & rmdir /s /q "${runtimeDir}"`],
-            { detached: true, stdio: "ignore", windowsHide: true },
-          );
-          child.unref();
-        },
-        catch: () =>
-          new CliUninstallError({
-            reason: `Could not schedule removal of ${runtimeDir}. Delete it yourself once this window is closed.`,
-          }),
-      });
-      yield* Console.log(`${runtimeDir} will be removed once kairo exits.`);
+      const notScheduled = () =>
+        new CliUninstallError({
+          reason: `Could not schedule removal of ${runtimeDir}. Delete it yourself once this window is closed.`,
+        });
+      yield* awaitDetachedSpawn(() => spawnWindowsRemoval(environment, runtimeDir)).pipe(
+        Effect.mapError(notScheduled),
+      );
+      yield* Console.log(`${runtimeDir} will be removed once t3 exits.`);
     } else {
       yield* fs
         .remove(plan.runtimeDir, { recursive: true, force: true })
@@ -218,5 +306,6 @@ const runUninstall = Effect.fn("cli.uninstall.run")(function* (input: {
     }
   }
   yield* Console.log("");
-  yield* Console.log("kairo is uninstalled. Thanks for trying Kairo.");
+  yield* Console.log("t3 is uninstalled. Thanks for trying Kairo.");
+  yield* logOtherHomeService(plan);
 });

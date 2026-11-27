@@ -1,27 +1,10 @@
 import type { ModelOption, ProviderGroup } from "../../lib/modelOptions";
-import type { ProviderInstanceId } from "@kairo/contracts";
-
-export type ModelFavorite = {
-  readonly provider: ProviderInstanceId;
-  readonly model: string;
-};
+import type { ModelSelection, ProviderInstanceId } from "@kairo/contracts";
 
 export function modelFavoriteKey(provider: ProviderInstanceId, model: string): string {
   return `${provider}:${model}`;
 }
 
-export function toggleModelFavorite(
-  favorites: ReadonlyArray<ModelFavorite>,
-  option: ModelOption,
-): ReadonlyArray<ModelFavorite> {
-  const provider = option.selection.instanceId;
-  const model = option.selection.model;
-  return favorites.some((favorite) => favorite.provider === provider && favorite.model === model)
-    ? favorites.filter((favorite) => favorite.provider !== provider || favorite.model !== model)
-    : [...favorites, { provider, model }];
-}
-
-/** Keep catalog order within each group when favorites move to the front. */
 export function favoritesFirst(
   models: ReadonlyArray<ModelOption>,
   favoriteKeys: ReadonlySet<string>,
@@ -34,7 +17,6 @@ export function favoritesFirst(
   return [...favorites, ...others];
 }
 
-/** Match the terms a user can actually see or recognize in the model picker. */
 export function modelMatchesCatalogQuery(input: {
   readonly model: ModelOption;
   readonly providerLabel: string;
@@ -53,32 +35,64 @@ export function modelMatchesCatalogQuery(input: {
   ].some((value) => value.toLocaleLowerCase().includes(query));
 }
 
-/** Preserve staged provider options when the highlighted model is tapped again. */
+export function visibleCatalogModels(input: {
+  readonly models: ReadonlyArray<ModelOption>;
+  readonly providerLabel: string;
+  readonly query: string;
+  readonly favoriteKeys: ReadonlySet<string>;
+  readonly favoritesOnly: boolean;
+  readonly showLegacy: boolean;
+  readonly isDisplayed: (model: ModelOption) => boolean;
+}): ReadonlyArray<ModelOption> {
+  const catalogModels =
+    input.showLegacy || input.favoritesOnly || input.query.trim().length > 0
+      ? input.models
+      : input.models.filter(
+          (model) =>
+            !model.isLegacy || input.isDisplayed(model) || input.favoriteKeys.has(model.key),
+        );
+  return favoritesFirst(
+    catalogModels.filter(
+      (model) =>
+        (!input.favoritesOnly || input.favoriteKeys.has(model.key)) &&
+        modelMatchesCatalogQuery({
+          model,
+          providerLabel: input.providerLabel,
+          query: input.query,
+        }),
+    ),
+    input.favoriteKeys,
+  );
+}
+
 export function pendingModelAfterPress(input: {
   readonly current: ModelOption | null;
   readonly pressed: ModelOption;
   readonly pressedIsApplied: boolean;
+  readonly restoreSelection?: (selection: ModelSelection) => ModelSelection;
 }): ModelOption | null {
   if (input.pressedIsApplied) {
     return null;
   }
-  return input.current?.key === input.pressed.key ? input.current : input.pressed;
+  if (input.current?.key === input.pressed.key) {
+    return input.current;
+  }
+  return input.restoreSelection
+    ? { ...input.pressed, selection: input.restoreSelection(input.pressed.selection) }
+    : input.pressed;
 }
 
-/** A model can disappear while the picker is open. */
 export function canCommitPendingModel(
   pending: ModelOption,
   groups: ReadonlyArray<ProviderGroup>,
 ): boolean {
   return groups.some((group) =>
-    group.models.some((model) => model.key === pending.key && !model.isUnavailable),
+    group.models.some(
+      (model) => model.key === pending.key && !model.isUnavailable && !model.isHidden,
+    ),
   );
 }
 
-/**
- * Primary and selected providers start open; all other catalogs start closed.
- * A user's disclosure tap inverts that default until the picker is dismissed.
- */
 export function providerSectionIsCollapsed(input: {
   readonly defaultExpanded: boolean;
   readonly hasExpansionOverride: boolean;

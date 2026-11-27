@@ -4,25 +4,32 @@ import * as NodeOS from "node:os";
 import * as NodeURL from "node:url";
 import * as NodeFS from "node:fs";
 
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { it } from "@effect/vitest";
+import * as Layer from "effect/Layer";
+import { assert, it } from "@effect/vitest";
+import * as HostProcess from "@kairo/shared/HostProcess";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
-import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
-import * as TestClock from "effect/testing/TestClock";
+import * as Result from "effect/Result";
+import * as Scheduler from "effect/Scheduler";
 import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
+import { ChildProcessSpawner } from "effect/process";
 import { describe, expect } from "vite-plus/test";
 
-import * as AcpSessionRuntime from "./AcpSessionRuntime.ts";
-import type * as EffectAcpProtocol from "effect-acp/protocol";
+import * as AcpSessionRuntime from "@kairo/provider-acp/server/AcpSessionRuntime";
+import { AgentScope } from "@kairo/shared/AgentScope";
 import * as EffectAcpErrors from "effect-acp/errors";
+import type * as EffectAcpSchema from "effect-acp/compat";
+import type * as EffectAcpProtocol from "effect-acp/protocol";
 
 const __dirname = NodePath.dirname(NodeURL.fileURLToPath(import.meta.url));
 const mockAgentPath = NodePath.join(__dirname, "../../../scripts/acp-mock-agent.ts");
-const mockAgentCommand = "node";
+const mockAgentCommand = process.execPath;
 const mockAgentArgs = [mockAgentPath];
 const mockRuntimeOptions = {
   spawn: { command: mockAgentCommand, args: mockAgentArgs },
@@ -31,9 +38,150 @@ const mockRuntimeOptions = {
   authMethodId: "test",
 } satisfies AcpSessionRuntime.AcpSessionRuntimeOptions;
 
+// The spawner extends the real process environment, so the test must set it there.
+const setProcessEnv = (name: string, value: string) => {
+  const previous = process.env[name];
+  process.env[name] = value;
+  return () => {
+    if (previous === undefined) delete process.env[name];
+    else process.env[name] = previous;
+  };
+};
+
+const isPromptStarted = (event: AcpSessionRuntime.AcpSessionRequestLogEvent) =>
+  event.method === "session/prompt" && event.status === "started";
+
+const isOutgoing = (tag: string) => (event: EffectAcpProtocol.AcpProtocolLogEvent) =>
+  event.direction === "outgoing" &&
+  event.stage === "decoded" &&
+  typeof event.payload === "object" &&
+  event.payload !== null &&
+  Reflect.get(event.payload, "tag") === tag;
+
+// The methods the mock agent read, in order, keeping only the given ones.
+const readReceived = (requestLogPath: string, methods: ReadonlyArray<string>) =>
+  NodeFS.readFileSync(requestLogPath, "utf8")
+    .split("\n")
+    .filter((line) => line.length > 0)
+    .map((line) => (JSON.parse(line) as { readonly method?: string }).method)
+    .filter((method) => method !== undefined && methods.includes(method));
+
+// Prompts, then cancels while the prompt is held on its way out: in its started request record,
+// in its outgoing protocol log record, or by its fiber yielding every few operations. The cancel
+// comes on dispatch or from inside the held record. Returns the prompt's exit
+// and the order in which the agent read the prompt, the cancel and the request that ends it.
+const promptThenCancel = (input: {
+  readonly cancelBehavior: "interrupt" | "wait-for-prompt";
+  readonly holdPrompt: {
+    readonly in: "request-log" | "protocol-log" | "scheduler";
+    readonly cancelOn: "dispatch" | "log";
+  };
+}) =>
+  Effect.gen(function* () {
+    const tempDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "acp-runtime-"));
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => NodeFS.rmSync(tempDir, { recursive: true, force: true })),
+    );
+    const requestLogPath = NodePath.join(tempDir, "requests.ndjson");
+    const { holdPrompt } = input;
+    const promptHeld = yield* Deferred.make<void>();
+    const promptReleased = yield* Deferred.make<void>();
+    yield* Effect.addFinalizer(() => Deferred.succeed(promptReleased, undefined));
+    const testScope = yield* Scope.Scope;
+    const runtimeMade = yield* Deferred.make<AcpSessionRuntime.AcpSessionRuntime["Service"]>();
+    const cancelledFromLog = yield* Deferred.make<Fiber.Fiber<void, EffectAcpErrors.AcpError>>();
+    const hold = (
+      holdPrompt.cancelOn === "log"
+        ? Deferred.await(runtimeMade).pipe(
+            Effect.flatMap((made) =>
+              made.cancel.pipe(Effect.forkIn(testScope, { startImmediately: true })),
+            ),
+            Effect.flatMap((fiber) => Deferred.succeed(cancelledFromLog, fiber)),
+          )
+        : Effect.void
+    ).pipe(
+      Effect.andThen(Deferred.succeed(promptHeld, undefined)),
+      Effect.andThen(Deferred.await(promptReleased)),
+    );
+    const runtime = yield* AcpSessionRuntime.make({
+      ...mockRuntimeOptions,
+      spawn: {
+        ...mockRuntimeOptions.spawn,
+        env: {
+          KAIRO_ACP_COMPLETE_FIRST_PROMPT_ON_CANCEL: "1",
+          KAIRO_ACP_REQUEST_LOG_PATH: requestLogPath,
+        },
+      },
+      cancelBehavior: input.cancelBehavior,
+      interruptPromptOnCancel: false,
+      protocolLogging: {
+        logOutgoing: holdPrompt.in === "protocol-log",
+        logger: (event) => (isOutgoing("session/prompt")(event) ? hold : Effect.void),
+      },
+      requestLogger: (event) =>
+        holdPrompt.in === "request-log" && isPromptStarted(event) ? hold : Effect.void,
+    });
+    yield* Deferred.succeed(runtimeMade, runtime);
+    const cancelReceived = yield* Deferred.make<void>();
+    yield* runtime.getEvents().pipe(
+      Stream.runForEach((event) => {
+        if (event._tag === "EventStreamBarrier") {
+          return Deferred.succeed(event.acknowledge, undefined);
+        }
+        if (event._tag === "ThoughtDelta" && event.text === "native-cancel-received") {
+          return Deferred.succeed(cancelReceived, undefined);
+        }
+        return Effect.void;
+      }),
+      Effect.forkChild,
+    );
+    yield* runtime.start();
+    const dispatched = yield* Deferred.make<void>();
+    const prompt = yield* runtime
+      .prompt({ prompt: [{ type: "text", text: "first" }] }, { dispatched })
+      .pipe(
+        holdPrompt.in === "scheduler"
+          ? Effect.provideService(Scheduler.MaxOpsBeforeYield, 3)
+          : (effect) => effect,
+        Effect.forkChild,
+      );
+    // A round trip: whatever was queued before it reaches the agent first.
+    const roundTrip = runtime.request("_test/environment", {});
+    let cancel: Fiber.Fiber<void, EffectAcpErrors.AcpError>;
+    if (holdPrompt.in === "scheduler") {
+      yield* Deferred.await(dispatched);
+      cancel = yield* runtime.cancel.pipe(Effect.forkChild({ startImmediately: true }));
+    } else {
+      yield* Deferred.await(promptHeld);
+      if (holdPrompt.cancelOn === "dispatch") {
+        cancel = yield* Deferred.await(dispatched).pipe(
+          Effect.andThen(runtime.cancel),
+          Effect.forkChild({ startImmediately: true }),
+        );
+      } else {
+        cancel = yield* Deferred.await(cancelledFromLog);
+      }
+      yield* roundTrip;
+      yield* Deferred.succeed(promptReleased, undefined);
+    }
+    yield* Deferred.await(cancelReceived);
+    yield* runtime.request("_test/finish-cancel", {});
+    // The agent answers it only after reading every earlier line.
+    yield* roundTrip;
+    const received = readReceived(requestLogPath, [
+      "session/prompt",
+      "session/cancel",
+      "_test/finish-cancel",
+    ]);
+    const promptExit = yield* Fiber.await(prompt);
+    yield* Fiber.join(cancel);
+    return { received, promptExit };
+  }).pipe(Effect.scoped);
+
 describe("AcpSessionRuntime", () => {
-  for (const setupMethod of ["session/new", "session/resume"] as const) {
-    it.effect(`buffers root metadata while ${setupMethod} startup is still pending`, () =>
+  it.effect.each(["session/new", "session/resume"] as const)(
+    "buffers root metadata while %s startup is still pending",
+    (setupMethod) =>
       Effect.gen(function* () {
         const setupReplied = yield* Deferred.make<void>();
         const allowStartup = yield* Deferred.make<void>();
@@ -41,7 +189,14 @@ describe("AcpSessionRuntime", () => {
         const runtime = yield* AcpSessionRuntime.make({
           ...mockRuntimeOptions,
           ...(setupMethod === "session/resume"
-            ? { resumeSessionId: "mock-session-1", resumeMethod: "resume" as const }
+            ? {
+                spawn: {
+                  ...mockRuntimeOptions.spawn,
+                  env: { KAIRO_ACP_SESSION_LIFECYCLE: "1" },
+                },
+                resumeSessionId: "mock-session-1",
+                resumeMethod: "resume" as const,
+              }
             : {}),
           requestLogger: (event) =>
             event.method === setupMethod && event.status === "succeeded"
@@ -82,9 +237,8 @@ describe("AcpSessionRuntime", () => {
         expect(
           (yield* runtime.getConfigOptions).find((option) => option.category === "model"),
         ).toMatchObject({ currentValue: "gpt-5.4" });
-      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
-    );
-  }
+      }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+  );
 
   it.effect("publishes model changes returned by a config request and live notifications", () =>
     Effect.gen(function* () {
@@ -97,43 +251,7 @@ describe("AcpSessionRuntime", () => {
       expect((yield* updates)[0]?.configOptions).toEqual(selected.configOptions);
       yield* runtime.request("_test/startup-metadata", {});
       expect((yield* updates)[0]?.configOptions).toEqual(yield* runtime.getConfigOptions);
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
-  );
-
-  it.effect("awaits native resume instead of using the load replay idle fallback", () =>
-    Effect.gen(function* () {
-      const resumeStarted = yield* Deferred.make<void>();
-      const requestMethods: Array<string> = [];
-      const runtime = yield* AcpSessionRuntime.make({
-        ...mockRuntimeOptions,
-        spawn: {
-          ...mockRuntimeOptions.spawn,
-          env: { KAIRO_ACP_WAIT_FOR_RESUME_RELEASE: "1" },
-        },
-        resumeSessionId: "mock-session-1",
-        resumeMethod: "resume",
-        sessionLoadReplayIdleGap: "1 second",
-        requestLogger: (event) =>
-          Effect.sync(() => {
-            if (event.status === "started") requestMethods.push(event.method);
-          }),
-      });
-      yield* runtime.handleSessionUpdate((notification) =>
-        notification.update.sessionUpdate === "user_message_chunk"
-          ? Deferred.succeed(resumeStarted, undefined).pipe(Effect.asVoid)
-          : Effect.void,
-      );
-      const startup = yield* runtime.start().pipe(Effect.forkChild);
-      yield* Deferred.await(resumeStarted);
-      yield* TestClock.adjust("3 seconds");
-      expect(startup.pollUnsafe()).toBeUndefined();
-      yield* runtime.request("_test/release-resume", {});
-      const started = yield* Fiber.join(startup);
-
-      expect(started.sessionSetupResult._meta).toEqual({ nativeResume: true });
-      expect(requestMethods).toContain("session/resume");
-      expect(requestMethods).not.toContain("session/load");
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
 
   it.effect("waits for native cancellation and drains final updates before another prompt", () =>
@@ -218,70 +336,43 @@ describe("AcpSessionRuntime", () => {
       }
       expect(yield* Fiber.join(replacement)).toMatchObject({ stopReason: "end_turn" });
       expect(promptRequests).toBe(2);
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
-  );
-
-  it.effect("retires a process when native cancellation times out", () =>
-    Effect.gen(function* () {
-      const toolStarted = yield* Deferred.make<void>();
-      const cancelReceived = yield* Deferred.make<void>();
-      const runtime = yield* AcpSessionRuntime.make({
-        ...mockRuntimeOptions,
-        spawn: {
-          ...mockRuntimeOptions.spawn,
-          env: { KAIRO_ACP_COMPLETE_FIRST_PROMPT_ON_CANCEL: "1" },
-        },
-        cancelBehavior: "wait-for-prompt",
-        cancelTimeout: "1 second",
-      });
-      yield* runtime.getEvents().pipe(
-        Stream.runForEach((event) => {
-          if (event._tag === "EventStreamBarrier") {
-            return Deferred.succeed(event.acknowledge, undefined);
-          }
-          if (event._tag === "ToolCallUpdated") {
-            return Deferred.succeed(toolStarted, undefined);
-          }
-          if (event._tag === "ThoughtDelta") {
-            return Deferred.succeed(cancelReceived, undefined);
-          }
-          return Effect.void;
-        }),
-        Effect.forkChild,
-      );
-      yield* runtime.start();
-      const prompt = yield* runtime
-        .prompt({
-          prompt: [{ type: "text", text: "first" }],
-        })
-        .pipe(Effect.forkChild);
-      yield* Deferred.await(toolStarted);
-      const cancellation = yield* runtime.cancel.pipe(Effect.forkChild);
-      yield* Deferred.await(cancelReceived);
-      yield* TestClock.adjust("2 seconds");
-
-      const error = yield* Fiber.join(cancellation).pipe(Effect.flip);
-      expect(error).toMatchObject({
-        _tag: "AcpTransportError",
-        method: "session/cancel",
-      });
-      expect(Exit.isFailure(yield* Fiber.await(prompt))).toBe(true);
-      expect(
-        yield* runtime
-          .prompt({
-            prompt: [{ type: "text", text: "must not run" }],
-          })
-          .pipe(Effect.flip),
-      ).toBe(error);
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
 
   it.effect("reports an idle child exit and rejects later prompts", () =>
     Effect.gen(function* () {
-      const runtime = yield* AcpSessionRuntime.make(mockRuntimeOptions);
+      const stopped = yield* Deferred.make<string>();
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      const runtime = yield* AcpSessionRuntime.make(mockRuntimeOptions).pipe(
+        Effect.provideService(
+          ChildProcessSpawner.ChildProcessSpawner,
+          ChildProcessSpawner.make((command) =>
+            spawner.spawn(command).pipe(
+              Effect.map((child) =>
+                ChildProcessSpawner.makeHandle({
+                  ...child,
+                  // Model an inherited pipe held open until detached work is stopped.
+                  stdout: Stream.concat(
+                    child.stdout,
+                    Stream.fromEffect(Deferred.await(stopped)).pipe(Stream.drain),
+                  ),
+                }),
+              ),
+            ),
+          ),
+        ),
+        Effect.provideService(AgentScope, {
+          ...AgentScope.defaultValue(),
+          wrap: ({ command, args }) =>
+            Effect.succeed({ command, args, unit: "kairo-acp-test.scope" }),
+          stop: (unit) => Deferred.succeed(stopped, unit).pipe(Effect.asVoid),
+        }),
+      );
       yield* runtime.start();
+      expect(yield* Deferred.isDone(stopped)).toBe(false);
       yield* runtime.notify("_test/exit", {});
       const events = yield* runtime.getEvents().pipe(Stream.take(1), Stream.runCollect);
+      expect(yield* Deferred.await(stopped)).toBe("kairo-acp-test.scope");
       const event = events[0];
       expect(event).toMatchObject({ _tag: "ConnectionTerminated", error: { code: 19 } });
       if (event?._tag !== "ConnectionTerminated") return;
@@ -303,7 +394,7 @@ describe("AcpSessionRuntime", () => {
         ),
       ).toBe(event.error);
       expect(yield* runtime.notify("_test/exit", {}).pipe(Effect.flip)).toBe(event.error);
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
 
   it.effect("retires a native runtime when its prompt caller is interrupted", () =>
@@ -343,7 +434,7 @@ describe("AcpSessionRuntime", () => {
           })
           .pipe(Effect.flip),
       ).toBe(events[0]?.error);
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
 
   it.effect("fails a pending request when the stderr handler rejects the runtime", () =>
@@ -365,10 +456,22 @@ describe("AcpSessionRuntime", () => {
       );
       expect(events[0]?.error).toBe(failure);
       expect(yield* runtime.initialize().pipe(Effect.flip)).toBe(failure);
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
 
-  it.effect("attaches child stderr when the ACP process exits before initialize", () =>
+  it.effect.each([
+    { name: "exit code", terminate: "process.exit(1)", code: 1, signal: undefined },
+    ...(HostProcess.Platform.defaultValue() === "win32"
+      ? []
+      : [
+          {
+            name: "signal",
+            terminate: "process.kill(process.pid, 'SIGTERM')",
+            code: undefined,
+            signal: "SIGTERM",
+          },
+        ]),
+  ])("retains the $name and sanitized stderr when ACP exits before initialize", (testCase) =>
     Effect.gen(function* () {
       const runtime = yield* AcpSessionRuntime.make({
         ...mockRuntimeOptions,
@@ -376,16 +479,32 @@ describe("AcpSessionRuntime", () => {
           command: process.execPath,
           args: [
             "-e",
-            "process.stderr.write(\"Invalid project config at /tmp/project/.cursor/cli.json: schema validation failed. Unrecognized key(s): 'approvalMode', 'sandbox'\\n\"); process.exit(1);",
+            `process.stderr.write("Invalid project config: Unrecognized key in cli.json\\nAuthorization: Bearer secret-token-value\\n", () => { ${testCase.terminate}; });`,
           ],
         },
       });
       const error = yield* runtime.start().pipe(Effect.flip);
-      expect(error._tag).toBe("AcpProcessExitedError");
-      expect(error.message).toContain("cli.json");
-      expect(error.message).toContain("Unrecognized key");
-      expect(error.message).not.toContain("ACP process exited with code 1\nACP process exited");
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+      assert.instanceOf(error, EffectAcpErrors.AcpProcessExitedError);
+      expect(error.code).toBe(testCase.code);
+      expect(error.signal).toBe(testCase.signal);
+      expect(error).toMatchObject({
+        pid: expect.any(Number),
+        stderr:
+          "Invalid project config: Unrecognized key in cli.json\nAuthorization: Bearer [redacted]",
+      });
+      expect(error.message).toBe(
+        `${testCase.signal ? "ACP process exited after signal SIGTERM" : "ACP process exited with code 1"}\nInvalid project config: Unrecognized key in cli.json\nAuthorization: Bearer [redacted]`,
+      );
+      if (testCase.signal) {
+        expect(error.cause).toMatchObject({
+          reason: {
+            module: "ChildProcess",
+            method: "exitCode",
+            cause: new Error("Process interrupted due to receipt of signal: 'SIGTERM'"),
+          },
+        });
+      }
+    }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
 
   it.effect("drains large stderr output and keeps auth-sized logging chunks", () =>
@@ -405,13 +524,13 @@ describe("AcpSessionRuntime", () => {
                 }
               : {}),
           });
-          expect(yield* runtime.initialize()).toMatchObject({ protocolVersion: 1 });
+          expect(yield* runtime.initialize()).toMatchObject({ protocolVersion: 2 });
         }).pipe(Effect.scoped);
       }
       expect(lengths.length).toBeGreaterThan(0);
       expect(Math.max(...lengths)).toBeGreaterThanOrEqual(16_384);
       expect(Math.max(...lengths)).toBeLessThanOrEqual(32_768);
-    }).pipe(Effect.provide(NodeServices.layer)),
+    }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
 
   it.effect("releases a queued event drain when its runtime scope closes", () =>
@@ -441,97 +560,118 @@ describe("AcpSessionRuntime", () => {
         _tag: "AcpTransportError",
         detail: "The ACP session runtime is closed.",
       });
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
 
-  it.effect("bounds native cancellation when its event consumer is absent", () =>
-    Effect.gen(function* () {
-      const toolStarted = yield* Deferred.make<void>();
-      const cancelReceived = yield* Deferred.make<void>();
-      const runtime = yield* AcpSessionRuntime.make({
-        ...mockRuntimeOptions,
-        spawn: {
-          ...mockRuntimeOptions.spawn,
-          env: { KAIRO_ACP_COMPLETE_FIRST_PROMPT_ON_CANCEL: "1" },
-        },
-        cancelBehavior: "wait-for-prompt",
-        cancelTimeout: "1 second",
-      });
-      yield* runtime.handleSessionUpdate((notification) => {
-        if (notification.update.sessionUpdate === "tool_call") {
-          return Deferred.succeed(toolStarted, undefined).pipe(Effect.asVoid);
-        }
-        if (notification.update.sessionUpdate === "agent_thought_chunk") {
-          return Deferred.succeed(cancelReceived, undefined).pipe(Effect.asVoid);
-        }
-        return Effect.void;
-      });
-      yield* runtime.start();
-      const prompt = yield* runtime
-        .prompt({
-          prompt: [{ type: "text", text: "first" }],
-        })
-        .pipe(Effect.forkChild);
-      yield* Deferred.await(toolStarted);
-      const cancellation = yield* runtime.cancel.pipe(Effect.forkChild);
-      yield* Deferred.await(cancelReceived);
-      yield* runtime.request("_test/finish-cancel", {});
-      expect(yield* Fiber.join(prompt)).toMatchObject({ stopReason: "cancelled" });
-      yield* TestClock.adjust("2 seconds");
-      expect(yield* Fiber.join(cancellation).pipe(Effect.flip)).toMatchObject({
-        _tag: "AcpTransportError",
-        method: "session/cancel",
-      });
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  // A provided env is the complete child environment, as in OpenCodeRuntime; the AppImage
+  // scrub deletes mount-only variables, which inheritance would put back.
+  it.effect.each([
+    { label: "with extendEnv false", extendEnv: false as const },
+    { label: "when extendEnv is unset", extendEnv: undefined },
+  ])(
+    "does not restore ambient variables to a sanitized child environment $label",
+    ({ extendEnv }) =>
+      Effect.gen(function* () {
+        yield* Effect.acquireRelease(
+          Effect.sync(() => setProcessEnv("KAIRO_ACP_RUNTIME_AMBIENT", "sentinel")),
+          (restore) => Effect.sync(restore),
+        );
+        const runtime = yield* AcpSessionRuntime.make({
+          ...mockRuntimeOptions,
+          spawn: {
+            command: process.execPath,
+            args: mockAgentArgs,
+            ...(extendEnv === undefined ? {} : { extendEnv }),
+            env: { KAIRO_ACP_RUNTIME_EXPLICIT: "kept" },
+          },
+        });
+        yield* runtime.initialize();
+        expect(yield* runtime.request("_test/environment", {})).toEqual({
+          inherited: false,
+          explicit: true,
+        });
+      }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
 
-  it.effect("does not restore ambient variables to a sanitized child environment", () =>
-    Effect.gen(function* () {
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          const previous = process.env.KAIRO_ACP_RUNTIME_AMBIENT;
-          process.env.KAIRO_ACP_RUNTIME_AMBIENT = "sentinel";
-          return previous;
-        }),
-        (previous) =>
-          Effect.sync(() => {
-            if (previous === undefined) delete process.env.KAIRO_ACP_RUNTIME_AMBIENT;
-            else process.env.KAIRO_ACP_RUNTIME_AMBIENT = previous;
-          }),
-      );
-      const runtime = yield* AcpSessionRuntime.make({
-        ...mockRuntimeOptions,
-        spawn: {
-          command: process.execPath,
-          args: mockAgentArgs,
-          extendEnv: false,
-          env: { KAIRO_ACP_RUNTIME_EXPLICIT: "kept" },
-        },
-      });
-      yield* runtime.initialize();
-      expect(yield* runtime.request("_test/environment", {})).toEqual({
-        inherited: false,
-        explicit: true,
-      });
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
-  );
+  it("selects explicit or agent-managed authentication without choosing terminal auth", () => {
+    const methods = [
+      { id: "browser", name: "Browser", type: "terminal" as const },
+      { id: "api-key", name: "API key", type: "agent" as const },
+    ];
 
-  it.effect("merges custom initialize client capabilities into the ACP handshake", () => {
+    expect(AcpSessionRuntime.selectAcpAgentAuthMethod(methods)?.id).toBe("api-key");
+    expect(AcpSessionRuntime.selectAcpAgentAuthMethod(methods, "browser")?.id).toBe("browser");
+    expect(AcpSessionRuntime.selectAcpAgentAuthMethod(methods, "missing")).toBeUndefined();
+  });
+
+  it.effect("prefers MCP-over-ACP only when the agent advertises that transport", () => {
     const requestEvents: Array<AcpSessionRuntime.AcpSessionRequestLogEvent> = [];
     return Effect.gen(function* () {
       const runtime = yield* AcpSessionRuntime.AcpSessionRuntime;
       yield* runtime.start();
 
-      const initializeStarted = requestEvents.find(
-        (event) => event.method === "initialize" && event.status === "started",
+      const created = requestEvents.find(
+        (event) => event.method === "session/new" && event.status === "started",
       );
-      expect(initializeStarted?.payload).toMatchObject({
-        protocolVersion: 1,
-        clientCapabilities: {
-          fs: { readTextFile: false, writeTextFile: false },
-          terminal: false,
-          _meta: { parameterizedModelPicker: true },
-        },
+      expect(created?.payload).toMatchObject({
+        mcpServers: [{ type: "acp", name: "kairo-code", serverId: "kairo-code" }],
+      });
+      // This agent does not advertise additional directories, so the thread's other folders stay out.
+      expect(created?.payload).not.toHaveProperty("additionalDirectories");
+    }).pipe(
+      Effect.provide(
+        AcpSessionRuntime.layer({
+          spawn: {
+            command: mockAgentCommand,
+            args: mockAgentArgs,
+            env: { KAIRO_ACP_MCP_ACP: "1" },
+          },
+          cwd: process.cwd(),
+          clientInfo: { name: "kairo-test", version: "0.0.0" },
+          authMethodId: "test",
+          mcpServers: [{ type: "stdio", name: "kairo-code", command: "/usr/bin/node", args: [] }],
+          acpMcpServers: [{ type: "acp", name: "kairo-code", serverId: "kairo-code" }],
+          extraRoots: ["/tmp/kairo-tracked"],
+          requestLogger: (event) =>
+            Effect.sync(() => {
+              requestEvents.push(event);
+            }),
+        }),
+      ),
+      Effect.scoped,
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+    );
+  });
+
+  it.effect("supports v2 session deletion and secret-safe provider management", () => {
+    const requestEvents: Array<AcpSessionRuntime.AcpSessionRequestLogEvent> = [];
+    return Effect.gen(function* () {
+      const runtime = yield* AcpSessionRuntime.AcpSessionRuntime;
+      yield* runtime.start();
+
+      yield* runtime.deleteSession("native-session-1");
+      expect((yield* runtime.listProviders).providers[0]).toMatchObject({
+        providerId: "mock-provider",
+        current: null,
+      });
+      yield* runtime.setProvider({
+        providerId: "mock-provider",
+        apiType: "openai",
+        baseUrl: "https://api.example.test/v1",
+        headers: { Authorization: "Bearer top-secret" },
+      });
+      expect((yield* runtime.listProviders).providers[0]?.current).toEqual({
+        apiType: "openai",
+        baseUrl: "https://api.example.test/v1",
+      });
+      yield* runtime.disableProvider("mock-provider");
+      expect((yield* runtime.listProviders).providers[0]?.current).toBeNull();
+
+      const setRequest = requestEvents.find(
+        (event) => event.method === "providers/set" && event.status === "started",
+      );
+      expect(setRequest?.payload).toMatchObject({
+        headers: { Authorization: "[redacted]" },
       });
     }).pipe(
       Effect.provide(
@@ -539,13 +679,9 @@ describe("AcpSessionRuntime", () => {
           spawn: {
             command: mockAgentCommand,
             args: mockAgentArgs,
+            env: { KAIRO_ACP_V2_MANAGEMENT: "1" },
           },
           cwd: process.cwd(),
-          clientCapabilities: {
-            _meta: {
-              parameterizedModelPicker: true,
-            },
-          },
           clientInfo: { name: "kairo-test", version: "0.0.0" },
           authMethodId: "test",
           requestLogger: (event) =>
@@ -555,7 +691,93 @@ describe("AcpSessionRuntime", () => {
         }),
       ),
       Effect.scoped,
-      Effect.provide(NodeServices.layer),
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+    );
+  });
+
+  it.effect("authenticates explicitly typed v2 agent methods and retries session creation", () => {
+    const requestEvents: Array<AcpSessionRuntime.AcpSessionRequestLogEvent> = [];
+    return Effect.gen(function* () {
+      const runtime = yield* AcpSessionRuntime.AcpSessionRuntime;
+      const started = yield* runtime.start();
+      expect(started.sessionId).toBe("mock-session-1");
+      expect(
+        requestEvents.filter((event) => event.status === "started").map((event) => event.method),
+      ).toEqual(["initialize", "session/new", "authenticate", "session/new"]);
+      expect(
+        requestEvents.filter(
+          (event) => event.method === "session/new" && event.status === "failed",
+        ),
+      ).toHaveLength(1);
+      expect(
+        requestEvents.filter(
+          (event) => event.method === "session/new" && event.status === "succeeded",
+        ),
+      ).toHaveLength(1);
+    }).pipe(
+      Effect.provide(
+        AcpSessionRuntime.layer({
+          authMethodId: "test",
+          spawn: {
+            command: mockAgentCommand,
+            args: mockAgentArgs,
+            env: {
+              KAIRO_ACP_AUTH_METHOD_ID: "test",
+              KAIRO_ACP_REQUIRE_AUTH: "1",
+            },
+          },
+          cwd: process.cwd(),
+          clientInfo: { name: "kairo-test", version: "0.0.0" },
+          requestLogger: (event) =>
+            Effect.sync(() => {
+              requestEvents.push(event);
+            }),
+        }),
+      ),
+      Effect.scoped,
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+    );
+  });
+
+  it.effect("can surface auth-required without authenticating during discovery", () => {
+    const requestEvents: Array<AcpSessionRuntime.AcpSessionRequestLogEvent> = [];
+    let advertisedAuthMethodName: string | undefined;
+    return Effect.gen(function* () {
+      const runtime = yield* AcpSessionRuntime.AcpSessionRuntime;
+      const result = yield* Effect.result(runtime.start());
+
+      expect(Result.isFailure(result)).toBe(true);
+      expect(advertisedAuthMethodName).toBe("Mock agent authentication");
+      expect(
+        requestEvents.filter((event) => event.status === "started").map((event) => event.method),
+      ).toEqual(["initialize", "session/new"]);
+    }).pipe(
+      Effect.provide(
+        AcpSessionRuntime.layer({
+          authenticateOnAuthRequired: false,
+          authMethodId: "test",
+          spawn: {
+            command: mockAgentCommand,
+            args: mockAgentArgs,
+            env: {
+              KAIRO_ACP_AUTH_METHOD_ID: "test",
+              KAIRO_ACP_REQUIRE_AUTH: "1",
+            },
+          },
+          cwd: process.cwd(),
+          clientInfo: { name: "kairo-test", version: "0.0.0" },
+          onInitialized: (initializeResult) =>
+            Effect.sync(() => {
+              advertisedAuthMethodName = initializeResult.authMethods?.[0]?.name;
+            }),
+          requestLogger: (event) =>
+            Effect.sync(() => {
+              requestEvents.push(event);
+            }),
+        }),
+      ),
+      Effect.scoped,
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
     );
   });
 
@@ -564,7 +786,7 @@ describe("AcpSessionRuntime", () => {
       const runtime = yield* AcpSessionRuntime.AcpSessionRuntime;
       const started = yield* runtime.start();
 
-      expect(started.initializeResult).toMatchObject({ protocolVersion: 1 });
+      expect(started.initializeResult).toMatchObject({ protocolVersion: 2 });
       expect(started.sessionId).toBe("mock-session-1");
 
       const promptResult = yield* runtime.prompt({
@@ -583,7 +805,13 @@ describe("AcpSessionRuntime", () => {
       const planUpdate = notes.find((note) => note._tag === "PlanUpdated");
       expect(planUpdate?._tag).toBe("PlanUpdated");
       if (planUpdate?._tag === "PlanUpdated") {
-        expect(planUpdate.payload.plan).toHaveLength(2);
+        expect(planUpdate.payload).toMatchObject({
+          nativePlanId: "mock-plan",
+          kind: "items",
+        });
+        if (planUpdate.payload.kind === "items") {
+          expect(planUpdate.payload.plan).toHaveLength(2);
+        }
       }
       const assistantStart = notes[1];
       const assistantDelta = notes[2];
@@ -606,7 +834,7 @@ describe("AcpSessionRuntime", () => {
         }),
       ),
       Effect.scoped,
-      Effect.provide(NodeServices.layer),
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
     ),
   );
 
@@ -644,7 +872,7 @@ describe("AcpSessionRuntime", () => {
       const afterRestart = yield* collectFirstAssistantItemId;
 
       expect(afterRestart).not.toBe(beforeRestart);
-    }).pipe(Effect.provide(NodeServices.layer));
+    }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)));
   });
 
   it.effect("drops session updates emitted for a child ACP session", () =>
@@ -687,79 +915,7 @@ describe("AcpSessionRuntime", () => {
         }),
       ),
       Effect.scoped,
-      Effect.provide(NodeServices.layer),
-    ),
-  );
-
-  it.effect("supports successive standard ACP prompts", () =>
-    Effect.gen(function* () {
-      const runtime = yield* AcpSessionRuntime.AcpSessionRuntime;
-      yield* runtime.start();
-
-      const firstPromptResult = yield* runtime.prompt({
-        prompt: [{ type: "text", text: "first" }],
-      });
-      const secondPromptResult = yield* runtime.prompt({
-        prompt: [{ type: "text", text: "second" }],
-      });
-
-      expect(firstPromptResult).toMatchObject({ stopReason: "end_turn" });
-      expect(secondPromptResult).toMatchObject({ stopReason: "end_turn" });
-    }).pipe(
-      Effect.provide(
-        AcpSessionRuntime.layer({
-          spawn: {
-            command: mockAgentCommand,
-            args: mockAgentArgs,
-          },
-          cwd: process.cwd(),
-          clientInfo: { name: "kairo-test", version: "0.0.0" },
-          authMethodId: "test",
-        }),
-      ),
-      Effect.scoped,
-      Effect.provide(NodeServices.layer),
-    ),
-  );
-
-  it.effect("releases a fully silent prompt when session/cancel is requested", () =>
-    Effect.gen(function* () {
-      const runtime = yield* AcpSessionRuntime.AcpSessionRuntime;
-      yield* runtime.start();
-
-      const promptFiber = yield* runtime
-        .prompt({
-          prompt: [{ type: "text", text: "hang forever" }],
-        })
-        .pipe(Effect.forkChild({ startImmediately: true }));
-
-      yield* TestClock.adjust("500 millis");
-      yield* runtime.cancel;
-
-      const firstPromptResult = yield* Fiber.join(promptFiber);
-      expect(firstPromptResult).toMatchObject({ stopReason: "cancelled" });
-
-      const secondPromptResult = yield* runtime.prompt({
-        prompt: [{ type: "text", text: "second" }],
-      });
-      expect(secondPromptResult).toMatchObject({ stopReason: "end_turn" });
-    }).pipe(
-      Effect.provide(
-        AcpSessionRuntime.layer({
-          spawn: {
-            command: mockAgentCommand,
-            args: mockAgentArgs,
-            env: {
-              KAIRO_ACP_HANG_FIRST_PROMPT_FOREVER: "1",
-            },
-          },
-          cwd: process.cwd(),
-          clientInfo: { name: "kairo-test", version: "0.0.0" },
-          authMethodId: "test",
-        }),
-      ),
-      Effect.scoped,
-      Effect.provide(NodeServices.layer),
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
     ),
   );
 
@@ -820,7 +976,7 @@ describe("AcpSessionRuntime", () => {
         }),
       ),
       Effect.scoped,
-      Effect.provide(NodeServices.layer),
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
     ),
   );
 
@@ -831,8 +987,6 @@ describe("AcpSessionRuntime", () => {
       yield* runtime.prompt({ prompt: [{ type: "text", text: "hi" }] });
 
       const notes = Array.from(yield* Stream.runCollect(Stream.take(runtime.getEvents(), 9)));
-      // The coalesced progress tick emits nothing, and neither the completion
-      // nor a repeated one splits the markdown table across items.
       expect(notes.map((note) => note._tag)).toEqual([
         "ToolCallUpdated",
         "AssistantItemStarted",
@@ -868,7 +1022,7 @@ describe("AcpSessionRuntime", () => {
         }),
       ),
       Effect.scoped,
-      Effect.provide(NodeServices.layer),
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
     ),
   );
 
@@ -915,41 +1069,61 @@ describe("AcpSessionRuntime", () => {
         }),
       ),
       Effect.scoped,
-      Effect.provide(NodeServices.layer),
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
     ),
   );
 
-  it.effect("logs ACP requests from the shared runtime", () => {
+  it.effect("supports negotiated ACP session list, fork, resume, and close methods", () => {
     const requestEvents: Array<AcpSessionRuntime.AcpSessionRequestLogEvent> = [];
     return Effect.gen(function* () {
       const runtime = yield* AcpSessionRuntime.AcpSessionRuntime;
-      yield* runtime.start();
-
-      yield* runtime.setModel("composer-2");
-      yield* runtime.prompt({
-        prompt: [{ type: "text", text: "hi" }],
+      const started = yield* runtime.start();
+      expect(started.initializeResult.agentCapabilities?.sessionCapabilities).toMatchObject({
+        list: {},
+        fork: {},
+        resume: {},
+        close: {},
       });
+      expect(started.initializeResult.agentCapabilities?.auth).toMatchObject({ logout: {} });
+
+      const listed = yield* runtime.listSessions();
+      expect(listed.sessions.map((session) => session.sessionId)).toEqual(["mock-session-1"]);
+
+      const forked = yield* runtime.forkSession(started.sessionId);
+      expect(forked.sessionId).toBe("mock-session-1-fork");
+      yield* runtime.prompt({ prompt: [{ type: "text", text: "on fork" }] });
+
+      const resumed = yield* runtime.resumeSession(started.sessionId);
+      expect(resumed.sessionId).toBe("mock-session-1");
+      yield* runtime.closeSession();
+      yield* runtime.logout;
 
       expect(
-        requestEvents.some(
-          (event) => event.method === "session/set_config_option" && event.status === "started",
-        ),
-      ).toBe(true);
-      expect(
-        requestEvents.some(
-          (event) => event.method === "session/set_config_option" && event.status === "succeeded",
-        ),
-      ).toBe(true);
-      expect(
-        requestEvents.some(
+        requestEvents.find(
           (event) => event.method === "session/prompt" && event.status === "started",
-        ),
-      ).toBe(true);
+        )?.payload,
+      ).toMatchObject({ sessionId: "mock-session-1-fork" });
       expect(
-        requestEvents.some(
-          (event) => event.method === "session/prompt" && event.status === "succeeded",
-        ),
-      ).toBe(true);
+        requestEvents.filter((event) => event.status === "started").map((event) => event.method),
+      ).toEqual(
+        expect.arrayContaining([
+          "session/list",
+          "session/fork",
+          "session/resume",
+          "session/close",
+          "logout",
+        ]),
+      );
+      // Omitted roots clear an agent's stored ones, so every activation resends them.
+      for (const method of ["session/new", "session/fork", "session/resume"]) {
+        expect(
+          requestEvents.find((event) => event.method === method && event.status === "started")
+            ?.payload,
+        ).toMatchObject({
+          additionalDirectories: ["/tmp/kairo-attachments", "/tmp/kairo-tracked"],
+          _meta: { negotiated: "0.0.0" },
+        });
+      }
     }).pipe(
       Effect.provide(
         AcpSessionRuntime.layer({
@@ -957,7 +1131,15 @@ describe("AcpSessionRuntime", () => {
           spawn: {
             command: mockAgentCommand,
             args: mockAgentArgs,
+            env: {
+              KAIRO_ACP_SESSION_LIFECYCLE: "1",
+            },
           },
+          additionalDirectories: ["/tmp/kairo-attachments"],
+          extraRoots: ["/tmp/kairo-tracked"],
+          sessionMeta: (initializeResult) => ({
+            negotiated: initializeResult.agentInfo?.version ?? "none",
+          }),
           cwd: process.cwd(),
           clientInfo: { name: "kairo-test", version: "0.0.0" },
           requestLogger: (event) =>
@@ -967,92 +1149,60 @@ describe("AcpSessionRuntime", () => {
         }),
       ),
       Effect.scoped,
-      Effect.provide(NodeServices.layer),
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
     );
   });
 
-  it.effect("skips no-op session config writes when the requested value is already active", () => {
-    const requestEvents: Array<AcpSessionRuntime.AcpSessionRequestLogEvent> = [];
-    return Effect.gen(function* () {
+  it.effect("rejects unauthenticated ACP session lifecycle requests", () =>
+    Effect.gen(function* () {
       const runtime = yield* AcpSessionRuntime.AcpSessionRuntime;
       yield* runtime.start();
 
-      yield* runtime.setConfigOption("model", "default");
-      yield* runtime.setMode("ask");
+      const listError = yield* runtime.listSessions().pipe(Effect.flip);
+      expect(listError._tag).toBe("AcpRequestError");
+      if (listError._tag === "AcpRequestError") {
+        expect(listError.code).toBe(-32000);
+      }
 
-      expect(
-        requestEvents.some(
-          (event) => event.method === "session/set_config_option" && event.status === "started",
-        ),
-      ).toBe(false);
+      const forkError = yield* runtime.forkSession("mock-session-1").pipe(Effect.flip);
+      expect(forkError._tag).toBe("AcpRequestError");
+      if (forkError._tag === "AcpRequestError") {
+        expect(forkError.code).toBe(-32000);
+      }
+
+      const resumeError = yield* runtime.resumeSession("mock-session-1").pipe(Effect.flip);
+      expect(resumeError._tag).toBe("AcpRequestError");
+      if (resumeError._tag === "AcpRequestError") {
+        expect(resumeError.code).toBe(-32000);
+      }
+
+      const closeError = yield* runtime.closeSession().pipe(Effect.flip);
+      expect(closeError._tag).toBe("AcpRequestError");
+      if (closeError._tag === "AcpRequestError") {
+        expect(closeError.code).toBe(-32000);
+      }
     }).pipe(
       Effect.provide(
         AcpSessionRuntime.layer({
-          authMethodId: "test",
           spawn: {
             command: mockAgentCommand,
             args: mockAgentArgs,
+            env: {
+              KAIRO_ACP_REQUIRE_AUTH: "1",
+              KAIRO_ACP_SESSION_LIFECYCLE: "1",
+            },
           },
           cwd: process.cwd(),
+          resumeSessionId: "mock-session-1",
           clientInfo: { name: "kairo-test", version: "0.0.0" },
-          requestLogger: (event) =>
-            Effect.sync(() => {
-              requestEvents.push(event);
-            }),
         }),
       ),
       Effect.scoped,
-      Effect.provide(NodeServices.layer),
-    );
-  });
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+    ),
+  );
 
-  it.effect("emits low-level ACP protocol logs for raw and decoded messages", () => {
-    const protocolEvents: Array<EffectAcpProtocol.AcpProtocolLogEvent> = [];
-    return Effect.gen(function* () {
-      const runtime = yield* AcpSessionRuntime.AcpSessionRuntime;
-      yield* runtime.start();
-
-      yield* runtime.prompt({
-        prompt: [{ type: "text", text: "hi" }],
-      });
-
-      expect(
-        protocolEvents.some((event) => event.direction === "outgoing" && event.stage === "raw"),
-      ).toBe(true);
-      expect(
-        protocolEvents.some((event) => event.direction === "outgoing" && event.stage === "decoded"),
-      ).toBe(true);
-      expect(
-        protocolEvents.some((event) => event.direction === "incoming" && event.stage === "raw"),
-      ).toBe(true);
-      expect(
-        protocolEvents.some((event) => event.direction === "incoming" && event.stage === "decoded"),
-      ).toBe(true);
-    }).pipe(
-      Effect.provide(
-        AcpSessionRuntime.layer({
-          authMethodId: "test",
-          spawn: {
-            command: mockAgentCommand,
-            args: mockAgentArgs,
-          },
-          cwd: process.cwd(),
-          clientInfo: { name: "kairo-test", version: "0.0.0" },
-          protocolLogging: {
-            logIncoming: true,
-            logOutgoing: true,
-            logger: (event) =>
-              Effect.sync(() => {
-                protocolEvents.push(event);
-              }),
-          },
-        }),
-      ),
-      Effect.scoped,
-      Effect.provide(NodeServices.layer),
-    );
-  });
-
+  // regression: #3156 harden ACP resume with replay-idle load readiness
   it.effect("fails session startup when session/load returns an error", () =>
     Effect.gen(function* () {
       const runtime = yield* AcpSessionRuntime.AcpSessionRuntime;
@@ -1076,7 +1226,195 @@ describe("AcpSessionRuntime", () => {
         }),
       ),
       Effect.scoped,
-      Effect.provide(NodeServices.layer),
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+    ),
+  );
+
+  // Live clock: the replay-idle gap must elapse in real time against the mock agent process.
+  it.live("adopts config options from a session/load response that arrives after replay idle", () =>
+    Effect.gen(function* () {
+      const runtime = yield* AcpSessionRuntime.make({
+        ...mockRuntimeOptions,
+        spawn: {
+          ...mockRuntimeOptions.spawn,
+          env: {
+            KAIRO_ACP_DELAY_LOAD_SESSION_AFTER_REPLAY: "1",
+            KAIRO_ACP_LOAD_SESSION_DELAY_MS: "500",
+          },
+        },
+        resumeSessionId: "mock-session-1",
+        sessionLoadReplayIdleGap: "100 millis",
+        sessionLoadReplayIdleReadiness: true,
+      });
+      const started = yield* runtime.start();
+      expect(started.sessionSetupResult._meta).toMatchObject({
+        kairoSessionLoadReady: "replay_idle",
+      });
+
+      yield* runtime.getEvents().pipe(
+        Stream.filter((event) => event._tag === "ConfigOptionsUpdated"),
+        Stream.take(1),
+        Stream.runDrain,
+        Effect.timeoutOption("5 seconds"),
+      );
+
+      expect((yield* runtime.getConfigOptions).map((option) => option.id)).toEqual([
+        "mode",
+        "model",
+      ]);
+    }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+  );
+
+  it.live("drops a late session/load response when a selection was sent before it", () =>
+    Effect.gen(function* () {
+      const lateLoadLogged = yield* Deferred.make<void>();
+      const runtime = yield* AcpSessionRuntime.make({
+        ...mockRuntimeOptions,
+        spawn: {
+          ...mockRuntimeOptions.spawn,
+          env: {
+            KAIRO_ACP_DELAY_LOAD_SESSION_AFTER_REPLAY: "1",
+            KAIRO_ACP_LOAD_SESSION_DELAY_MS: "500",
+            KAIRO_ACP_HOLD_SET_CONFIG_OPTION_UNTIL_LOAD_REPLY: "1",
+          },
+        },
+        resumeSessionId: "mock-session-1",
+        sessionLoadReplayIdleGap: "100 millis",
+        sessionLoadReplayIdleReadiness: true,
+        requestLogger: (event) =>
+          event.method === "session/load" &&
+          event.status === "succeeded" &&
+          (event.result as { readonly configOptions?: unknown } | undefined)?.configOptions !==
+            undefined
+            ? Deferred.succeed(lateLoadLogged, undefined).pipe(Effect.asVoid)
+            : Effect.void,
+      });
+      const started = yield* runtime.start();
+      // The agent answers the load before this request, so no config change
+      // is visible when the late response arrives.
+      yield* runtime.setConfigOption("model", "gpt-5.4");
+      yield* Deferred.await(lateLoadLogged).pipe(Effect.timeout("5 seconds"));
+
+      expect((yield* runtime.start()).sessionSetupResult).toBe(started.sessionSetupResult);
+      const model = (yield* runtime.getConfigOptions).find((option) => option.id === "model");
+      expect(model?.currentValue).toBe("gpt-5.4");
+    }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+  );
+
+  it.live("drops a late session/load response when the agent changed mode before it", () =>
+    Effect.gen(function* () {
+      const lateLoadLogged = yield* Deferred.make<void>();
+      const runtime = yield* AcpSessionRuntime.make({
+        ...mockRuntimeOptions,
+        spawn: {
+          ...mockRuntimeOptions.spawn,
+          env: {
+            KAIRO_ACP_DELAY_LOAD_SESSION_AFTER_REPLAY: "1",
+            KAIRO_ACP_LOAD_SESSION_DELAY_MS: "500",
+            KAIRO_ACP_NOTIFY_MODE_BEFORE_LOAD_REPLY: "code",
+          },
+        },
+        resumeSessionId: "mock-session-1",
+        sessionLoadReplayIdleGap: "100 millis",
+        sessionLoadReplayIdleReadiness: true,
+        // The mock speaks ACP v2, which has no current_mode_update; decode it as a v1 agent's.
+        transformSessionUpdate: (notification) =>
+          notification.update.sessionUpdate === "_t3_unknown" &&
+          notification.update.originalSessionUpdate === "current_mode_update"
+            ? {
+                ...notification,
+                update: notification.update.raw as EffectAcpSchema.SessionNotification["update"],
+              }
+            : notification,
+        requestLogger: (event) =>
+          event.method === "session/load" &&
+          event.status === "succeeded" &&
+          (event.result as { readonly configOptions?: unknown } | undefined)?.configOptions !==
+            undefined
+            ? Deferred.succeed(lateLoadLogged, undefined).pipe(Effect.asVoid)
+            : Effect.void,
+      });
+      const started = yield* runtime.start();
+      // No mode metadata yet, so the notification leaves the mode state as is.
+      expect(yield* runtime.getModeState).toBeUndefined();
+      yield* Deferred.await(lateLoadLogged).pipe(Effect.timeout("5 seconds"));
+
+      expect((yield* runtime.start()).sessionSetupResult).toBe(started.sessionSetupResult);
+      expect(yield* runtime.getModeState).toBeUndefined();
+    }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+  );
+
+  it.live("drops a late session/load response that startup metadata superseded", () =>
+    Effect.gen(function* () {
+      const provisionalLogged = yield* Deferred.make<void>();
+      const allowStartup = yield* Deferred.make<void>();
+      const lateLoadLogged = yield* Deferred.make<void>();
+      const runtime = yield* AcpSessionRuntime.make({
+        ...mockRuntimeOptions,
+        spawn: {
+          ...mockRuntimeOptions.spawn,
+          env: {
+            KAIRO_ACP_DELAY_LOAD_SESSION_AFTER_REPLAY: "1",
+            KAIRO_ACP_LOAD_SESSION_DELAY_MS: "500",
+          },
+        },
+        resumeSessionId: "mock-session-1",
+        sessionLoadReplayIdleGap: "100 millis",
+        sessionLoadReplayIdleReadiness: true,
+        requestLogger: (event) => {
+          if (event.method !== "session/load" || event.status !== "succeeded") {
+            return Effect.void;
+          }
+          return (event.result as { readonly configOptions?: unknown } | undefined)
+            ?.configOptions === undefined
+            ? Deferred.succeed(provisionalLogged, undefined).pipe(
+                Effect.andThen(Deferred.await(allowStartup)),
+              )
+            : Deferred.succeed(lateLoadLogged, undefined).pipe(Effect.asVoid);
+        },
+      });
+      const startup = yield* runtime.start().pipe(Effect.forkChild);
+      yield* Deferred.await(provisionalLogged);
+      yield* runtime.request("_test/startup-metadata", {});
+      yield* Deferred.succeed(allowStartup, undefined);
+      yield* Fiber.join(startup);
+      yield* Deferred.await(lateLoadLogged).pipe(Effect.timeout("5 seconds"));
+
+      expect(yield* runtime.getModeState).toMatchObject({ currentModeId: "code" });
+      expect(
+        (yield* runtime.getConfigOptions).find((option) => option.category === "model"),
+      ).toMatchObject({ currentValue: "gpt-5.4" });
+    }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+  );
+
+  it.effect("keeps active configuration after a candidate session load fails", () =>
+    Effect.gen(function* () {
+      const runtime = yield* AcpSessionRuntime.AcpSessionRuntime;
+      yield* runtime.start();
+      const before = yield* runtime.getConfigOptions;
+
+      const error = yield* runtime.loadSession("candidate-session").pipe(Effect.flip);
+
+      expect(error._tag).toBe("AcpRequestError");
+      expect(yield* runtime.getConfigOptions).toEqual(before);
+      expect(before.some((option) => option.id === "candidate-only")).toBe(false);
+    }).pipe(
+      Effect.provide(
+        AcpSessionRuntime.layer({
+          authMethodId: "test",
+          spawn: {
+            command: mockAgentCommand,
+            args: mockAgentArgs,
+            env: {
+              KAIRO_ACP_FAIL_LOAD_SESSION_AFTER_CONFIG_REPLAY: "1",
+            },
+          },
+          cwd: process.cwd(),
+          clientInfo: { name: "kairo-test", version: "0.0.0" },
+        }),
+      ),
+      Effect.scoped,
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
     ),
   );
 
@@ -1113,24 +1451,20 @@ describe("AcpSessionRuntime", () => {
         }),
       ),
       Effect.scoped,
-      Effect.provide(NodeServices.layer),
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
     ),
   );
 
-  it.effect("completes session/load after replay becomes idle while its RPC stays pending", () =>
+  // regression: #37106 prompt sent before session/load replied
+  it.live("does not prompt before session/load replies after replay goes idle", () =>
     Effect.gen(function* () {
       const runtime = yield* AcpSessionRuntime.AcpSessionRuntime;
-      const started = yield* runtime.start().pipe(Effect.timeout("2 seconds"));
+      yield* runtime.start();
 
-      expect(started.sessionId).toBe("mock-session-1");
-      expect(started.sessionSetupResult._meta).toMatchObject({
-        kairoSessionLoadReady: "replay_idle",
+      const result = yield* runtime.prompt({
+        prompt: [{ type: "text", text: "hi" }],
       });
-
-      const unexpectedReplayEvent = yield* Stream.runHead(runtime.getEvents()).pipe(
-        Effect.timeoutOption("100 millis"),
-      );
-      expect(Option.isNone(unexpectedReplayEvent)).toBe(true);
+      expect(result.stopReason).toBe("end_turn");
     }).pipe(
       Effect.provide(
         AcpSessionRuntime.layer({
@@ -1139,20 +1473,51 @@ describe("AcpSessionRuntime", () => {
             command: mockAgentCommand,
             args: mockAgentArgs,
             env: {
-              KAIRO_ACP_HANG_LOAD_SESSION_AFTER_REPLAY: "1",
-              KAIRO_ACP_LOAD_SESSION_DELAY_MS: "10000",
+              KAIRO_ACP_EMIT_LOAD_REPLAY: "1",
+              KAIRO_ACP_LOAD_REPLY_DELAY_MS: "500",
+              KAIRO_ACP_REJECT_PROMPT_UNTIL_LOADED: "1",
             },
           },
           cwd: process.cwd(),
           resumeSessionId: "mock-session-1",
           sessionLoadReplayIdleGap: "50 millis",
-          sessionLoadTimeout: "1 second",
           clientInfo: { name: "kairo-test", version: "0.0.0" },
         }),
       ),
       Effect.scoped,
-      Effect.provide(NodeServices.layer),
-      TestClock.withLive,
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+    ),
+  );
+
+  it.live("treats replay idle as loaded when the agent opts in", () =>
+    Effect.gen(function* () {
+      const runtime = yield* AcpSessionRuntime.AcpSessionRuntime;
+      const started = yield* runtime.start();
+
+      expect(started.sessionSetupResult._meta).toMatchObject({
+        kairoSessionLoadReady: "replay_idle",
+      });
+    }).pipe(
+      Effect.provide(
+        AcpSessionRuntime.layer({
+          authMethodId: "test",
+          spawn: {
+            command: mockAgentCommand,
+            args: mockAgentArgs,
+            env: {
+              KAIRO_ACP_EMIT_LOAD_REPLAY: "1",
+              KAIRO_ACP_LOAD_NEVER_REPLIES: "1",
+            },
+          },
+          cwd: process.cwd(),
+          resumeSessionId: "mock-session-1",
+          sessionLoadReplayIdleGap: "50 millis",
+          sessionLoadReplayIdleReadiness: true,
+          clientInfo: { name: "kairo-test", version: "0.0.0" },
+        }),
+      ),
+      Effect.scoped,
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
     ),
   );
 
@@ -1201,8 +1566,168 @@ describe("AcpSessionRuntime", () => {
         }),
       ),
       Effect.scoped,
-      Effect.provide(NodeServices.layer),
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
       Effect.ensuring(Effect.sync(() => NodeFS.rmSync(tempDir, { recursive: true, force: true }))),
     );
   });
+
+  it.effect("sends configured custom models the agent does not advertise", () => {
+    const tempDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "acp-runtime-"));
+    const requestLogPath = NodePath.join(tempDir, "requests.ndjson");
+    return Effect.gen(function* () {
+      const runtime = yield* AcpSessionRuntime.AcpSessionRuntime;
+      yield* runtime.start();
+
+      yield* runtime.setModel("cline-free/custom-model");
+      const error = yield* runtime.setModel("unconfigured/model").pipe(Effect.flip);
+      expect(error._tag).toBe("AcpRequestError");
+
+      const sentModels = NodeFS.readFileSync(requestLogPath, "utf8")
+        .trim()
+        .split("\n")
+        .filter((line) => line.length > 0)
+        .map((line) => JSON.parse(line) as { method?: string; params?: { value?: unknown } })
+        .filter((message) => message.method === "session/set_config_option")
+        .map((message) => message.params?.value);
+      expect(sentModels).toEqual(["cline-free/custom-model"]);
+    }).pipe(
+      Effect.provide(
+        AcpSessionRuntime.layer({
+          ...mockRuntimeOptions,
+          spawn: {
+            command: mockAgentCommand,
+            args: mockAgentArgs,
+            env: { KAIRO_ACP_REQUEST_LOG_PATH: requestLogPath },
+          },
+          customModels: ["cline-free/custom-model"],
+        }),
+      ),
+      Effect.scoped,
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+      Effect.ensuring(Effect.sync(() => NodeFS.rmSync(tempDir, { recursive: true, force: true }))),
+    );
+  });
+
+  it.effect.each(
+    (["interrupt", "wait-for-prompt"] as const).flatMap((cancelBehavior) =>
+      (
+        [
+          { in: "request-log", cancelOn: "dispatch" },
+          { in: "protocol-log", cancelOn: "log" },
+          { in: "scheduler", cancelOn: "dispatch" },
+        ] as const
+      ).map((holdPrompt) => ({ cancelBehavior, holdPrompt })),
+    ),
+  )(
+    "sends session/prompt before a cancel issued while the prompt is held in the $holdPrompt.in ($cancelBehavior, cancel on $holdPrompt.cancelOn)",
+    ({ cancelBehavior, holdPrompt }) =>
+      Effect.gen(function* () {
+        const run = yield* promptThenCancel({ cancelBehavior, holdPrompt });
+        expect(run.received).toEqual(["session/prompt", "session/cancel", "_test/finish-cancel"]);
+        expect(run.promptExit).toEqual(
+          Exit.succeed({ stopReason: "cancelled", _meta: { nativeCancel: true } }),
+        );
+      }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+  );
+
+  it.effect("fails startup when the agent never answers initialize", () =>
+    Effect.gen(function* () {
+      const initializeSent = yield* Deferred.make<void>();
+      const runtime = yield* AcpSessionRuntime.make({
+        ...mockRuntimeOptions,
+        // A live child that reads stdin and never replies, like one stuck in disk sleep.
+        spawn: { command: "node", args: ["-e", "process.stdin.resume()"] },
+        requestLogger: (event) =>
+          event.method === "initialize" && event.status === "started"
+            ? Deferred.succeed(initializeSent, undefined)
+            : Effect.void,
+      });
+      const startup = yield* runtime.start().pipe(Effect.forkChild);
+      yield* Deferred.await(initializeSent);
+      yield* TestClock.adjust("30 minutes");
+      const exit = yield* Fiber.await(startup);
+      expect(Exit.isFailure(exit)).toBe(true);
+    }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+  );
+
+  it.effect("sends a cancel after the cancel timeout when its prompt never goes out", () =>
+    Effect.gen(function* () {
+      const runtime = yield* AcpSessionRuntime.make({
+        ...mockRuntimeOptions,
+        interruptPromptOnCancel: false,
+        cancelTimeout: "5 seconds",
+        requestLogger: (event) => (isPromptStarted(event) ? Effect.never : Effect.void),
+      });
+      yield* runtime.start();
+      const dispatched = yield* Deferred.make<void>();
+      yield* runtime
+        .prompt({ prompt: [{ type: "text", text: "first" }] }, { dispatched })
+        .pipe(Effect.forkChild);
+      yield* Deferred.await(dispatched);
+      const cancel = yield* runtime.cancel.pipe(Effect.forkChild({ startImmediately: true }));
+      yield* TestClock.adjust("5 seconds");
+      yield* Fiber.join(cancel);
+    }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+  );
+
+  it.effect(
+    "sends a cancel before the next prompt when the prompt it waited for never went out",
+    () =>
+      Effect.gen(function* () {
+        const tempDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "acp-runtime-"));
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => NodeFS.rmSync(tempDir, { recursive: true, force: true })),
+        );
+        const requestLogPath = NodePath.join(tempDir, "requests.ndjson");
+        let promptsStarted = 0;
+        const runtime = yield* AcpSessionRuntime.make({
+          ...mockRuntimeOptions,
+          spawn: {
+            ...mockRuntimeOptions.spawn,
+            env: { KAIRO_ACP_REQUEST_LOG_PATH: requestLogPath },
+          },
+          interruptPromptOnCancel: false,
+          // The cancel spends a test-clock second in its outgoing record, the window in which the
+          // next prompt could overtake it.
+          protocolLogging: {
+            logOutgoing: true,
+            logger: (event) =>
+              isOutgoing("session/cancel")(event) ? Effect.sleep("1 second") : Effect.void,
+          },
+          requestLogger: (event) =>
+            isPromptStarted(event) && promptsStarted++ === 0 ? Effect.never : Effect.void,
+        });
+        yield* runtime.getEvents().pipe(
+          Stream.runForEach((event) =>
+            event._tag === "EventStreamBarrier"
+              ? Deferred.succeed(event.acknowledge, undefined)
+              : Effect.void,
+          ),
+          Effect.forkChild,
+        );
+        yield* runtime.start();
+        const dispatched = yield* Deferred.make<void>();
+        const first = yield* runtime
+          .prompt({ prompt: [{ type: "text", text: "first" }] }, { dispatched })
+          .pipe(Effect.forkChild);
+        yield* Deferred.await(dispatched);
+        const cancel = yield* runtime.cancel.pipe(Effect.forkChild({ startImmediately: true }));
+        const next = yield* runtime
+          .prompt({ prompt: [{ type: "text", text: "next" }] })
+          .pipe(Effect.forkChild);
+        // The first prompt ends before it is queued, which releases the cancel's wait.
+        yield* Effect.sleep("1 second").pipe(
+          Effect.andThen(Fiber.interrupt(first)),
+          Effect.forkChild,
+        );
+        yield* TestClock.adjust("1 second");
+        yield* TestClock.adjust("1 second");
+        yield* Fiber.join(cancel);
+        yield* Fiber.join(next);
+        expect(readReceived(requestLogPath, ["session/prompt", "session/cancel"])).toEqual([
+          "session/cancel",
+          "session/prompt",
+        ]);
+      }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+  );
 });

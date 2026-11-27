@@ -1,45 +1,55 @@
-import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { AsyncResult } from "effect/unstable/reactivity";
-import { useCallback, useRef } from "react";
+import { useAtomValue } from "@effect/atom-react";
+import { AsyncResult } from "effect/reactivity";
 
-import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
+import { mobilePreferencesAtom, saveMobilePreferences } from "../../state/preferences";
+import { useAtomCommand } from "../../state/use-atom-command";
 
-/**
- * Shared persisted shelf state for the compact Home list and iPad sidebar.
- * Refs advance before persistence starts so consecutive presses always toggle
- * the latest value, even if React has not rendered the optimistic patch yet.
- */
 export function useThreadListV2ShelfPreferences() {
   const preferencesResult = useAtomValue(mobilePreferencesAtom);
-  const savePreferences = useAtomSet(updateMobilePreferencesAtom);
+  const savePreferences = useAtomCommand(saveMobilePreferences);
   const loaded = AsyncResult.isSuccess(preferencesResult);
   const snoozedShelfExpanded =
     loaded && preferencesResult.value.threadListSnoozedShelfExpanded === true;
   const settledShelfExpanded =
     loaded && preferencesResult.value.threadListSettledShelfExpanded === true;
-  const snoozedShelfExpandedRef = useRef(snoozedShelfExpanded);
-  const settledShelfExpandedRef = useRef(settledShelfExpanded);
-  snoozedShelfExpandedRef.current = snoozedShelfExpanded;
-  settledShelfExpandedRef.current = settledShelfExpanded;
+  const workingShelfEnabled = loaded && preferencesResult.value.workingShelfEnabled !== false;
+  const workingShelfExpanded =
+    loaded && preferencesResult.value.threadListWorkingShelfExpanded === true;
 
-  const toggleSnoozedShelf = useCallback(() => {
+  // Transforms read optimistic state so same-frame presses toggle twice.
+  const toggleSnoozedShelf = () => {
     if (!loaded) return;
-    const expanded = !snoozedShelfExpandedRef.current;
-    snoozedShelfExpandedRef.current = expanded;
-    savePreferences({ threadListSnoozedShelfExpanded: expanded });
-  }, [loaded, savePreferences]);
-  const toggleSettledShelf = useCallback(() => {
+    void savePreferences({
+      transform: (current) => ({
+        threadListSnoozedShelfExpanded: current.threadListSnoozedShelfExpanded !== true,
+      }),
+    });
+  };
+  const toggleSettledShelf = () => {
     if (!loaded) return;
-    const expanded = !settledShelfExpandedRef.current;
-    settledShelfExpandedRef.current = expanded;
-    savePreferences({ threadListSettledShelfExpanded: expanded });
-  }, [loaded, savePreferences]);
+    void savePreferences({
+      transform: (current) => ({
+        threadListSettledShelfExpanded: current.threadListSettledShelfExpanded !== true,
+      }),
+    });
+  };
+  const toggleWorkingShelf = () => {
+    if (!loaded) return;
+    void savePreferences({
+      transform: (current) => ({
+        threadListWorkingShelfExpanded: current.threadListWorkingShelfExpanded !== true,
+      }),
+    });
+  };
 
   return {
     loaded,
     settledShelfExpanded,
     snoozedShelfExpanded,
+    workingShelfEnabled,
+    workingShelfExpanded,
     toggleSettledShelf,
     toggleSnoozedShelf,
+    toggleWorkingShelf,
   } as const;
 }

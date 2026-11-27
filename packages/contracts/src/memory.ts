@@ -24,8 +24,6 @@ export const MemorySettings = Schema.Struct({
 }).pipe(Schema.withDecodingDefault(Effect.succeed({})));
 export type MemorySettings = typeof MemorySettings.Type;
 
-export const DEFAULT_MEMORY_SETTINGS: MemorySettings = Schema.decodeSync(MemorySettings)({});
-
 export const MemorySettingsPatch = Schema.Struct({
   supermemory: Schema.optionalKey(
     Schema.Struct({

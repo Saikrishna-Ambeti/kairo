@@ -8,29 +8,17 @@ function getComposioMcpConnection(environment: NodeJS.ProcessEnv | undefined) {
   return url && authorization ? { url, authorization } : null;
 }
 
-export function getComposioMcpUrl(environment: NodeJS.ProcessEnv | undefined): string | null {
-  return getComposioMcpConnection(environment)?.url ?? null;
-}
-
-export function buildComposioMcpHeaders(
-  environment: NodeJS.ProcessEnv | undefined,
-): Record<string, string> | null {
-  const connection = getComposioMcpConnection(environment);
-  return connection ? { authorization: connection.authorization } : null;
-}
-
 export function buildComposioAcpMcpServers(
   environment: NodeJS.ProcessEnv | undefined,
 ): ReadonlyArray<EffectAcpSchema.McpServer> {
-  const headers = buildComposioMcpHeaders(environment);
   const connection = getComposioMcpConnection(environment);
-  if (!headers || !connection) return [];
+  if (!connection) return [];
   return [
     {
       type: "http",
       name: "composio",
       url: connection.url,
-      headers: Object.entries(headers).map(([name, value]) => ({ name, value })),
+      headers: [{ name: "authorization", value: connection.authorization }],
     },
   ];
 }

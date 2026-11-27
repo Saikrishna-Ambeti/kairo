@@ -1,6 +1,6 @@
 {
   "name": "@kairo/contracts",
-  "version": "0.0.44",
+  "version": "0.1.12",
   "private": true,
   "files": [
     "dist"
@@ -25,7 +25,7 @@
     }
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "effect-tsgo tsrs --noEmit",
     "test": "vp test run --config ../../vite.config.ts --dir ."
   },
   "dependencies": {

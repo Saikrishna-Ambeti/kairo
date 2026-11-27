@@ -1,21 +1,44 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { ThreadId } from "@kairo/contracts";
+import { ThreadId, TurnItemId, type OrchestrationV2TurnItem } from "@kairo/contracts";
+import * as DateTime from "effect/DateTime";
+import { compactT3McpToolOutput } from "@kairo/shared/toolOutput";
 
 import {
-  commandDetailRepeatsCommand,
-  extractCommandOutputText,
   resolveViewedImageAsset,
   resolveWorkEntryToolPresentation,
-  summarizeToolGroup,
-  toolGroupAction,
-  toolGroupSummaryKind,
+  toolItemForDisplay,
   type WorkLogPresentationEntry,
-  workEntryViewedImagePath,
   workEntryIndicatesToolFailure,
   workEntryDisplayIndicatesToolFailure,
-  workEntryIndicatesToolSuccess,
+  workEntriesViewedImagePaths,
+  workEntriesViewedImages,
+  workEntryViewedImagePath,
 } from "./presentation.js";
+
+function commandItem(
+  fields: Partial<Extract<OrchestrationV2TurnItem, { type: "command_execution" }>> = {},
+): OrchestrationV2TurnItem {
+  return {
+    id: TurnItemId.make("command"),
+    threadId: ThreadId.make("thread"),
+    runId: null,
+    nodeId: null,
+    providerThreadId: null,
+    providerTurnId: null,
+    nativeItemRef: null,
+    parentItemId: null,
+    ordinal: 1,
+    status: "completed",
+    title: null,
+    startedAt: null,
+    completedAt: null,
+    updatedAt: DateTime.makeUnsafe("2026-09-08T00:00:00.000Z"),
+    type: "command_execution",
+    input: 'rg "command not found"',
+    ...fields,
+  };
+}
 
 describe("workEntryIndicatesToolFailure", () => {
   const base = {
@@ -24,70 +47,58 @@ describe("workEntryIndicatesToolFailure", () => {
     label: "Read",
   };
 
-  it("is true for error tone", () => {
-    expect(
-      workEntryIndicatesToolFailure({
-        ...base,
-        tone: "error",
-        detail: "nothing special",
-      }),
-    ).toBe(true);
-  });
-
-  it("is true when lifecycle says failed even if detail is empty", () => {
-    expect(
-      workEntryIndicatesToolFailure({
+  it.each([
+    [{ exitCode: 2 }, true],
+    [{ output: "sh: missing-command: command not found" }, true],
+    [{ output: `${"x".repeat(32_768)} command not found` }, false],
+  ] as const)(
+    "preserves command failure state after removing displayed output: %j",
+    (fields, failed) => {
+      const structuredPayload = commandItem(fields);
+      const entry: WorkLogPresentationEntry = {
         ...base,
         tone: "tool",
-        toolLifecycleStatus: "failed",
-      }),
-    ).toBe(true);
-  });
-
-  it("detects file-not-found style tool output with completed lifecycle", () => {
-    expect(
-      workEntryIndicatesToolFailure({
-        ...base,
-        tone: "tool",
+        itemType: "command_execution",
         toolLifecycleStatus: "completed",
-        detail: "File not found: C:\\foo\\nonexistent.ts",
-      }),
-    ).toBe(true);
+        structuredPayload,
+      };
+      expect(workEntryDisplayIndicatesToolFailure(entry)).toBe(failed);
+      expect(JSON.stringify(toolItemForDisplay(structuredPayload))).not.toContain('"output":');
+    },
+  );
+
+  it.each([
+    "logs/app.log:12: Error: ENOENT: no such file or directory",
+    "fixtures/ci.txt:3: Process exited with exit code 2",
+  ])("trusts a zero exit code over failure text in the output and command: %s", (output) => {
+    const entry: WorkLogPresentationEntry = {
+      ...base,
+      tone: "tool",
+      itemType: "command_execution",
+      toolLifecycleStatus: "completed",
+      command: 'rg -n "ENOENT|exit code" logs fixtures',
+      structuredPayload: commandItem({ output, exitCode: 0, outputIndicatesFailure: true }),
+    };
+    expect(workEntryIndicatesToolFailure(entry)).toBe(false);
+    expect(workEntryDisplayIndicatesToolFailure(entry)).toBe(false);
   });
 
-  it("detects glob no files and PowerShell command errors", () => {
-    expect(
-      workEntryIndicatesToolFailure({
-        ...base,
-        label: "Glob",
-        tone: "tool",
-        detail: "No files found",
-      }),
-    ).toBe(true);
-    expect(
-      workEntryIndicatesToolFailure({
-        ...base,
-        label: "Bash",
-        tone: "tool",
-        detail:
-          "The term 'this_is_not_a_command' is not recognized as the name of a cmdlet, function, script file, or operable program.",
-      }),
-    ).toBe(true);
-  });
-
-  it("is false for successful completed tools", () => {
-    expect(
-      workEntryIndicatesToolFailure({
-        ...base,
-        tone: "tool",
-        toolLifecycleStatus: "completed",
-        detail: "Found 3 matching files",
-      }),
-    ).toBe(false);
+  it("ignores failure phrases in reasoning text", () => {
+    const entry: WorkLogPresentationEntry = {
+      ...base,
+      label: "Thinking",
+      tone: "thinking",
+      itemType: "reasoning",
+      toolLifecycleStatus: "completed",
+      detail: "That exit code 2 is just from listing the deleted directory, which is expected.",
+    };
+    expect(workEntryIndicatesToolFailure(entry)).toBe(false);
+    expect(workEntryDisplayIndicatesToolFailure(entry)).toBe(false);
   });
 
   it("does not treat error text in a command as rendered failure", () => {
     const entry = {
+      ...base,
       label: "Ran command",
       tone: "tool",
       toolLifecycleStatus: "completed",
@@ -96,122 +107,41 @@ describe("workEntryIndicatesToolFailure", () => {
     } satisfies WorkLogPresentationEntry;
 
     expect(workEntryDisplayIndicatesToolFailure(entry)).toBe(false);
-    // Older activities can store output in this field, so that path stays separate.
+
     expect(workEntryIndicatesToolFailure(entry)).toBe(true);
     expect(workEntryDisplayIndicatesToolFailure({ ...entry, detail: "File not found" })).toBe(true);
-  });
-
-  it("treats successful tool rows as success candidates", () => {
-    expect(
-      workEntryIndicatesToolSuccess({
-        ...base,
-        tone: "tool",
-        toolLifecycleStatus: "completed",
-        detail: "ok",
-      }),
-    ).toBe(true);
-    expect(
-      workEntryIndicatesToolSuccess({
-        ...base,
-        tone: "tool",
-        toolLifecycleStatus: "inProgress",
-        detail: "…",
-      }),
-    ).toBe(false);
-    expect(workEntryIndicatesToolSuccess({ ...base, tone: "thinking", detail: "…" })).toBe(false);
-    expect(
-      workEntryIndicatesToolSuccess({ ...base, tone: "tool", toolLifecycleStatus: "stopped" }),
-    ).toBe(false);
-  });
-
-  it("does not run heuristics on non-tool info rows", () => {
-    expect(
-      workEntryIndicatesToolFailure({
-        ...base,
-        label: "Context compacted",
-        tone: "info",
-        detail: "File not found in conversation",
-      }),
-    ).toBe(false);
-  });
-});
-
-describe("summarizeToolGroup", () => {
-  it.each(["command", "file-read", "file-change"])(
-    "keeps %s approvals out of tool execution counts",
-    (requestKind) => {
-      const approvals = [
-        {
-          label: "Approval requested",
-          sourceActivityKind: "approval.requested",
-          tone: "info",
-          requestKind,
-        },
-        {
-          label: "Approval resolved",
-          sourceActivityKind: "approval.resolved",
-          tone: "info",
-          requestKind,
-        },
-        {
-          label: "Provider approval response failed",
-          sourceActivityKind: "provider.approval.respond.failed",
-          tone: "error",
-        },
-      ] satisfies WorkLogPresentationEntry[];
-
-      expect(
-        summarizeToolGroup([
-          ...approvals,
-          { label: "Read", tone: "tool", itemType: "dynamic_tool_call" },
-        ]),
-      ).toBe("Received 3 updates and used 1 tool");
-      expect(summarizeToolGroup(approvals)).toBe("Received 3 updates");
-      expect(toolGroupSummaryKind(approvals)).toBe("update");
-    },
-  );
-
-  it("deduplicates named sources ahead of ordinary actions", () => {
-    const source = { key: "browser-use:chrome", name: "Chrome", kind: "integration" as const };
-    expect(
-      summarizeToolGroup([
-        { label: "Open page", tone: "tool", toolSource: source },
-        { label: "Inspect page", tone: "tool", toolSource: source },
-        {
-          label: "Ran command",
-          tone: "tool",
-          itemType: "command_execution",
-          command: "git status",
-        },
-      ]),
-    ).toBe("Used Chrome integration and ran 1 command");
-  });
-
-  it("omits the integration suffix for special browser and computer sources", () => {
-    expect(
-      summarizeToolGroup([
-        {
-          label: "Inspect page",
-          tone: "tool",
-          toolSource: { key: "browser-use", name: "Browser", kind: "browser" },
-        },
-        {
-          label: "Click",
-          tone: "tool",
-          toolSource: { key: "computer-use", name: "Computer Use", kind: "computer" },
-        },
-      ]),
-    ).toBe("Used Browser and Computer Use");
   });
 });
 
 describe("resolveWorkEntryToolPresentation", () => {
+  it("shows returned MCP errors as failures even in the live activity row", () => {
+    const entry: WorkLogPresentationEntry = {
+      id: "clone",
+      createdAt: "2026-09-19T00:00:00.000Z",
+      tone: "tool",
+      label: "T3-code.kairo_project_clone",
+      toolLifecycleStatus: "inProgress",
+      itemType: "dynamic_tool",
+      toolData: { output: { isError: true } },
+    };
+    expect(resolveWorkEntryToolPresentation(entry)?.displayName).toBe(
+      "Failed to clone a repository",
+    );
+    expect(workEntryDisplayIndicatesToolFailure(entry)).toBe(true);
+    const childFailure = {
+      ...entry,
+      label: "T3-code.task_status",
+      toolLifecycleStatus: "completed" as const,
+      toolData: { output: { taskId: "child", status: "failed", summary: "command not found" } },
+    };
+    expect(workEntryDisplayIndicatesToolFailure(childFailure)).toBe(false);
+  });
   it.each([
-    "mcp__kairo__preview_click",
-    "mcp__kairo_code__preview_click",
-    "mcp__kairo__preview_click",
-    "Kairo-code.preview_click",
-    "kairo · preview_click completed",
+    "mcp__t3-code__preview_click",
+    "mcp__t3_code__preview_click",
+    "mcp__t3code__preview_click",
+    "T3-code.preview_click",
+    "kairo-code · preview_click completed",
     "kairo_code/preview_click",
     "preview_click",
   ])("recognizes browser tool names across providers: %s", (label) => {
@@ -221,47 +151,40 @@ describe("resolveWorkEntryToolPresentation", () => {
     });
   });
 
-  it("labels device tools with the device icon", () => {
-    expect(
-      resolveWorkEntryToolPresentation({
-        label: "mcp__kairo__device_open",
-        toolLifecycleStatus: "completed",
-      }),
-    ).toEqual({ displayName: "Opened a device in the Device panel", icon: "device" });
-    expect(resolveWorkEntryToolPresentation({ label: "kairo · device_screenshot" })).toEqual({
-      displayName: "Taking a screenshot of the device",
-      icon: "device",
-    });
-  });
-
   it("uses structured MCP identity when the provider supplies a custom title", () => {
     expect(
       resolveWorkEntryToolPresentation({
         label: "Tool call complete",
         toolTitle: "Inspect the current page",
-        toolData: { server: "kairo", tool: "preview_snapshot", result: { title: "Example" } },
+        toolData: { server: "kairo-code", tool: "preview_snapshot", result: { title: "Example" } },
       }),
     ).toEqual({ displayName: "Taking a snapshot of the preview page", icon: "browser" });
   });
 
-  it.each([
-    ["inProgress", "Clicking in the preview browser"],
-    ["completed", "Clicked in the preview browser"],
-    ["failed", "Failed to click in the preview browser"],
-    ["declined", "Declined to click in the preview browser"],
-    ["stopped", "Stopped clicking in the preview browser"],
-    ["unknown", "Clicking in the preview browser"],
-  ])("describes the tool's own %s state", (toolLifecycleStatus, displayName) => {
-    expect(
+  it("names the reported outcome when it contradicts the row's verb", () => {
+    const row = (tool: string, output: unknown) =>
       resolveWorkEntryToolPresentation({
-        label: "Kairo-code.preview_click",
-        toolLifecycleStatus,
-      }),
-    ).toEqual({ displayName, icon: "browser" });
+        label: `T3-code.${tool}`,
+        toolLifecycleStatus: "completed",
+        toolData: { output: compactT3McpToolOutput(`kairo-code.${tool}`, output) },
+      })?.displayName;
+    expect(row("pull_request_create", { number: 470, created: false })).toBe(
+      "Found 1 open pull request",
+    );
+    expect(row("pull_request_create", { number: 470, created: true })).toBe(
+      "Opened a pull request",
+    );
+    expect(row("ci_rerun", { number: 883, checks: [] })).toBe("Found no failed checks to re-run");
+    expect(row("ci_rerun", { number: 883, checks: [{ name: "ci", rerun: true }] })).toBe(
+      "Re-ran CI",
+    );
+    expect(row("pull_request_merge", { number: 1, state: "open" })).toBe(
+      "Queued 1 pull request to merge",
+    );
   });
 
   it("uses the summary's state only when the provider omitted a lifecycle status", () => {
-    const entry = { label: "Kairo-code.preview_click" };
+    const entry = { label: "T3-code.preview_click" };
     expect(resolveWorkEntryToolPresentation(entry, "inProgress")?.displayName).toBe(
       "Clicking in the preview browser",
     );
@@ -279,54 +202,23 @@ describe("resolveWorkEntryToolPresentation", () => {
   });
 
   it.each([
-    ["preview_type", "Typing in the preview browser", "Typed in the preview browser"],
-    [
-      "preview_set_appearance",
-      "Setting preview browser appearance",
-      "Set preview browser appearance",
-    ],
-    [
-      "preview_snapshot",
-      "Taking a snapshot of the preview page",
-      "Took a snapshot of the preview page",
-    ],
-    [
-      "preview_recording_stop",
-      "Stopping recording the preview browser",
-      "Stopped recording the preview browser",
-    ],
-    ["kairo_thread_read", "Reading a Kairo thread", "Read a Kairo thread"],
-    ["kairo_thread_send", "Sending to a Kairo thread", "Sent to a Kairo thread"],
-    [
-      "kairo_worktree_handoff",
-      "Handing off thread to a git worktree",
-      "Handed off thread to a git worktree",
-    ],
-  ])("preserves verb forms and the rest of %s's label", (tool, running, completed) => {
-    const entry = { label: `kairo.${tool}` };
-    expect(
-      resolveWorkEntryToolPresentation({ ...entry, toolLifecycleStatus: "inProgress" })
-        ?.displayName,
-    ).toBe(running);
-    expect(
-      resolveWorkEntryToolPresentation({ ...entry, toolLifecycleStatus: "completed" })?.displayName,
-    ).toBe(completed);
-  });
-
-  it("keeps Kairo branding for non-browser tools and falls back to the original tool label", () => {
+    ["https://github.com/acme/web/pull/7", "PR #7"],
+    ["https://gitlab.com/acme/web/-/merge_requests/7", "MR #7"],
+  ])("names a linked change request with its host's term (%s)", (url, target) => {
     expect(
       resolveWorkEntryToolPresentation({
-        label: "mcp__kairo_code__task_status",
-        toolTitle: "Check the child task",
-      }),
-    ).toEqual({ displayName: "Getting delegated task status", icon: "kairo" });
+        label: "T3-code.link_pull_request",
+        toolLifecycleStatus: "completed",
+        toolData: { arguments: { url } },
+      })?.displayName,
+    ).toMatch(new RegExp(` ${target}$`));
   });
 
   it("does not brand unknown tools or another server's matching tool name", () => {
     for (const label of [
       "mcp__github__preview_click",
-      "kairo.unknown_tool",
-      "kairo.toString",
+      "kairo-code.unknown_tool",
+      "kairo-code.toString",
       "Search files",
     ]) {
       expect(resolveWorkEntryToolPresentation({ label })).toBeNull();
@@ -340,373 +232,86 @@ describe("resolveWorkEntryToolPresentation", () => {
   });
 });
 
-describe("browser group summaries", () => {
-  const browserEntry: WorkLogPresentationEntry = {
-    label: "MCP tool call",
-    toolData: { server: "kairo", tool: "preview_click" },
-    itemType: "mcp_tool_call",
-    toolLifecycleStatus: "completed",
-    tone: "tool",
-  };
-  const commandEntry: WorkLogPresentationEntry = {
-    label: "Ran command",
-    command: "/bin/bash -lc 'vp test run'",
-    itemType: "command_execution",
-    toolLifecycleStatus: "completed",
-    tone: "tool",
-  };
-
-  it.each([1, 18])("counts %s browser calls separately from generic tools", (count) => {
-    const entries = Array.from({ length: count }, (_, index) => ({
-      ...browserEntry,
-      toolCallId: `browser-${index}`,
-    }));
-    expect(summarizeToolGroup(entries)).toBe(
-      `Used browser ${count} ${count === 1 ? "time" : "times"}`,
-    );
-    expect(toolGroupSummaryKind(entries)).toBe("browser");
-  });
-
-  it("combines command and browser counts in a single sentence", () => {
-    const entries = [
-      ...Array.from({ length: 4 }, () => commandEntry),
-      ...Array.from({ length: 15 }, () => browserEntry),
-    ];
-    expect(summarizeToolGroup(entries)).toBe("Ran 4 commands and used browser 15 times");
-    expect(toolGroupSummaryKind(entries)).toBe("mixed");
-  });
-
-  it("preserves first-seen action ordering alongside non-browser tools", () => {
-    expect(
-      summarizeToolGroup([
-        browserEntry,
-        commandEntry,
-        {
-          ...browserEntry,
-          toolData: { server: "kairo", tool: "task_status" },
-        },
-      ]),
-    ).toBe("Used browser 1 time, ran 1 command, and used 1 tool");
-  });
-
-  it("recognizes Claude browser identity without treating script metadata as a shell command", () => {
-    expect(
-      summarizeToolGroup([
-        {
-          ...browserEntry,
-          command: "node inspect-page.js",
-          toolData: { toolName: "mcp__kairo_code__preview_evaluate" },
-        },
-      ]),
-    ).toBe("Used browser 1 time");
-  });
-
-  it("keeps foreign tools and web searches out of the browser count", () => {
-    expect(
-      summarizeToolGroup([
-        browserEntry,
-        {
-          ...browserEntry,
-          label: "preview_click",
-          toolData: { server: "another-server", tool: "preview_click" },
-        },
-        { label: "Search", tone: "tool", itemType: "web_search" },
-      ]),
-    ).toBe("Used browser 1 time, used 1 tool, and searched the web 1 time");
-  });
-
-  it("keeps browser screenshots in the browser count while preserving their image path", () => {
-    const entry = { ...browserEntry, viewedImagePath: "/workspace/page.png" };
-    expect(summarizeToolGroup([entry])).toBe("Used browser 1 time");
-    expect(workEntryViewedImagePath(entry)).toBe("/workspace/page.png");
-  });
-});
-
-describe("command work-log details", () => {
-  it("extracts Claude result blocks and projected output", () => {
-    expect(
-      extractCommandOutputText({
-        result: {
-          content: [
-            { type: "text", text: "first" },
-            { type: "text", text: "second" },
-          ],
-        },
-      }),
-    ).toBe("first\nsecond");
-    expect(extractCommandOutputText({ rawOutput: { content: "projected summary" } })).toBe(
-      "projected summary",
-    );
-  });
-
-  it("only removes a detail with the matching tool-name prefix", () => {
-    expect(
-      commandDetailRepeatsCommand({
-        detail: "Bash: printf hello",
-        command: "printf hello",
-        rawCommand: null,
-        toolName: "Bash",
-        data: { toolName: "Bash", command: "printf hello" },
-      }),
-    ).toBe(true);
-    expect(
-      commandDetailRepeatsCommand({
-        detail: "warning: printf hello",
-        command: "printf hello",
-        rawCommand: null,
-        toolName: "Bash",
-        data: { toolName: "Bash", command: "printf hello" },
-      }),
-    ).toBe(false);
-  });
-
-  it("treats an ingestion-truncated echo of a long command as a repeat", () => {
-    const command = `git add -A && git commit -m "${"x".repeat(200)}"`;
-    const truncated = `Bash: ${command}`.slice(0, 177) + "...";
-    expect(
-      commandDetailRepeatsCommand({
-        detail: truncated,
-        command,
-        rawCommand: null,
-        toolName: "Bash",
-        data: { toolName: "Bash", command },
-      }),
-    ).toBe(true);
-    expect(
-      commandDetailRepeatsCommand({
-        detail: "Bash: printf hello...",
-        command: "printf goodbye",
-        rawCommand: null,
-        toolName: "Bash",
-        data: { toolName: "Bash", command: "printf goodbye" },
-      }),
-    ).toBe(false);
-  });
-
-  it("treats ACP command echoes as synthetic even without a tool kind", () => {
-    expect(
-      commandDetailRepeatsCommand({
-        detail: "pnpm test",
-        command: "pnpm test",
-        rawCommand: null,
-        toolName: undefined,
-        data: { toolCallId: "tool-1", command: "pnpm test" },
-      }),
-    ).toBe(true);
-    expect(
-      commandDetailRepeatsCommand({
-        detail: "pnpm test",
-        command: "pnpm test",
-        rawCommand: null,
-        toolName: undefined,
-        data: { command: "pnpm test" },
-      }),
-    ).toBe(false);
-  });
-});
-
-describe("workEntryViewedImagePath", () => {
-  const entry = { label: "Read", tone: "tool" } as const;
-
-  it("returns a single image path from supported read entries", () => {
-    expect(
-      workEntryViewedImagePath({ ...entry, requestKind: "file-read", detail: " assets/a.png " }),
-    ).toBe("assets/a.png");
-    expect(
-      workEntryViewedImagePath({
-        ...entry,
-        itemType: "dynamic_tool_call",
-        toolTitle: "Read file",
-        detail: "C:\\workspace\\a.webp",
-      }),
-    ).toBe("C:\\workspace\\a.webp");
-    expect(
-      workEntryViewedImagePath({
-        ...entry,
-        itemType: "dynamic_tool_call",
-        detail: 'Read: {"file_path":"truncated..."}',
-        viewedImagePath: " /workspace/reference image.webp ",
-      }),
-    ).toBe("/workspace/reference image.webp");
-  });
-
-  it("rejects non-image, multi-line, and non-read details", () => {
-    expect(
-      workEntryViewedImagePath({ ...entry, itemType: "image_view", detail: "a.txt" }),
-    ).toBeNull();
-    expect(
-      workEntryViewedImagePath({ ...entry, itemType: "image_view", detail: "a.png\nb.png" }),
-    ).toBeNull();
-    expect(workEntryViewedImagePath({ ...entry, detail: "a.png" })).toBeNull();
-  });
-});
-
-describe("toolGroupAction", () => {
-  it("groups legacy Claude image reads with other reads", () => {
-    expect(
-      toolGroupAction({
-        label: "Tool call",
-        tone: "tool",
-        itemType: "dynamic_tool_call",
-        viewedImagePath: "/workspace/reference.png",
-      }),
-    ).toBe("read");
-  });
-});
-
 describe("resolveViewedImageAsset", () => {
-  const threadId = ThreadId.make("thread-1");
-
-  it("serves kairo attachment paths in place like any other host path", () => {
-    const path = "/Users/demo/.kairo/dev/attachments/11111111-1111-4111-8111-111111111111.png";
-    expect(resolveViewedImageAsset(path, { threadId, workspaceRoot: "/workspace" })).toEqual({
-      resource: { _tag: "media-file", threadId, path },
-      alt: "11111111-1111-4111-8111-111111111111.png",
+  it("requests the file the agent read when its name holds %, # or ?", () => {
+    const path = "/Users/me/.grok/sessions/%2FUsers%2Fme%2Fproject/shot #1?/1.jpg";
+    expect(
+      resolveViewedImageAsset(path, { threadId: ThreadId.make("thread"), workspaceRoot: "/repo" }),
+    ).toEqual({
+      resource: { _tag: "media-file", threadId: ThreadId.make("thread"), path },
+      alt: "1.jpg",
       srcFragment: "",
     });
   });
 
-  it("normalizes workspace image sources", () => {
+  it("still decodes a file URL", () => {
     expect(
-      resolveViewedImageAsset("screens/logo.svg?v=2#mark", {
-        threadId,
-        workspaceRoot: "/workspace",
-      }),
-    ).toEqual({
-      resource: {
-        _tag: "media-file",
-        threadId,
-        path: "/workspace/screens/logo.svg",
-      },
-      alt: "logo.svg",
-      srcFragment: "#mark",
-    });
-    expect(resolveViewedImageAsset("https://example.com/logo.png", { threadId })).toBeNull();
+      resolveViewedImageAsset("file:///repo/my%20shot.png", { threadId: ThreadId.make("thread") })
+        ?.resource.path,
+    ).toBe("/repo/my shot.png");
   });
 });
 
-describe("pull request tool presentation", () => {
-  it.each([
-    "mcp__kairo__link_pull_request",
-    "mcp__kairo_code__link_pull_request",
-    "Kairo-code · link_pull_request",
-    "kairo/link_pull_request",
-    "link_pull_request",
-  ])("recognizes the native linking tool: %s", (label) => {
-    const entry = { label, tone: "tool" as const, toolLifecycleStatus: "completed" };
-    expect(resolveWorkEntryToolPresentation(entry)).toMatchObject({
-      displayName: "Linked a pull request",
-      icon: "pull-request",
-    });
-    expect(toolGroupAction(entry)).toBe("link-pr");
-  });
-
-  it.each([
-    ["inProgress", "Linking PR #42"],
-    ["completed", "Linked PR #42"],
-    ["failed", "Failed to link PR #42"],
-    ["declined", "Declined to link PR #42"],
-    ["stopped", "Stopped linking PR #42"],
-  ])("describes the target and %s status", (toolLifecycleStatus, displayName) => {
-    expect(
-      resolveWorkEntryToolPresentation({
-        label: "MCP tool call",
-        toolTitle: "Custom title",
-        toolLifecycleStatus,
-        toolData: {
-          server: "kairo",
-          tool: "link_pull_request",
-          arguments: { url: "https://github.com/acme/web/pull/42" },
-        },
-      })?.displayName,
-    ).toBe(displayName);
-  });
-
-  it("recognizes unlink targets supplied as repository and number", () => {
-    expect(
-      resolveWorkEntryToolPresentation({
-        label: "MCP tool call",
-        toolLifecycleStatus: "completed",
-        toolData: {
-          toolName: "mcp__kairo__unlink_pull_request",
-          rawInput: { repository: "acme/web", number: 42 },
-        },
-      }),
-    ).toMatchObject({ displayName: "Unlinked PR #42", icon: "pull-request", action: "unlink-pr" });
-  });
-
-  it("summarizes native PR work separately from ordinary tools and integration metadata", () => {
-    const link: WorkLogPresentationEntry = {
-      label: "Kairo-code · link_pull_request",
+describe("workEntryViewedImagePath", () => {
+  it("withholds a Read's image preview until the Read has finished", () => {
+    const read: WorkLogPresentationEntry = {
+      id: "read",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      label: "Read",
       tone: "tool",
-      itemType: "mcp_tool_call",
-      toolLifecycleStatus: "completed",
-      toolSource: { key: "kairo", name: "Kairo", kind: "integration" },
+      itemType: "dynamic_tool",
+      viewedImagePath: "/repo/out/later3.png",
     };
-    const list: WorkLogPresentationEntry = {
-      ...link,
-      label: "Kairo-code · list_thread_pull_requests",
-    };
-    expect(summarizeToolGroup([link, link, list])).toBe(
-      "Linked 2 pull requests and checked linked pull requests",
+
+    expect(workEntryViewedImagePath({ ...read, toolLifecycleStatus: "inProgress" })).toBeNull();
+    expect(workEntryViewedImagePath({ ...read, toolLifecycleStatus: "completed" })).toBe(
+      "/repo/out/later3.png",
     );
-    expect(summarizeToolGroup([{ ...link, label: "Kairo-code · unlink_pull_request" }])).toBe(
-      "Unlinked 1 pull request",
-    );
-    expect(toolGroupSummaryKind([link, link, list])).toBe("pull-request");
-    expect(summarizeToolGroup([list, list])).toBe("Checked linked pull requests 2 times");
-    expect(
-      resolveWorkEntryToolPresentation({ label: "mcp__another-server__link_pull_request" }),
-    ).toBeNull();
   });
 });
 
-describe("device group summaries", () => {
-  const deviceEntry = (tool: string): WorkLogPresentationEntry => ({
-    label: "MCP tool call",
-    toolData: { server: "kairo", tool },
-    itemType: "mcp_tool_call",
-    toolLifecycleStatus: "completed",
+describe("workEntriesViewedImages", () => {
+  const read = (
+    id: string,
+    path: string,
+    toolLifecycleStatus: NonNullable<WorkLogPresentationEntry["toolLifecycleStatus"]>,
+  ): WorkLogPresentationEntry => ({
+    id,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    label: "Read",
     tone: "tool",
+    itemType: "dynamic_tool",
+    viewedImagePath: path,
+    toolLifecycleStatus,
   });
 
-  it.each(["device_list", "device_open", "device_screenshot", "device_close"])(
-    "recognizes %s as device controls",
-    (tool) => {
-      const entry = deviceEntry(tool);
-      expect(summarizeToolGroup([entry])).toBe("Used device controls 1 time");
-      expect(toolGroupSummaryKind([entry])).toBe("device");
-    },
-  );
-
-  it("summarizes device calls alongside shell commands", () => {
+  it("marks an image pending until a Read of it finishes", () => {
     expect(
-      summarizeToolGroup([
-        { label: "Ran command", itemType: "command_execution", command: "pwd", tone: "tool" },
-        deviceEntry("device_list"),
-        deviceEntry("device_open"),
+      workEntriesViewedImages([
+        read("done", "/repo/a.png", "completed"),
+        read("running", "/repo/b.png", "inProgress"),
+        read("missing", "/repo/c.png", "failed"),
+        read("again", "/repo/a.png", "inProgress"),
       ]),
-    ).toBe("Ran 1 command and used device controls 2 times");
-  });
-
-  it("recognizes Claude tool names and preserves screenshot previews", () => {
-    const entry = {
-      ...deviceEntry("device_screenshot"),
-      toolData: { toolName: "mcp__kairo_code__device_screenshot" },
-      viewedImagePath: "/workspace/device.png",
-    };
-    expect(summarizeToolGroup([entry])).toBe("Used device controls 1 time");
-    expect(workEntryViewedImagePath(entry)).toBe("/workspace/device.png");
-  });
-
-  it("does not classify another server's tools as T3 device controls", () => {
+    ).toEqual([
+      { path: "/repo/a.png", pending: false },
+      { path: "/repo/b.png", pending: true },
+    ]);
     expect(
-      summarizeToolGroup([
-        {
-          ...deviceEntry("device_open"),
-          toolData: { server: "another-server", tool: "device_open" },
-        },
+      workEntriesViewedImages([
+        read("running", "/repo/b.png", "inProgress"),
+        read("done", "/repo/b.png", "completed"),
       ]),
-    ).toBe("Used 1 tool");
+    ).toEqual([{ path: "/repo/b.png", pending: false }]);
+  });
+
+  it("orders the finished images like the strip shows them", () => {
+    expect(
+      workEntriesViewedImagePaths([
+        read("first", "/repo/a.png", "inProgress"),
+        read("other", "/repo/b.png", "completed"),
+        read("again", "/repo/a.png", "completed"),
+      ]),
+    ).toEqual(["/repo/a.png", "/repo/b.png"]);
   });
 });

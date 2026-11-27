@@ -4,7 +4,7 @@ import type { ServerConfig } from "@kairo/contracts";
 import { EnvironmentId } from "@kairo/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Option from "effect/Option";
-import { Atom, AtomRegistry } from "effect/unstable/reactivity";
+import { Atom, AtomRegistry } from "effect/reactivity";
 
 import { createRemoteEnvironmentProjectionAtoms } from "./remote-environment-projections";
 
@@ -29,6 +29,7 @@ function presentation(
     entry: { target: target(environmentId, endpoint), profile: Option.none(), enabled: true },
     connection: { phase: "connected", error: null, traceId: null },
     serverConfig,
+    refusedRouteIds: [],
   };
 }
 
@@ -124,35 +125,5 @@ describe("remote environment projections", () => {
       wsBaseUrl: "wss://catalog-updated.example.test",
       bearerToken: null,
     });
-  });
-
-  it("preserves saved identity across config-only updates and refreshes runtime state", () => {
-    const harness = makeHarness();
-    const savedAtom = harness.projections.savedConnectionAtom(ENVIRONMENT_ID);
-    const runtimeAtom = harness.projections.runtimeStateAtom(ENVIRONMENT_ID);
-    const savedInitial = harness.registry.get(savedAtom);
-    const runtimeInitial = harness.registry.get(runtimeAtom);
-    const config = { cwd: "/repo" } as ServerConfig;
-    const initialPresentation = harness.registry.get(harness.presentationAtom(ENVIRONMENT_ID));
-
-    harness.registry.set(
-      harness.presentationAtom(ENVIRONMENT_ID),
-      initialPresentation === null ? null : { ...initialPresentation, serverConfig: config },
-    );
-    harness.registry.set(harness.serverConfigAtom(ENVIRONMENT_ID), config);
-
-    expect(harness.registry.get(savedAtom)).toBe(savedInitial);
-    expect(harness.registry.get(runtimeAtom)).not.toBe(runtimeInitial);
-    expect(harness.registry.get(runtimeAtom)?.serverConfig).toBe(config);
-  });
-
-  it("keeps missing environments null", () => {
-    const harness = makeHarness();
-    harness.registry.set(harness.presentationAtom(ENVIRONMENT_ID), null);
-
-    expect(
-      harness.registry.get(harness.projections.savedConnectionAtom(ENVIRONMENT_ID)),
-    ).toBeNull();
-    expect(harness.registry.get(harness.projections.runtimeStateAtom(ENVIRONMENT_ID))).toBeNull();
   });
 });

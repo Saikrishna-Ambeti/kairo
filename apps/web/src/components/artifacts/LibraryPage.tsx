@@ -1,3 +1,4 @@
+import { T, useGT, useMessages } from "gt-react";
 import { isElectron } from "~/env";
 import { openCommandPalette } from "../../commandPaletteBus";
 import {
@@ -7,10 +8,11 @@ import {
   RefreshCwIcon,
   SearchIcon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
+import { useDebouncedValue } from "../../state/queries";
 import { useArtifacts } from "../../state/artifacts";
-import { useActiveEnvironmentId } from "../../state/entities";
+import { usePrimaryEnvironmentId } from "../../state/environments";
 import { WorkspaceBreadcrumb, WorkspaceBreadcrumbItem } from "../WorkspaceBreadcrumb";
 import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
@@ -22,15 +24,12 @@ import { ArtifactRow } from "./ArtifactRow";
 import { ARTIFACT_FILTERS, type ArtifactFilter } from "./artifactDisplay";
 
 export function LibraryPage() {
-  const environmentId = useActiveEnvironmentId();
+  const gt = useGT();
+  const m = useMessages();
+  const environmentId = usePrimaryEnvironmentId();
   const [search, setSearch] = useState("");
-  const [query, setQuery] = useState("");
+  const query = useDebouncedValue(search.trim(), 180);
   const [filter, setFilter] = useState<ArtifactFilter>("all");
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => setQuery(search.trim()), 180);
-    return () => window.clearTimeout(timeout);
-  }, [search]);
 
   const { artifacts, error, isPending, refresh } = useArtifacts(environmentId, {
     ...(query.length > 0 ? { query } : {}),
@@ -42,9 +41,11 @@ export function LibraryPage() {
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none isolate">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
         <WorkspacePageHeader electron={isElectron}>
-          <WorkspaceBreadcrumb ariaLabel="Library breadcrumb" className="min-w-0">
+          <WorkspaceBreadcrumb ariaLabel={gt("Library breadcrumb")} className="min-w-0">
             <WorkspaceBreadcrumbItem current>
-              <h1>Library</h1>
+              <h1>
+                <T>Library</T>
+              </h1>
             </WorkspaceBreadcrumbItem>
           </WorkspaceBreadcrumb>
           <Button
@@ -53,9 +54,14 @@ export function LibraryPage() {
             size="sm"
           >
             <FilePlus2Icon className="size-4" />
-            Create file
+            <T>Create file</T>
           </Button>
-          <Button aria-label="Refresh library" onClick={refresh} size="icon-sm" variant="ghost">
+          <Button
+            aria-label={gt("Refresh library")}
+            onClick={refresh}
+            size="icon-sm"
+            variant="ghost"
+          >
             <RefreshCwIcon className="size-3.5" />
           </Button>
         </WorkspacePageHeader>
@@ -65,16 +71,20 @@ export function LibraryPage() {
             <section aria-labelledby="library-heading" className="flex flex-col gap-4">
               <div className="max-w-2xl">
                 <h2 id="library-heading" className="text-xl font-semibold tracking-tight">
-                  Files
+                  <T>Files</T>
                 </h2>
                 <p className="mt-1 text-muted-foreground text-sm leading-relaxed">
-                  Files created by agents across every project and thread in this environment.
+                  <T>
+                    Files created by agents across every project and thread in this environment.
+                  </T>
                 </p>
               </div>
 
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <label className="relative block min-w-0 flex-1 sm:max-w-xl">
-                  <span className="sr-only">Search library</span>
+                  <span className="sr-only">
+                    <T>Search library</T>
+                  </span>
                   <InputGroup>
                     <InputGroupAddon>
                       <SearchIcon aria-hidden />
@@ -84,44 +94,46 @@ export function LibraryPage() {
                       type="search"
                       value={search}
                       onChange={(event) => setSearch(event.currentTarget.value)}
-                      placeholder="Search titles, files, projects, and threads"
+                      placeholder={gt("Search titles, files, projects, and threads")}
                     />
                   </InputGroup>
                 </label>
-                <div className="flex shrink-0 items-center gap-1" aria-label="Artifact type">
+                <div className="flex shrink-0 items-center gap-1" aria-label={gt("Artifact type")}>
                   {ARTIFACT_FILTERS.map(({ value, label }) => (
                     <button
                       key={value}
                       type="button"
                       aria-pressed={filter === value}
-                      className="rounded-md px-2.5 py-1.5 text-muted-foreground text-xs hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-pressed:bg-accent aria-pressed:font-medium aria-pressed:text-foreground"
+                      className="rounded-md px-2.5 py-1.5 text-muted-foreground text-xs hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-pressed:bg-accent aria-pressed:font-medium aria-pressed:text-foreground"
                       onClick={() => setFilter(value)}
                     >
-                      {label}
+                      {m(label)}
                     </button>
                   ))}
                 </div>
               </div>
             </section>
 
-            <section aria-live="polite" aria-label="Artifact library">
+            <section aria-live="polite" aria-label={gt("Artifact library")}>
               {environmentId === null ? (
                 <LibraryEmptyState
                   icon={PackageOpenIcon}
-                  title="No environment selected"
-                  description="Open an environment to browse its artifact library."
+                  title={gt("No environment selected")}
+                  description={gt("Open an environment to browse its artifact library.")}
                 />
               ) : error ? (
                 <div className="rounded-lg border border-destructive/25 bg-destructive/5 p-4">
-                  <p className="font-medium text-sm">Library could not load</p>
+                  <p className="font-medium text-sm">
+                    <T>Library could not load</T>
+                  </p>
                   <p className="mt-1 text-muted-foreground text-xs">
-                    Check the environment, then retry.
+                    <T>Check the environment, then retry.</T>
                   </p>
                 </div>
               ) : isPending && artifacts.length === 0 ? (
                 <div
                   className="divide-y divide-border/60 rounded-lg border border-border/70 p-2"
-                  aria-label="Loading library"
+                  aria-label={gt("Loading library")}
                 >
                   {[0, 1, 2, 3].map((item) => (
                     <div key={item} className="h-[76px] rounded-lg bg-muted/45" />
@@ -130,17 +142,23 @@ export function LibraryPage() {
               ) : artifacts.length === 0 ? (
                 <LibraryEmptyState
                   icon={query.length > 0 ? FileSearchIcon : PackageOpenIcon}
-                  title={query.length > 0 ? "No matching artifacts" : "Your library is empty"}
+                  title={
+                    query.length > 0 ? gt("No matching artifacts") : gt("Your library is empty")
+                  }
                   description={
                     query.length > 0
-                      ? "Try another title, filename, project, or thread."
-                      : "Ask an agent to create a document, presentation, spreadsheet, CSV, or PDF. It will appear here automatically."
+                      ? gt("Try another title, filename, project, or thread.")
+                      : gt(
+                          "Ask an agent to create a document, presentation, spreadsheet, CSV, or PDF. It will appear here automatically.",
+                        )
                   }
                 />
               ) : (
                 <div>
                   <p className="mb-2 px-3 text-muted-foreground text-xs tabular-nums">
-                    {artifacts.length} {artifacts.length === 1 ? "artifact" : "artifacts"}
+                    {gt("{count, plural, one {{count} artifact} other {{count} artifacts}}", {
+                      count: artifacts.length,
+                    })}
                   </p>
                   <div className="divide-y divide-border/60 rounded-lg border border-border/70 bg-card/25 p-2">
                     {artifacts.map((artifact) => (

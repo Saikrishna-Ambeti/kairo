@@ -4,7 +4,10 @@ import * as Effect from "effect/Effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { appAtomRegistry } from "../../state/atom-registry";
-import { activateCloudAccount, deactivateCloudAccount } from "./CloudAuthProvider";
+import {
+  activateCloudRelayAccount as activateCloudAccount,
+  deactivateCloudRelayAccount as deactivateCloudAccount,
+} from "./cloudAccountService";
 import { setAgentAwarenessRelayTokenProvider } from "../agent-awareness/remoteRegistration";
 
 vi.mock("@clerk/expo", () => ({
@@ -29,6 +32,10 @@ vi.mock("../../connection/catalog", () => ({
 }));
 
 vi.mock("./cloud-drafts", () => ({ removeCloudEnvironments: {} }));
+vi.mock("./connectOnboarding", () => ({
+  clearConnectOnboardingRequest: vi.fn(),
+  requestConnectOnboarding: vi.fn(),
+}));
 vi.mock("../../state/use-composer-drafts", () => ({
   getComposerCloudAccountId: vi.fn(async () => null),
   restoreCloudComposerDrafts: vi.fn(async () => undefined),
@@ -59,7 +66,7 @@ describe("CloudAuthProvider account isolation", () => {
     Effect.gen(function* () {
       const tokenProvider = async () => "account-1-token";
 
-      activateCloudAccount("account-1", tokenProvider, false);
+      activateCloudAccount("account-1", tokenProvider);
 
       const session = appAtomRegistry.get(managedRelaySessionAtom);
       expect(yield* session!.readClerkToken()).toBe("account-1-token");

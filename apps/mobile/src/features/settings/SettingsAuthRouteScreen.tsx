@@ -1,13 +1,17 @@
+import { useLayoutEffect } from "react";
 import { useAuth } from "@clerk/expo";
-import { AuthView, type UserProfileCustomPage, UserProfileView } from "@clerk/expo/native";
+import {
+  AuthView,
+  type UserProfileCustomPage,
+  UserProfileView,
+} from "@clerk/expo/native-components";
 import { StackActions, useNavigation } from "@react-navigation/native";
-import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { View } from "react-native";
 
 import { hasCloudIdentityConfig, hasManagedRelayConfig } from "../cloud/publicConfig";
 import { KairoConnectProfilePage } from "../cloud/KairoConnectProfilePage";
 
-// Custom rows in Clerk's native profile. Mirrors the web UserButton pages.
 const USER_PROFILE_CUSTOM_PAGES = [
   {
     path: "kairo-connect",
@@ -17,9 +21,11 @@ const USER_PROFILE_CUSTOM_PAGES = [
   },
 ] satisfies UserProfileCustomPage[];
 
+// Without cloud config the app has no entry point here and appLinking drops the deep link.
 export function SettingsAuthRouteScreen() {
   const navigation = useNavigation();
 
+  // oxlint-disable-next-line kairo/no-unreasoned-state-sync -- Redirects a direct navigation when this build has no cloud sign-in.
   useLayoutEffect(() => {
     if (!hasCloudIdentityConfig()) {
       navigation.dispatch(StackActions.replace("SettingsContent"));
@@ -32,25 +38,25 @@ export function SettingsAuthRouteScreen() {
 function ConfiguredSettingsAuthRouteScreen() {
   const { isLoaded, isSignedIn } = useAuth({ treatPendingAsSignedOut: false });
   const navigation = useNavigation();
-  const handleHostBack = useCallback(
-    () => navigation.dispatch(StackActions.popTo("SettingsContent")),
-    [navigation],
-  );
-  const hasBeenSignedIn = useRef(isSignedIn);
-  if (isSignedIn) {
-    hasBeenSignedIn.current = true;
-  }
+  const handleHostBack = () => navigation.goBack();
+  // Once signed in, stay on the profile view so signing out pops back instead of
+  // flashing the sign-in form.
+  const [hasBeenSignedIn, setHasBeenSignedIn] = useState(isSignedIn === true);
+  if (isSignedIn && !hasBeenSignedIn) setHasBeenSignedIn(true);
 
+  // Clerk reports sign-out only through its auth store (the native profile view
+  // and the Kairo Connect page can both sign out), so this follows that store.
+  // oxlint-disable-next-line kairo/no-unreasoned-state-sync -- pops the navigator when Clerk's auth store reports a sign-out from the profile view or Connect page
   useEffect(() => {
-    if (hasBeenSignedIn.current && isLoaded && isSignedIn === false) {
-      navigation.dispatch(StackActions.popTo("SettingsContent"));
+    if (hasBeenSignedIn && isLoaded && isSignedIn === false) {
+      navigation.goBack();
     }
-  }, [isLoaded, isSignedIn, navigation]);
+  }, [hasBeenSignedIn, isLoaded, isSignedIn, navigation]);
 
   return (
     <View collapsable={false} className="flex-1 overflow-hidden bg-sheet">
       {isLoaded ? (
-        hasBeenSignedIn.current ? (
+        hasBeenSignedIn ? (
           <UserProfileView
             customPages={hasManagedRelayConfig() ? USER_PROFILE_CUSTOM_PAGES : []}
             isDismissible={false}

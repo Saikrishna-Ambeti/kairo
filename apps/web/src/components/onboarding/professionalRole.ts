@@ -1,3 +1,4 @@
+import { msg } from "gt-react";
 import {
   ProfessionalRole as ProfessionalRoleSchema,
   type ProfessionalRole,
@@ -18,28 +19,28 @@ export const PROFESSIONAL_ROLES: ReadonlyArray<{
 }> = [
   {
     value: "student",
-    label: "Student",
-    description: "Learning, researching, or building coursework",
+    label: msg("Student"),
+    description: msg("Learning, researching, or building coursework"),
   },
   {
     value: "founder",
-    label: "Founder",
-    description: "Building and shipping a company",
+    label: msg("Founder"),
+    description: msg("Building and shipping a company"),
   },
   {
     value: "freelancer",
-    label: "Freelancer",
-    description: "Working across client projects",
+    label: msg("Freelancer"),
+    description: msg("Working across client projects"),
   },
   {
     value: "content-creator",
-    label: "Content creator",
-    description: "Creating content and growing an audience",
+    label: msg("Content creator"),
+    description: msg("Creating content and growing an audience"),
   },
   {
     value: "other",
-    label: "Other",
-    description: "Tell us what kind of work you do",
+    label: msg("Other"),
+    description: msg("Tell us what kind of work you do"),
   },
 ];
 

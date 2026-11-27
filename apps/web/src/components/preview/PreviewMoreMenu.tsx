@@ -1,6 +1,5 @@
-"use client";
-
-import type { DesktopPreviewColorScheme, EnvironmentId } from "@kairo/contracts";
+import type { DesktopPreviewColorScheme } from "@kairo/contracts";
+import { msg, T, useGT, useMessages, Var } from "gt-react";
 import { Minus, MoreVertical, Plus as PlusIcon, RotateCcw } from "lucide-react";
 
 import { Button } from "~/components/ui/button";
@@ -8,6 +7,7 @@ import {
   Menu,
   MenuItem,
   MenuPopup,
+  MenuShortcut,
   MenuRadioGroup,
   MenuRadioItem,
   MenuGroup,
@@ -18,148 +18,145 @@ import {
   MenuSubTrigger,
   MenuTrigger,
 } from "~/components/ui/menu";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
-
-import { previewBridge } from "./previewBridge";
+import { SharedTooltipTrigger } from "~/components/ui/shared-tooltip";
 
 const COLOR_SCHEME_OPTIONS: ReadonlyArray<{
   value: DesktopPreviewColorScheme;
   label: string;
 }> = [
-  { value: "system", label: "System" },
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
+  { value: "system", label: msg("System", { $context: "color scheme" }) },
+  { value: "light", label: msg("Light", { $context: "color scheme" }) },
+  { value: "dark", label: msg("Dark", { $context: "color scheme" }) },
 ];
 
-interface Props {
-  /** Active preview tab id. Tab-targeting actions are disabled without it. */
-  tabId: string | null;
-  /**
-   * True only after the desktop bridge has registered a `webContentsId` for
-   * the active tab. Tab-targeting actions throw on the desktop side until
-   * then; we disable those items so the menu doesn't fire silent no-ops.
-   */
-  hasWebContents: boolean;
-  /** Current zoom factor as a number (1.0 = 100%). */
-  zoomFactor: number;
-  /** Emulated `prefers-color-scheme` for the guest page. */
-  colorScheme: DesktopPreviewColorScheme;
-  /** Fixed viewport modes expose the device toolbar and resize rails. */
-  deviceToolbarVisible: boolean;
-  /** Switches between fill-panel mode and a fixed responsive viewport. */
-  onToggleDeviceToolbar: () => void;
-  /** Whether the separate native always-on-top preview window is open. */
-  nativePictureInPicture: boolean;
-  /** Toggles the optional native always-on-top preview window. */
-  onNativePictureInPicture: () => void;
-  /** Environment the tab belongs to; scopes storage clearing to its partitions. */
-  environmentId: EnvironmentId;
-  /** Profile the tab was opened under, if the server recorded one. */
-  /**
-   * Required: the IPC layer reads an absent profile as "every profile", so a
-   * tab whose own profile is unknown must resolve the default before it gets
-   * here rather than passing the gap along.
-   */
-  profileId: string;
-  /** Profile display name, shown so the menu says which data is being cleared. */
-  profileName: string | undefined;
+export interface PreviewMoreMenuActions {
+  readonly hardReload: () => void;
+  readonly setColorScheme: (colorScheme: DesktopPreviewColorScheme) => void;
+  readonly zoomIn: () => void;
+  readonly zoomOut: () => void;
+  readonly resetZoom: () => void;
+  readonly clearCookies: () => void;
+  readonly clearCache: () => void;
+  readonly openDevTools?: () => void;
+  readonly toggleNativePictureInPicture?: () => void;
+  readonly find?: () => void;
 }
 
-/**
- * Three-dot menu in the chrome row. Wires reload, zoom controls, and
- * storage-clearing actions. Only mounted by `PreviewView`
- * when the desktop bridge is present, so we can call it unconditionally.
- */
+interface Props {
+  enabled: boolean;
+  actions: PreviewMoreMenuActions;
+  zoomFactor: number;
+  colorScheme: DesktopPreviewColorScheme;
+  deviceToolbarVisible: boolean;
+  onToggleDeviceToolbar: () => void;
+  nativePictureInPicture: boolean;
+  profileName: string | undefined;
+  findShortcutLabel?: string | null;
+  move?: { readonly label: string; readonly onMove: () => void };
+}
+
+const MenuTriggerButton = () => {
+  const gt = useGT();
+  return (
+    <SharedTooltipTrigger
+      render={
+        <MenuTrigger
+          render={
+            <Button variant="ghost" size="icon-xs" type="button" aria-label={gt("Preview menu")} />
+          }
+        />
+      }
+      label={
+        <>
+          <T context="more actions menu">More</T>
+        </>
+      }
+    >
+      <MoreVertical />
+    </SharedTooltipTrigger>
+  );
+};
+
 export function PreviewMoreMenu({
-  tabId,
-  hasWebContents,
+  enabled,
+  actions,
   zoomFactor,
   colorScheme,
   deviceToolbarVisible,
   onToggleDeviceToolbar,
   nativePictureInPicture,
-  onNativePictureInPicture,
-  environmentId,
-  profileId,
   profileName,
+  findShortcutLabel,
+  move,
 }: Props) {
-  if (!previewBridge) return null;
-  const bridge = previewBridge;
-  const tabDisabled = !tabId || !hasWebContents;
-  const callTab = (op: (tabId: string) => Promise<void>) => () => {
-    if (!tabId) return;
-    void op(tabId).catch(() => undefined);
-  };
-
+  const gt = useGT();
+  const m = useMessages();
   const zoomLabel = `${Math.round(zoomFactor * 100)}%`;
+  const disabled = !enabled;
   return (
     <Menu>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <MenuTrigger
-              render={
-                <Button variant="ghost" size="icon-xs" type="button" aria-label="Preview menu" />
-              }
-            />
-          }
-        >
-          <MoreVertical />
-        </TooltipTrigger>
-        <TooltipPopup>More</TooltipPopup>
-      </Tooltip>
+      <MenuTriggerButton />
       <MenuPopup align="end" sideOffset={6}>
-        <MenuItem onClick={callTab(bridge.hardReload)} disabled={tabDisabled}>
-          Hard reload
+        {actions.find ? (
+          <MenuItem onClick={actions.find} disabled={disabled}>
+            <T>Find on page</T>
+            {findShortcutLabel ? <MenuShortcut>{findShortcutLabel}</MenuShortcut> : null}
+          </MenuItem>
+        ) : null}
+        <MenuItem onClick={actions.hardReload} disabled={disabled}>
+          <T>Hard reload</T>
         </MenuItem>
-        <MenuItem onClick={onNativePictureInPicture} disabled={tabDisabled}>
-          {nativePictureInPicture
-            ? "Close separate preview window"
-            : "Open separate preview window"}
-        </MenuItem>
-        <MenuItem onClick={onToggleDeviceToolbar} disabled={tabDisabled}>
-          {deviceToolbarVisible ? "Hide device toolbar" : "Show device toolbar"}
+        {actions.openDevTools ? (
+          <MenuItem onClick={actions.openDevTools} disabled={disabled}>
+            <T>Open DevTools</T>
+          </MenuItem>
+        ) : null}
+        {actions.toggleNativePictureInPicture ? (
+          <MenuItem onClick={actions.toggleNativePictureInPicture} disabled={disabled}>
+            {nativePictureInPicture
+              ? gt("Close separate preview window")
+              : gt("Open separate preview window")}
+          </MenuItem>
+        ) : null}
+        {move ? <MenuItem onClick={move.onMove}>{move.label}</MenuItem> : null}
+        <MenuItem onClick={onToggleDeviceToolbar} disabled={disabled}>
+          {deviceToolbarVisible ? gt("Hide device toolbar") : gt("Show device toolbar")}
         </MenuItem>
         <MenuSub>
-          <MenuSubTrigger disabled={tabDisabled}>Appearance</MenuSubTrigger>
+          <MenuSubTrigger disabled={disabled}>
+            <T>Appearance</T>
+          </MenuSubTrigger>
           <MenuSubPopup>
             <MenuRadioGroup
               value={colorScheme}
-              onValueChange={(value) => {
-                if (!tabId) return;
-                void bridge
-                  .setColorScheme(tabId, value as DesktopPreviewColorScheme)
-                  .catch(() => undefined);
-              }}
+              onValueChange={(value) => actions.setColorScheme(value as DesktopPreviewColorScheme)}
             >
               {COLOR_SCHEME_OPTIONS.map((option) => (
                 <MenuRadioItem key={option.value} value={option.value}>
-                  {option.label}
+                  {m(option.label)}
                 </MenuRadioItem>
               ))}
             </MenuRadioGroup>
           </MenuSubPopup>
         </MenuSub>
         <MenuSeparator />
-        {/*
-          Zoom row: label + inline control cluster. `closeOnClick=false`
-          keeps the menu open while the user clicks the +/− buttons.
-        */}
         <MenuItem
           closeOnClick={false}
           onClick={(event: React.MouseEvent) => event.preventDefault()}
           className="justify-between"
-          disabled={tabDisabled}
+          disabled={disabled}
         >
-          <span>Zoom</span>
+          <span>
+            <T>Zoom</T>
+          </span>
           <span className="flex items-center gap-1">
             <Button
               variant="outline"
               size="icon-xs"
               type="button"
-              onClick={callTab(bridge.zoomOut)}
-              aria-label="Zoom out"
-              disabled={tabDisabled}
+              onClick={actions.zoomOut}
+              aria-label={gt("Zoom out")}
+              disabled={disabled}
             >
               <Minus />
             </Button>
@@ -170,9 +167,9 @@ export function PreviewMoreMenu({
               variant="outline"
               size="icon-xs"
               type="button"
-              onClick={callTab(bridge.zoomIn)}
-              aria-label="Zoom in"
-              disabled={tabDisabled}
+              onClick={actions.zoomIn}
+              aria-label={gt("Zoom in")}
+              disabled={disabled}
             >
               <PlusIcon />
             </Button>
@@ -180,45 +177,30 @@ export function PreviewMoreMenu({
               variant="ghost"
               size="icon-xs"
               type="button"
-              onClick={callTab(bridge.resetZoom)}
-              aria-label="Reset zoom"
-              disabled={tabDisabled}
+              onClick={actions.resetZoom}
+              aria-label={gt("Reset zoom")}
+              disabled={disabled}
             >
               <RotateCcw />
             </Button>
           </span>
         </MenuItem>
         <MenuSeparator />
-        {/*
-          Grouped so the heading has a `MenuGroup` ancestor — `MenuGroupLabel`
-          reads its context and throws without one. The heading also answers
-          which profile the tab is in, which is otherwise invisible: it is fixed
-          at open and nothing else in the chrome shows it.
-        */}
         <MenuGroup>
-          {/*
-            The heading carries the profile so the actions below can keep
-            fixed-length labels: repeating a name of up to 48 characters in
-            each one drove the popup far past its width.
-          */}
           {profileName ? (
-            // Truncation needs a block box: `text-overflow` on an inline child
-            // never applies and a long name would push the popup past its width.
             <MenuGroupLabel className="max-w-64">
-              <span className="block truncate">Profile: {profileName}</span>
+              <span className="block truncate">
+                <T>
+                  Profile: <Var>{profileName}</Var>
+                </T>
+              </span>
             </MenuGroupLabel>
           ) : null}
-          <MenuItem
-            onClick={() =>
-              void bridge.clearCookies(environmentId, profileId).catch(() => undefined)
-            }
-          >
-            Clear cookies
+          <MenuItem onClick={actions.clearCookies}>
+            <T>Clear cookies</T>
           </MenuItem>
-          <MenuItem
-            onClick={() => void bridge.clearCache(environmentId, profileId).catch(() => undefined)}
-          >
-            Clear cache
+          <MenuItem onClick={actions.clearCache}>
+            <T>Clear cache</T>
           </MenuItem>
         </MenuGroup>
       </MenuPopup>

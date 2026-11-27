@@ -17,7 +17,7 @@ import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import { KairoCloudClient } from "../cloud/KairoCloudClient.ts";
 import * as KairoCloudClientLive from "../cloud/KairoCloudClient.ts";
 import { getKairoCloudAccessToken } from "../memory/SupermemorySecrets.ts";
-import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
+import { ProviderRegistry } from "../provider/ProviderRegistry.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 import {
   getComposioAccessToken,
@@ -169,23 +169,22 @@ export const makeComposioService = Effect.gen(function* () {
     } satisfies ComposioStatus;
   });
 
-  const configure: ComposioServiceShape["configure"] = (input) =>
-    Effect.gen(function* () {
-      yield* provisionProviderAccess();
-      yield* serverSettings.updateSettings({
-        integrations: {
-          composio: {
-            enabled: true,
-            providerInstanceIds: input.providerInstanceIds,
-          },
+  const configure: ComposioServiceShape["configure"] = Effect.fn("configure")(function* (input) {
+    yield* provisionProviderAccess();
+    yield* serverSettings.updateSettings({
+      integrations: {
+        composio: {
+          enabled: true,
+          providerInstanceIds: input.providerInstanceIds,
         },
-      });
-      yield* Ref.set(connectionStateRef, { lastTestedAt: undefined, lastError: undefined });
-      return yield* buildStatus;
+      },
     });
+    yield* Ref.set(connectionStateRef, { lastTestedAt: undefined, lastError: undefined });
+    return yield* buildStatus;
+  });
 
-  const testConnection: ComposioServiceShape["testConnection"] = () =>
-    Effect.gen(function* () {
+  const testConnection: ComposioServiceShape["testConnection"] = Effect.fn("testConnection")(
+    function* () {
       const lastTestedAt = DateTime.formatIso(yield* DateTime.now);
       const result = yield* provisionProviderAccess().pipe(Effect.result);
       yield* Ref.set(connectionStateRef, {
@@ -193,7 +192,8 @@ export const makeComposioService = Effect.gen(function* () {
         lastError: result._tag === "Failure" ? result.failure.message : undefined,
       });
       return yield* buildStatus;
-    });
+    },
+  );
 
   const disable = Effect.gen(function* () {
     yield* withSecrets(removeComposioAccessToken());

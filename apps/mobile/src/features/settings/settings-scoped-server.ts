@@ -1,4 +1,5 @@
 import {
+  isManagedSettingPath,
   isNullableProjectSettingsOverride,
   PROJECT_SCOPED_SERVER_SETTING_KEYS,
   type EnvironmentId,
@@ -12,6 +13,9 @@ import {
   resolveProjectSettings,
 } from "@kairo/shared/projectSettings";
 
+import { msg } from "gt-react-native";
+
+import { m, type MessageResolver } from "../../i18n/messages";
 import type { SettingsTarget } from "./settings-environment-filter";
 
 export interface ScopedMobileSettingsTarget {
@@ -19,6 +23,23 @@ export interface ScopedMobileSettingsTarget {
   readonly projectId: ProjectId | null;
   readonly settings: ServerSettings;
   readonly sources: ReturnType<typeof resolveProjectSettings>["sources"];
+}
+
+/**
+ * "Managed by <organization>." when any target's policy locks `path`: the server refuses the
+ * whole write then, so the control is managed for the selection.
+ */
+export function managedSettingReason(
+  targets: readonly ScopedMobileSettingsTarget[],
+  paths: readonly string[],
+  resolve: MessageResolver = m,
+): string | undefined {
+  const policy = targets
+    .map((target) => target.environment.serverConfig.managedPolicy)
+    .find((candidate) => paths.some((path) => isManagedSettingPath(candidate, path)));
+  return policy === undefined
+    ? undefined
+    : resolve(msg("Managed by {organization}.", { organization: policy.organization }));
 }
 
 export function resolveMobileSettingsTargets(
@@ -63,17 +84,11 @@ export function planMobileScopedSettingsPatch(
     return [];
   const writes = new Map<EnvironmentId, Record<string, unknown>>();
   for (const target of targets) {
-    if (
-      target.projectId === null ||
-      target.environment.serverConfig.environment.capabilities.projectSettingsOverrides !== true
-    )
-      continue;
+    if (target.projectId === null) continue;
     const current =
       target.environment.serverConfig.settings.projectSettingsOverrides[target.projectId] ?? {};
     const next: Record<string, unknown> = { ...current };
     for (const [key, value] of Object.entries(patch)) {
-      // A picker's "Inherit" sends null; for keys whose override cannot
-      // store null that means remove the override.
       if (
         value === null &&
         !isNullableProjectSettingsOverride(key as ProjectScopedServerSettingKey)
@@ -93,17 +108,23 @@ export function planMobileScopedSettingsPatch(
   }));
 }
 
+export function uniformMobileSetting<K extends keyof ServerSettings>(
+  targets: readonly Pick<ScopedMobileSettingsTarget, "settings">[],
+  key: K,
+): ServerSettings[K] | null {
+  const reference = targets[0];
+  if (!reference) return null;
+  const value = reference.settings[key];
+  return targets.every((target) => target.settings[key] === value) ? value : null;
+}
+
 export function planMobileScopedSettingsClear(
   targets: readonly ScopedMobileSettingsTarget[],
   keys: readonly ProjectScopedServerSettingKey[],
 ) {
   const writes = new Map<EnvironmentId, Record<string, unknown>>();
   for (const target of targets) {
-    if (
-      target.projectId === null ||
-      target.environment.serverConfig.environment.capabilities.projectSettingsOverrides !== true
-    )
-      continue;
+    if (target.projectId === null) continue;
     const overrides = writes.get(target.environment.environmentId) ?? {};
     overrides[target.projectId] = clearProjectSettingsOverrides(
       target.environment.serverConfig.settings,

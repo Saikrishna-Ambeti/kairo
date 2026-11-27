@@ -4,6 +4,11 @@ import UIKit
 enum KairoComposerClipboard {
   static let fragmentType = "app.kairo.context-fragment"
 
+  // Pasted thread links become chips in JS; packages/shared/src/threadLinks.ts parses them.
+  static func hasThreadLink(_ text: String) -> Bool {
+    text.contains("kairo-thread://v2/") || text.contains("https://app.kairo.codes/threads/")
+  }
+
   static func write(text: String, fragment: String) {
     var items: [String: Any] = ["public.utf8-plain-text": text]
     if let data = fragment.data(using: .utf8),
@@ -36,14 +41,16 @@ enum KairoComposerClipboard {
   }
 }
 
+@ExpoModule("KairoComposerEditor")
 public class KairoComposerEditorModule: Module {
+  // UIPasteboard is main-thread only, so the member is main-actor isolated.
+  @JS
+  @MainActor
+  func writeContextClipboard(text: String, fragment: String) async {
+    KairoComposerClipboard.write(text: text, fragment: fragment)
+  }
+
   public func definition() -> ModuleDefinition {
-    Name("KairoComposerEditor")
-
-    AsyncFunction("writeContextClipboard") { (text: String, fragment: String) in
-      KairoComposerClipboard.write(text: text, fragment: fragment)
-    }.runOnQueue(.main)
-
     View(KairoComposerEditorView.self) {
       Prop("controlledDocumentJson") { (view: KairoComposerEditorView, documentJson: String) in
         view.setControlledDocumentJson(documentJson)
@@ -87,6 +94,12 @@ public class KairoComposerEditorModule: Module {
       Prop("spellCheck") { (view: KairoComposerEditorView, spellCheck: Bool) in
         view.setSpellCheck(spellCheck)
       }
+      Prop("submitTitle") { (view: KairoComposerEditorView, title: String) in
+        view.setSubmitTitle(title)
+      }
+      Prop("alternateSubmitTitle") { (view: KairoComposerEditorView, title: String) in
+        view.setAlternateSubmitTitle(title)
+      }
       Prop("enterBehavior") { (view: KairoComposerEditorView, behavior: String) in
         view.setEnterBehavior(behavior)
       }
@@ -104,6 +117,7 @@ public class KairoComposerEditorModule: Module {
         "onComposerBlur",
         "onComposerSubmit",
         "onComposerPasteImages",
+        "onComposerPasteImagesPending",
         "onComposerContextPress",
         "onComposerPasteContext",
         "onComposerPasteText",
@@ -118,6 +132,9 @@ public class KairoComposerEditorModule: Module {
       }
       AsyncFunction("setSelection") { (view: KairoComposerEditorView, start: Int, end: Int) in
         view.setSelection(start: start, end: end)
+      }
+      AsyncFunction("readState") { (view: KairoComposerEditorView) -> [String: Any] in
+        view.readState()
       }
     }
   }

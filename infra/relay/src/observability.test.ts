@@ -2,15 +2,15 @@ import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { expect, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import * as HttpServer from "effect/unstable/http/HttpServer";
-import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import type { OtlpTracer } from "effect/unstable/observability";
+import * as HttpServer from "effect/http/HttpServer";
+import * as HttpServerRequest from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { OtlpTracer, OtlpSerialization } from "effect/observability";
+import * as Layer from "effect/Layer";
 
 import * as EnvironmentConnector from "./environments/EnvironmentConnector.ts";
-import { makeRelayTraceLayer } from "./observability.ts";
+import { withSchemaErrorSpanAttributes } from "./observability.ts";
 
 interface ExportedRequest {
   readonly authorization: string | undefined;
@@ -51,12 +51,19 @@ it.effect("exports schema error fields as span attributes", () =>
     ).pipe(
       Effect.withSpan("relay.test.schema_error"),
       Effect.exit,
+      withSchemaErrorSpanAttributes,
       Effect.provide(
-        makeRelayTraceLayer({
-          tracesEndpoint: "/v1/traces",
-          tracesDatasetName: "relay-test-traces",
-          ingestToken: Redacted.make("test-token"),
-        }),
+        OtlpTracer.layer({
+          url: "/v1/traces",
+          resource: {
+            serviceName: "kairo-relay-worker",
+            attributes: { "service.namespace": "kairo" },
+          },
+          headers: {
+            Authorization: "Bearer test-token",
+            "X-Axiom-Dataset": "relay-test-traces",
+          },
+        }).pipe(Layer.provide(OtlpSerialization.layerJson)),
       ),
     );
 

@@ -34,7 +34,6 @@ class MediaFileStatError extends Schema.TaggedError<MediaFileStatError>()("Media
   }
 }
 
-/** Holds the file identity and descriptor for one HTTP request, never a copy of its bytes. */
 export interface OpenMediaFile {
   readonly handle: NodeFSP.FileHandle;
   readonly info: NodeFS.BigIntStats;
@@ -45,7 +44,10 @@ const realpathLikeFileSystem = (filePath: string) =>
     NodeFS.realpath(filePath, (error, resolved) => (error ? reject(error) : resolve(resolved)));
   });
 
-/** Opens a canonical media path once. Replacements cannot change the response's source. */
+/** Null when the path cannot be resolved. */
+export const realPathWithoutNativeResolver = (filePath: string) =>
+  Effect.promise(() => realpathLikeFileSystem(filePath).catch(() => null));
+
 export const openMediaFile = Effect.fn("openMediaFile")(function* (
   filePath: string,
   identity?: { readonly device: string; readonly inode: string },
@@ -79,10 +81,7 @@ export const openMediaFile = Effect.fn("openMediaFile")(function* (
           ) {
             return null;
           }
-          // Callers canonicalise with Effect's FileSystem.realPath, which is
-          // Node's JS realpath. fs/promises.realpath is the native binding and
-          // on Windows also expands 8.3 short names, so a path that is already
-          // canonical by the caller's rules would still look swapped here.
+          // Match FileSystem.realPath's JS behavior; native realpath expands Windows 8.3 names too.
           if ((await realpathLikeFileSystem(filePath)) !== filePath) return null;
           const after = await NodeFSP.lstat(filePath, { bigint: true });
           if (!after.isFile() || info.dev !== after.dev || info.ino !== after.ino) return null;
@@ -98,7 +97,16 @@ export const openMediaFile = Effect.fn("openMediaFile")(function* (
   );
 });
 
-/** Reads the leading bytes of an already-validated media file, never past the end. */
+/** Identity, size and nanosecond times, so it moves whenever the file is edited or replaced. */
+export const mediaFileRevision = (info: NodeFS.BigIntStats) =>
+  `${info.dev}:${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}`;
+
+/** Follows links, as serving the path does. Null when nothing can be read there. */
+export const readFileRevision = (filePath: string) =>
+  Effect.promise(() =>
+    NodeFSP.stat(filePath, { bigint: true }).then(mediaFileRevision, () => null),
+  );
+
 export const readMediaFileHeader = (filePath: string, file: OpenMediaFile, byteCount: number) =>
   Effect.tryPromise({
     try: async () => {

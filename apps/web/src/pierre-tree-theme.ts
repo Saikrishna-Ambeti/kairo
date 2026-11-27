@@ -1,6 +1,5 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, PointerEvent } from "react";
 
-/** Shadow-root overrides that make a Pierre file tree read as part of the app chrome. */
 export const PIERRE_TREE_UNSAFE_CSS = `
   :host {
     --trees-bg-override: transparent;
@@ -8,15 +7,40 @@ export const PIERRE_TREE_UNSAFE_CSS = `
     --trees-hover-bg-override: color-mix(in srgb, currentColor 7%, transparent);
     --trees-border-color-override: color-mix(in srgb, currentColor 14%, transparent);
     --trees-font-family-override: var(--font-sans);
-    --trees-font-size-override: 12px;
+    --trees-font-size-override: 0.75rem;
   }
-  button[data-type='item'] { border-radius: 5px; }
+  [data-truncate-content='visible'] { overflow: hidden; text-overflow: ellipsis; }
+  [data-truncate-marker] { display: none; }
+  button[data-type='item'], button[data-type='item']::before { border-radius: var(--radius-md); }
+  svg[data-icon-name='kairo-tree-icon-loading'] { opacity: 0.6; }
+  @media (prefers-reduced-motion: no-preference) {
+    svg[data-icon-name='kairo-tree-icon-loading'] { animation: kairo-tree-spin 1s linear infinite; }
+  }
+  @keyframes kairo-tree-spin { to { transform: rotate(360deg); } }
 `;
 
-/** Host styles that keep a Pierre tree on the active color scheme and foreground. */
 export function pierreTreeStyle(colorScheme: "light" | "dark"): CSSProperties {
   return {
     colorScheme,
     ["--trees-fg-override" as string]: "var(--contrast-foreground)",
+    ["--trees-fg-muted-override" as string]: "var(--contrast-muted-foreground)",
+    ["--trees-status-ignored-override" as string]: "var(--contrast-muted-foreground)",
   };
+}
+
+// Clipped labels are unreadable and the tree cannot scroll sideways, so a clipped row gets its full name as a native tooltip.
+export function titleClippedPierreTreeRow(event: PointerEvent<HTMLElement>) {
+  const row = event.nativeEvent
+    .composedPath()
+    .find(
+      (node): node is HTMLElement =>
+        node instanceof HTMLElement && node.matches("button[data-type='item']"),
+    );
+  if (!row) return;
+  const label = row.getAttribute("aria-label");
+  const clipped = Array.from(
+    row.querySelectorAll<HTMLElement>("[data-truncate-content='visible']"),
+  ).some((element) => element.scrollWidth > element.clientWidth);
+  if (label && clipped) row.title = label;
+  else row.removeAttribute("title");
 }

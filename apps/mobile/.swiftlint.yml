@@ -4,6 +4,7 @@ included:
   - modules/kairo-native-controls/ios
   - modules/kairo-terminal/ios
   - modules/kairo-review-diff/ios
+  - modules/kairo-voice-transcription/ios
 
 excluded:
   - ios/Pods

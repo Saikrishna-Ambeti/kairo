@@ -1,12 +1,13 @@
-import type { DiscoveredLocalServer, EnvironmentId } from "@kairo/contracts";
+import type { EnvironmentId } from "@kairo/contracts";
+import type { DiscoveredLocalServer } from "@kairo/contracts";
 import { isLoopbackHost } from "@kairo/shared/preview";
-import { useMemo } from "react";
 
 import { resolveDiscoveredServerUrl } from "~/browser/browserTargetResolver";
 import { useDiscoveredPortsState } from "~/portDiscoveryState";
 
 export interface PreviewableServer extends DiscoveredLocalServer {
   source: "scanner" | "configured";
+  /** Pre-resolution loopback URL used as the history key; remote navigation URLs are volatile. */
   requestedUrl: string;
 }
 
@@ -20,19 +21,15 @@ export function useDiscoveredLocalServers(
 ): ReadonlyArray<PreviewableServer> {
   const scannerState = useDiscoveredPortsState(input.environmentId, input.configuredUrls);
 
-  return useMemo(
-    () =>
-      mergeServers({
-        scanner: scannerState.servers.map((server) => ({
-          ...server,
-          url: resolveDiscoveredServerUrl(input.environmentId, server.url),
-          requestedUrl: server.url,
-        })),
-        configuredUrls: input.configuredUrls ?? [],
-        configuredUrlProbing: scannerState.configuredUrlProbing,
-      }),
-    [input.environmentId, scannerState, input.configuredUrls],
-  );
+  return mergeServers({
+    scanner: scannerState.servers.map((server) => ({
+      ...server,
+      url: resolveDiscoveredServerUrl(input.environmentId, server.url),
+      requestedUrl: server.url,
+    })),
+    configuredUrls: input.configuredUrls ?? [],
+    configuredUrlProbing: scannerState.configuredUrlProbing,
+  });
 }
 
 export function mergeServers(input: {

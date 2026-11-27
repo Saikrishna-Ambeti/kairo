@@ -3,7 +3,7 @@ import { assert, it } from "@effect/vitest";
 import * as NodeSqliteClient from "@kairo/shared/nodeSqliteClient";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as SqlClient from "effect/sql/SqlClient";
 
 import { runMigrations } from "../Migrations.ts";
 import migrateArtifactFileKinds from "./058_ArtifactFileKinds.ts";
@@ -56,7 +56,9 @@ it.effect(
       assert.isFalse(before.some((column) => column.name === "branch_pull_request_json"));
       assert.isFalse(before.some((column) => column.name === "active_order_key"));
 
-      assert.deepEqual(yield* runMigrations(), [[60, "KairoThreadSchemaReconciliation"]]);
+      assert.deepEqual(yield* runMigrations({ toMigrationInclusive: 60 }), [
+        [60, "KairoThreadSchemaReconciliation"],
+      ]);
       const threads = yield* sql<{
         readonly title: string;
         readonly branch_pull_request_json: string | null;
@@ -89,7 +91,7 @@ it.effect(
         { name: "ArtifactFileKinds" },
         { name: "BackfillArtifactFileKinds" },
       ]);
-      assert.deepEqual(yield* runMigrations(), []);
+      assert.deepEqual(yield* runMigrations({ toMigrationInclusive: 60 }), []);
     }).pipe(Effect.provide(sqliteLayer)),
 );
 
@@ -109,7 +111,7 @@ it.effect("preserves existing branch pull requests and thread order when replaye
             '2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z'
           )
         `;
-    yield* runMigrations();
+    yield* runMigrations({ toMigrationInclusive: 60 });
     yield* migrateThreadSchema;
     const threads = yield* sql<{
       readonly branch_pull_request_json: string;

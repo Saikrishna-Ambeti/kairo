@@ -2,10 +2,10 @@ import { expect, it } from "@effect/vitest";
 import { EnvironmentId, ProviderInstanceId, ThreadId } from "@kairo/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { McpSchema, McpServer } from "effect/unstable/ai";
+import { McpSchema, McpServer } from "effect/ai";
 
 import { SupermemoryService } from "../../../memory/SupermemoryService.ts";
-import { MemoryToolkitRegistrationLive } from "../../McpHttpServer.ts";
+import { layerInProcessMcpServer, MemoryToolkitRegistrationLive } from "../../McpHttpServer.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 
 const client = McpSchema.McpServerClient.of({
@@ -23,9 +23,13 @@ const client = McpSchema.McpServerClient.of({
 
 const invocation = (capabilities: ReadonlySet<McpInvocationContext.McpCapability>) => ({
   environmentId: EnvironmentId.make("environment-memory-test"),
-  threadId: ThreadId.make("thread-memory-test"),
-  providerSessionId: "provider-session-memory-test",
-  providerInstanceId: ProviderInstanceId.make("codex"),
+  thread: {
+    threadId: ThreadId.make("thread-memory-test"),
+    providerSessionId: "provider-session-memory-test",
+    providerInstanceId: ProviderInstanceId.make("codex"),
+  },
+  client: undefined,
+  requestNamespace: "memory-test",
   capabilities,
   issuedAt: 1,
 });
@@ -46,7 +50,7 @@ it.effect("routes memory tools only for sessions with the memory capability", ()
     context: () => Effect.die("unused"),
   });
   const testLayer = MemoryToolkitRegistrationLive.pipe(
-    Layer.provideMerge(McpServer.McpServer.layer),
+    Layer.provideMerge(layerInProcessMcpServer),
     Layer.provide(Layer.succeed(SupermemoryService, service)),
   );
 

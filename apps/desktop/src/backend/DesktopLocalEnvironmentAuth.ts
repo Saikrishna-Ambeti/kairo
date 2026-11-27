@@ -1,15 +1,38 @@
 import { bootstrapRemoteBearerSession } from "@kairo/client-runtime/authorization";
+import type { RemoteEnvironmentRequestError } from "@kairo/client-runtime/rpc";
 import { PRIMARY_LOCAL_ENVIRONMENT_ID } from "@kairo/contracts";
+import { currentDesktopBootstrapToken } from "@kairo/shared/desktopBootstrapToken";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
+import * as Mac from "effect/crypto/Mac";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 
 import * as DesktopBackendPool from "./DesktopBackendPool.ts";
+
+// Each /oauth/token attempt may take 10 s, so a backend busy after ready needs several attempts.
+const BOOTSTRAP_TRANSIENT_RETRY_TIMEOUT = Duration.seconds(60);
+const BOOTSTRAP_TRANSIENT_RETRY_INTERVAL = Duration.millis(500);
+const TRANSIENT_BOOTSTRAP_STATUS_CODES = new Set([502, 503, 504]);
+
+const isTransientBearerBootstrapError = (error: RemoteEnvironmentRequestError): boolean => {
+  switch (error._tag) {
+    case "RemoteEnvironmentAuthFetchError":
+    case "RemoteEnvironmentAuthTimeoutError":
+      return true;
+    case "RemoteEnvironmentAuthUndeclaredStatusError":
+      return TRANSIENT_BOOTSTRAP_STATUS_CODES.has(error.status);
+    default:
+      return false;
+  }
+};
 
 export class DesktopLocalEnvironmentAuthBackendNotConfiguredError extends Schema.TaggedError<DesktopLocalEnvironmentAuthBackendNotConfiguredError>()(
   "DesktopLocalEnvironmentAuthBackendNotConfiguredError",
@@ -42,10 +65,11 @@ export class DesktopLocalEnvironmentAuth extends Context.Service<
   }
 >()("@kairo/desktop/backend/DesktopLocalEnvironmentAuth") {}
 
-/** @public Service construction is part of the canonical Effect module API. */
+/** @public */
 export const make = Effect.gen(function* () {
   const pool = yield* DesktopBackendPool.DesktopBackendPool;
   const httpClient = yield* HttpClient.HttpClient;
+  const mac = yield* Mac.Mac;
   const tokenRef = yield* Ref.make(Option.none<string>());
   const mutex = yield* Semaphore.make(1);
 
@@ -59,29 +83,51 @@ export const make = Effect.gen(function* () {
 
         const instances = yield* pool.list;
         const primary = instances.find((instance) => instance.id === PRIMARY_LOCAL_ENVIRONMENT_ID);
-        const configOption = primary === undefined ? Option.none() : yield* primary.currentConfig;
+        if (primary === undefined || !(yield* primary.waitForReady(Duration.infinity))) {
+          return yield* new DesktopLocalEnvironmentAuthBackendNotConfiguredError();
+        }
+        const configOption = yield* primary.currentConfig;
         if (Option.isNone(configOption)) {
           return yield* new DesktopLocalEnvironmentAuthBackendNotConfiguredError();
         }
         const config = configOption.value;
-        const credential = config.bootstrap.desktopBootstrapToken;
+        // Secret-authenticated backends accept the current window token; the launch token may be stale.
+        const secret = config.bootstrap.desktopBootstrapSecret;
+        const credential =
+          secret === undefined
+            ? config.bootstrap.desktopBootstrapToken
+            : yield* currentDesktopBootstrapToken(secret, yield* Clock.currentTimeMillis).pipe(
+                Effect.provideService(Mac.Mac, mac),
+              );
         if (!credential) {
           return yield* new DesktopLocalEnvironmentAuthBackendNotConfiguredError();
         }
-        const session = yield* bootstrapRemoteBearerSession({
-          httpBaseUrl: config.httpBaseUrl.href,
-          credential,
-          clientMetadata: {
-            label: "Kairo Desktop",
-            deviceType: "desktop",
-          },
-        }).pipe(
-          Effect.provideService(HttpClient.HttpClient, httpClient),
-          Effect.mapError(
-            (cause) =>
-              new DesktopLocalEnvironmentAuthSessionBootstrapError({
-                cause,
-              }),
+        const exchange = Effect.gen(function* () {
+          // Each attempt goes only to a backend that is currently ready.
+          if (!(yield* primary.waitForReady(Duration.infinity))) {
+            return yield* new DesktopLocalEnvironmentAuthBackendNotConfiguredError();
+          }
+          return yield* bootstrapRemoteBearerSession({
+            httpBaseUrl: config.httpBaseUrl.href,
+            credential,
+            clientMetadata: {
+              label: "Kairo Desktop",
+              deviceType: "desktop",
+            },
+          }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient));
+        });
+        const session = yield* exchange.pipe(
+          Effect.retry({
+            while: (error) =>
+              error._tag !== "DesktopLocalEnvironmentAuthBackendNotConfiguredError" &&
+              isTransientBearerBootstrapError(error),
+            schedule: Schedule.spaced(BOOTSTRAP_TRANSIENT_RETRY_INTERVAL),
+          }),
+          Effect.timeout(BOOTSTRAP_TRANSIENT_RETRY_TIMEOUT),
+          Effect.mapError((cause) =>
+            cause._tag === "DesktopLocalEnvironmentAuthBackendNotConfiguredError"
+              ? cause
+              : new DesktopLocalEnvironmentAuthSessionBootstrapError({ cause }),
           ),
         );
         yield* Ref.set(tokenRef, Option.some(session.access_token));

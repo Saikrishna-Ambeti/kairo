@@ -15,8 +15,7 @@ import * as Stream from "effect/Stream";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import { KairoCloudClient } from "../cloud/KairoCloudClient.ts";
 import { KAIRO_CLOUD_ACCESS_TOKEN_SECRET } from "../memory/SupermemorySecrets.ts";
-import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
-import { makeManualOnlyProviderMaintenanceCapabilities } from "../provider/providerMaintenance.ts";
+import { ProviderRegistry } from "../provider/ProviderRegistry.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 import { buildComposioAcpMcpServers, buildComposioCodexArgs } from "./ComposioMcp.ts";
 import { COMPOSIO_ACCESS_TOKEN_SECRET } from "./ComposioSecrets.ts";
@@ -67,11 +66,6 @@ const makeProviderRegistryLayer = (providers: ReadonlyArray<unknown>) =>
     getProviders: Effect.succeed(providers as never),
     refresh: () => Effect.succeed([]),
     refreshInstance: () => Effect.succeed([]),
-    getProviderMaintenanceCapabilitiesForInstance: (_instanceId, provider) =>
-      Effect.succeed(
-        makeManualOnlyProviderMaintenanceCapabilities({ provider, packageName: null }),
-      ),
-    setProviderMaintenanceActionState: () => Effect.succeed([]),
     streamChanges: Stream.empty,
   });
 

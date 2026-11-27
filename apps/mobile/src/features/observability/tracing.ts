@@ -1,7 +1,9 @@
 import Constants from "expo-constants";
-import { makeRelayClientTracingLayer } from "@kairo/shared/relayTracing";
+import { type ReleaseChannel, releaseResourceAttributes } from "@kairo/shared/releaseResource";
+import * as RelayTracing from "@kairo/shared/relayTracing";
 
 import { hasTracingPublicConfig, resolveCloudPublicConfig } from "../cloud/publicConfig";
+import { connectionTracesEnabled } from "./diagnosticsSetting";
 
 export interface TracingConfig {
   readonly tracesUrl: string;
@@ -11,8 +13,15 @@ export interface TracingConfig {
 
 export interface TracingResource {
   readonly serviceVersion?: string;
+  readonly serviceInstanceId: string;
   readonly appVariant: string;
 }
+
+const RELEASE_CHANNEL_BY_VARIANT: Readonly<Record<string, ReleaseChannel | undefined>> = {
+  development: "dev",
+  preview: "preview",
+  production: "stable",
+};
 
 export function resolveTracingConfig(): TracingConfig | null {
   const config = resolveCloudPublicConfig();
@@ -23,17 +32,28 @@ export function resolveTracingConfig(): TracingConfig | null {
   return { tracesUrl, tracesDataset, tracesToken };
 }
 
-export function makeTracingLayer(config: TracingConfig | null, resource: TracingResource) {
-  return makeRelayClientTracingLayer(config, {
-    serviceName: "kairo-mobile",
-    serviceVersion: resource.serviceVersion,
-    runtime: "react-native",
-    client: `mobile-${resource.appVariant}`,
-  });
+export function layerFromConfig(config: TracingConfig | null, resource: TracingResource) {
+  const channel =
+    typeof __DEV__ !== "undefined" && __DEV__
+      ? "dev"
+      : RELEASE_CHANNEL_BY_VARIANT[resource.appVariant];
+  return RelayTracing.layer(
+    config,
+    {
+      serviceName: "kairo-mobile",
+      serviceVersion: resource.serviceVersion,
+      runtime: "react-native",
+      serviceInstanceId: resource.serviceInstanceId,
+      client: `mobile-${resource.appVariant}`,
+      attributes: channel && releaseResourceAttributes(channel),
+    },
+    { isEnabled: connectionTracesEnabled },
+  );
 }
 
-export const tracingLayer = makeTracingLayer(resolveTracingConfig(), {
+export const layer = layerFromConfig(resolveTracingConfig(), {
   serviceVersion: Constants.expoConfig?.version,
+  serviceInstanceId: Constants.sessionId,
   appVariant:
     typeof Constants.expoConfig?.extra?.appVariant === "string"
       ? Constants.expoConfig.extra.appVariant

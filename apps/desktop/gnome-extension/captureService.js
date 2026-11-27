@@ -1,4 +1,3 @@
-// This policy is independent of Shell so lifecycle and authorization can be tested without a desktop.
 export const CLIENT_NAMES = ["com.kairo.Kairo.SnapShot", "com.kairo.Kairo.Development.SnapShot"];
 
 export function isWaylandSession(meta) {

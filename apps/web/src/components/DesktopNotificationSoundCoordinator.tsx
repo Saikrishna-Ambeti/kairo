@@ -1,16 +1,13 @@
-import type {
-  DesktopNotificationSound,
-  OrchestrationLatestTurn,
-  OrchestrationSessionStatus,
-} from "@kairo/contracts";
+import type { DesktopNotificationSound, OrchestrationV2RunStatus } from "@kairo/contracts";
+import type { EnvironmentThreadShell } from "@kairo/client-runtime/state/shell";
 import { useEffect, useRef } from "react";
 
 import { useAllEnvironmentShellsBootstrapped, useThreadShells } from "../state/entities";
 
 export interface SessionNotificationThread {
-  readonly sessionStatus: OrchestrationSessionStatus | null;
+  readonly sessionStatus: NonNullable<EnvironmentThreadShell["runtime"]>["status"] | null;
   readonly turnId: string | null;
-  readonly turnState: OrchestrationLatestTurn["state"] | null;
+  readonly turnState: OrchestrationV2RunStatus | null;
   readonly completedAt: string | null;
 }
 
@@ -23,7 +20,10 @@ function terminalNotification(
     thread.completedAt === null ||
     thread.turnId === null ||
     thread.sessionStatus === null ||
+    thread.sessionStatus === "preparing" ||
+    thread.sessionStatus === "queued" ||
     thread.sessionStatus === "starting" ||
+    thread.sessionStatus === "waiting" ||
     thread.sessionStatus === "running"
   ) {
     return null;
@@ -35,7 +35,7 @@ function terminalNotification(
       sound: "success",
     };
   }
-  if (thread.turnState === "error" && thread.sessionStatus === "error") {
+  if (thread.turnState === "failed" && thread.sessionStatus === "failed") {
     return {
       key: `${thread.turnId}\u0000error\u0000${thread.completedAt}`,
       sound: "error",
@@ -67,6 +67,7 @@ export function DesktopNotificationSoundCoordinator() {
   const bootstrapped = useAllEnvironmentShellsBootstrapped();
   const previousRef = useRef<SessionNotificationSnapshot | null>(null);
 
+  // oxlint-disable-next-line kairo/no-unreasoned-state-sync -- synchronizes desktop sound playback with completed runs
   useEffect(() => {
     if (!bootstrapped) {
       previousRef.current = null;
@@ -76,10 +77,10 @@ export function DesktopNotificationSoundCoordinator() {
     const current = new Map<string, SessionNotificationThread>();
     for (const thread of threads) {
       current.set(`${thread.environmentId}\u0000${thread.id}`, {
-        sessionStatus: thread.session?.status ?? null,
-        turnId: thread.latestTurn?.turnId ?? null,
-        turnState: thread.latestTurn?.state ?? null,
-        completedAt: thread.latestTurn?.completedAt ?? null,
+        sessionStatus: thread.runtime?.status ?? null,
+        turnId: thread.latestRun?.runId ?? null,
+        turnState: thread.latestRun?.status ?? null,
+        completedAt: thread.latestRun?.completedAt ?? null,
       });
     }
 

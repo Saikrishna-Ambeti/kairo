@@ -1,0 +1,5 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": { "modules": ["KairoPreviewTunnelModule"] },
+  "android": { "modules": ["expo.modules.kairopreviewtunnel.KairoPreviewTunnelModule"] }
+}

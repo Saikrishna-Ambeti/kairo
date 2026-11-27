@@ -25,7 +25,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 
 export interface KairoCloudClientShape {
   readonly exchangeInstallationGrant: (
@@ -111,16 +111,18 @@ const makeKairoCloudClient = Effect.gen(function* () {
   });
 
   return KairoCloudClient.of({
-    exchangeInstallationGrant: (clerkToken, body) =>
-      execute({
-        accessToken: clerkToken,
-        method: "POST",
-        operation: "access provisioning",
-        path: "/v1/installations/exchange",
-        body,
-        responseSchema: KairoCloudInstallationExchangeResponse,
-      }),
-    getCapabilities: (accessToken) =>
+    exchangeInstallationGrant: Effect.fn("KairoCloudClient.exchangeInstallationGrant")(
+      (clerkToken, body) =>
+        execute({
+          accessToken: clerkToken,
+          method: "POST",
+          operation: "access provisioning",
+          path: "/v1/installations/exchange",
+          body,
+          responseSchema: KairoCloudInstallationExchangeResponse,
+        }),
+    ),
+    getCapabilities: Effect.fn("KairoCloudClient.getCapabilities")((accessToken) =>
       execute({
         accessToken,
         method: "GET",
@@ -128,7 +130,8 @@ const makeKairoCloudClient = Effect.gen(function* () {
         path: "/v1/capabilities",
         responseSchema: KairoCloudCapabilitiesResponse,
       }),
-    issueComposioAccess: (accessToken) =>
+    ),
+    issueComposioAccess: Effect.fn("KairoCloudClient.issueComposioAccess")((accessToken) =>
       execute({
         accessToken,
         method: "POST",
@@ -140,7 +143,8 @@ const makeKairoCloudClient = Effect.gen(function* () {
           (error) => new ComposioError({ message: error.message, cause: error.cause }),
         ),
       ),
-    saveMemory: (accessToken, body) =>
+    ),
+    saveMemory: Effect.fn("KairoCloudClient.saveMemory")((accessToken, body) =>
       execute({
         accessToken,
         method: "POST",
@@ -149,7 +153,8 @@ const makeKairoCloudClient = Effect.gen(function* () {
         body,
         responseSchema: KairoCloudMemorySaveResponse,
       }),
-    recallMemory: (accessToken, body) =>
+    ),
+    recallMemory: Effect.fn("KairoCloudClient.recallMemory")((accessToken, body) =>
       execute({
         accessToken,
         method: "POST",
@@ -158,7 +163,8 @@ const makeKairoCloudClient = Effect.gen(function* () {
         body,
         responseSchema: KairoCloudMemoryRecallResponse,
       }),
-    getMemoryContext: (accessToken, body) =>
+    ),
+    getMemoryContext: Effect.fn("KairoCloudClient.getMemoryContext")((accessToken, body) =>
       execute({
         accessToken,
         method: "POST",
@@ -167,6 +173,7 @@ const makeKairoCloudClient = Effect.gen(function* () {
         body,
         responseSchema: KairoCloudMemoryContextResponse,
       }),
+    ),
   });
 });
 

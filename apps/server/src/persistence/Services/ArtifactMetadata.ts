@@ -55,6 +55,10 @@ export interface ArtifactMetadataRepositoryShape {
   readonly deletePath: (
     input: DeleteArtifactMetadataPathInput,
   ) => Effect.Effect<void, ProjectionRepositoryError>;
+  readonly deleteAfterCheckpoint: (
+    threadId: ThreadId,
+    checkpointTurnCount: number,
+  ) => Effect.Effect<void, ProjectionRepositoryError>;
   readonly deleteByThreadId: (threadId: ThreadId) => Effect.Effect<void, ProjectionRepositoryError>;
   readonly deleteByProjectId: (
     projectId: ProjectId,

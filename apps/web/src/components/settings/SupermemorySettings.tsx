@@ -1,3 +1,6 @@
+import { msg, T, useGT } from "gt-react";
+import { m } from "../../i18n/messages";
+import { settlePromise, squashAtomCommandFailure } from "@kairo/client-runtime/state/runtime";
 import {
   BrainCircuitIcon,
   CheckCircle2Icon,
@@ -5,7 +8,7 @@ import {
   LoaderCircleIcon,
   PowerIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   ProviderInstanceId,
   SupermemoryProviderStatus,
@@ -36,30 +39,24 @@ function showMemoryError(title: string, error: unknown) {
 }
 
 function useSupermemoryStatus() {
-  const serverApi = usePrimaryServerApi();
+  const { getMemoryStatus } = usePrimaryServerApi();
   const [status, setStatus] = useState<SupermemoryStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(async () => {
-    const next = await serverApi.getMemoryStatus();
-    setStatus(next);
-    return next;
-  }, []);
-
+  // oxlint-disable-next-line kairo/no-unreasoned-state-sync -- reads memory configuration from the connected host
   useEffect(() => {
     let disposed = false;
-    setLoading(true);
-    void refresh()
-      .catch((error: unknown) => {
-        if (!disposed) showMemoryError("Memory status unavailable", error);
-      })
-      .finally(() => {
-        if (!disposed) setLoading(false);
-      });
-    return () => {
-      disposed = true;
-    };
-  }, [refresh]);
+    void settlePromise(getMemoryStatus).then((result) => {
+      if (disposed) return;
+      setLoading(false);
+      if (result._tag === "Failure") {
+        showMemoryError(m(msg("Memory status unavailable")), squashAtomCommandFailure(result));
+        return;
+      }
+      setStatus(result.value);
+    });
+    return () => void (disposed = true);
+  }, [getMemoryStatus]);
 
   return { status, setStatus, loading };
 }
@@ -139,12 +136,13 @@ function SupermemorySetupWizard({
   status: SupermemoryStatus;
   onStatus: (status: SupermemoryStatus) => void;
 }) {
+  const gt = useGT();
   const serverApi = usePrimaryServerApi();
   const settings = useServerSettings();
   const serverProviders = useServerProviders();
   const [busy, setBusy] = useState<BusyAction>(null);
   const defaultProviderId = settings.textGenerationModelSelection.instanceId;
-  const providers = useMemo(() => {
+  const providers = (() => {
     if (status.providers.length > 0) return status.providers;
     return serverProviders.map((provider) => {
       const supported = SUPPORTED_MEMORY_DRIVERS.has(provider.driver);
@@ -157,50 +155,42 @@ function SupermemorySetupWizard({
         status: supported ? ("not_selected" as const) : ("unsupported" as const),
       };
     });
-  }, [defaultProviderId, serverProviders, status.providers]);
-  const [selectedIds, setSelectedIds] = useState<ReadonlySet<ProviderInstanceId>>(
-    () =>
-      new Set(
-        providers
-          .filter((provider) => provider.instanceId === defaultProviderId && provider.supported)
-          .map((provider) => provider.instanceId),
-      ),
+  })();
+  const [selection, setSelectedIds] = useState<ReadonlySet<ProviderInstanceId> | null>(null);
+  const defaultProvider = providers.find(
+    (provider) => provider.instanceId === defaultProviderId && provider.supported,
   );
-
-  useEffect(() => {
-    if (selectedIds.size > 0 || providers.length === 0) return;
-    const defaultProvider = providers.find(
-      (provider) => provider.instanceId === defaultProviderId && provider.supported,
-    );
-    if (defaultProvider) setSelectedIds(new Set([defaultProvider.instanceId]));
-  }, [defaultProviderId, providers, selectedIds.size]);
+  const selectedIds = selection ?? new Set(defaultProvider ? [defaultProvider.instanceId] : []);
 
   const configure = async () => {
     if (selectedIds.size === 0) return;
     setBusy("configure");
-    try {
+    const result = await settlePromise(async () => {
       const next = await serverApi.configureMemory({ providerInstanceIds: [...selectedIds] });
       onStatus(next);
       toastManager.add(
         stackedThreadToast({
           type: "success",
-          title: "Memory enabled",
-          description: "Memory will be available in new provider sessions.",
+          title: m(msg("Memory enabled")),
+          description: m(msg("Memory will be available in new provider sessions.")),
         }),
       );
-    } catch (error) {
-      showMemoryError("Memory setup failed", error);
-    } finally {
-      setBusy(null);
+    });
+    if (result._tag === "Failure") {
+      const error = squashAtomCommandFailure(result);
+      showMemoryError(m(msg("Memory setup failed")), error);
     }
+    setBusy(null);
   };
 
   return (
     <SettingsPageContainer>
-      <SettingsSection icon={<BrainCircuitIcon className="size-3.5" />} title="Memory">
+      <SettingsSection icon={<BrainCircuitIcon className="size-3.5" />} title={gt("Memory")}>
         <div className="space-y-5 p-5">
           <div className="space-y-2">
-            <div className="text-xs font-medium text-muted-foreground">Provider instances</div>
+            <div className="text-xs font-medium text-muted-foreground">
+              <T>Provider instances</T>
+            </div>
             <SupermemoryProviderSelector
               onChange={setSelectedIds}
               providers={providers}
@@ -213,12 +203,12 @@ function SupermemorySetupWizard({
               onClick={configure}
             >
               {busy === "configure" ? <LoaderCircleIcon className="size-4 animate-spin" /> : null}
-              Enable memory
+              <T>Enable memory</T>
             </Button>
           </div>
           {!status.service.available ? (
             <p className="text-xs text-warning">
-              This Kairo host does not have working Kairo Cloud access.
+              <T>This Kairo host does not have working Kairo Cloud access.</T>
             </p>
           ) : null}
         </div>
@@ -228,27 +218,36 @@ function SupermemorySetupWizard({
 }
 
 function SupermemoryStatusSummary({ status }: { status: SupermemoryStatus }) {
+  const gt = useGT();
   return (
     <div className="grid gap-3 p-5 sm:grid-cols-3">
       <div className="rounded-xl border p-3">
-        <div className="text-xs text-muted-foreground">Service</div>
+        <div className="text-xs text-muted-foreground">
+          <T>Service</T>
+        </div>
         <div className="mt-1 flex items-center gap-2 text-sm font-semibold">
           <CloudIcon className="size-4" />
-          Hosted
+          <T>Hosted</T>
         </div>
       </div>
       <div className="rounded-xl border p-3">
-        <div className="text-xs text-muted-foreground">Setup</div>
+        <div className="text-xs text-muted-foreground">
+          <T>Setup</T>
+        </div>
         <div className="mt-1 flex items-center gap-2 text-sm font-semibold">
           <CheckCircle2Icon
             className={cn("size-4", status.service.available ? "text-success" : "text-warning")}
           />
-          {status.service.available ? "Managed by Kairo" : "Service unavailable"}
+          {status.service.available ? gt("Managed by Kairo") : gt("Service unavailable")}
         </div>
       </div>
       <div className="rounded-xl border p-3">
-        <div className="text-xs text-muted-foreground">Scope</div>
-        <div className="mt-1 text-sm font-semibold">User-wide</div>
+        <div className="text-xs text-muted-foreground">
+          <T>Scope</T>
+        </div>
+        <div className="mt-1 text-sm font-semibold">
+          <T>User-wide</T>
+        </div>
       </div>
     </div>
   );
@@ -261,36 +260,34 @@ function ConfiguredSupermemoryPanel({
   status: SupermemoryStatus;
   onStatus: (status: SupermemoryStatus) => void;
 }) {
+  const gt = useGT();
   const serverApi = usePrimaryServerApi();
   const [busy, setBusy] = useState<BusyAction>(null);
-  const [selectedIds, setSelectedIds] = useState<ReadonlySet<ProviderInstanceId>>(
-    () =>
-      new Set(
-        status.providers
-          .filter((provider) => provider.selected)
-          .map((provider) => provider.instanceId),
-      ),
-  );
-
-  useEffect(() => {
-    setSelectedIds(
-      new Set(
-        status.providers
-          .filter((provider) => provider.selected)
-          .map((provider) => provider.instanceId),
-      ),
-    );
-  }, [status.providers]);
+  const [draft, setDraft] = useState<{
+    providers: SupermemoryStatus["providers"];
+    selectedIds: ReadonlySet<ProviderInstanceId>;
+  } | null>(null);
+  const selectedIds =
+    draft?.providers === status.providers
+      ? draft.selectedIds
+      : new Set(
+          status.providers
+            .filter((provider) => provider.selected)
+            .map((provider) => provider.instanceId),
+        );
+  const setSelectedIds = (ids: ReadonlySet<ProviderInstanceId>) =>
+    setDraft({ providers: status.providers, selectedIds: ids });
 
   const runAction = async (action: BusyAction, task: () => Promise<SupermemoryStatus>) => {
     setBusy(action);
-    try {
+    const result = await settlePromise(async () => {
       onStatus(await task());
-    } catch (error) {
-      showMemoryError("Memory action failed", error);
-    } finally {
-      setBusy(null);
+    });
+    if (result._tag === "Failure") {
+      const error = squashAtomCommandFailure(result);
+      showMemoryError(m(msg("Memory action failed")), error);
     }
+    setBusy(null);
   };
 
   const providersChanged = status.providers.some(
@@ -299,10 +296,12 @@ function ConfiguredSupermemoryPanel({
 
   return (
     <SettingsPageContainer>
-      <SettingsSection icon={<BrainCircuitIcon className="size-3.5" />} title="Supermemory">
+      <SettingsSection icon={<BrainCircuitIcon className="size-3.5" />} title={gt("Supermemory")}>
         <SupermemoryStatusSummary status={status} />
         <div className="space-y-3 border-t p-5">
-          <div className="text-xs font-medium text-muted-foreground">Provider instances</div>
+          <div className="text-xs font-medium text-muted-foreground">
+            <T>Provider instances</T>
+          </div>
           <SupermemoryProviderSelector
             onChange={setSelectedIds}
             providers={status.providers}
@@ -316,7 +315,7 @@ function ConfiguredSupermemoryPanel({
               variant="destructive-outline"
             >
               <PowerIcon className="size-4" />
-              Disable memory
+              <T>Disable memory</T>
             </Button>
             <Button
               disabled={busy !== null || selectedIds.size === 0 || !providersChanged}
@@ -328,7 +327,7 @@ function ConfiguredSupermemoryPanel({
               size="sm"
             >
               {busy === "providers" ? <LoaderCircleIcon className="size-4 animate-spin" /> : null}
-              Save providers
+              <T>Save providers</T>
             </Button>
           </div>
         </div>
@@ -338,15 +337,16 @@ function ConfiguredSupermemoryPanel({
 }
 
 export function SupermemorySettingsPanel() {
+  const gt = useGT();
   const { status, setStatus, loading } = useSupermemoryStatus();
 
   if (loading && !status) {
     return (
       <SettingsPageContainer>
-        <SettingsSection icon={<BrainCircuitIcon className="size-3.5" />} title="Memory">
+        <SettingsSection icon={<BrainCircuitIcon className="size-3.5" />} title={gt("Memory")}>
           <div className="flex items-center gap-2 p-5 text-sm text-muted-foreground">
             <LoaderCircleIcon className="size-4 animate-spin" />
-            Loading memory status
+            <T>Loading memory status</T>
           </div>
         </SettingsSection>
       </SettingsPageContainer>

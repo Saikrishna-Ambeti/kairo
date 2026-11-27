@@ -1,5 +1,8 @@
 import { readHostedPairingRequest } from "@kairo/shared/remote";
 import * as Schema from "effect/Schema";
+import { msg } from "gt-react-native";
+
+import { m } from "../../i18n/messages";
 
 const MOBILE_PAIRING_URL_PARAM = "pairingUrl";
 
@@ -23,7 +26,7 @@ export class PairingQrPayloadEmptyError extends Schema.TaggedError<PairingQrPayl
   {},
 ) {
   override get message(): string {
-    return "Scanned QR code did not contain a pairing URL.";
+    return m(msg("Scanned QR code did not contain a pairing URL."));
   }
 }
 
@@ -35,6 +38,8 @@ export function buildPairingUrl(host: string, code: string): string {
 
   try {
     const url = new URL(h.includes("://") ? h : `${isIpLiteral(h) ? "http" : "https"}://${h}`);
+    // The code goes to the address shown, so a query cannot name another destination.
+    url.search = "";
     url.hash = new URLSearchParams([["token", c]]).toString();
     return url.toString();
   } catch {
@@ -84,9 +89,7 @@ export function extractPairingUrlFromQrPayload(payload: string): string {
         return pairingUrl;
       }
     }
-  } catch {
-    // Treat non-URL payloads as raw pairing-url text so the normal input validation can decide.
-  }
+  } catch {}
 
   return trimmed;
 }

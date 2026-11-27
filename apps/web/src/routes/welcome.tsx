@@ -1,3 +1,4 @@
+import { LocalOnboarding } from "../components/onboarding/LocalOnboarding";
 import { createFileRoute, redirect, useLocation, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { EnvironmentId } from "@kairo/contracts";
@@ -5,15 +6,12 @@ import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
 
 import { NoProjectsHero } from "../components/NoProjectsHero";
-import { OnboardingGate } from "../components/onboarding/OnboardingGate";
-import { useCompleteOnboarding } from "../onboarding/firstRun";
-import { toastManager } from "../components/ui/toast";
-import { WelcomeWizard } from "../components/onboarding/WelcomeWizard";
+import { WelcomePage } from "../components/onboarding/WelcomePage";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
+import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
 
 const decodeEnvironmentId = Schema.decodeOption(EnvironmentId);
 
-/** Onboarding overlays the workspace. Visiting /welcome reopens setup. */
 export const Route = createFileRoute("/welcome")({
   beforeLoad: ({ context }) => {
     const { authGateState } = context;
@@ -28,59 +26,40 @@ function WelcomeRouteView() {
   const { authGateState } = Route.useRouteContext();
   const navigate = useNavigate();
   const hash = useLocation({ select: (location) => location.hash });
+  // A ChatGPT sign-in returns here with the computer it set up.
   const resumeEnvironmentId = hash.startsWith("agents:")
     ? Option.getOrUndefined(decodeEnvironmentId(hash.slice("agents:".length)))
     : undefined;
-  // The root shell can remount this pending outlet after the location changes.
-  // Never reopen setup while the destination route is still loading.
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const { environments, isReady } = useEnvironments();
+  // Trust the id only once the catalog has it; an unknown computer falls back to this one.
+  const waitingForCatalog =
+    !isReady && (resumeEnvironmentId !== undefined || primaryEnvironmentId === null);
+  const resumeKnown =
+    resumeEnvironmentId !== undefined &&
+    environments.some((environment) => environment.environmentId === resumeEnvironmentId);
+  const environmentId = (resumeKnown ? resumeEnvironmentId : undefined) ?? primaryEnvironmentId;
+  // The root can remount this pending outlet after navigation; do not reopen setup.
   const isWelcomeRoute = useLocation({ select: (location) => location.pathname === "/welcome" });
   const [dismissed, setDismissed] = useState(false);
   const openNewThread = useNewThreadHandler();
-  const completeOnboarding = useCompleteOnboarding();
-  // An authenticated gate means a primary server is serving this app —
-  // desktop, `npx kairo`, or a dev server — and that server is "this machine"
-  // no matter what hostname the browser used. Only hosted-static has no
-  // local server to offer.
-  const localAvailable = authGateState.status === "authenticated";
-  if (localAvailable) {
-    return isWelcomeRoute && !dismissed ? (
-      <OnboardingGate
-        onComplete={() => {
-          void completeOnboarding().then(
-            () => {
-              setDismissed(true);
-              void navigate({ to: "/", replace: true });
-            },
-            (error: unknown) =>
-              toastManager.add({
-                type: "error",
-                title: "Could not save setup",
-                description: error instanceof Error ? error.message : "Try again.",
-              }),
-          );
-        }}
-      />
-    ) : null;
-  }
+  if (authGateState.status === "authenticated" && isWelcomeRoute) return <LocalOnboarding />;
+  if (waitingForCatalog) return null;
+  if (environmentId === null || !isWelcomeRoute || dismissed) return <NoProjectsHero />;
   return (
-    <>
-      <NoProjectsHero />
-      {isWelcomeRoute && !dismissed ? (
-        <WelcomeWizard
-          localAvailable={localAvailable}
-          resumeEnvironmentId={resumeEnvironmentId}
-          onDone={async (projectRef) => {
-            setDismissed(true);
-            if (projectRef !== undefined) {
-              await openNewThread(projectRef, { replace: true }).catch(() =>
-                navigate({ to: "/", replace: true }),
-              );
-              return;
-            }
-            await navigate({ to: "/", replace: true });
-          }}
-        />
-      ) : null}
-    </>
+    <WelcomePage
+      key={environmentId}
+      environmentId={environmentId}
+      onDone={async (projectRef) => {
+        setDismissed(true);
+        if (projectRef !== undefined) {
+          await openNewThread(projectRef, { replace: true }).catch(() =>
+            navigate({ to: "/", replace: true }),
+          );
+          return;
+        }
+        await navigate({ to: "/", replace: true });
+      }}
+    />
   );
 }

@@ -1,6 +1,6 @@
 import { ProviderDriverKind, ProviderInstanceId } from "@kairo/contracts";
 import { describe, expect, it } from "@effect/vitest";
-import { Tool } from "effect/unstable/ai";
+import { Tool } from "effect/ai";
 
 import { MemoryContextTool, MemoryTool, RecallTool } from "../mcp/toolkits/memory/tools.ts";
 import { computeProviderMemoryStatus, isSupermemoryDriverSupported } from "./SupermemoryMcp.ts";

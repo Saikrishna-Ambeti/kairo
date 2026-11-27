@@ -7,6 +7,7 @@ export function authClientMetadata(appVersion?: string): AuthClientPresentationM
   const deviceModel = Device.modelName?.trim();
 
   return {
+    // oxlint-disable-next-line kairo/no-untranslated-copy -- product name
     label: "Kairo Mobile",
     deviceType:
       Device.deviceType === Device.DeviceType.TABLET

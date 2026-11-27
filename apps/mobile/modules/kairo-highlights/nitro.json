@@ -1,0 +1,20 @@
+{
+  "$schema": "https://nitro.margelo.com/nitro.schema.json",
+  "cxxNamespace": ["t3highlights"],
+  "ios": {
+    "iosModuleName": "KairoHighlightsNative"
+  },
+  "android": {
+    "androidNamespace": ["t3highlights"],
+    "androidCxxLibName": "t3highlights"
+  },
+  "autolinking": {
+    "KairoHighlights": {
+      "all": {
+        "language": "c++",
+        "implementationClassName": "HybridT3Highlights"
+      }
+    }
+  },
+  "ignorePaths": ["node_modules", "Vendor"]
+}

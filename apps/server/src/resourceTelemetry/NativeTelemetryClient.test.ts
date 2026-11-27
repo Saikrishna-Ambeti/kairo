@@ -2,17 +2,16 @@ import type { HostPowerSnapshot } from "@kairo/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
+import * as TestClock from "effect/testing/TestClock";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Ref from "effect/Ref";
 import * as Semaphore from "effect/Semaphore";
 
 import {
-  canCommandNativeTelemetrySidecar,
-  canRequestNativeTelemetryRetry,
+  requestProcessTable,
   commitCollectionControlUpdate,
-  retainRecentNativeTelemetryFailures,
-  resolveNativeSampleIntervalMs,
   synchronizeCollectionControlOnStart,
 } from "./NativeTelemetryClient.ts";
 
@@ -28,62 +27,6 @@ const basePower: HostPowerSnapshot = {
   stale: false,
   updatedAt: DateTime.makeUnsafe("2026-06-17T12:00:00.000Z"),
 };
-
-describe("resolveNativeSampleIntervalMs", () => {
-  it("keeps a recovery cadence while suspended and backs off under host constraints", () => {
-    expect(resolveNativeSampleIntervalMs({ ...basePower, suspended: true }, 1)).toBe(15_000);
-    expect(resolveNativeSampleIntervalMs({ ...basePower, locked: "true" }, 1)).toBe(15_000);
-    expect(resolveNativeSampleIntervalMs({ ...basePower, lowPowerMode: "true" }, 1)).toBe(15_000);
-    expect(resolveNativeSampleIntervalMs({ ...basePower, thermalState: "critical" }, 1)).toBe(
-      15_000,
-    );
-    expect(resolveNativeSampleIntervalMs({ ...basePower, onBattery: "true" }, 1)).toBe(5_000);
-  });
-
-  it("slows background telemetry and serves live diagnostics at 1Hz", () => {
-    const unknown: HostPowerSnapshot = {
-      ...basePower,
-      source: "unknown",
-      stale: true,
-    };
-    expect(resolveNativeSampleIntervalMs(unknown, 0)).toBe(5_000);
-    expect(resolveNativeSampleIntervalMs(unknown, 1)).toBe(1_000);
-    expect(
-      resolveNativeSampleIntervalMs(
-        { ...basePower, stale: true, locked: "true", suspended: true },
-        0,
-      ),
-    ).toBe(5_000);
-    expect(resolveNativeSampleIntervalMs(basePower, 0)).toBe(5_000);
-    expect(resolveNativeSampleIntervalMs(basePower, 1)).toBe(1_000);
-  });
-});
-
-describe("canRequestNativeTelemetryRetry", () => {
-  it("only accepts retry while the supervisor is waiting without a live sidecar", () => {
-    expect(canRequestNativeTelemetryRetry("degraded", false)).toBe(true);
-    expect(canRequestNativeTelemetryRetry("unavailable", false)).toBe(true);
-    expect(canRequestNativeTelemetryRetry("degraded", true)).toBe(false);
-    expect(canRequestNativeTelemetryRetry("healthy", false)).toBe(false);
-    expect(canRequestNativeTelemetryRetry("starting", false)).toBe(false);
-  });
-});
-
-describe("canCommandNativeTelemetrySidecar", () => {
-  it("keeps on-demand recovery commands available while a live sidecar is degraded", () => {
-    expect(canCommandNativeTelemetrySidecar("healthy", true)).toBe(true);
-    expect(canCommandNativeTelemetrySidecar("degraded", true)).toBe(true);
-    expect(canCommandNativeTelemetrySidecar("unavailable", true)).toBe(false);
-    expect(canCommandNativeTelemetrySidecar("degraded", false)).toBe(false);
-  });
-});
-
-describe("retainRecentNativeTelemetryFailures", () => {
-  it("expires old failures so an isolated crash restarts from the initial backoff", () => {
-    expect(retainRecentNativeTelemetryFailures([0, 30_000], 90_001)).toEqual([]);
-    expect(retainRecentNativeTelemetryFailures([30_000, 60_000], 90_000)).toEqual([30_000, 60_000]);
-  });
-});
 
 describe("commitCollectionControlUpdate", () => {
   it.effect("retains desired demand and retries unapplied sidecar state", () =>
@@ -198,3 +141,19 @@ describe("commitCollectionControlUpdate", () => {
     }),
   );
 });
+
+it.effect("bounds a process-table write that outlasts the deadline", () =>
+  Effect.gen(function* () {
+    const response = yield* Deferred.make<void>();
+    const writing = yield* Deferred.make<void>();
+    const fiber = yield* requestProcessTable(
+      Deferred.succeed(writing, undefined).pipe(Effect.andThen(Effect.sleep(300))),
+      response,
+      Duration.millis(250),
+    ).pipe(Effect.flip, Effect.forkChild);
+    yield* Deferred.await(writing);
+    yield* TestClock.adjust(250);
+    expect(fiber.pollUnsafe()?._tag).toBe("Success");
+    expect((yield* Fiber.join(fiber)).timeoutMs).toBe(250);
+  }),
+);

@@ -1,24 +1,20 @@
+import { LegendList } from "@legendapp/list/react-native";
+import { msg, useGT, useMessages } from "gt-react-native";
 import type { ArtifactKind, EnvironmentId } from "@kairo/contracts";
 import {
   ARTIFACT_CREATION_COMMANDS,
   isArtifactCreationKind,
 } from "@kairo/client-runtime/artifact-creation";
 import { EnvironmentId as EnvironmentIdSchema } from "@kairo/contracts";
-import type { MenuAction } from "@react-native-menu/menu";
+import { MenuView, type MenuAction } from "@react-native-menu/menu";
 import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
-import { useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Platform,
-  Pressable,
-  RefreshControl,
-  View,
-} from "react-native";
+import { useState } from "react";
+import { ActivityIndicator, Platform, Pressable, View } from "react-native";
 
-import { AndroidScreenHeader } from "../../components/AndroidScreenHeader";
-import { AppText as Text, AppTextInput as TextInput } from "../../components/AppText";
-import { ControlPillMenu } from "../../components/ControlPill";
+import { AppText as Text, AppTextInput as TextInput } from "../../components/ui/AppText";
+import { NativeScrollView } from "../../native/NativeScrollViewMarker";
+import { RefreshControl } from "../../components/ui/RefreshControl";
+import { useDebouncedValue } from "../../state/queries";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { useEnvironments } from "../../state/environments";
 import { useEnvironmentQuery } from "../../state/query";
@@ -26,22 +22,24 @@ import { serverEnvironment } from "../../state/server";
 import { MobileArtifactRow } from "./ThreadArtifactsList";
 
 const FILTERS: ReadonlyArray<{ readonly label: string; readonly kind: ArtifactKind | null }> = [
-  { label: "All", kind: null },
-  { label: "Docs", kind: "document" },
-  { label: "Slides", kind: "presentation" },
-  { label: "Sheets", kind: "spreadsheet" },
-  { label: "CSV", kind: "csv" },
-  { label: "PDF", kind: "pdf" },
+  { label: msg("All"), kind: null },
+  { label: msg("Docs"), kind: "document" },
+  { label: msg("Slides"), kind: "presentation" },
+  { label: msg("Sheets"), kind: "spreadsheet" },
+  { label: msg("CSV"), kind: "csv" },
+  { label: msg("PDF"), kind: "pdf" },
 ];
 
 export function ArtifactLibraryScreen(
   props: StaticScreenProps<{ readonly environmentId?: string }>,
 ) {
+  const gt = useGT();
+  const m = useMessages();
   const { environments } = useEnvironments();
   const navigation = useNavigation();
   const [environmentOverride, setEnvironmentOverride] = useState<EnvironmentId | null>(null);
   const [search, setSearch] = useState("");
-  const [queryText, setQueryText] = useState("");
+  const queryText = useDebouncedValue(search.trim(), 200);
   const [kind, setKind] = useState<ArtifactKind | null>(null);
   const routeEnvironment = props.route.params?.environmentId;
   const environmentId =
@@ -50,11 +48,6 @@ export function ArtifactLibraryScreen(
       ? EnvironmentIdSchema.make(routeEnvironment)
       : (environments[0]?.environmentId ?? null));
   const environmentLabel = environments.find((item) => item.environmentId === environmentId)?.label;
-
-  useEffect(() => {
-    const timer = setTimeout(() => setQueryText(search.trim()), 200);
-    return () => clearTimeout(timer);
-  }, [search]);
 
   const artifactsQuery = useEnvironmentQuery(
     environmentId === null
@@ -68,46 +61,35 @@ export function ArtifactLibraryScreen(
           },
         }),
   );
-  const environmentActions = useMemo<MenuAction[]>(
-    () =>
-      environments.map((item) => ({
-        id: String(item.environmentId),
-        title: item.label,
-        state: item.environmentId === environmentId ? "on" : undefined,
-      })),
-    [environmentId, environments],
-  );
+  const environmentActions = environments.map<MenuAction>((item) => ({
+    id: String(item.environmentId),
+    title: item.label,
+    state: item.environmentId === environmentId ? "on" : undefined,
+  }));
   const artifacts = artifactsQuery.data?.artifacts ?? [];
 
   return (
     <View className="flex-1 bg-sheet">
       <NativeStackScreenOptions
-        options={{ title: "Library", headerShown: Platform.OS === "ios" }}
+        options={{ title: gt("Library"), headerShown: Platform.OS === "ios" }}
       />
-      {Platform.OS === "android" ? <AndroidScreenHeader title="Library" /> : null}
       <View className="gap-3 border-b border-border px-4 py-3">
-        <ControlPillMenu
-          actions={ARTIFACT_CREATION_COMMANDS.map(({ kind, label }) => ({
+        <MenuView
+          actions={ARTIFACT_CREATION_COMMANDS.map(({ kind, creationTitle }) => ({
             id: kind,
-            title: `Create ${label}`,
+            title: m(creationTitle),
           }))}
           onPressAction={({ nativeEvent }) => {
             if (!isArtifactCreationKind(nativeEvent.event)) return;
-            navigation.navigate("NewTaskSheet", {
-              screen: "NewTask",
-              params: {
-                artifactKind: nativeEvent.event,
-                environmentId: environmentId ?? undefined,
-              },
-            });
+            navigation.navigate("NewTaskProject", { artifactKind: nativeEvent.event });
           }}
         >
-          <Pressable accessibilityRole="button" accessibilityLabel="Create file">
-            <Text className="text-sm font-kairo-medium text-accent">Create file ▾</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={gt("Create file")}>
+            <Text className="text-sm font-kairo-medium text-accent">{gt("Create file")} ▾</Text>
           </Pressable>
-        </ControlPillMenu>
+        </MenuView>
         {environments.length > 1 ? (
-          <ControlPillMenu
+          <MenuView
             actions={environmentActions}
             onPressAction={({ nativeEvent }) => {
               const selected = environments.find(
@@ -116,37 +98,40 @@ export function ArtifactLibraryScreen(
               if (selected) setEnvironmentOverride(selected.environmentId);
             }}
           >
-            <Pressable accessibilityRole="button" accessibilityLabel="Choose environment">
+            <Pressable accessibilityRole="button" accessibilityLabel={gt("Choose environment")}>
               <Text className="text-sm font-kairo-medium text-accent">
-                {environmentLabel ?? "Choose environment"} ▾
+                {environmentLabel ?? gt("Choose environment")} ▾
               </Text>
             </Pressable>
-          </ControlPillMenu>
+          </MenuView>
         ) : null}
         <TextInput
-          accessibilityLabel="Search library"
+          accessibilityLabel={gt("Search library")}
           autoCapitalize="none"
           autoCorrect={false}
           className="min-h-11 rounded-xl border border-input-border bg-input px-3 text-sm"
-          placeholder="Search files, projects, and threads"
+          placeholder={gt("Search files, projects, and threads")}
           value={search}
           onChangeText={setSearch}
         />
         <View className="flex-row flex-wrap gap-2">
           {FILTERS.map((filter) => (
             <Pressable
-              key={filter.label}
+              key={filter.kind ?? "all"}
               accessibilityRole="button"
               accessibilityState={{ selected: kind === filter.kind }}
               className={`rounded-full px-3 py-1.5 ${kind === filter.kind ? "bg-subtle-strong" : "bg-subtle"}`}
               onPress={() => setKind(filter.kind)}
             >
-              <Text className="text-xs font-kairo-medium text-foreground">{filter.label}</Text>
+              <Text className="text-xs font-kairo-medium text-foreground">{m(filter.label)}</Text>
             </Pressable>
           ))}
         </View>
       </View>
-      <FlatList
+      <LegendList
+        renderScrollComponent={NativeScrollView}
+        estimatedItemSize={52}
+        extraData={environmentId}
         className="flex-1"
         data={artifacts}
         keyExtractor={(artifact) => `${artifact.threadId}:${artifact.relativePath}`}
@@ -170,10 +155,10 @@ export function ArtifactLibraryScreen(
               <Text className="text-center text-sm text-foreground-muted">
                 {artifactsQuery.error ??
                   (environmentId === null
-                    ? "Connect an environment to see its files."
+                    ? gt("Connect an environment to see its files.")
                     : queryText || kind
-                      ? "No matching files."
-                      : "Files created by agents will appear here.")}
+                      ? gt("No matching files.")
+                      : gt("Files created by agents will appear here."))}
               </Text>
             )}
           </View>

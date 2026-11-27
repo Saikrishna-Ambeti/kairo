@@ -9,7 +9,6 @@ import type {
   ServerProviderUpdateInput,
   TestComposioConnectionInput,
 } from "@kairo/contracts";
-import { useCallback } from "react";
 
 import { usePrimaryEnvironment } from "./environments";
 import { serverEnvironment } from "./server";
@@ -29,7 +28,9 @@ export function usePrimaryServerApi() {
   const refreshProviders = useAtomCommand(serverEnvironment.refreshProviders, {
     reportFailure: false,
   });
-  const loginProvider = useAtomCommand(serverEnvironment.loginProvider, { reportFailure: false });
+  const startProviderAuth = useAtomCommand(serverEnvironment.startProviderAuth, {
+    reportFailure: false,
+  });
   const updateProvider = useAtomCommand(serverEnvironment.updateProvider, { reportFailure: false });
   const getMemoryStatus = useAtomCommand(serverEnvironment.getMemoryStatus, {
     reportFailure: false,
@@ -51,16 +52,21 @@ export function usePrimaryServerApi() {
     reportFailure: false,
   });
 
-  const requireEnvironmentId = useCallback(() => {
+  const requireEnvironmentId = () => {
     if (environmentId === null) throw new Error("No primary environment is connected.");
     return environmentId;
-  }, [environmentId]);
+  };
 
   return {
     refreshProviders: (input: { readonly instanceId?: ProviderInstanceId } = {}) =>
       runCommand(refreshProviders({ environmentId: requireEnvironmentId(), input })),
-    loginProvider: (input: ServerProviderUpdateInput) =>
-      runCommand(loginProvider({ environmentId: requireEnvironmentId(), input })),
+    startProviderAuth: (input: { readonly instanceId: ProviderInstanceId }) =>
+      runCommand(
+        startProviderAuth({
+          environmentId: requireEnvironmentId(),
+          input: { instanceId: input.instanceId },
+        }),
+      ),
     updateProvider: (input: ServerProviderUpdateInput) =>
       runCommand(updateProvider({ environmentId: requireEnvironmentId(), input })),
     getMemoryStatus: () =>

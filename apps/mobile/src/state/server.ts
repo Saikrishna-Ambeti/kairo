@@ -1,4 +1,8 @@
 import { createServerEnvironmentAtoms } from "@kairo/client-runtime/state/server";
+import {
+  createOutdatedServerDescriptionCommand,
+  createOutdatedServerUpdateCommand,
+} from "@kairo/client-runtime/state/outdatedServerUpdate";
 import { createEnvironmentServerConfigsAtom } from "@kairo/client-runtime/state/shell";
 
 import { environmentCatalog } from "../connection/catalog";
@@ -9,7 +13,13 @@ export const serverEnvironment = createServerEnvironmentAtoms(connectionAtomRunt
   initialConfigValueAtom: environmentSession.initialConfigValueAtom,
   usageLimitSources: true,
   usageLimitsCommand: true,
+  providerCatalogsOnDemand: true,
+  providerCatalogDigests: true,
+  providerStatusDeltas: true,
+  omitRefreshedProviders: true,
 });
+export const describeOutdatedServer = createOutdatedServerDescriptionCommand(connectionAtomRuntime);
+export const updateOutdatedServer = createOutdatedServerUpdateCommand(connectionAtomRuntime);
 export const environmentServerConfigsAtom = createEnvironmentServerConfigsAtom({
   catalogValueAtom: environmentCatalog.catalogValueAtom,
   serverConfigValueAtom: serverEnvironment.configValueAtom,

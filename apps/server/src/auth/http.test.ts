@@ -1,29 +1,38 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { EnvironmentHttpApi } from "@kairo/contracts";
+import {
+  AuthTokenExchangeGrantType,
+  AuthEnvironmentBootstrapTokenType,
+  AuthAccessTokenType,
+  EnvironmentHttpApi,
+} from "@kairo/contracts";
 import { expect, it } from "@effect/vitest";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as DateTime from "effect/DateTime";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import * as Etag from "effect/unstable/http/Etag";
-import * as HttpPlatform from "effect/unstable/http/HttpPlatform";
-import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
-import * as HttpApi from "effect/unstable/httpapi/HttpApi";
-import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import * as Etag from "effect/http/Etag";
+import * as HttpPlatform from "effect/http/HttpPlatform";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as HttpApi from "effect/http-api/HttpApi";
+import * as HttpRouter from "effect/http/HttpRouter";
 
 import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
-import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
+import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as EnvironmentAuth from "./EnvironmentAuth.ts";
+import { makeDpopKey } from "./dpop.testkit.ts";
 import * as ServerSecretStore from "./ServerSecretStore.ts";
-import { authHttpApiLayer, environmentAuthenticatedAuthLayer } from "./http.ts";
+import * as AuthHttp from "./http.ts";
+import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 
 const DEV_TOKEN = "reusable-dev-auth-token-that-is-long-enough";
 class AuthTestApi extends HttpApi.make("environment").add(EnvironmentHttpApi.groups.auth) {}
 
-const configLayer = Layer.effect(
+const layerConfig = Layer.effect(
   ServerConfig.ServerConfig,
   Effect.gen(function* () {
     const config = yield* ServerConfig.ServerConfig;
@@ -36,25 +45,29 @@ const configLayer = Layer.effect(
   }),
 ).pipe(Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "kairo-auth-http-test-" })));
 
-const environmentAuthLayer = EnvironmentAuth.layer.pipe(
-  Layer.provide(SqlitePersistenceMemory),
+const layerEnvironmentAuth = EnvironmentAuth.layer.pipe(
+  Layer.provide(ManagedPolicy.layerTest()),
+  Layer.provide(SqlitePersistence.layerMemory),
   Layer.provide(ServerSecretStore.layer),
-  Layer.provide(ServerEnvironment.identityLayer),
-  Layer.provide(configLayer),
+  Layer.provide(ServerEnvironment.layerIdentity),
+  Layer.provide(layerConfig),
 );
-const routesLayer = HttpApiBuilder.layer(AuthTestApi).pipe(
-  Layer.provide(authHttpApiLayer),
-  Layer.provide(environmentAuthenticatedAuthLayer),
-  Layer.provideMerge(environmentAuthLayer),
-  Layer.provide(configLayer),
-  Layer.provideMerge(
-    HttpPlatform.layer.pipe(
-      Layer.provideMerge(NodeServices.layer),
-      Layer.provideMerge(Etag.layerWeak),
+const layerRoutes = <Extra, E, R>(
+  auth: Layer.Layer<EnvironmentAuth.EnvironmentAuth | Extra, E, R>,
+) =>
+  HttpApiBuilder.layer(AuthTestApi).pipe(
+    Layer.provide(AuthHttp.layer),
+    Layer.provide(AuthHttp.layerAuthenticatedAuth),
+    Layer.provideMerge(auth),
+    Layer.provide(layerConfig),
+    Layer.provideMerge(
+      HttpPlatform.layer.pipe(
+        Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+        Layer.provideMerge(Etag.layerWeak),
+      ),
     ),
-  ),
-  Layer.provide(NodeServices.layer),
-);
+    Layer.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+  );
 
 const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 const postJson = (path: string, body: unknown, headers?: Readonly<Record<string, string>>) =>
@@ -64,9 +77,9 @@ const postJson = (path: string, body: unknown, headers?: Readonly<Record<string,
     body: encodeJson(body),
   });
 
-it.effect("sets the selected browser session cookies through the HTTP route", () =>
+it.live("sets the selected browser session cookies through the HTTP route", () =>
   Effect.gen(function* () {
-    const crypto = yield* Crypto.Crypto;
+    const random = yield* SecureRandom.SecureRandom;
     const unusedSecretStore = ServerSecretStore.ServerSecretStore.of({
       get: () => Effect.succeedNone,
       set: () => Effect.void,
@@ -74,24 +87,48 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
       getOrCreateRandom: () => Effect.die("Not used by these routes."),
       remove: () => Effect.void,
     });
-    const requestContext = Context.make(Crypto.Crypto, crypto).pipe(
+    const requestContext = Context.make(SecureRandom.SecureRandom, random).pipe(
       Context.add(ServerSecretStore.ServerSecretStore, unusedSecretStore),
     );
+    const authContext = yield* Layer.build(
+      layerEnvironmentAuth.pipe(
+        Layer.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+      ),
+    );
+    const auth = Context.get(authContext, EnvironmentAuth.EnvironmentAuth);
+    const pairing = yield* auth.issuePairingCredential({ scopes: ["orchestration:read"] });
+    const environmentARoutes = layerRoutes(Layer.succeedContext(authContext));
     return yield* Effect.acquireUseRelease(
       Effect.sync(
         () =>
           [
-            HttpRouter.toWebHandler(routesLayer, { disableLogger: true }),
-            HttpRouter.toWebHandler(routesLayer, { disableLogger: true }),
+            HttpRouter.toWebHandler(environmentARoutes, { disableLogger: true }),
+            HttpRouter.toWebHandler(layerRoutes(layerEnvironmentAuth), { disableLogger: true }),
           ] as const,
       ),
       ([environmentA, environmentB]) =>
-        Effect.tryPromise(async () => {
+        Effect.promise(async () => {
           const devResponse = await environmentA.handler(
             postJson("/api/auth/browser-session", { credential: DEV_TOKEN }),
             requestContext,
           );
           expect(devResponse.status).toBe(200);
+          const retiredScopeResponse = await environmentA.handler(
+            new Request("http://127.0.0.1/oauth/token", {
+              method: "POST",
+              body: new URLSearchParams({
+                grant_type: AuthTokenExchangeGrantType,
+                subject_token: DEV_TOKEN,
+                subject_token_type: AuthEnvironmentBootstrapTokenType,
+                requested_token_type: AuthAccessTokenType,
+                scope: "review:write",
+              }),
+            }),
+            requestContext,
+          );
+          expect(retiredScopeResponse.status).toBe(400);
+          expect(await retiredScopeResponse.json()).toMatchObject({ reason: "invalid_scope" });
+
           const devCookies = devResponse.headers.getSetCookie();
           const devCookie = devCookies.find((cookie) => cookie.startsWith("kairo_dev_session_"));
           expect(devCookie).toContain("HttpOnly");
@@ -99,6 +136,18 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
           expect(devCookies).toContainEqual(
             expect.stringMatching(/^kairo_session_[^=]*=;.*Max-Age=0/),
           );
+          expect(devCookies.filter((cookie) => /;\s*Secure/i.test(cookie))).toEqual([]);
+          const httpsResponse = await environmentA.handler(
+            postJson(
+              "/api/auth/browser-session",
+              { credential: DEV_TOKEN },
+              { "x-forwarded-proto": "https" },
+            ),
+            requestContext,
+          );
+          const httpsCookies = httpsResponse.headers.getSetCookie();
+          expect(httpsCookies).toHaveLength(2);
+          for (const cookie of httpsCookies) expect(cookie).toMatch(/;\s*Secure/i);
           const devCookieHeader = devCookie?.split(";", 1)[0] ?? "";
           const environmentBSession = await environmentB.handler(
             new Request("http://127.0.0.1/api/auth/session", {
@@ -109,16 +158,6 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
           expect(environmentBSession.status).toBe(200);
           expect(await environmentBSession.json()).toMatchObject({ authenticated: true });
 
-          const pairingResponse = await environmentA.handler(
-            postJson(
-              "/api/auth/pairing-token",
-              { scopes: ["orchestration:read"] },
-              { cookie: devCookieHeader },
-            ),
-            requestContext,
-          );
-          expect(pairingResponse.status).toBe(200);
-          const pairing = (await pairingResponse.json()) as { credential: string };
           const restrictedResponse = await environmentA.handler(
             postJson("/api/auth/browser-session", { credential: pairing.credential }),
             requestContext,
@@ -128,9 +167,117 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
           expect(restrictedCookies).toHaveLength(1);
           expect(restrictedCookies[0]).toMatch(/^kairo_session_/);
           expect(restrictedCookies[0]).not.toContain("kairo_dev_session_");
+
+          const restrictedCookieHeader = restrictedCookies[0]?.split(";", 1)[0] ?? "";
+          const refusedPairing = await environmentA.handler(
+            postJson(
+              "/api/auth/pairing-token",
+              { scopes: ["orchestration:read"] },
+              { cookie: restrictedCookieHeader },
+            ),
+            requestContext,
+          );
+          expect(refusedPairing.status).toBe(403);
         }),
       ([environmentA, environmentB]) =>
         Effect.promise(() => Promise.all([environmentA.dispose(), environmentB.dispose()])),
     );
-  }).pipe(Effect.provide(NodeServices.layer)),
+  }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+);
+
+it.effect.each(["DPoP", "dpop"])("challenges a refused %s request with DPoP", (scheme) =>
+  Effect.gen(function* () {
+    const random = yield* SecureRandom.SecureRandom;
+    const unusedSecretStore = ServerSecretStore.ServerSecretStore.of({
+      get: () => Effect.succeedNone,
+      set: () => Effect.void,
+      create: () => Effect.void,
+      getOrCreateRandom: () => Effect.die("Not used by these routes."),
+      remove: () => Effect.void,
+    });
+    const requestContext = Context.make(SecureRandom.SecureRandom, random).pipe(
+      Context.add(ServerSecretStore.ServerSecretStore, unusedSecretStore),
+    );
+    return yield* Effect.acquireUseRelease(
+      Effect.sync(() =>
+        HttpRouter.toWebHandler(layerRoutes(layerEnvironmentAuth), { disableLogger: true }),
+      ),
+      (environment) =>
+        Effect.promise(async () => {
+          const refused = await environment.handler(
+            postJson(
+              "/api/auth/pairing-token",
+              { scopes: ["orchestration:read"] },
+              { authorization: `${scheme} not-a-valid-token` },
+            ),
+            requestContext,
+          );
+          expect(refused.status).toBe(401);
+          expect(refused.headers.get("www-authenticate")).toBe("DPoP");
+        }),
+      (environment) => Effect.promise(() => environment.dispose()),
+    );
+  }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+);
+
+// The web handler runs on its own runtime, so proofs need wall-clock time.
+it.live("checks token-endpoint DPoP proofs without writing replay state", () =>
+  Effect.gen(function* () {
+    const random = yield* SecureRandom.SecureRandom;
+    const written: Array<string> = [];
+    const recordingSecretStore = ServerSecretStore.ServerSecretStore.of({
+      get: () => Effect.succeedNone,
+      set: () => Effect.void,
+      create: (name) => Effect.sync(() => void written.push(name)),
+      getOrCreateRandom: () => Effect.die("Not used by these routes."),
+      remove: () => Effect.void,
+    });
+    const requestContext = Context.make(SecureRandom.SecureRandom, random).pipe(
+      Context.add(ServerSecretStore.ServerSecretStore, recordingSecretStore),
+    );
+    const url = "http://127.0.0.1/oauth/token";
+    const key = makeDpopKey();
+    const iat = Math.floor((yield* DateTime.now).epochMilliseconds / 1_000);
+    const tokenRequest = (subjectToken: string, proof: string) =>
+      new Request(url, {
+        method: "POST",
+        headers: { host: "127.0.0.1", dpop: proof },
+        body: new URLSearchParams({
+          grant_type: AuthTokenExchangeGrantType,
+          subject_token: subjectToken,
+          subject_token_type: AuthEnvironmentBootstrapTokenType,
+          requested_token_type: AuthAccessTokenType,
+        }),
+      });
+    return yield* Effect.acquireUseRelease(
+      Effect.sync(() =>
+        HttpRouter.toWebHandler(layerRoutes(layerEnvironmentAuth), { disableLogger: true }),
+      ),
+      (environment) =>
+        Effect.promise(async () => {
+          const unknownToken = await environment.handler(
+            tokenRequest("not-a-pairing-token", key.sign({ method: "POST", url, token: "", iat })),
+            requestContext,
+          );
+          expect(unknownToken.status).toBe(401);
+          expect(await unknownToken.json()).not.toHaveProperty("dpopFailureReason");
+
+          const accepted = await environment.handler(
+            tokenRequest(DEV_TOKEN, key.sign({ method: "POST", url, token: "", iat })),
+            requestContext,
+          );
+          expect(accepted.status).toBe(200);
+          expect(await accepted.json()).toMatchObject({ token_type: "DPoP" });
+
+          const badProof = await environment.handler(
+            tokenRequest(DEV_TOKEN, "not-a-proof"),
+            requestContext,
+          );
+          expect(badProof.status).toBe(401);
+          expect(badProof.headers.get("www-authenticate")).toBe("DPoP");
+          expect(written).toEqual([]);
+        }),
+      (environment) => Effect.promise(() => environment.dispose()),
+    );
+  }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
 );

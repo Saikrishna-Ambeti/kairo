@@ -1,27 +1,40 @@
-import { BearerConnectionTarget, PrimaryConnectionTarget } from "@kairo/client-runtime/connection";
+import {
+  AVAILABLE_CONNECTION_STATE,
+  BearerConnectionTarget,
+  PrimaryConnectionTarget,
+} from "@kairo/client-runtime/connection";
 import type { EnvironmentCatalogState } from "@kairo/client-runtime/state/connections";
-import type { EnvironmentShellState } from "@kairo/client-runtime/state/shell";
+import { EMPTY_SHELL_STATE, type EnvironmentShellState } from "@kairo/client-runtime/state/shell";
 import { EnvironmentId } from "@kairo/contracts";
 import * as Option from "effect/Option";
-import { Atom, AtomRegistry } from "effect/unstable/reactivity";
-import { describe, expect, it } from "vite-plus/test";
+import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
+import { describe, expect, it, vi } from "vite-plus/test";
 
-import { createAllEnvironmentProjectSnapshotsReadyAtom } from "./shell";
+import {
+  createAllEnvironmentProjectSnapshotsReadyAtom,
+  expectsPrimaryEnvironment,
+  environmentShell,
+} from "./shell";
+import { environmentCatalog } from "../connection/catalog";
+import { environmentUnreachableAtom } from "./presentation";
+import { defaultProjectFallbackReadyAtom } from "./projects";
 
 const LOCAL = EnvironmentId.make("local");
 const REMOTE = EnvironmentId.make("remote");
 
 function shellState(status: EnvironmentShellState["status"]): EnvironmentShellState {
   return {
+    ...EMPTY_SHELL_STATE,
     status,
     snapshot:
       status === "empty"
         ? Option.none()
         : Option.some({
+            schemaVersion: 1,
             snapshotSequence: 1,
-            updatedAt: "2026-09-04T00:00:00.000Z",
             projects: [],
             threads: [],
+            archivedThreads: [],
           }),
     error: Option.none(),
   };
@@ -106,7 +119,6 @@ describe("project snapshot readiness", () => {
     registry.set(shells(LOCAL), shellState("live"));
     expect(registry.get(ready)).toBe(false);
 
-    // An old cache and a reconnect in progress can both omit a real project.
     registry.set(shells(REMOTE), shellState("cached"));
     expect(registry.get(ready)).toBe(false);
     registry.set(shells(REMOTE), shellState("synchronizing"));
@@ -131,3 +143,64 @@ describe("project snapshot readiness", () => {
     registry.dispose();
   });
 });
+
+it("calls an environment unreachable only once primary discovery can prove it absent", () => {
+  const UNKNOWN = EnvironmentId.make("unknown");
+  const unreachable = (catalog: EnvironmentCatalogState, environmentId: EnvironmentId) => {
+    const registry = AtomRegistry.make({
+      initialValues: [[environmentCatalog.catalogValueAtom, catalog]],
+    });
+    try {
+      return registry.get(environmentUnreachableAtom(environmentId));
+    } finally {
+      registry.dispose();
+    }
+  };
+  vi.stubGlobal("window", { desktopBridge: { getLocalEnvironmentEnabled: () => true } });
+  try {
+    expect(unreachable(catalogState([REMOTE]), LOCAL)).toBe(false);
+    expect(unreachable(catalogState([LOCAL, REMOTE]), UNKNOWN)).toBe(true);
+    expect(unreachable(catalogState([LOCAL, REMOTE]), REMOTE)).toBe(false);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+it("expects a primary environment only on desktops with the local environment enabled", () => {
+  const desktop = (enabled: boolean) => {
+    vi.stubGlobal("window", { desktopBridge: { getLocalEnvironmentEnabled: () => enabled } });
+    try {
+      return expectsPrimaryEnvironment();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  };
+  expect(desktop(true)).toBe(true);
+  expect(desktop(false)).toBe(false);
+});
+
+it.each([undefined, "", "Server update required"])(
+  "settles fallback for an unsupported remembered environment: %s",
+  (unsupportedReason) => {
+    const catalog = catalogState([LOCAL, REMOTE]);
+    const entries = new Map(catalog.entries);
+    entries.set(REMOTE, {
+      ...entries.get(REMOTE)!,
+      ...(unsupportedReason === undefined ? {} : { unsupportedReason }),
+    });
+    const registry = AtomRegistry.make({
+      initialValues: [
+        [environmentCatalog.catalogValueAtom, { ...catalog, entries }],
+        [environmentShell.statusAtom(REMOTE), "empty"],
+        [environmentCatalog.stateAtom(REMOTE), AsyncResult.success(AVAILABLE_CONNECTION_STATE)],
+      ],
+    });
+    try {
+      expect(registry.get(defaultProjectFallbackReadyAtom("remote:project"))).toBe(
+        unsupportedReason !== undefined,
+      );
+    } finally {
+      registry.dispose();
+    }
+  },
+);

@@ -1,40 +1,26 @@
-/**
- * Zustand store for sidebar thread multi-selection state.
- *
- * Supports Cmd/Ctrl+Click (toggle individual), Shift+Click (range select),
- * and bulk actions on the selected set.
- */
 import { create } from "zustand";
 
 export interface ThreadSelectionState {
-  /** Currently selected scoped thread keys. */
   selectedThreadKeys: ReadonlySet<string>;
-  /** The scoped thread key that anchors shift-click range selection. */
   anchorThreadKey: string | null;
 }
 
 interface ThreadSelectionStore extends ThreadSelectionState {
-  /** Toggle a single scoped thread key in the selection (Cmd/Ctrl+Click). */
-  toggleThread: (threadKey: string) => void;
-  /**
-   * Select a range of threads (Shift+Click).
-   * Requires the ordered list of scoped thread keys within the same project
-   * so the store can compute which threads fall between anchor and target.
-   */
-  rangeSelectTo: (threadKey: string, orderedThreadKeys: readonly string[]) => void;
-  /** Clear all selection state. */
+  /** The open thread looks selected, so a new selection starts from it. */
+  toggleThread: (threadKey: string, openThreadKey?: string | null) => void;
+  /** Requires ordered scoped thread keys from the same project. */
+  rangeSelectTo: (
+    threadKey: string,
+    orderedThreadKeys: readonly string[],
+    openThreadKey?: string | null,
+  ) => void;
   clearSelection: () => void;
-  /** Remove specific scoped thread keys from the selection (e.g. after deletion). */
   removeFromSelection: (threadKeys: readonly string[]) => void;
-  /** Set the anchor thread without adding it to the selection (e.g. on plain-click navigate). */
-  setAnchor: (threadKey: string) => void;
-  /** Check if any threads are selected. */
   hasSelection: () => boolean;
 }
 
 const EMPTY_SET = new Set<string>();
 
-/** Clear completed deletions and missing threads, retaining failed or unprocessed threads. */
 export function getThreadKeysToDeselectAfterDelete(
   selectedThreadKeys: readonly string[],
   deletedThreadKeys: ReadonlySet<string>,
@@ -47,10 +33,13 @@ export const useThreadSelectionStore = create<ThreadSelectionStore>((set, get) =
   selectedThreadKeys: EMPTY_SET,
   anchorThreadKey: null,
 
-  toggleThread: (threadKey) => {
+  toggleThread: (threadKey, openThreadKey = null) => {
     set((state) => {
       const next = new Set(state.selectedThreadKeys);
-      if (next.has(threadKey)) {
+      if (next.size === 0 && openThreadKey !== null && openThreadKey !== threadKey) {
+        next.add(openThreadKey);
+        next.add(threadKey);
+      } else if (next.has(threadKey)) {
         next.delete(threadKey);
       } else {
         next.add(threadKey);
@@ -62,11 +51,10 @@ export const useThreadSelectionStore = create<ThreadSelectionStore>((set, get) =
     });
   },
 
-  rangeSelectTo: (threadKey, orderedThreadKeys) => {
+  rangeSelectTo: (threadKey, orderedThreadKeys, openThreadKey = null) => {
     set((state) => {
-      const anchor = state.anchorThreadKey;
+      const anchor = state.selectedThreadKeys.size === 0 ? openThreadKey : state.anchorThreadKey;
       if (anchor === null) {
-        // No anchor yet — treat as a single toggle
         const next = new Set(state.selectedThreadKeys);
         next.add(threadKey);
         return { selectedThreadKeys: next, anchorThreadKey: threadKey };
@@ -75,7 +63,6 @@ export const useThreadSelectionStore = create<ThreadSelectionStore>((set, get) =
       const anchorIndex = orderedThreadKeys.indexOf(anchor);
       const targetIndex = orderedThreadKeys.indexOf(threadKey);
       if (anchorIndex === -1 || targetIndex === -1) {
-        // Anchor or target not in this list (different project?) — fallback to toggle
         const next = new Set(state.selectedThreadKeys);
         next.add(threadKey);
         return { selectedThreadKeys: next, anchorThreadKey: threadKey };
@@ -90,7 +77,6 @@ export const useThreadSelectionStore = create<ThreadSelectionStore>((set, get) =
           next.add(key);
         }
       }
-      // Keep anchor stable so subsequent shift-clicks extend from the same point
       return { selectedThreadKeys: next, anchorThreadKey: anchor };
     });
   },
@@ -99,11 +85,6 @@ export const useThreadSelectionStore = create<ThreadSelectionStore>((set, get) =
     const state = get();
     if (state.selectedThreadKeys.size === 0 && state.anchorThreadKey === null) return;
     set({ selectedThreadKeys: EMPTY_SET, anchorThreadKey: null });
-  },
-
-  setAnchor: (threadKey) => {
-    if (get().anchorThreadKey === threadKey) return;
-    set({ anchorThreadKey: threadKey });
   },
 
   removeFromSelection: (threadKeys) => {
