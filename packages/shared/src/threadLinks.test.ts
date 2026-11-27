@@ -3,6 +3,7 @@ import { EnvironmentId, ThreadId, type ScopedThreadRef } from "@kairo/contracts"
 import { mFallback } from "gt-i18n";
 import type { MFunctionType } from "gt-i18n/types";
 
+import { DEFAULT_HOSTED_APP_URL } from "./connectAuth.ts";
 import {
   formatHostedThreadLink,
   formatThreadLink,
@@ -304,7 +305,9 @@ describe("hosted thread links", () => {
   it("escapes every id character a sentence or path could claim, and reads it back", () => {
     const thread = ref("env.1", "thread:delegated/mcp%3A1.");
     const link = hostedThreadLink(thread);
-    expect(link).toBe("https://app.kairo.codes/threads/env%2E1/thread%3Adelegated%2Fmcp%253A1%2E");
+    expect(link).toBe(
+      `${DEFAULT_HOSTED_APP_URL}/threads/env%2E1/thread%3Adelegated%2Fmcp%253A1%2E`,
+    );
     expect(parseThreadLinkHref(link)).toEqual(thread);
     expect(hostedThreadLink(thread, "https://preview.kairo.codes/")).toMatch(
       /^https:\/\/preview\.kairo\.codes\/threads\//,
@@ -312,24 +315,26 @@ describe("hosted thread links", () => {
   });
 
   it("reads only a bare thread path on the hosted app", () => {
-    expect(parseThreadLinkHref("https://app.kairo.codes/threads/env-1/thread-1")).toEqual(
+    expect(parseThreadLinkHref(`${DEFAULT_HOSTED_APP_URL}/threads/env-1/thread-1`)).toEqual(
       ref("env-1", "thread-1"),
     );
     expect(
-      parseThreadLinkHref("https://app.kairo.codes/threads/env-1/thread-1?prompt=go"),
+      parseThreadLinkHref(`${DEFAULT_HOSTED_APP_URL}/threads/env-1/thread-1?prompt=go`),
     ).toBeNull();
-    expect(parseThreadLinkHref("https://app.kairo.codes/threads/env-1/thread-1/extra")).toBeNull();
-    expect(parseThreadLinkHref("https://app.kairo.codes/threads/env-1")).toBeNull();
-    expect(parseThreadLinkHref("https://app.kairo.codes/env-1/thread-1")).toBeNull();
+    expect(
+      parseThreadLinkHref(`${DEFAULT_HOSTED_APP_URL}/threads/env-1/thread-1/extra`),
+    ).toBeNull();
+    expect(parseThreadLinkHref(`${DEFAULT_HOSTED_APP_URL}/threads/env-1`)).toBeNull();
+    expect(parseThreadLinkHref(`${DEFAULT_HOSTED_APP_URL}/env-1/thread-1`)).toBeNull();
     expect(parseThreadLinkHref("https://evil.test/threads/env-1/thread-1")).toBeNull();
   });
 
   it("writes a copied link a reader can follow, labeled when it has a title", () => {
     expect(formatHostedThreadLink(ref("e", "t1"), "Fix [ci]")).toBe(
-      "[Fix ci](https://app.kairo.codes/threads/e/t1)",
+      `[Fix ci](${DEFAULT_HOSTED_APP_URL}/threads/e/t1)`,
     );
     expect(formatHostedThreadLink(ref("e", "t1"), " ")).toBe(
-      "https://app.kairo.codes/threads/e/t1",
+      `${DEFAULT_HOSTED_APP_URL}/threads/e/t1`,
     );
   });
 
@@ -338,11 +343,11 @@ describe("hosted thread links", () => {
     expect(
       relabelThreadLinks(
         [
-          "See https://app.kairo.codes/threads/there/t1.",
-          "[old](https://app.kairo.codes/threads/there/t1)",
-          "<https://app.kairo.codes/threads/there/t1>",
-          "`https://app.kairo.codes/threads/there/t1`",
-          "https://app.kairo.codes/threads/there/t1?prompt=go",
+          `See ${DEFAULT_HOSTED_APP_URL}/threads/there/t1.`,
+          `[old](${DEFAULT_HOSTED_APP_URL}/threads/there/t1)`,
+          `<${DEFAULT_HOSTED_APP_URL}/threads/there/t1>`,
+          `\`${DEFAULT_HOSTED_APP_URL}/threads/there/t1\``,
+          `${DEFAULT_HOSTED_APP_URL}/threads/there/t1?prompt=go`,
         ].join("\n"),
         local,
         title,
@@ -352,20 +357,20 @@ describe("hosted thread links", () => {
         "See [There](kairo-thread://v2/there/t1).",
         "[There](kairo-thread://v2/there/t1)",
         "[There](kairo-thread://v2/there/t1)",
-        "`https://app.kairo.codes/threads/there/t1`",
-        "https://app.kairo.codes/threads/there/t1?prompt=go",
+        `\`${DEFAULT_HOSTED_APP_URL}/threads/there/t1\``,
+        `${DEFAULT_HOSTED_APP_URL}/threads/there/t1?prompt=go`,
       ].join("\n"),
     );
     expect(
-      relabelThreadLinks("https://app.kairo.codes/threads/there/t1", local, () => undefined),
+      relabelThreadLinks(`${DEFAULT_HOSTED_APP_URL}/threads/there/t1`, local, () => undefined),
     ).toBe("Thread on another machine");
-    expect(threadLinkRefs("Open https://app.kairo.codes/threads/there/t%3A1", local)).toEqual([
+    expect(threadLinkRefs(`Open ${DEFAULT_HOSTED_APP_URL}/threads/there/t%3A1`, local)).toEqual([
       ref("there", "t:1"),
     ]);
   });
 
   it("leaves a hosted link that is part of another link as written", () => {
-    const hosted = "https://app.kairo.codes/threads/there/t1";
+    const hosted = `${DEFAULT_HOSTED_APP_URL}/threads/there/t1`;
     const relabeled = "[There](kairo-thread://v2/there/t1)";
     const title = titlesIn({ there: { t1: "There" } });
     for (const [markdown, expected] of [

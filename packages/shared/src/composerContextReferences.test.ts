@@ -7,6 +7,7 @@ import {
 } from "@kairo/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
+import { DEFAULT_HOSTED_APP_URL } from "./connectAuth.ts";
 import { serializeAssistantCitation } from "./assistantCitations.ts";
 import {
   ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
@@ -618,37 +619,37 @@ describe("threadLinkContextReferences", () => {
   it("makes a chip of a copied link, a v2 link, and a labeled link, titled here", () => {
     const pasted = threadLinkContextReferences(
       [
-        "https://app.kairo.codes/threads/env-1/t1",
+        `${DEFAULT_HOSTED_APP_URL}/threads/env-1/t1`,
         "<kairo-thread://v2/env-1/t2>",
-        "[Written](https://app.kairo.codes/threads/env-2/t3)",
+        `[Written](${DEFAULT_HOSTED_APP_URL}/threads/env-2/t3)`,
       ].join(" "),
       [],
-      ({ threadId }) => (threadId === "kairo" ? undefined : `Title ${threadId}`),
+      ({ threadId }) => (threadId === "t3" ? undefined : `Title ${threadId}`),
     );
     expect(pasted.text).toBe(
       [
         reference("env-1", "t1", "Title t1"),
         reference("env-1", "t2", "Title t2"),
-        reference("env-2", "kairo", "Written"),
+        reference("env-2", "t3", "Written"),
       ].join(" "),
     );
     expect(pasted.records).toEqual([
       threadContextRecord(thread("env-1", "t1"), "Title t1"),
       threadContextRecord(thread("env-1", "t2"), "Title t2"),
-      threadContextRecord(thread("env-2", "kairo"), "Written"),
+      threadContextRecord(thread("env-2", "t3"), "Written"),
     ]);
   });
 
   it("prefers the record the copy carried, and names an unknown thread plainly", () => {
     const copied = threadContextRecord(thread("env-1", "t1"), "Copied title");
     const pasted = threadLinkContextReferences(
-      "https://app.kairo.codes/threads/env-1/t1 https://app.kairo.codes/threads/env-9/t9",
+      `${DEFAULT_HOSTED_APP_URL}/threads/env-1/t1 ${DEFAULT_HOSTED_APP_URL}/threads/env-9/t9`,
       [copied],
       () => "Here",
     );
     expect(pasted.records).toEqual([copied, threadContextRecord(thread("env-9", "t9"), "Here")]);
     expect(
-      threadLinkContextReferences("https://app.kairo.codes/threads/env-9/t9", [], () => undefined)
+      threadLinkContextReferences(`${DEFAULT_HOSTED_APP_URL}/threads/env-9/t9`, [], () => undefined)
         .records,
     ).toEqual([threadContextRecord(thread("env-9", "t9"), "Thread")]);
   });
@@ -674,9 +675,9 @@ describe("threadLinkContextReferences", () => {
 
   it("keeps links it may not chip, v1 links, and links in code as written", () => {
     const text = [
-      "https://app.kairo.codes/threads/elsewhere/t1",
+      `${DEFAULT_HOSTED_APP_URL}/threads/elsewhere/t1`,
       "[Old](kairo-thread://v1/t2)",
-      "`https://app.kairo.codes/threads/env-1/t3`",
+      `\`${DEFAULT_HOSTED_APP_URL}/threads/env-1/t3\``,
     ].join(" ");
     const pasted = threadLinkContextReferences(
       text,

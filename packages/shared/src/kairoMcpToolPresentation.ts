@@ -498,30 +498,40 @@ function resolveT3McpToolName(value: string): string | null {
   return name;
 }
 
+function canonicalMcpToolName(name: string): string {
+  return name.startsWith("t3_") ? `kairo_${name.slice(3)}` : name;
+}
+
 // ACP tool prefixes vary; match loosely but require a known display-name entry.
 function parseT3McpToolName(value: string): string | null {
   const label = normalizeT3McpToolLabel(value);
+  const direct = canonicalMcpToolName(label);
+  if (Object.hasOwn(KAIRO_MCP_TOOLS, direct)) return direct;
+
   const mcpMatch = /^mcp__(?<server>.+?)__(?<tool>.+)$/i.exec(label);
   if (mcpMatch?.groups) {
     const { server, tool } = mcpMatch.groups;
     return server !== undefined &&
       tool !== undefined &&
       KAIRO_MCP_SERVER_ALIASES.has(server.toLowerCase())
-      ? tool
+      ? canonicalMcpToolName(tool)
       : null;
   }
 
   const namespaceMatch =
-    /^(?<server>t3[-_]code[-_]direct|kairo-code|kairo_code|kairo)(?:[.:/]|\s*·\s*)(?<tool>.+)$/i.exec(
+    /^(?:(?:t3|kairo)[-_]?code(?:[-_]direct)?|kairo)(?:[.:/]|\s*·\s*)(?<tool>.+)$/i.exec(label);
+  const namespacedTool = namespaceMatch?.groups?.tool;
+  if (namespacedTool !== undefined) return canonicalMcpToolName(namespacedTool);
+
+  const prefixed =
+    /^(?:mcp[-_]{1,2})?(?:t3[-_ ]?code|kairo(?:[-_ ]?code)?)(?:__|[-_.:/ ])(?<tool>.+)$/i.exec(
       label,
     );
-  if (namespaceMatch?.groups) {
-    return namespaceMatch.groups.tool ?? null;
+  const prefixedTool = prefixed?.groups?.tool;
+  if (prefixedTool !== undefined) {
+    const candidate = canonicalMcpToolName(prefixedTool);
+    if (Object.hasOwn(KAIRO_MCP_TOOLS, candidate)) return candidate;
   }
-
-  const prefixed = /^(?:mcp[-_]{1,2})?t3[-_ ]?code(?:__|[-_.:/ ])(?<tool>.+)$/i.exec(label);
-  const candidate = prefixed?.groups?.tool ?? label;
-  if (Object.hasOwn(KAIRO_MCP_TOOLS, candidate)) return candidate;
   // OpenCode 2 thread prefixes can contain underscores; choose the longest known tool-name suffix.
   if (!/^kairo-code-/i.test(label)) return null;
   let longest: string | null = null;

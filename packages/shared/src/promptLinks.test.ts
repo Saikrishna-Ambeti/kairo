@@ -1,6 +1,7 @@
 import { EnvironmentId, ThreadId } from "@kairo/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
+import { DEFAULT_HOSTED_APP_URL } from "./connectAuth.ts";
 import {
   buildNewThreadLink,
   parseNewThreadLink,
@@ -48,7 +49,7 @@ describe("parseNewThreadLink", () => {
       value: {
         kind: "new",
         prompt: { text: "Rate me", hiddenCharacters: 0 },
-        repository: { owner: "pingdotgg", name: "kairo" },
+        repository: { owner: "pingdotgg", name: "t3code" },
         provider: "codex",
         model: "gpt-5",
       },
@@ -57,15 +58,15 @@ describe("parseNewThreadLink", () => {
 
   it("reads a pull request link, whose prompt is optional", () => {
     for (const pr of [
-      "pingdotgg/kairo/42",
-      "pingdotgg/kairo%2342",
+      "pingdotgg/t3code/42",
+      "pingdotgg/t3code%2342",
       "https://github.com/pingdotgg/t3code/pull/42/files",
     ]) {
       expect(parseNewThreadLink(`?pr=${pr}`)).toEqual({
         ok: true,
         value: {
           kind: "pull-request",
-          pullRequest: { owner: "pingdotgg", name: "kairo", number: 42 },
+          pullRequest: { owner: "pingdotgg", name: "t3code", number: 42 },
           prompt: null,
         },
       });
@@ -96,7 +97,7 @@ describe("link round trips", () => {
   it("builds a link that parses back to the same prompt", () => {
     const link = buildNewThreadLink({
       prompt: "Swear count & rating?",
-      repository: { owner: "pingdotgg", name: "kairo" },
+      repository: { owner: "pingdotgg", name: "t3code" },
       provider: "claudeAgent",
       model: "opus",
     });
@@ -123,19 +124,19 @@ describe("link round trips", () => {
   it("maps app scheme and hosted links to in-app paths, and nothing else", () => {
     expect(promptLinkAppPath("kairo://new?prompt=hi")).toBe("/new?prompt=hi");
     expect(promptLinkAppPath("kairo-dev://threads/env-1/thread-1")).toBe("/env-1/thread-1");
-    expect(promptLinkAppPath("https://app.kairo.codes/env-1/thread-1?prompt=go")).toBe(
+    expect(promptLinkAppPath(`${DEFAULT_HOSTED_APP_URL}/env-1/thread-1?prompt=go`)).toBe(
       "/env-1/thread-1?prompt=go",
     );
-    expect(promptLinkAppPath("https://app.kairo.codes/threads/env-1/thread-1")).toBe(
+    expect(promptLinkAppPath(`${DEFAULT_HOSTED_APP_URL}/threads/env-1/thread-1`)).toBe(
       "/env-1/thread-1",
     );
-    expect(promptLinkAppPath("https://app.kairo.codes/threads/env-1/thread-1?prompt=go")).toBe(
+    expect(promptLinkAppPath(`${DEFAULT_HOSTED_APP_URL}/threads/env-1/thread-1?prompt=go`)).toBe(
       "/env-1/thread-1?prompt=go",
     );
     // The web app's own thread route, reloaded, is no link.
-    expect(promptLinkAppPath("https://app.kairo.codes/env-1/thread-1")).toBeNull();
-    expect(promptLinkAppPath("https://app.kairo.codes/threads/env-1")).toBeNull();
-    expect(promptLinkAppPath("https://app.kairo.codes/settings/general")).toBeNull();
+    expect(promptLinkAppPath(`${DEFAULT_HOSTED_APP_URL}/env-1/thread-1`)).toBeNull();
+    expect(promptLinkAppPath(`${DEFAULT_HOSTED_APP_URL}/threads/env-1`)).toBeNull();
+    expect(promptLinkAppPath(`${DEFAULT_HOSTED_APP_URL}/settings/general`)).toBeNull();
     expect(promptLinkAppPath("https://evil.test/new?prompt=hi")).toBeNull();
     expect(promptLinkAppPath("kairo://app/index.html")).toBeNull();
   });
@@ -144,8 +145,8 @@ describe("link round trips", () => {
     const canParse = URL.canParse;
     Reflect.deleteProperty(URL, "canParse");
     try {
-      expect(promptLinkAppPath("https://app.kairo.codes/new?prompt=hi")).toBe("/new?prompt=hi");
-      expect(promptLinkAppPath("https://app.kairo.codes/")).toBeNull();
+      expect(promptLinkAppPath(`${DEFAULT_HOSTED_APP_URL}/new?prompt=hi`)).toBe("/new?prompt=hi");
+      expect(promptLinkAppPath(`${DEFAULT_HOSTED_APP_URL}/`)).toBeNull();
       expect(promptLinkAppPath("not a url")).toBeNull();
     } finally {
       URL.canParse = canParse;

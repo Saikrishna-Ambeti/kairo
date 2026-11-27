@@ -263,12 +263,12 @@ describe("isTemporaryWorktreeBranch", () => {
     );
   });
 
-  it("matches legacy kairo temporary worktree refs", () => {
+  it("matches temporary worktree refs from older Kairo builds", () => {
     expect(isTemporaryWorktreeBranch("kairo/deadbeef")).toBe(true);
     expect(isTemporaryWorktreeBranch("kairo-deadbeef")).toBe(true);
     expect(isTemporaryWorktreeBranch("kairo/f4ae4e0e-f971-4d48-b4f2-9cf0aa54ab12")).toBe(true);
     expect(
-      isTemporaryWorktreeBranch(`${WORKTREE_BRANCH_PREFIX}/f4ae4e0e-f971-4d48-b4f2-9cf0aa54ab12`),
+      isTemporaryWorktreeBranch(`${WORKTREE_BRANCH_PREFIX}-f4ae4e0e-f971-4d48-b4f2-9cf0aa54ab12`),
     ).toBe(false);
   });
 

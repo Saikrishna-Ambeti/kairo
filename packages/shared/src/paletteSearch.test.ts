@@ -247,8 +247,8 @@ describe("scoreThreadSearch", () => {
       [],
     );
     // Words with digits still forgive one.
-    expect(rankTitles("t3coed", [thread("kairo perf audit"), thread("Other")])).toEqual([
-      "kairo perf audit",
+    expect(rankTitles("t3coed", [thread("t3code perf audit"), thread("Other")])).toEqual([
+      "t3code perf audit",
     ]);
     expect(rankTitles("oath2", [thread("Fix oauth2 redirect")])).toEqual(["Fix oauth2 redirect"]);
     // A typo beats a mid-word accident: "ilde" is "idle", not the middle of "Builder".
@@ -371,7 +371,7 @@ describe("scoreThreadSearch beyond Latin text and titles", () => {
     // Short words before a mere prefix are a coincidence.
     expect(rankTitles("inth", [thread("Show skill names in thread overview")])).toEqual([]);
     expect(rankTitles("tos", [thread("Move Client State to Server")])).toEqual([]);
-    expect(rankTitles("t3co", [thread("Kairo vs Gemini")])).toEqual(["Kairo vs Gemini"]);
+    expect(rankTitles("t3co", [thread("T3 Code vs Gemini")])).toEqual(["T3 Code vs Gemini"]);
     expect(rankTitles('"sidebar lag"', [thread("Fix sidebar lag")])).toEqual(["Fix sidebar lag"]);
     // A pasted query with a separate accent mark matches the composed title.
     expect(rankTitles("cafe\u0301", [thread("Café menu")])).toEqual(["Café menu"]);
@@ -507,13 +507,13 @@ describe("scoreThreadSearch with heavy use and loose input", () => {
       pullRequests: [
         {
           number: 22889,
-          references: ["pingdotgg/kairo#22889", "https://github.com/pingdotgg/t3code/pull/22889"],
+          references: ["pingdotgg/t3code#22889", "https://github.com/pingdotgg/t3code/pull/22889"],
         },
       ],
     });
     for (const query of [
-      "kairo#22889",
-      "github.com/pingdotgg/kairo/pull/22889",
+      "t3code#22889",
+      "github.com/pingdotgg/t3code/pull/22889",
       "https://github.com/pingdotgg/t3code/pull/22889/files",
       "5fe6f59c",
       "beebox",
@@ -522,7 +522,7 @@ describe("scoreThreadSearch with heavy use and loose input", () => {
     }
     expect(scoreThreadSearch("github.com", subject, NOW)).toBeNull();
     // A number is never cut short.
-    for (const query of ["github.com/pingdotgg/kairo/pull/2288", "kairo#2288"]) {
+    for (const query of ["github.com/pingdotgg/t3code/pull/2288", "t3code#2288"]) {
       expect(scoreThreadSearch(foldSearchQuery(query), subject, NOW), query).toBeNull();
     }
   });
