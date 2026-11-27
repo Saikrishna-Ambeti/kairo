@@ -388,6 +388,7 @@ function ProviderSetupStep({
               provider,
               targetBusy === "install-agent",
               option.definition.label,
+              messages,
             );
 
             return (
@@ -411,7 +412,7 @@ function ProviderSetupStep({
                       !progressLabel && "sm:line-clamp-2",
                     )}
                   >
-                    {getOnboardingAgentDescription(provider)}
+                    {getOnboardingAgentDescription(provider, messages)}
                   </p>
                   {progressLabel ? (
                     <div className="space-y-1.5 pt-1">

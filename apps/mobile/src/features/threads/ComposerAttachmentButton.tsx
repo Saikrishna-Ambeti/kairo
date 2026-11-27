@@ -15,17 +15,12 @@ const ATTACHMENT_MENU_ACTIONS: MenuAction[] = [
   { id: "photos", title: msg("Photo Library"), image: "photo" },
   { id: "files", title: msg("Choose Files"), image: "folder" },
 ];
-const FILE_CREATION_MENU_TITLES = {
-  document: msg("Create document"),
-  presentation: msg("Create presentation"),
-  spreadsheet: msg("Create spreadsheet"),
-  csv: msg("Create CSV file"),
-  pdf: msg("Create PDF"),
-} satisfies Record<ArtifactCreationKind, string>;
-const FILE_CREATION_MENU_ACTIONS: MenuAction[] = ARTIFACT_CREATION_COMMANDS.map(({ kind }) => ({
-  id: kind,
-  title: FILE_CREATION_MENU_TITLES[kind],
-}));
+const FILE_CREATION_MENU_ACTIONS: MenuAction[] = ARTIFACT_CREATION_COMMANDS.map(
+  ({ kind, creationTitle }) => ({
+    id: kind,
+    title: creationTitle,
+  }),
+);
 
 export function ComposerAttachmentButton(props: {
   readonly disabled?: boolean;

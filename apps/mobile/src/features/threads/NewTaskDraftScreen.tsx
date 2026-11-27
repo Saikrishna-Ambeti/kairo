@@ -179,21 +179,23 @@ export function NewTaskDraftScreen(props: {
   const projects = useProjects();
   const flow = useNewTaskFlow();
   const preparedArtifactDraft = useRef<string | null>(null);
+  const { draftKey: artifactDraftKey, setPrompt: setArtifactDraftPrompt } = flow;
+  // oxlint-disable-next-line kairo/no-unreasoned-state-sync -- Seeds the stored draft once after the selected project gives it a key.
   useEffect(() => {
     if (
       !props.artifactKind ||
-      flow.draftKey === null ||
-      flow.draftKey === preparedArtifactDraft.current
+      artifactDraftKey === null ||
+      artifactDraftKey === preparedArtifactDraft.current
     )
       return;
-    preparedArtifactDraft.current = flow.draftKey;
-    flow.setPrompt(
+    preparedArtifactDraft.current = artifactDraftKey;
+    setArtifactDraftPrompt(
       prependArtifactCreationPrompt(
         props.artifactKind,
-        getComposerDraftSnapshot(flow.draftKey).text,
+        getComposerDraftSnapshot(artifactDraftKey).text,
       ),
     );
-  }, [flow.draftKey, flow.setPrompt, props.artifactKind]);
+  }, [artifactDraftKey, setArtifactDraftPrompt, props.artifactKind]);
   const navigation = useNavigation();
   const isFocused = useIsFocused();
   const goBack = useWorkspaceBackNavigation();

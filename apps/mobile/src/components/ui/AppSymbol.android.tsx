@@ -1,4 +1,3 @@
-import IconSparkles from "@tabler/icons-react-native/IconSparkles";
 import IconSchool from "@tabler/icons-react-native/IconSchool";
 import type { Icon } from "@tabler/icons-react-native/types";
 /* Package-root imports eagerly register the entire Tabler icon set in Metro. */
@@ -333,7 +332,7 @@ const SF_ICON_LOOKUP: Partial<
 > = ANDROID_ICON_BY_SF_SYMBOL;
 
 const ANDROID_ICON_BY_MATERIAL_NAME = {
-  auto_awesome: IconSparkles,
+  auto_awesome: IconRobot,
   school: IconSchool,
   bolt: IconBolt,
   build: IconTool,

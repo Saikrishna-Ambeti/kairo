@@ -594,7 +594,7 @@ it.effect("handoff analytics read only the caller's active run and its message",
   const recorded = Deferred.makeUnsafe<void>();
   return Effect.gen(function* () {
     const server = yield* McpServer.McpServer;
-    yield* server
+    const edited = yield* server
       .callTool({
         name: "kairo_queue",
         arguments: { action: "edit", queuedRunId: "run:queued", text: "Edited" },
@@ -603,6 +603,7 @@ it.effect("handoff analytics read only the caller's active run and its message",
         Effect.provideService(McpInvocationContext.McpInvocationContext, scope),
         Effect.provideService(McpSchema.McpServerClient, client),
       );
+    expect(edited.isError).not.toBe(true);
     yield* Deferred.await(recorded);
     expect(reads).toEqual([]);
     // The edit keeps the queued image, so `/logout` stays an ordinary prompt and is not refused.

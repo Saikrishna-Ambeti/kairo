@@ -477,7 +477,7 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "professional-role",
-    title: "Professional role",
+    title: msg("Professional role"),
     to: "/settings/general",
   },
   {

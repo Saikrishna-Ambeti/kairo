@@ -1,3 +1,4 @@
+import { T, useGT, useMessages } from "gt-react";
 import {
   BriefcaseBusinessIcon,
   CheckIcon,
@@ -30,9 +31,13 @@ export function ProfessionalRolePicker({
   readonly onChange: (role: ProfessionalRole) => void;
   readonly onOtherValueChange: (value: string) => void;
 }) {
+  const gt = useGT();
+  const m = useMessages();
   return (
     <fieldset className="grid gap-3 text-left sm:grid-cols-2">
-      <legend className="sr-only">Professional role</legend>
+      <legend className="sr-only">
+        <T>Professional role</T>
+      </legend>
       {PROFESSIONAL_ROLES.map((role) => {
         const Icon = ROLE_ICONS[role.value];
         const selected = value === role.value;
@@ -41,7 +46,7 @@ export function ProfessionalRolePicker({
           <label
             key={role.value}
             className={cn(
-              "group relative min-h-32 cursor-pointer rounded-xl border p-5 text-left outline-none transition-[border-color,background-color,box-shadow,transform] has-focus-visible:ring-2 has-focus-visible:ring-ring has-focus-visible:ring-offset-2 has-focus-visible:ring-offset-card",
+              "group relative min-h-32 cursor-pointer rounded-xl border p-5 text-left outline-none transition-[border-color,background-color,box-shadow,transform] has-focus-visible:ring-2 has-focus-visible:ring-inset has-focus-visible:ring-ring",
               selected
                 ? "border-primary/55 bg-primary/8 ring-1 ring-primary/20"
                 : "border-border/80 bg-background/65 hover:-translate-y-px hover:border-primary/30 hover:bg-accent/45",
@@ -65,9 +70,11 @@ export function ProfessionalRolePicker({
             >
               <Icon className="size-5" />
             </span>
-            <span className="block pr-6 text-base font-semibold text-foreground">{role.label}</span>
+            <span className="block pr-6 text-base font-semibold text-foreground">
+              {m(role.label)}
+            </span>
             <span className="mt-1 block text-sm leading-5 text-muted-foreground">
-              {role.description}
+              {m(role.description)}
             </span>
             <span
               aria-hidden
@@ -85,13 +92,15 @@ export function ProfessionalRolePicker({
       })}
       {value === "other" ? (
         <label className="space-y-2 sm:col-span-2" htmlFor="professional-role-other">
-          <span className="text-sm font-medium text-foreground">Your profession</span>
+          <span className="text-sm font-medium text-foreground">
+            <T>Your profession</T>
+          </span>
           <input
             required
             autoFocus
             id="professional-role-other"
-            className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
-            placeholder="e.g. Product designer"
+            className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            placeholder={gt("e.g. Product designer")}
             value={otherValue}
             onChange={(event) => onOtherValueChange(event.currentTarget.value)}
           />

@@ -1,6 +1,7 @@
+import { T, useGT, useMessages } from "gt-react";
 import type { EnvironmentId, ThreadId } from "@kairo/contracts";
 import { FileTextIcon, PackageOpenIcon, RefreshCwIcon } from "lucide-react";
-import { useEffect, useEffectEvent, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { useArtifacts } from "../../state/artifacts";
 import { Button } from "../ui/button";
@@ -17,6 +18,8 @@ export function ThreadArtifactsPanel({
   readonly threadId: ThreadId;
   readonly refreshToken: string;
 }) {
+  const gt = useGT();
+  const m = useMessages();
   const [filter, setFilter] = useState<ArtifactFilter>("all");
   const { artifacts, error, isPending, refresh } = useArtifacts(environmentId, {
     threadId,
@@ -24,15 +27,18 @@ export function ThreadArtifactsPanel({
     limit: 200,
   });
   const refreshArtifacts = useEffectEvent(refresh);
-
+  const previousRefreshToken = useRef(refreshToken);
+  // oxlint-disable-next-line kairo/no-unreasoned-state-sync -- A completed turn invalidates the external artifact index.
   useEffect(() => {
+    if (previousRefreshToken.current === refreshToken) return;
+    previousRefreshToken.current = refreshToken;
     refreshArtifacts();
   }, [refreshToken]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
       <div className="flex min-h-12 shrink-0 items-center gap-2 border-b border-border/70 px-3">
-        <div className="flex min-w-0 flex-1 items-center gap-1" aria-label="Artifact type">
+        <div className="flex min-w-0 flex-1 items-center gap-1" aria-label={gt("Artifact type")}>
           {ARTIFACT_FILTERS.map(({ value, label }) => (
             <button
               key={value}
@@ -41,11 +47,16 @@ export function ThreadArtifactsPanel({
               className="rounded-md px-2.5 py-1.5 text-muted-foreground text-xs hover:bg-accent hover:text-foreground aria-pressed:bg-accent aria-pressed:font-medium aria-pressed:text-foreground"
               onClick={() => setFilter(value)}
             >
-              {label}
+              {m(label)}
             </button>
           ))}
         </div>
-        <Button aria-label="Refresh artifacts" onClick={refresh} size="icon-xs" variant="ghost">
+        <Button
+          aria-label={gt("Refresh artifacts")}
+          onClick={refresh}
+          size="icon-xs"
+          variant="ghost"
+        >
           <RefreshCwIcon className="size-3.5" />
         </Button>
       </div>
@@ -54,13 +65,15 @@ export function ThreadArtifactsPanel({
         <div className="p-2">
           {error ? (
             <div className="m-2 rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-sm">
-              <p className="font-medium text-foreground">Artifacts could not load</p>
+              <p className="font-medium text-foreground">
+                <T>Artifacts could not load</T>
+              </p>
               <p className="mt-1 text-muted-foreground text-xs">
-                Check the environment, then retry.
+                <T>Check the environment, then retry.</T>
               </p>
             </div>
           ) : isPending && artifacts.length === 0 ? (
-            <div className="space-y-2 p-2" aria-label="Loading artifacts">
+            <div className="space-y-2 p-2" aria-label={gt("Loading artifacts")}>
               {[0, 1, 2].map((item) => (
                 <div key={item} className="h-16 rounded-lg bg-muted/55" />
               ))}
@@ -74,9 +87,11 @@ export function ThreadArtifactsPanel({
                   <FileTextIcon className="size-5" aria-hidden />
                 )}
               </span>
-              <h2 className="mt-4 font-medium text-sm text-foreground">No artifacts yet</h2>
+              <h2 className="mt-4 font-medium text-sm text-foreground">
+                <T>No artifacts yet</T>
+              </h2>
               <p className="mt-1 max-w-64 text-muted-foreground text-xs leading-relaxed">
-                Ask the agent to create a document, presentation, spreadsheet, CSV, or PDF.
+                <T>Ask the agent to create a document, presentation, spreadsheet, CSV, or PDF.</T>
               </p>
             </div>
           ) : (

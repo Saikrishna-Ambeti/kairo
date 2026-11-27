@@ -25,6 +25,7 @@ const USER_PROFILE_CUSTOM_PAGES = [
 export function SettingsAuthRouteScreen() {
   const navigation = useNavigation();
 
+  // oxlint-disable-next-line kairo/no-unreasoned-state-sync -- Redirects a direct navigation when this build has no cloud sign-in.
   useLayoutEffect(() => {
     if (!hasCloudIdentityConfig()) {
       navigation.dispatch(StackActions.replace("SettingsContent"));

@@ -11,7 +11,6 @@ import {
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 
-import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import { getComposioAccessToken } from "./ComposioSecrets.ts";
 
 export const COMPOSIO_MCP_URL_ENV = "KAIRO_COMPOSIO_MCP_URL";
@@ -53,35 +52,34 @@ export function buildComposioProviderEnvironment(input: {
   ];
 }
 
-export const applyComposioProviderBindings = (
+export const applyComposioProviderBindings = Effect.fn("applyComposioProviderBindings")(function* (
   settings: ServerSettings,
   configMap: ProviderInstanceConfigMap,
-): Effect.Effect<ProviderInstanceConfigMap, never, ServerSecretStore.ServerSecretStore> =>
-  Effect.gen(function* () {
-    const composio = settings.integrations.composio;
-    if (!composio.enabled || composio.providerInstanceIds.length === 0) {
-      return configMap;
-    }
+) {
+  const composio = settings.integrations.composio;
+  if (!composio.enabled || composio.providerInstanceIds.length === 0) {
+    return configMap;
+  }
 
-    const accessToken = yield* getComposioAccessToken().pipe(Effect.orElseSucceed(() => null));
-    if (!accessToken) return configMap;
+  const accessToken = yield* getComposioAccessToken().pipe(Effect.orElseSucceed(() => null));
+  if (!accessToken) return configMap;
 
-    const cloudApiUrl = yield* Config.String("KAIRO_CLOUD_API_URL").pipe(
-      Effect.orElseSucceed(() => DEFAULT_KAIRO_CLOUD_API_URL),
-    );
-    const generated = buildComposioProviderEnvironment({
-      accessToken,
-      cloudApiUrl,
-    });
-    const selectedIds = new Set<ProviderInstanceId>(composio.providerInstanceIds);
-    const merged: Record<string, ProviderInstanceConfig> = { ...configMap };
-    for (const [rawInstanceId, instance] of Object.entries(configMap)) {
-      const instanceId = rawInstanceId as ProviderInstanceId;
-      if (!selectedIds.has(instanceId) || !isComposioDriverSupported(instance.driver)) continue;
-      merged[rawInstanceId] = {
-        ...instance,
-        environment: mergeGeneratedEnvironment(instance.environment, generated),
-      };
-    }
-    return merged as ProviderInstanceConfigMap;
+  const cloudApiUrl = yield* Config.String("KAIRO_CLOUD_API_URL").pipe(
+    Effect.orElseSucceed(() => DEFAULT_KAIRO_CLOUD_API_URL),
+  );
+  const generated = buildComposioProviderEnvironment({
+    accessToken,
+    cloudApiUrl,
   });
+  const selectedIds = new Set<ProviderInstanceId>(composio.providerInstanceIds);
+  const merged: Record<string, ProviderInstanceConfig> = { ...configMap };
+  for (const [rawInstanceId, instance] of Object.entries(configMap)) {
+    const instanceId = rawInstanceId as ProviderInstanceId;
+    if (!selectedIds.has(instanceId) || !isComposioDriverSupported(instance.driver)) continue;
+    merged[rawInstanceId] = {
+      ...instance,
+      environment: mergeGeneratedEnvironment(instance.environment, generated),
+    };
+  }
+  return merged as ProviderInstanceConfigMap;
+});

@@ -1,9 +1,26 @@
+import { msg } from "gt-i18n";
+
 export const ARTIFACT_CREATION_COMMANDS = [
-  { kind: "document", label: "Document", extension: ".docx" },
-  { kind: "presentation", label: "Presentation", extension: ".pptx" },
-  { kind: "spreadsheet", label: "Spreadsheet", extension: ".xlsx" },
-  { kind: "csv", label: "CSV", extension: ".csv" },
-  { kind: "pdf", label: "PDF", extension: ".pdf" },
+  {
+    kind: "document",
+    label: msg("Document"),
+    creationTitle: msg("Create document"),
+    extension: ".docx",
+  },
+  {
+    kind: "presentation",
+    label: msg("Presentation"),
+    creationTitle: msg("Create presentation"),
+    extension: ".pptx",
+  },
+  {
+    kind: "spreadsheet",
+    label: msg("Spreadsheet"),
+    creationTitle: msg("Create spreadsheet"),
+    extension: ".xlsx",
+  },
+  { kind: "csv", label: msg("CSV"), creationTitle: msg("Create CSV file"), extension: ".csv" },
+  { kind: "pdf", label: msg("PDF"), creationTitle: msg("Create PDF"), extension: ".pdf" },
 ] as const;
 
 export type ArtifactCreationKind = (typeof ARTIFACT_CREATION_COMMANDS)[number]["kind"];
@@ -21,6 +38,7 @@ const ARTIFACT_REQUESTS: Record<ArtifactCreationKind, string> = {
 };
 
 export function artifactCreationPrompt(kind: ArtifactCreationKind): string {
+  // oxlint-disable-next-line kairo/no-untranslated-copy -- The agent prompt uses English independently of the client locale.
   return `${ARTIFACT_REQUESTS[kind]} for the task below. Use the attached files as source material. Save the finished file under artifacts/ in this thread's workspace. Check its content and layout, then return a relative Markdown link to the file and state what you checked. Preserve any existing file content unless the task asks you to change it.\n\n`;
 }
 
@@ -45,5 +63,6 @@ export function prependArtifactRevisionPrompt(relativePath: string, draft: strin
     previousChangeIndex === -1
       ? draft.trimStart()
       : draft.slice(previousChangeIndex + changeMarker.length);
+  // oxlint-disable-next-line kairo/no-untranslated-copy -- These are field markers in the agent prompt.
   return `${instruction}\n\nLocation (page, slide, passage, sheet, or cells): \nChange: ${body}`;
 }

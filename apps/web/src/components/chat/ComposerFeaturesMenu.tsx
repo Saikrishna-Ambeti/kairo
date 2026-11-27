@@ -1,3 +1,4 @@
+import { T, useGT } from "gt-react";
 import { EllipsisIcon, SearchIcon } from "lucide-react";
 import { memo } from "react";
 
@@ -17,10 +18,14 @@ export const ComposerFeaturesMenuContent = memo(function ComposerFeaturesMenuCon
 }) {
   return (
     <MenuGroup>
-      <MenuGroupLabel>Features</MenuGroupLabel>
+      <MenuGroupLabel>
+        <T>Features</T>
+      </MenuGroupLabel>
       <MenuItem onClick={props.onDeepResearchSelect}>
         <SearchIcon aria-hidden="true" />
-        <span>Deep Research</span>
+        <span>
+          <T>Deep Research</T>
+        </span>
         <MenuShortcut>/research</MenuShortcut>
       </MenuItem>
     </MenuGroup>
@@ -30,6 +35,7 @@ export const ComposerFeaturesMenuContent = memo(function ComposerFeaturesMenuCon
 export const ComposerFeaturesMenu = memo(function ComposerFeaturesMenu(props: {
   onDeepResearchSelect: () => void;
 }) {
+  const gt = useGT();
   return (
     <Menu>
       <MenuTrigger
@@ -38,7 +44,7 @@ export const ComposerFeaturesMenu = memo(function ComposerFeaturesMenu(props: {
             size="icon-sm"
             variant="ghost-muted"
             className="shrink-0"
-            aria-label="Composer features"
+            aria-label={gt("Composer features")}
           />
         }
       >

@@ -1,3 +1,5 @@
+import { T, useGT } from "gt-react-native";
+import { useDebouncedValue } from "../../state/queries";
 import type { ArtifactMetadata, EnvironmentId, ThreadId } from "@kairo/contracts";
 import { prependArtifactRevisionPrompt } from "@kairo/client-runtime/artifact-creation";
 import { StackActions, useNavigation } from "@react-navigation/native";
@@ -30,6 +32,7 @@ export function MobileArtifactRow(props: {
   readonly artifact: ArtifactMetadata;
   readonly environmentId: EnvironmentId;
 }) {
+  const gt = useGT();
   const [isSharing, setIsSharing] = useState(false);
   const navigation = useNavigation();
   const controllerRef = useRef<AbortController | null>(null);
@@ -42,6 +45,7 @@ export function MobileArtifactRow(props: {
     [props.artifact.relativePath, props.artifact.threadId],
   );
   const refreshUrl = useRefreshAssetUrl(props.environmentId, resource);
+  // oxlint-disable-next-line kairo/no-unreasoned-state-sync -- Aborts an in-flight share when the row unmounts.
   useEffect(() => () => controllerRef.current?.abort(), []);
 
   const share = useCallback(async () => {
@@ -52,7 +56,7 @@ export function MobileArtifactRow(props: {
     try {
       const url = await refreshUrl();
       if (controller.signal.aborted) return;
-      if (url === null) throw new Error("File unavailable. Refresh and try again.");
+      if (url === null) throw new Error(gt("File unavailable. Refresh and try again."));
       await downloadAndShareAttachment({
         url,
         attachment: {
@@ -63,19 +67,22 @@ export function MobileArtifactRow(props: {
       });
     } catch (error) {
       if (!controller.signal.aborted) {
-        Alert.alert("Could not open file", error instanceof Error ? error.message : "Try again.");
+        Alert.alert(
+          gt("Could not open file"),
+          error instanceof Error ? error.message : gt("Try again."),
+        );
       }
     } finally {
       if (controllerRef.current === controller) controllerRef.current = null;
       if (!controller.signal.aborted) setIsSharing(false);
     }
-  }, [isSharing, props.artifact.fileName, props.artifact.kind, refreshUrl]);
+  }, [gt, isSharing, props.artifact.fileName, props.artifact.kind, refreshUrl]);
 
   return (
     <View className="mx-2 flex-row items-center rounded-xl">
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Open ${props.artifact.fileName}`}
+        accessibilityLabel={gt("Open {fileName}", { fileName: props.artifact.fileName })}
         className="min-h-[48px] min-w-0 flex-1 flex-row items-center gap-3 rounded-xl px-2 active:bg-subtle"
         disabled={isSharing}
         onPress={() => void share()}
@@ -100,11 +107,13 @@ export function MobileArtifactRow(props: {
             {props.artifact.fileName}
           </Text>
         </View>
-        <Text className="text-xs text-foreground-muted">{isSharing ? "Opening" : "Open"}</Text>
+        <Text className="text-xs text-foreground-muted">
+          {isSharing ? gt("Opening") : gt("Open")}
+        </Text>
       </Pressable>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Revise ${props.artifact.fileName}`}
+        accessibilityLabel={gt("Revise {fileName}", { fileName: props.artifact.fileName })}
         className="min-h-[44px] justify-center rounded-xl px-2 active:bg-subtle"
         onPress={() =>
           void (async () => {
@@ -126,13 +135,15 @@ export function MobileArtifactRow(props: {
             );
           })().catch((error: unknown) => {
             Alert.alert(
-              "Could not prepare revision",
-              error instanceof Error ? error.message : "Try again.",
+              gt("Could not prepare revision"),
+              error instanceof Error ? error.message : gt("Try again."),
             );
           })
         }
       >
-        <Text className="text-xs font-kairo-medium text-accent">Revise</Text>
+        <Text className="text-xs font-kairo-medium text-accent">
+          <T>Revise</T>
+        </Text>
       </Pressable>
     </View>
   );
@@ -144,12 +155,9 @@ export function ThreadArtifactsList(props: {
   readonly searchQuery: string;
   readonly refreshToken?: number;
 }) {
-  const [queryText, setQueryText] = useState("");
+  const gt = useGT();
+  const queryText = useDebouncedValue(props.searchQuery.trim(), 200);
   const [pageState, setPageState] = useState({ key: "", page: 0 });
-  useEffect(() => {
-    const timer = setTimeout(() => setQueryText(props.searchQuery.trim()), 200);
-    return () => clearTimeout(timer);
-  }, [props.searchQuery]);
   const query = useEnvironmentQuery(
     serverEnvironment.artifacts({
       environmentId: props.environmentId,
@@ -161,6 +169,7 @@ export function ThreadArtifactsList(props: {
     }),
   );
   const refreshArtifacts = useEffectEvent(query.refresh);
+  // oxlint-disable-next-line kairo/no-unreasoned-state-sync -- Refreshes the external artifact index after the composer reports a change.
   useEffect(() => {
     if (props.refreshToken !== undefined && props.refreshToken > 0) refreshArtifacts();
   }, [props.refreshToken]);
@@ -177,7 +186,7 @@ export function ThreadArtifactsList(props: {
     <View className="border-b border-border pb-2 pt-2">
       <View className="mb-1 flex-row items-center justify-between px-4">
         <Text className="text-2xs font-kairo-bold uppercase tracking-wide text-foreground-muted">
-          Artifacts
+          <T>Artifacts</T>
         </Text>
         <Text className="text-2xs text-foreground-muted">{artifacts.length}</Text>
       </View>
@@ -192,24 +201,32 @@ export function ThreadArtifactsList(props: {
         <View className="flex-row items-center justify-between px-4">
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Previous artifact page"
+            accessibilityLabel={gt("Previous artifact page")}
             className="min-h-[44px] justify-center rounded-xl px-2 active:bg-subtle disabled:opacity-40"
             disabled={currentPage === 0}
             onPress={() => setPageState({ key: pageKey, page: currentPage - 1 })}
           >
-            <Text className="text-xs font-kairo-medium text-accent">Previous</Text>
+            <Text className="text-xs font-kairo-medium text-accent">
+              <T>Previous</T>
+            </Text>
           </Pressable>
           <Text className="text-xs text-foreground-muted">
-            {firstIndex + 1}-{Math.min(firstIndex + 20, artifacts.length)} of {artifacts.length}
+            {gt("{start}-{end} of {total}", {
+              start: firstIndex + 1,
+              end: Math.min(firstIndex + 20, artifacts.length),
+              total: artifacts.length,
+            })}
           </Text>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Next artifact page"
+            accessibilityLabel={gt("Next artifact page")}
             className="min-h-[44px] justify-center rounded-xl px-2 active:bg-subtle disabled:opacity-40"
             disabled={currentPage === pageCount - 1}
             onPress={() => setPageState({ key: pageKey, page: currentPage + 1 })}
           >
-            <Text className="text-xs font-kairo-medium text-accent">Next</Text>
+            <Text className="text-xs font-kairo-medium text-accent">
+              <T>Next</T>
+            </Text>
           </Pressable>
         </View>
       ) : null}

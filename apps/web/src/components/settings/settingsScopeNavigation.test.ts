@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { EnvironmentId, ProviderInstanceId, ScheduledTaskId } from "@kairo/contracts";
 import {
   createMemoryHistory,
@@ -66,6 +65,8 @@ function createSettingsRouter(initialEntry = "/settings/general") {
     },
   });
   return createRouter({
+    isServer: false,
+    origin: "http://localhost",
     routeTree: root.addChildren([
       settings.addChildren([
         general,

@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import { GTProvider, initializeGT } from "gt-react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -10,6 +11,8 @@ import {
   PROFESSIONAL_ROLE_STORAGE_KEY,
   ProfessionalRoleSchema,
 } from "./professionalRole";
+
+initializeGT({ defaultLocale: "en", locales: ["en"] });
 
 const decodeProfessionalRole = Schema.decodeUnknownSync(ProfessionalRoleSchema);
 
@@ -30,12 +33,14 @@ describe("professional roles", () => {
 
   it("renders every role as a selectable radio option", () => {
     const html = renderToStaticMarkup(
-      <ProfessionalRolePicker
-        value="founder"
-        otherValue=""
-        onChange={() => undefined}
-        onOtherValueChange={() => undefined}
-      />,
+      <GTProvider locale="en" translations={{}}>
+        <ProfessionalRolePicker
+          value="founder"
+          otherValue=""
+          onChange={() => undefined}
+          onOtherValueChange={() => undefined}
+        />
+      </GTProvider>,
     );
 
     expect(html.match(/type="radio"/g)).toHaveLength(PROFESSIONAL_ROLES.length);
@@ -49,12 +54,14 @@ describe("professional roles", () => {
 
   it("shows a profession field when other is selected", () => {
     const html = renderToStaticMarkup(
-      <ProfessionalRolePicker
-        value="other"
-        otherValue="Product designer"
-        onChange={() => undefined}
-        onOtherValueChange={() => undefined}
-      />,
+      <GTProvider locale="en" translations={{}}>
+        <ProfessionalRolePicker
+          value="other"
+          otherValue="Product designer"
+          onChange={() => undefined}
+          onOtherValueChange={() => undefined}
+        />
+      </GTProvider>,
     );
 
     expect(html).toContain("Your profession");

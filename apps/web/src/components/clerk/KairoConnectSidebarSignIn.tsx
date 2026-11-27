@@ -1,3 +1,4 @@
+import { useGT } from "gt-react";
 import { UserButton, useAuth } from "@clerk/react";
 import { LogInIcon } from "lucide-react";
 
@@ -57,6 +58,7 @@ function ConfiguredKairoConnectSidebarSignIn({
 }: {
   readonly managedRelayEnabled: boolean;
 }) {
+  const gt = useGT();
   const { isLoaded, isSignedIn } = useAuth();
   const { openAuthPrompt } = useKairoConnectAuthPrompt();
 
@@ -68,7 +70,9 @@ function ConfiguredKairoConnectSidebarSignIn({
         <SidebarMenuItem>
           <SidebarMenuButton onClick={openAuthPrompt}>
             <LogInIcon />
-            <span>{managedRelayEnabled ? "Sign in to Kairo Connect" : "Sign in to Kairo"}</span>
+            <span>
+              {managedRelayEnabled ? gt("Sign in to Kairo Connect") : gt("Sign in to Kairo")}
+            </span>
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>

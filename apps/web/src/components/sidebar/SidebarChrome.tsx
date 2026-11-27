@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { T, useGT } from "gt-react";
-import { memo, useCallback } from "react";
+import { memo } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 
 import { APP_BASE_NAME } from "../../branding";
@@ -259,10 +259,10 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
     void navigate({ to: "/usage" });
   };
 
-  const handleLibraryClick = useCallback(() => {
+  const handleLibraryClick = () => {
     closeMobileSidebar();
     void navigate({ to: "/library" });
-  }, [closeMobileSidebar, navigate]);
+  };
 
   const handleBackClick = () => {
     closeMobileSidebar();
@@ -308,7 +308,7 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
           />
           <SidebarUtilityItem
             icon={<LibraryBigIcon />}
-            label="Library"
+            label={gt("Library")}
             onClick={handleLibraryClick}
           />
         </>

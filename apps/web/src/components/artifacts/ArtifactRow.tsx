@@ -1,3 +1,4 @@
+import { T, useGT, useMessages } from "gt-react";
 import type { ArtifactMetadata, EnvironmentId } from "@kairo/contracts";
 import { scopeThreadRef } from "@kairo/client-runtime/environment";
 import { prependArtifactRevisionPrompt } from "@kairo/client-runtime/artifact-creation";
@@ -49,6 +50,7 @@ function ArtifactAccess({
   readonly artifact: ArtifactMetadata;
   readonly environmentId: EnvironmentId;
 }) {
+  const gt = useGT();
   const asset = useAssetUrlState(environmentId, {
     _tag: "workspace-document",
     threadId: artifact.threadId,
@@ -59,15 +61,19 @@ function ArtifactAccess({
   if (asset._tag !== "Success") {
     return (
       <span className="shrink-0 px-2 text-muted-foreground text-xs">
-        {asset._tag === "Failure" ? "Unavailable" : "Preparing..."}
+        {asset._tag === "Failure" ? gt("Unavailable") : gt("Preparing...")}
       </span>
     );
   }
 
   return (
     <a
-      aria-label={`${isPdf ? "Open" : "Download"} ${artifact.title}`}
-      className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 font-medium text-primary text-xs hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      aria-label={
+        isPdf
+          ? gt("Open {title}", { title: artifact.title })
+          : gt("Download {title}", { title: artifact.title })
+      }
+      className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 font-medium text-primary text-xs hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       download={isPdf ? undefined : artifact.fileName}
       href={asset.url}
       rel={isPdf ? "noopener noreferrer" : undefined}
@@ -78,7 +84,7 @@ function ArtifactAccess({
       ) : (
         <DownloadIcon className="size-3.5" aria-hidden />
       )}
-      {isPdf ? "Open" : "Download"}
+      {isPdf ? gt("Open") : gt("Download")}
     </a>
   );
 }
@@ -92,9 +98,11 @@ export function ArtifactRow({
   readonly environmentId: EnvironmentId;
   readonly showProvenance?: boolean;
 }) {
+  const gt = useGT();
+  const m = useMessages();
   const [accessRequested, setAccessRequested] = useState(false);
   const navigate = useNavigate();
-  const formatLabel = ARTIFACT_FORMAT_LABELS[artifact.kind];
+  const formatLabel = m(ARTIFACT_FORMAT_LABELS[artifact.kind]);
   const Icon = ARTIFACT_ICONS[artifact.kind];
 
   return (
@@ -130,7 +138,7 @@ export function ArtifactRow({
       </span>
       <button
         type="button"
-        className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 font-medium text-primary text-xs hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 font-medium text-primary text-xs hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         onClick={() => {
           const threadRef = scopeThreadRef(environmentId, artifact.threadId);
           const drafts = useComposerDraftStore.getState();
@@ -149,17 +157,17 @@ export function ArtifactRow({
         }}
       >
         <PencilIcon className="size-3.5" aria-hidden />
-        Revise
+        <T>Revise</T>
       </button>
       {accessRequested ? (
         <ArtifactAccess artifact={artifact} environmentId={environmentId} />
       ) : (
         <button
           type="button"
-          className="shrink-0 rounded-md px-2 py-1 font-medium text-primary text-xs hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="shrink-0 rounded-md px-2 py-1 font-medium text-primary text-xs hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
           onClick={() => setAccessRequested(true)}
         >
-          {artifact.kind === "pdf" ? "Open" : "Download"}
+          {artifact.kind === "pdf" ? gt("Open") : gt("Download")}
         </button>
       )}
     </div>

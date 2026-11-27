@@ -155,8 +155,8 @@ function GuestLinksRow() {
       managed={settings.guestSharingEnabled ? undefined : connectDenial}
       description={
         <T>
-          Share a thread with a guest who watches it live in a browser and sends messages you
-          approve. Needs Kairo Connect: sign in and link this machine in{" "}
+          Guests can watch a thread and send messages you approve. Sign in to Kairo Connect and link
+          this machine in{" "}
           <Link to="/settings/access" className="underline underline-offset-2">
             Sharing & access
           </Link>

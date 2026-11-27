@@ -6,7 +6,7 @@ import {
 } from "@kairo/shared/connectAuth";
 import { clerkFrontendApiUrlFromPublishableKey } from "@kairo/shared/relayAuth";
 
-import { configuredHostedAppUrl, isHostedStaticApp } from "../hostedPairing";
+import { isHostedStaticApp } from "../hostedPairing";
 import { hasManagedRelayConfig, resolveCloudPublicConfig, trimNonEmpty } from "./publicConfig";
 
 function resolveConnectCliOAuthClientId(): string | null {

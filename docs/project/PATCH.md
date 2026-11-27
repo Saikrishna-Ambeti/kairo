@@ -168,14 +168,15 @@ The October review candidate declared Electron `44.4.2`. Effect moves to `4.0.0-
 ## Latest attempt
 
 - Date: 2026-11-27.
-- State: draft [PR #41](https://github.com/Saikrishna-Ambeti/kairo/pull/41) targets Kairo main. Merge commit `b214a96651a9e0edb90a6ff4eab1c5b1f472145b` integrates the exact release. The original checkout is clean. CI and manual acceptance are open.
+- State: [PR #41](https://github.com/Saikrishna-Ambeti/kairo/pull/41) targets Kairo main. Merge commit `b214a96651a9e0edb90a6ff4eab1c5b1f472145b` integrates the exact release. The original checkout is clean. CI and manual acceptance are open.
 - Target: [T3 Code v0.1.13](https://github.com/pingdotgg/t3code/releases/tag/v0.1.13), commit `bc0f04da94f64b5e487c598761a43b4cf06b2ac9`. The tag was fetched from `upstream`. The previous baseline is its ancestor, 9,595 commits back.
 - Local review branch: `review/upstream-v0.1.13`. Worktree: `/Users/saikrishnaambeti/Documents/projects/kairo-upstream-v0.1.13`.
 - Validation: pnpm 12.14.0 regenerated the lockfile under Node 26.13.1 and installed dependencies with lifecycle scripts disabled. Seven focused server suites passed 28 tests covering migration registration, the startup repair, task import and archiving, scheduler timing, Supermemory, and Composio. The older-macOS DMG fallback unit test passed. TanStack Router regenerated the web route tree. These checks leave integrated builds and runtime acceptance pending.
 - Scheduler: the server, web, and mobile use the v0.1.13 implementation with Kairo branding. The old scheduler RPCs, editor, and composer command parser are removed. The old web URL redirects to Settings. The archive migration preserves all four legacy tables. The import test checks compatible one-time and weekly schedules and verifies the original definitions and run records for cron, calendar, email, and GitHub tasks.
 - Scheduler checks: migration and timing passed 3 tests. Upstream scheduler service and webhook tests passed 106 tests. Web scheduling settings passed 28 tests. Mobile draft, presentation, and editor tests passed 35 tests. Focused migration and redirect lint passed. The reconciliation rerun passed 51 CLI, migration, and scheduler tests, 41 WebSocket tests, 82 web tests covering scheduling, navigation, and notification sounds, and 13 memory, Composio, and pull-request tests.
 - CI opened the seeded thread in the built desktop app and booted the built web client. Follow-up local checks passed for update launchers, legacy scheduler import, checkpoint cleanup, client runtime, and the server, client-runtime, web, and marketing typechecks.
-- Reviews used the `personal` profile. CodeRabbit requires reauthentication. Greptile stopped with `spawnSync git ENOBUFS` on the committed merge.
+- The CI fixes passed 104 focused server, relay, web, and client-runtime tests, scoped lint and formatting, and web and mobile typechecks. New web and mobile catalog entries use English until translated.
+- Reviews used the `personal` profile. CodeRabbit requires reauthentication. Greptile hit `spawnSync git ENOBUFS` on the merge, and the follow-up CLI review requires a different billing plan.
 - Evidence: `/private/tmp/kairo-v0.1.13-evidence/` holds focused test, typecheck, and review logs. The desktop, web, and mobile package typechecks passed in local runs. Full CI, integrated builds, and manual acceptance remain pending. Study Mode and Deep Research still need client entry points restored against the new composer.
 
 ## October 2026 attempt

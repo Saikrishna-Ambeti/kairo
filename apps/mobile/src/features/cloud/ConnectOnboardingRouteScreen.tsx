@@ -31,6 +31,7 @@ export function ConnectOnboardingRouteScreen() {
 
   // The route is deep-linkable; without cloud config the sheet would present
   // empty with no chrome to dismiss it, so bail back out instead.
+  // oxlint-disable-next-line kairo/no-unreasoned-state-sync -- Restores a usable route after a direct link to an unavailable sheet.
   useEffect(() => {
     if (hasManagedRelayConfig()) {
       return;
@@ -114,7 +115,7 @@ function ConfiguredConnectOnboardingRouteScreen() {
         ) : (
           <View collapsable={false} className="rounded-[24px] bg-grouped-card p-5">
             <Text className="text-sm leading-normal text-foreground-muted">
-              Sign in to your Kairo account to set up Kairo Connect.
+              {gt("Sign in to your Kairo account to set up Kairo Connect.")}
             </Text>
           </View>
         )}

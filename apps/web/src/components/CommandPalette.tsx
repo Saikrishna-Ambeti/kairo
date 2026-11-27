@@ -1919,11 +1919,11 @@ function OpenCommandPaletteDialog(props: {
     );
   };
   const fileCreationItems: CommandPaletteActionItem[] = ARTIFACT_CREATION_COMMANDS.map(
-    ({ kind, label, extension }) => ({
+    ({ kind, label, creationTitle, extension }) => ({
       kind: "action",
       value: `action:create-${kind}`,
-      searchTerms: ["create", "file", label, extension],
-      title: `Create ${label}`,
+      searchTerms: ["create", "file", messages(label), extension],
+      title: messages(creationTitle),
       icon: <FilePlus2Icon className={ITEM_ICON_CLASS} />,
       keepOpen: paletteRouteTarget === null,
       disabled: paletteRouteTarget === null && projects.length === 0,
@@ -1942,7 +1942,7 @@ function OpenCommandPaletteDialog(props: {
           groups: [
             {
               value: `file-projects:${kind}`,
-              label: `Create ${label} in`,
+              label: gt("Create {format} in", { format: messages(label) }),
               items: projects
                 .filter((project) => project.archivedAt == null)
                 .map((project) => ({
