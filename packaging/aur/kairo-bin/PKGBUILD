@@ -1,9 +1,9 @@
 # Maintainer: maria-rcks <maria at kuuro dot net>
 
-pkgname=kairo-nightly-bin
-pkgver=0.0.34_nightly.20260814.1095
+pkgname=kairo-bin
+pkgver=0.0.33
 pkgrel=1
-pkgdesc='Nightly desktop control surface for local coding agents'
+pkgdesc='Desktop control surface for local coding agents'
 arch=('x86_64')
 url='https://github.com/Saikrishna-Ambeti/kairo'
 license=('MIT')
@@ -39,20 +39,23 @@ depends=(
   'zlib'
 )
 optdepends=('openai-codex: use the system-installed Codex CLI')
-provides=("kairo-nightly=$pkgver")
-conflicts=('kairo-nightly' 'kairo')
+provides=("kairo=$pkgver")
+conflicts=('kairo')
 options=('!debug' '!strip')
 
-_upstream_version="${pkgver/_nightly./-nightly.}"
-_appimage="Kairo-Code-${_upstream_version}-x86_64.AppImage"
-source=(
-  "$_appimage::https://github.com/Saikrishna-Ambeti/kairo/releases/download/v${_upstream_version}/$_appimage"
-  "${pkgname}-${pkgver}-LICENSE::https://raw.githubusercontent.com/Saikrishna-Ambeti/kairo/v${_upstream_version}/LICENSE"
-)
-sha256sums=(
-  'c4dea5bba9ed0b51b2f60f2d4a4867e61d62b57c50ea66f2792a73112e054566' # AppImage
-  '935d8f2af0c703f9c39517ee57cc4930b19d02d533be930b63f0e82f93614b43' # upstream license
-)
+_appimage="Kairo-${pkgver}-${CARCH/aarch64/arm64}.AppImage"
+_asset_x86_64="Kairo-Code-0.0.33-x86_64.AppImage"
+_asset_aarch64=""
+source=("${pkgname}-${pkgver}-LICENSE::https://raw.githubusercontent.com/Saikrishna-Ambeti/kairo/v${pkgver}/LICENSE")
+sha256sums=('935d8f2af0c703f9c39517ee57cc4930b19d02d533be930b63f0e82f93614b43') # upstream license
+source_x86_64=("Kairo-${pkgver}-x86_64.AppImage::https://github.com/Saikrishna-Ambeti/kairo/releases/download/v${pkgver}/$_asset_x86_64")
+sha256sums_x86_64=('415c8648f43c3d22d572f27f2c50fdc8c310ea7fcde9537b903e1e2f1c8775a1')
+sha256sums_aarch64=()
+# The release script adds ARM64 once it has verified the asset for this tag.
+if [[ -n "$_asset_aarch64" ]]; then
+  arch+=('aarch64')
+  source_aarch64=("Kairo-${pkgver}-arm64.AppImage::https://github.com/Saikrishna-Ambeti/kairo/releases/download/v${pkgver}/$_asset_aarch64")
+fi
 
 prepare() {
   chmod +x "$srcdir/$_appimage"
@@ -72,29 +75,29 @@ package() {
   chmod -R u=rwX,go=rX "$pkgdir/opt/$pkgname"
   chmod 4755 "$pkgdir/opt/$pkgname/chrome-sandbox"
 
-  install -Dm755 /dev/stdin "$pkgdir/usr/bin/kairo-nightly" <<'EOF'
+  install -Dm755 /dev/stdin "$pkgdir/usr/bin/kairo" <<'EOF'
 #!/bin/sh
-exec /opt/kairo-nightly-bin/AppRun "$@"
+exec env APPDIR=/opt/kairo-bin /opt/kairo-bin/AppRun "$@"
 EOF
-  ln -s kairo-nightly "$pkgdir/usr/bin/kairo-code-nightly-desktop"
+  ln -s kairo "$pkgdir/usr/bin/kairo-code-desktop"
 
   # Icon lookup only sees sizes registered in hicolor's index.theme (max 512x512).
   local icon size_dir
   for icon in "$srcdir"/squashfs-root/usr/share/icons/hicolor/*/apps/kairo.png; do
     size_dir="${icon%/apps/kairo.png}"
     install -Dm644 "$icon" \
-      "$pkgdir/usr/share/icons/hicolor/${size_dir##*/}/apps/kairo-nightly.png"
+      "$pkgdir/usr/share/icons/hicolor/${size_dir##*/}/apps/kairo.png"
   done
 
   install -Dm644 /dev/stdin "$pkgdir/usr/share/applications/kairo.desktop" <<'EOF'
 [Desktop Entry]
-Name=Kairo Nightly
-Comment=Nightly desktop control surface for local coding agents
-Exec=kairo-nightly %U
-TryExec=kairo-nightly
+Name=Kairo
+Comment=Desktop control surface for local coding agents
+Exec=kairo %U
+TryExec=kairo
 Terminal=false
 Type=Application
-Icon=kairo-nightly
+Icon=kairo
 StartupWMClass=kairo
 Categories=Development;
 MimeType=x-scheme-handler/kairo;

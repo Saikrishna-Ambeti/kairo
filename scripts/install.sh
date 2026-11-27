@@ -8,7 +8,7 @@
 #   KAIRO_CHANNEL           release train to follow: stable, nightly, or preview
 #                            (default: stable; preview is a maintainers' test train)
 #   KAIRO_VERSION           exact version to install (overrides KAIRO_CHANNEL)
-#   KAIRO_HOME              T3 home directory (default: ~/.kairo)
+#   KAIRO_HOME              Kairo home directory (default: ~/.kairo)
 #   KAIRO_INSTALL_BIN_DIR   where the `kairo` command goes (default: ~/.local/bin)
 #   KAIRO_RELEASE_BASE_URL  mirror for releases/download (default: GitHub)
 #
@@ -36,7 +36,7 @@ while [ "${bin_dir%/}" != "$bin_dir" ] && [ "$bin_dir" != / ]; do bin_dir="${bin
 case "$bin_dir" in /*) ;; *) bin_dir="$PWD/$bin_dir" ;; esac
 
 fail() {
-  printf '\nt3 install: %s\n' "$1" >&2
+  printf '\nkairo install: %s\n' "$1" >&2
   exit 1
 }
 
@@ -295,7 +295,7 @@ script_kairo() {
 # Replace only this home's own kairo launchers: into its versions, or the desktop app's launcher.
 # Anything else (a user's script, a copied binary) belongs to someone else.
 # Exactly <versions>/<version>/kairo ($1 under $2), never another program inside a version.
-version_t3() {
+version_kairo() {
   case "$1" in "$2"/*) ;; *) return 1 ;; esac
   case "${1#"$2"/}" in */*/*) return 1 ;; */kairo) return 0 ;; *) return 1 ;; esac
 }
@@ -317,11 +317,11 @@ if [ -e "${bin_dir}/kairo" ] || [ -L "${bin_dir}/kairo" ]; then
     case "$existing" in
       */./* | */../* | */. | */..) ;;
       *)
-        if version_t3 "$existing" "$versions_dir" || version_t3 "$existing" "$real_versions_dir" ||
+        if version_kairo "$existing" "$versions_dir" || version_kairo "$existing" "$real_versions_dir" ||
           [ "$existing" = "${kairo_home}/bin/kairo" ]; then owned=true; fi
         ;;
     esac
-    if [ -n "$existing_dir" ] && version_t3 "${existing_dir}/${existing##*/}" "$real_versions_dir"; then
+    if [ -n "$existing_dir" ] && version_kairo "${existing_dir}/${existing##*/}" "$real_versions_dir"; then
       owned=true
     fi
   fi
@@ -389,12 +389,12 @@ if [ -n "$first_kairo" ]; then
   printf '  Another kairo at %s runs first, so run %s%s/kairo%s to use this one.\n\n' "$first_kairo" "$bold" "$bin_dir" "$reset"
 else
   case ":${PATH}:" in
-    *":${bin_dir}:"* | *":${bin_dir}/:"*) printf '  Run %st3%s to use Kairo here, or %st3 up%s to use it from your other devices.\n\n' "$bold" "$reset" "$bold" "$reset" ;;
+    *":${bin_dir}:"* | *":${bin_dir}/:"*) printf '  Run %skairo%s to use Kairo here, or %skairo up%s to use it from your other devices.\n\n' "$bold" "$reset" "$bold" "$reset" ;;
     *)
       if [ -n "$path_command" ]; then
-        printf '  %s is not on your PATH yet. Add it with:\n\n    %s\n\n  Then open a new terminal and run %st3%s.\n\n' "$bin_dir" "$path_command" "$bold" "$reset"
+        printf '  %s is not on your PATH yet. Add it with:\n\n    %s\n\n  Then open a new terminal and run %skairo%s.\n\n' "$bin_dir" "$path_command" "$bold" "$reset"
       else
-        printf '  Add %s to your PATH, then run %st3%s.\n\n' "$bin_dir" "$bold" "$reset"
+        printf '  Add %s to your PATH, then run %skairo%s.\n\n' "$bin_dir" "$bold" "$reset"
       fi
       ;;
   esac

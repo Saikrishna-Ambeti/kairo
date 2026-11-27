@@ -64,7 +64,7 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("AUR release", 
       const version = nightly ? "1.2.4-nightly.20261104.1" : "1.2.3";
       const pkgname = nightly ? "kairo-nightly-bin" : "kairo-bin";
       const prefix =
-        naming === "versioned" ? `Kairo-${version}` : nightly ? "Kairo-Nightly" : "T3-Code";
+        naming === "versioned" ? `Kairo-${version}` : nightly ? "Kairo-Nightly" : "Kairo";
       const assets = [
         { name: `${prefix}-x86_64.AppImage`, digest: `sha256:${"a".repeat(64)}` },
         ...(failure === "missing"
@@ -115,7 +115,7 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("AUR release", 
         assert.deepEqual(selected.stdout.trim().split("\n"), [
           version.replace("-nightly.", "_nightly."),
           "x86_64 aarch64",
-          `${localName}::https://github.com/pingdotgg/t3code/releases/download/v${version}/${prefix}-${upstreamArch}.AppImage`,
+          `${localName}::https://github.com/Saikrishna-Ambeti/kairo/releases/download/v${version}/${prefix}-${upstreamArch}.AppImage`,
           checksum.repeat(64),
           localName,
         ]);

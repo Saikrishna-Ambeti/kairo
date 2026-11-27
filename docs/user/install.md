@@ -50,17 +50,17 @@ node apps/server/dist/bin.mjs
 
 ## Desktop app
 
-Download from [GitHub Releases](https://github.com/pingdotgg/t3code/releases) or install via a package manager:
+Download from [GitHub Releases](https://github.com/Saikrishna-Ambeti/kairo/releases) or install via a package manager:
 
 | Platform                | Command                                                        |
 | ----------------------- | -------------------------------------------------------------- |
 | macOS                   | `brew install --cask kairo-code`                               |
 | Windows                 | `winget install T3Tools.Kairo` or `scoop install extras/kairo` |
-| Debian / Ubuntu         | `sudo apt install ./T3-Code-*.deb`                             |
+| Debian / Ubuntu         | `sudo apt install ./Kairo-*.deb`                               |
 | Arch Linux              | `yay -S kairo-bin` (or `yay -S kairo-nightly-bin`)             |
 | Nix (flakes, Nix 2.30+) | `nix profile add github:NixOS/nixpkgs/nixos-unstable#kairo`    |
 
-- **Linux AppImage**: `chmod +x ./T3-Code-*.AppImage && ./T3-Code-*.AppImage` (x86_64 and ARM64). `.deb` self-updates with a password prompt; update AUR packages via your AUR helper (`yay -Syu`).
+- **Linux AppImage**: `chmod +x ./Kairo-*.AppImage && ./Kairo-*.AppImage` (x86_64 and ARM64). `.deb` self-updates with a password prompt; update AUR packages via your AUR helper (`yay -Syu`).
 - **NixOS / Home Manager**: Add `pkgs.kairo` to `environment.systemPackages` or `home.packages` (`kairo-desktop` launches the app; `t3` is included). Update via Nix rather than the in-app updater.
 
 ### The `t3` command
