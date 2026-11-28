@@ -1,0 +1,129 @@
+name: Build Kairo private macOS DMG
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: Mac architecture
+        type: choice
+        options: [x64, arm64]
+        default: x64
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git sparse-checkout set --no-cone '/*' '!/.repos/'
+          git checkout --detach FETCH_HEAD
+
+      - name: Install dependencies
+        uses: ./.github/actions/setup-ci-deps
+        with:
+          install-args: --filter=@kairo/desktop... --filter=kairo... --filter=@kairo/scripts...
+
+      - name: Install Rust target
+        shell: bash
+        env:
+          RUST_TARGET: ${{ inputs.arch == 'x64' && 'x86_64-apple-darwin' || 'aarch64-apple-darwin' }}
+        run: rustup target add "$RUST_TARGET"
+
+      - name: Sign and package Kairo
+        shell: bash
+        env:
+          ARCH: ${{ inputs.arch }}
+          KAIRO_PRIVATE_MACOS_P12: ${{ secrets.KAIRO_PRIVATE_MACOS_P12 }}
+          KAIRO_PRIVATE_MACOS_P12_PASSWORD: ${{ secrets.KAIRO_PRIVATE_MACOS_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${KAIRO_PRIVATE_MACOS_P12:?Set the KAIRO_PRIVATE_MACOS_P12 secret}"
+          : "${KAIRO_PRIVATE_MACOS_P12_PASSWORD:?Set the KAIRO_PRIVATE_MACOS_P12_PASSWORD secret}"
+          umask 077
+          signing_dir=$(mktemp -d "$RUNNER_TEMP/kairo-signing.XXXXXXXX")
+          keychain="$signing_dir/kairo.keychain-db"
+          certificate="$signing_dir/kairo-signing.cer"
+          trap 'security delete-keychain "$keychain" >/dev/null 2>&1 || true; rm -rf "$signing_dir"' EXIT
+          keychain_password=$(/usr/bin/openssl rand -hex 32)
+          echo "::add-mask::$keychain_password"
+
+          printf '%s' "$KAIRO_PRIVATE_MACOS_P12" | base64 -D > "$signing_dir/identity.p12"
+          /usr/bin/openssl pkcs12 -in "$signing_dir/identity.p12" -clcerts -nokeys \
+            -passin env:KAIRO_PRIVATE_MACOS_P12_PASSWORD |
+            /usr/bin/openssl x509 -outform der -out "$certificate"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security import "$signing_dir/identity.p12" -k "$keychain" \
+            -P "$KAIRO_PRIVATE_MACOS_P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
+            -k "$keychain_password" "$keychain" >/dev/null
+          python3 - "$keychain" "$certificate" <<'PYTHON'
+          import shlex
+          import subprocess
+          import sys
+
+          keychain, certificate = sys.argv[1:]
+          security = '/usr/bin/security'
+          existing = shlex.split(subprocess.check_output([security, 'list-keychains', '-d', 'user'], text=True, timeout=15))
+          subprocess.run([security, 'list-keychains', '-d', 'user', '-s', keychain, *existing], check=True, timeout=15)
+          subprocess.run([
+              'sudo', '-n', security, 'add-trusted-cert', '-d', '-r', 'trustRoot', '-p', 'codeSign',
+              '-k', '/Library/Keychains/System.keychain', certificate,
+          ], check=True, timeout=60)
+          PYTHON
+          rm "$signing_dir/identity.p12"
+          unset KAIRO_PRIVATE_MACOS_P12 KAIRO_PRIVATE_MACOS_P12_PASSWORD
+
+          identity=$(/usr/bin/openssl x509 -inform der -in "$certificate" -noout -sha1 -fingerprint |
+            cut -d= -f2 | tr -d ':')
+          probe="$signing_dir/signing-probe"
+          printf 'int main(void) { return 0; }\n' | xcrun clang -x c - -o "$probe"
+          python3 - "$identity" "$keychain" "$probe" <<'PYTHON'
+          import subprocess
+          import sys
+
+          identity, keychain, probe = sys.argv[1:]
+          subprocess.run([
+              '/usr/bin/codesign', '--force', '--sign', identity,
+              '--keychain', keychain, '--timestamp=none', probe,
+          ], check=True, timeout=30)
+          subprocess.run(['/usr/bin/codesign', '--verify', '--strict', probe], check=True, timeout=15)
+          PYTHON
+
+          export CSC_KEYCHAIN="$keychain"
+          vp run dist:desktop:artifact --platform mac --target dmg --arch "$ARCH" \
+            --private-signing-cert "$certificate" --output-dir "$RUNNER_TEMP/kairo-private-dmg"
+
+      - name: Verify DMG
+        shell: bash
+        run: |
+          set -euo pipefail
+          images=("$RUNNER_TEMP"/kairo-private-dmg/*.dmg)
+          test "${#images[@]}" -eq 1
+          hdiutil verify "${images[0]}"
+          mount_dir=$(mktemp -d "$RUNNER_TEMP/kairo-dmg.XXXXXXXX")
+          trap 'hdiutil detach "$mount_dir" >/dev/null 2>&1 || true; rmdir "$mount_dir"' EXIT
+          hdiutil attach -nobrowse -readonly -mountpoint "$mount_dir" "${images[0]}"
+          test -f "$mount_dir/Install Kairo Signing Certificate.pkg"
+          apps=("$mount_dir"/*.app)
+          test "${#apps[@]}" -eq 1
+          codesign --verify --deep --strict "${apps[0]}"
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: kairo-private-macos-${{ inputs.arch }}
+          path: ${{ runner.temp }}/kairo-private-dmg/*.dmg
+          if-no-files-found: error
+          compression-level: 0
