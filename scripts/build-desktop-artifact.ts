@@ -1865,7 +1865,11 @@ export const stageMacPrivateCertificatePackage = Effect.fn("stageMacPrivateCerti
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const scriptsDir = path.join(input.stageRoot, "certificate-installer");
-    const packagePath = path.join(input.stageAppDir, MAC_PRIVATE_CERTIFICATE_PACKAGE);
+    // Electron Builder compares DMG contents against the real path of the workspace.
+    const packagePath = path.join(
+      yield* fs.realPath(input.stageAppDir),
+      MAC_PRIVATE_CERTIFICATE_PACKAGE,
+    );
     yield* fs.makeDirectory(scriptsDir);
     yield* fs.writeFile(path.join(scriptsDir, "kairo-signing.cer"), input.certificate.raw);
     const postinstall = path.join(scriptsDir, "postinstall");

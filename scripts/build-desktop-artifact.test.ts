@@ -579,9 +579,13 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const stageRoot = yield* fs.makeTempDirectoryScoped();
-        const stageAppDir = path.join(stageRoot, "app");
+        const appDir = path.join(stageRoot, "app");
+        const stageAppDir = symlinksSupported ? path.join(stageRoot, "app-alias") : appDir;
         const certificatePath = path.join(stageRoot, "signing.cer");
-        yield* fs.makeDirectory(stageAppDir);
+        yield* fs.makeDirectory(appDir);
+        if (symlinksSupported) {
+          yield* fs.symlink(appDir, stageAppDir);
+        }
         yield* fs.writeFile(certificatePath, MAC_SIGNING_TEST_CERTIFICATE.raw);
         yield* TestClock.setTime(MAC_SIGNING_TEST_CERTIFICATE.validFromDate.getTime());
         const certificate = yield* readMacPrivateSigningCertificate(certificatePath);
@@ -619,6 +623,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
             ),
           ),
         );
+        assert.equal(path.dirname(packagePath), yield* fs.realPath(appDir));
 
         const config = yield* createBuildConfig(
           "mac",
