@@ -55,6 +55,51 @@ Configure `t3` on npm with GitHub Actions Trusted Publishing for `.github/workfl
 - **Variables:** `APPLE_TEAM_ID`, optional `CLERK_PASSKEY_RP_DOMAINS`.
 - The packager only enables passkey entitlements (`keychain-access-groups`, `com.apple.developer.web-browser.public-key-credential`) present in the provisioning profile; regenerate and re-upload `MACOS_PROVISIONING_PROFILE` after Apple approves managed capabilities. Complete Clerk AASA setup per [Connect setup](./02_connect-setup.md#desktop-passkeys).
 
+### Private macOS builds
+
+Use a dedicated self-signed code-signing identity for private distribution. Keep the same identity for subsequent builds until you rotate it. The DMG includes `Install Kairo Signing Certificate.pkg`, which grants Code Signing trust to the public certificate on the recipient's Mac.
+
+Generate the identity outside the checkout with OpenSSL. It prompts for a passphrase for the private key and a password for the PKCS#12 export.
+
+```sh
+umask 077
+mkdir -p "$HOME/.kairo-signing"
+cd "$HOME/.kairo-signing"
+
+openssl req -x509 -newkey rsa:3072 -sha256 -days 365 \
+  -subj '/CN=Kairo Private Code Signing' \
+  -addext 'basicConstraints=critical,CA:FALSE' \
+  -addext 'keyUsage=critical,digitalSignature' \
+  -addext 'extendedKeyUsage=codeSigning' \
+  -keyout Kairo-signing.key -out Kairo-signing.pem
+
+openssl pkcs12 -export -inkey Kairo-signing.key -in Kairo-signing.pem \
+  -name 'Kairo Private Code Signing' \
+  -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1 \
+  -out Kairo-signing.p12
+
+openssl x509 -in Kairo-signing.pem -outform der -out Kairo-signing.cer
+openssl x509 -in Kairo-signing.pem -noout -sha256 -fingerprint
+```
+
+Back up the private key, the `.p12`, and their passwords securely. Share the public certificate fingerprint alongside the DMG. The PKCS#12 export uses the algorithms required by macOS Keychain import.
+
+For GitHub Actions, set `KAIRO_PRIVATE_MACOS_P12` to the base64-encoded `.p12` and `KAIRO_PRIVATE_MACOS_P12_PASSWORD` to its export password. Run **Build Kairo private macOS DMG** on `main`, select `x64` for Intel or `arm64` for Apple Silicon, and download the workflow artifact.
+
+```sh
+base64 -i "$HOME/.kairo-signing/Kairo-signing.p12" | gh secret set KAIRO_PRIVATE_MACOS_P12
+gh secret set KAIRO_PRIVATE_MACOS_P12_PASSWORD
+```
+
+For a local build, import the `.p12` into your login keychain and set the certificate's **Code Signing** trust in Keychain Access. Check that `security find-identity -v -p codesigning` lists it. Then build from the checkout with Xcode 26 or newer.
+
+```sh
+vp run dist:desktop:dmg:x64 --private-signing-cert "$HOME/.kairo-signing/Kairo-signing.cer" \
+  --output-dir release/private
+```
+
+Recipients run the certificate installer as an administrator, then drag Kairo to Applications. Private builds have no Apple notarization. If macOS blocks the package or app, approve that item under **System Settings → Privacy & Security → Open Anyway** after checking the download source. An administrator can remove the certificate from the System keychain in Keychain Access. Private builds are distributed as new DMGs and carry no automatic update feed or Apple-managed passkey entitlements.
+
 ### Azure Trusted Signing (Windows)
 
 Set secrets `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TRUSTED_SIGNING_ENDPOINT`, `AZURE_TRUSTED_SIGNING_ACCOUNT_NAME`, `AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME`, and `AZURE_TRUSTED_SIGNING_PUBLISHER_NAME` with an Entra service principal granted Trusted Signing permissions.

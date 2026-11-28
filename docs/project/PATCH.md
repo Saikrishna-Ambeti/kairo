@@ -165,6 +165,14 @@ The October review candidate declared Electron `44.4.2`. Effect moves to `4.0.0-
 - Local, remote/relay, tunnel, and multi-environment acceptance remain unverified. Server-side operations must target the selected environment.
 - Browser checks and application launches require explicit user authorization under `AGENTS.md`. Headless web checks were later authorized and completed as recorded below. DMG creation on older macOS and target-hardware graphics remain pending; CI results are tracked in PR #38.
 
+### P008: Private macOS distribution
+
+- Status: active until Kairo has Developer ID signing and notarization for its recipients.
+- Purpose: Install Kairo from a privately signed DMG without an Apple Developer account.
+- Requirements: match the app signature to the supplied self-signed code-signing certificate. Include a separate package that trusts only that public certificate for Code Signing. Keep the private key out of both artifacts and leave Gatekeeper approval to macOS.
+- Verification: run the private macOS DMG workflow and check that its image contains both the signed app and certificate installer. On a clean test Mac, approve and install the certificate, then open the app.
+- See the [release runbook](../operations/03_release.md#private-macos-builds).
+
 ## Latest attempt
 
 - Date: 2026-11-27.

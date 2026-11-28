@@ -19,6 +19,7 @@ import * as Sink from "effect/Sink";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as TestClock from "effect/testing/TestClock";
 import { fromYaml } from "@kairo/shared/schemaYaml";
 
 import {
@@ -38,6 +39,7 @@ import {
   MissingMacPasskeyProvisioningProfileError,
   packWindowsServerAsar,
   preflightWindowsDesktopBuild,
+  readMacPrivateSigningCertificate,
   renderMacPasskeyEntitlements,
   resolveMacFileExclusions,
   resolveMacWebAuthnEntitlements,
@@ -51,6 +53,7 @@ import {
   LinuxPackagedAppMissingError,
   MacPackagedAppMissingError,
   stageBrowserSecret,
+  stageMacPrivateCertificatePackage,
   shouldUseHdiutilDmgbuildShim,
   validateLinuxPackagedPayload,
   validateMacPackagedPayload,
@@ -119,8 +122,8 @@ const makeLinuxCliArchiveFixture = Effect.fn("test.makeLinuxCliArchiveFixture")(
   return path.join(input.root, archiveName);
 });
 
-function mockProcess(exitCode: number, stdout = "") {
-  const encodedStdout = new TextEncoder().encode(stdout);
+function mockProcess(exitCode: number, stdout = "", stderr = "") {
+  const encoder = new TextEncoder();
   return ChildProcessSpawner.makeHandle({
     pid: ChildProcessSpawner.ProcessId(1),
     exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(exitCode)),
@@ -128,13 +131,26 @@ function mockProcess(exitCode: number, stdout = "") {
     kill: () => Effect.void,
     unref: Effect.succeed(Effect.void),
     stdin: Sink.drain,
-    stdout: stdout ? Stream.make(encodedStdout) : Stream.empty,
-    stderr: Stream.empty,
+    stdout: stdout ? Stream.make(encoder.encode(stdout)) : Stream.empty,
+    stderr: stderr ? Stream.make(encoder.encode(stderr)) : Stream.empty,
     all: Stream.empty,
     getInputFd: () => Sink.drain,
     getOutputFd: () => Stream.empty,
   });
 }
+
+// Public certificate from a disposable test key. The test clock keeps validity checks reproducible.
+const MAC_SIGNING_TEST_CERTIFICATE = new NodeCrypto.X509Certificate(`-----BEGIN CERTIFICATE-----
+MIIBkzCCATqgAwIBAgIUaruaGua5bJ3Yt2RmeCpJw3gkhD8wCgYIKoZIzj0EAwIw
+HzEdMBsGA1UEAwwUS2Fpcm8gUGFja2FnaW5nIFRlc3QwHhcNMjYxMTI4MDQxODAy
+WhcNMjcxMTI4MDQxODAyWjAfMR0wGwYDVQQDDBRLYWlybyBQYWNrYWdpbmcgVGVz
+dDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABKZel5Wl/66xEYkPAQytjYG3A/gD
+QiHG3hWXbqiMqVfEXLfuhHkn4IP1q15eZu/5KgwUn6qZ5pqU0B+v67T+OyWjVDBS
+MB0GA1UdDgQWBBSXSIQrmZbcmI3nlKEXMydbemeO+zAMBgNVHRMBAf8EAjAAMA4G
+A1UdDwEB/wQEAwIHgDATBgNVHSUEDDAKBggrBgEFBQcDAzAKBggqhkjOPQQDAgNH
+ADBEAiBRVwU0dqMM3D27F8ojSWjnPY2ScXhOYf0Nsa3BT72qdQIgN4NFzAwZHGs3
+2QHq7Z69Q/Nq5rzVw0cqlWhNFxCwdyc=
+-----END CERTIFICATE-----`);
 
 const WINDOWS_PAYLOAD_FIXTURE_VERSION = "1.2.3";
 
@@ -554,6 +570,103 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
           ConfigProvider.fromEnv({ env: { GITHUB_REPOSITORY: "pingdotgg/kairo" } }),
         ),
       ),
+    ),
+  );
+
+  it.effect("stages a certificate-only installer and selects it for the private DMG", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const stageRoot = yield* fs.makeTempDirectoryScoped();
+        const stageAppDir = path.join(stageRoot, "app");
+        const certificatePath = path.join(stageRoot, "signing.cer");
+        yield* fs.makeDirectory(stageAppDir);
+        yield* fs.writeFile(certificatePath, MAC_SIGNING_TEST_CERTIFICATE.raw);
+        yield* TestClock.setTime(MAC_SIGNING_TEST_CERTIFICATE.validFromDate.getTime());
+        const certificate = yield* readMacPrivateSigningCertificate(certificatePath);
+        const identity = certificate.fingerprint.replaceAll(":", "");
+        const packagePath = yield* stageMacPrivateCertificatePackage({
+          certificate,
+          stageRoot,
+          stageAppDir,
+          version: "1.2.3",
+          verbose: false,
+        }).pipe(
+          Effect.provideService(
+            ChildProcessSpawner.ChildProcessSpawner,
+            ChildProcessSpawner.make((command) =>
+              Effect.gen(function* () {
+                assert(ChildProcess.isStandardCommand(command));
+                assert.equal(command.command, "/usr/bin/pkgbuild");
+                assert.include(command.args, "--nopayload");
+                const scriptsDir = command.args[command.args.indexOf("--scripts") + 1];
+                assert(typeof scriptsDir === "string");
+                assert.sameMembers(yield* fs.readDirectory(scriptsDir), [
+                  "kairo-signing.cer",
+                  "postinstall",
+                ]);
+                assert.deepStrictEqual(
+                  yield* fs.readFile(path.join(scriptsDir, "kairo-signing.cer")),
+                  new Uint8Array(MAC_SIGNING_TEST_CERTIFICATE.raw),
+                );
+                assert.include(
+                  yield* fs.readFileString(path.join(scriptsDir, "postinstall")),
+                  "add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain",
+                );
+                return mockProcess(0);
+              }),
+            ),
+          ),
+        );
+
+        const config = yield* createBuildConfig(
+          "mac",
+          "dmg",
+          "1.2.3",
+          false,
+          false,
+          undefined,
+          undefined,
+          false,
+          "x64",
+          { identity, certificatePackagePath: packagePath },
+        );
+        assert.isNull(config.publish);
+        assert.isTrue(config.forceCodeSigning);
+        assert.nestedPropertyVal(config, "mac.identity", identity);
+        assert.nestedPropertyVal(config, "mac.notarize", false);
+        assert.nestedPropertyVal(config, "mac.target[0]", "dmg");
+        assert.notNestedProperty(config, "mac.target[1]");
+        assert.nestedPropertyVal(config, "dmg.contents[0].path", packagePath);
+        assert.include(config.files, `!${path.basename(packagePath)}`);
+      }),
+    ).pipe(
+      Effect.provide(
+        ConfigProvider.layer(
+          ConfigProvider.fromEnv({ env: { GITHUB_REPOSITORY: "pingdotgg/kairo" } }),
+        ),
+      ),
+    ),
+  );
+
+  it.effect("rejects malformed or expired private signing certificates", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const certificatePath = path.join(yield* fs.makeTempDirectoryScoped(), "signing.cer");
+        yield* fs.writeFileString(certificatePath, "invalid certificate");
+        const malformed = yield* Effect.flip(readMacPrivateSigningCertificate(certificatePath));
+        assert.propertyVal(malformed, "_tag", "MacPrivateSigningError");
+        assert.include(malformed.message, "PEM or DER");
+
+        yield* fs.writeFile(certificatePath, MAC_SIGNING_TEST_CERTIFICATE.raw);
+        yield* TestClock.setTime(MAC_SIGNING_TEST_CERTIFICATE.validToDate.getTime() + 1);
+        const expired = yield* Effect.flip(readMacPrivateSigningCertificate(certificatePath));
+        assert.propertyVal(expired, "_tag", "MacPrivateSigningError");
+        assert.include(expired.message, "valid, self-signed code-signing certificate");
+      }),
     ),
   );
 
@@ -1463,6 +1576,45 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     ),
   );
 
+  it.effect("rejects a mismatched private signature or a code-hash-bound requirement", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fixture = yield* makePackagedAppFixture({});
+        const identity = MAC_SIGNING_TEST_CERTIFICATE.fingerprint.replaceAll(":", "");
+        const designatedRequirement = `identifier "com.kairo.app" and certificate leaf = H"${identity.toLowerCase()}"`;
+        const validate = (verifyExitCode: number, requirement: string) =>
+          validateMacPackagedPayload({
+            stageDistDir: fixture.stageDistDir,
+            checkBundle: false,
+            signingIdentity: identity,
+          }).pipe(
+            Effect.provideService(
+              ChildProcessSpawner.ChildProcessSpawner,
+              ChildProcessSpawner.make((command) => {
+                assert(ChildProcess.isStandardCommand(command));
+                assert.equal(command.command, "/usr/bin/codesign");
+                if (command.args.includes("--verify")) {
+                  assert.include(command.args, `=certificate leaf = H"${identity}"`);
+                  return Effect.succeed(mockProcess(verifyExitCode));
+                }
+                assert.include(command.args, "-r-");
+                return Effect.succeed(mockProcess(0, "", `designated => ${requirement}\n`));
+              }),
+            ),
+          );
+
+        yield* validate(0, designatedRequirement);
+        const mismatch = yield* Effect.flip(validate(1, designatedRequirement));
+        assert.instanceOf(mismatch, BuildCommandFailedError);
+        const codeHash = yield* Effect.flip(
+          validate(0, `${designatedRequirement} and cdhash H"deadbeef"`),
+        );
+        assert.propertyVal(codeHash, "_tag", "MacPrivateSigningError");
+        assert.include(codeHash.message, "must bind its bundle ID to the signing certificate");
+      }),
+    ),
+  );
+
   it.effect("never runs an untrusted macOS bundle", () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -1857,6 +2009,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
             skipBuild: Option.none(),
             keepStage: Option.none(),
             signed: Option.none(),
+            privateSigningCert: Option.none(),
             verbose: Option.none(),
             mockUpdates: Option.none(),
             mockUpdateServerPort: Option.none(),
@@ -1881,6 +2034,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         skipBuild: Option.some(false),
         keepStage: Option.some(false),
         signed: Option.some(false),
+        privateSigningCert: Option.none(),
         verbose: Option.some(false),
         mockUpdates: Option.some(false),
         mockUpdateServerPort: Option.none(),

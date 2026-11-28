@@ -48,6 +48,7 @@ import { resolveTaggedSourceVersion } from "./lib/tagged-source-version.ts";
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -186,6 +187,7 @@ interface BuildCliInput {
   readonly skipBuild: Option.Option<boolean>;
   readonly keepStage: Option.Option<boolean>;
   readonly signed: Option.Option<boolean>;
+  readonly privateSigningCert: Option.Option<string>;
   readonly verbose: Option.Option<boolean>;
   readonly mockUpdates: Option.Option<boolean>;
   readonly mockUpdateServerPort: Option.Option<number>;
@@ -957,11 +959,24 @@ interface ResolvedBuildOptions {
   readonly skipBuild: boolean;
   readonly keepStage: boolean;
   readonly signed: boolean;
+  readonly privateSigningCert: string | undefined;
   readonly verbose: boolean;
   readonly mockUpdates: boolean;
   readonly mockUpdateServerPort: number | undefined;
   readonly wslRuntime: string | undefined;
 }
+
+const MAC_PRIVATE_CERTIFICATE_PACKAGE = "Install Kairo Signing Certificate.pkg";
+
+interface MacPrivateSigning {
+  readonly identity: string;
+  readonly certificatePackagePath: string;
+}
+
+class MacPrivateSigningError extends Schema.TaggedError<
+  MacPrivateSigningError,
+  { readonly brand: unique symbol }
+>()("MacPrivateSigningError", { message: Schema.String }) {}
 
 interface StagePackageJson {
   readonly name: string;
@@ -1738,6 +1753,15 @@ export const resolveBuildOptions = Effect.fn("resolveBuildOptions")(function* (
   const skipBuild = resolveBooleanFlag(input.skipBuild, env.skipBuild);
   const keepStage = resolveBooleanFlag(input.keepStage, env.keepStage);
   const signed = resolveBooleanFlag(input.signed, env.signed);
+  const privateSigningCert = Option.getOrUndefined(input.privateSigningCert);
+  if (
+    privateSigningCert !== undefined &&
+    (hostPlatform !== "darwin" || platform !== "mac" || target !== "dmg" || signed)
+  ) {
+    return yield* new MacPrivateSigningError({
+      message: "--private-signing-cert requires a macOS DMG build without --signed.",
+    });
+  }
   const verbose = resolveBooleanFlag(input.verbose, env.verbose);
 
   const mockUpdates = resolveBooleanFlag(input.mockUpdates, env.mockUpdates);
@@ -1764,6 +1788,8 @@ export const resolveBuildOptions = Effect.fn("resolveBuildOptions")(function* (
     skipBuild,
     keepStage,
     signed,
+    privateSigningCert:
+      privateSigningCert === undefined ? undefined : path.resolve(repoRoot, privateSigningCert),
     verbose,
     mockUpdates,
     mockUpdateServerPort,
@@ -1798,6 +1824,80 @@ const runCommand = Effect.fn("runCommand")(function* (
     });
   }
 });
+
+export const readMacPrivateSigningCertificate = Effect.fn("readMacPrivateSigningCertificate")(
+  function* (certificatePath: string) {
+    const fs = yield* FileSystem.FileSystem;
+    const data = yield* fs.readFile(certificatePath);
+    const certificate = yield* Effect.try({
+      try: () => new NodeCrypto.X509Certificate(data),
+      catch: () =>
+        new MacPrivateSigningError({
+          message: "Provide a public X.509 certificate in PEM or DER format.",
+        }),
+    });
+    const now = yield* Clock.currentTimeMillis;
+    if (
+      certificate.ca ||
+      certificate.subject !== certificate.issuer ||
+      !certificate.verify(certificate.publicKey) ||
+      !certificate.keyUsage?.includes("1.3.6.1.5.5.7.3.3") ||
+      now < certificate.validFromDate.getTime() ||
+      now > certificate.validToDate.getTime()
+    ) {
+      return yield* new MacPrivateSigningError({
+        message:
+          "Private signing requires a valid, self-signed code-signing certificate with CA:FALSE.",
+      });
+    }
+    return certificate;
+  },
+);
+
+export const stageMacPrivateCertificatePackage = Effect.fn("stageMacPrivateCertificatePackage")(
+  function* (input: {
+    readonly certificate: NodeCrypto.X509Certificate;
+    readonly stageRoot: string;
+    readonly stageAppDir: string;
+    readonly version: string;
+    readonly verbose: boolean;
+  }) {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const scriptsDir = path.join(input.stageRoot, "certificate-installer");
+    const packagePath = path.join(input.stageAppDir, MAC_PRIVATE_CERTIFICATE_PACKAGE);
+    yield* fs.makeDirectory(scriptsDir);
+    yield* fs.writeFile(path.join(scriptsDir, "kairo-signing.cer"), input.certificate.raw);
+    const postinstall = path.join(scriptsDir, "postinstall");
+    yield* fs.writeFileString(
+      postinstall,
+      `#!/bin/sh
+set -eu
+if [ "$3" != / ]; then
+  echo 'Install the Kairo signing certificate on the startup disk.' >&2
+  exit 1
+fi
+certificate="$(/usr/bin/dirname "$0")/kairo-signing.cer"
+exec /usr/bin/security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain "$certificate"
+`,
+    );
+    yield* fs.chmod(postinstall, 0o755);
+    yield* runCommand(
+      ChildProcess.make("/usr/bin/pkgbuild", [
+        "--nopayload",
+        "--identifier",
+        "com.kairo.app.signing-certificate",
+        "--version",
+        input.version,
+        "--scripts",
+        scriptsDir,
+        packagePath,
+      ]),
+      { label: "Build Kairo signing certificate installer", verbose: input.verbose },
+    );
+    return packagePath;
+  },
+);
 
 export class DesktopBuildAlreadyRunningError extends Schema.TaggedError<DesktopBuildAlreadyRunningError>()(
   "DesktopBuildAlreadyRunningError",
@@ -2832,10 +2932,12 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     | undefined,
   wslRuntimeBundled = false,
   arch?: typeof BuildArch.Type,
+  privateSigning?: MacPrivateSigning,
 ) {
   const buildConfig: Record<string, unknown> = {
     afterPack: (yield* Path.Path).join(yield* RepoRoot, "scripts/prepare-server-compile-cache.cjs"),
     appId: DESKTOP_APP_ID,
+    ...(privateSigning ? { forceCodeSigning: true } : {}),
     productName: resolveDesktopProductName(version),
     artifactName: "Kairo-${version}-${arch}.${ext}",
     electronLanguages: [...DESKTOP_ELECTRON_LANGUAGES],
@@ -2844,10 +2946,11 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     electronFuses: {
       enableNodeCliInspectArguments: false,
       // Nothing signs an unsigned macOS build after the flip, which voids its ad hoc signature.
-      resetAdHocDarwinSignature: platform === "mac" && !signed,
+      resetAdHocDarwinSignature: platform === "mac" && !signed && !privateSigning,
     },
     files: [
       ...DESKTOP_FILE_EXCLUSIONS,
+      ...(privateSigning ? [`!${MAC_PRIVATE_CERTIFICATE_PACKAGE}`] : []),
       ...(platform === "mac"
         ? resolveMacFileExclusions(arch)
         : platform === "linux"
@@ -2873,7 +2976,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   const updateChannel = resolveDesktopUpdateChannel(version);
   // Missing publish config infers a GitHub feed from tokens; staging has no repository, so manifest generation would crash.
   buildConfig.publish = null;
-  if (!isDesktopPreviewVersion(version)) {
+  if (!privateSigning && !isDesktopPreviewVersion(version)) {
     const publishConfig = yield* resolveGitHubPublishConfig(updateChannel);
     if (publishConfig) {
       buildConfig.publish = [publishConfig];
@@ -2891,7 +2994,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     const path = yield* Path.Path;
     const repoRoot = yield* RepoRoot;
     buildConfig.mac = {
-      target: target === "dmg" ? [target, "zip"] : [target],
+      target: target === "dmg" && !privateSigning ? [target, "zip"] : [target],
       icon: "icon.icns",
       category: "public.app-category.developer-tools",
       extendInfo: {
@@ -2936,7 +3039,16 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
           role: "Viewer",
         },
       ],
-      ...(signed ? { sign: path.join(repoRoot, "scripts/sign-macos.ts") } : {}),
+      ...(signed || privateSigning ? { sign: path.join(repoRoot, "scripts/sign-macos.ts") } : {}),
+      ...(privateSigning
+        ? {
+            identity: privateSigning.identity,
+            hardenedRuntime: false,
+            notarize: false,
+            preAutoEntitlements: false,
+            timestamp: "none",
+          }
+        : {}),
       ...(macPasskeySigning
         ? {
             entitlements: macPasskeySigning.entitlementsPath,
@@ -2949,17 +3061,26 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   if (platform === "mac" && target === "dmg") {
     buildConfig.dmg = {
       // Finder caches DMG backgrounds by volume name; give each installer its own.
-      title: `${resolveDesktopProductName(version)} ${version} Installer`,
-      background: `dmg/dmg-background-${updateChannel}.png`,
+      title: `${resolveDesktopProductName(version)} ${version}${privateSigning ? " Private" : ""} Installer`,
+      ...(privateSigning
+        ? { backgroundColor: "#ffffff" }
+        : { background: `dmg/dmg-background-${updateChannel}.png` }),
       window: {
         width: 640,
         // DMG bounds include Finder's 32px title bar; keep that artwork strip clear.
         height: 432,
       },
-      contents: [
-        { x: 166, y: 214, type: "file" },
-        { x: 474, y: 214, type: "link", path: "/Applications" },
-      ],
+      contents: privateSigning
+        ? [
+            { x: 320, y: 115, type: "file", path: privateSigning.certificatePackagePath },
+            { x: 166, y: 290, type: "file" },
+            { x: 474, y: 290, type: "link", path: "/Applications" },
+          ]
+        : [
+            { x: 166, y: 214, type: "file" },
+            { x: 474, y: 214, type: "link", path: "/Applications" },
+          ],
+      ...(privateSigning ? { sign: false } : {}),
       iconSize: 120,
       iconTextSize: 12,
     };
@@ -3621,28 +3742,68 @@ export class MacPackagedAppMissingError extends Schema.TaggedError<MacPackagedAp
 }
 
 export const validateMacPackagedPayload = Effect.fn("desktopArtifact.validateMacPackagedPayload")(
-  function* (input: { readonly stageDistDir: string; readonly verbose?: boolean }) {
+  function* (input: {
+    readonly stageDistDir: string;
+    readonly verbose?: boolean;
+    readonly checkBundle?: boolean;
+    readonly signingIdentity?: string;
+  }) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const asarPaths: string[] = [];
+    const appPaths: string[] = [];
     for (const entry of yield* fs.readDirectory(input.stageDistDir)) {
       if (!entry.startsWith("mac")) continue;
       const outputDir = path.join(input.stageDistDir, entry);
       const apps = yield* fs.readDirectory(outputDir).pipe(Effect.orElseSucceed(() => []));
       for (const app of apps) {
         if (app.endsWith(".app")) {
-          asarPaths.push(path.join(outputDir, app, "Contents/Resources/app.asar"));
+          appPaths.push(path.join(outputDir, app));
         }
       }
     }
-    if (asarPaths.length === 0) {
+    if (appPaths.length === 0) {
       return yield* new MacPackagedAppMissingError({ stageDistDir: input.stageDistDir });
     }
-    for (const asarPath of asarPaths) {
-      yield* verifyPackagedBundleIsSelfContained({ asarPath, verbose: input.verbose ?? false });
+    for (const appPath of appPaths) {
+      if (input.signingIdentity) {
+        yield* runCommand(
+          ChildProcess.make("/usr/bin/codesign", [
+            "--verify",
+            "--deep",
+            "--strict",
+            "--test-requirement",
+            `=certificate leaf = H"${input.signingIdentity}"`,
+            appPath,
+          ]),
+          { label: "Verify Kairo's private code signature", verbose: input.verbose ?? false },
+        );
+        const { stdout, stderr, exitCode } = yield* spawnAndCollectOutput(
+          ChildProcess.make("/usr/bin/codesign", ["--display", "-r-", appPath]),
+        );
+        const requirement = (stdout + stderr)
+          .split("\n")
+          .find((line) => line.startsWith("designated => "));
+        if (
+          exitCode !== 0 ||
+          !requirement?.includes(`identifier "${DESKTOP_APP_ID}"`) ||
+          !requirement.toUpperCase().includes(input.signingIdentity) ||
+          requirement.includes("cdhash")
+        ) {
+          return yield* new MacPrivateSigningError({
+            message:
+              "Kairo's designated requirement must bind its bundle ID to the signing certificate across builds.",
+          });
+        }
+      }
+      if (input.checkBundle !== false) {
+        yield* verifyPackagedBundleIsSelfContained({
+          asarPath: path.join(appPath, "Contents/Resources/app.asar"),
+          verbose: input.verbose ?? false,
+        });
+      }
     }
     yield* Effect.log(
-      `[desktop-artifact] Validated macOS payload (${String(asarPaths.length)} app bundle(s)).`,
+      `[desktop-artifact] Validated macOS payload (${String(appPaths.length)} app bundle(s)).`,
     );
   },
 );
@@ -3682,6 +3843,21 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
   const path = yield* Path.Path;
   const fs = yield* FileSystem.FileSystem;
   const hostPlatform = yield* HostProcess.Platform;
+  const privateSigningCertificate = options.privateSigningCert
+    ? yield* readMacPrivateSigningCertificate(options.privateSigningCert)
+    : undefined;
+  const privateSigningIdentity = privateSigningCertificate?.fingerprint.replaceAll(":", "");
+  if (privateSigningIdentity) {
+    const { stdout, exitCode } = yield* spawnAndCollectOutput(
+      ChildProcess.make("/usr/bin/security", ["find-identity", "-v", "-p", "codesigning"]),
+    );
+    if (exitCode !== 0 || !stdout.split(/\s+/).includes(privateSigningIdentity)) {
+      return yield* new MacPrivateSigningError({
+        message:
+          "Import the matching identity and trust its certificate for Code Signing in the build Mac's keychain.",
+      });
+    }
+  }
   if (hostPlatform === "linux" && options.platform === "linux") {
     yield* preflightLinuxDesktopBuild(options.arch);
   }
@@ -3863,7 +4039,7 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
       );
     }
   }
-  if (options.platform === "mac" && options.target === "dmg") {
+  if (options.platform === "mac" && options.target === "dmg" && !privateSigningCertificate) {
     yield* stageDesktopDmgBackground(
       stageResourcesDir,
       resolveDesktopUpdateChannel(appVersion),
@@ -3977,6 +4153,19 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
     options.platform === "win"
       ? path.join(stageAppDir, WINDOWS_SERVER_RESOURCE_SOURCE_DIR, WINDOWS_SERVER_ASAR_RESOURCE)
       : undefined;
+  const privateSigning =
+    privateSigningCertificate && privateSigningIdentity
+      ? {
+          identity: privateSigningIdentity,
+          certificatePackagePath: yield* stageMacPrivateCertificatePackage({
+            certificate: privateSigningCertificate,
+            stageRoot,
+            stageAppDir,
+            version: appVersion,
+            verbose: options.verbose,
+          }),
+        }
+      : undefined;
   const stagePackageJson: StagePackageJson = {
     name: "kairo",
     version: appVersion,
@@ -4007,6 +4196,7 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
         : undefined,
       bundlesWslRuntime({ platform: options.platform, runtimeArchivePath: options.wslRuntime }),
       options.arch,
+      privateSigning,
     ),
     dependencies: stageDependencies,
     devDependencies: {
@@ -4190,8 +4380,17 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
     yield* validateLinuxPackagedPayload({ stageDistDir, verbose: options.verbose });
   }
   // x64 builds on arm64 runners; the arm64 check covers the shared JS bundle.
-  if (options.platform === "mac" && options.arch === "arm64" && hostPlatform === "darwin") {
-    yield* validateMacPackagedPayload({ stageDistDir, verbose: options.verbose });
+  if (
+    options.platform === "mac" &&
+    hostPlatform === "darwin" &&
+    (options.arch === "arm64" || privateSigning)
+  ) {
+    yield* validateMacPackagedPayload({
+      stageDistDir,
+      verbose: options.verbose,
+      checkBundle: options.arch === "arm64",
+      ...(privateSigning ? { signingIdentity: privateSigning.identity } : {}),
+    });
   }
 
   const copiedArtifacts = yield* copyDesktopBuildArtifacts(
@@ -4295,6 +4494,12 @@ const buildDesktopArtifactCli = Command.make("build-desktop-artifact", {
   signed: Flag.Boolean("signed").pipe(
     Flag.withDescription(
       "Enable signing/notarization discovery; Windows uses Azure Trusted Signing (env: KAIRO_DESKTOP_SIGNED).",
+    ),
+    Flag.optional,
+  ),
+  privateSigningCert: Flag.String("private-signing-cert").pipe(
+    Flag.withDescription(
+      "Sign a macOS DMG with a trusted local identity and bundle its public certificate installer.",
     ),
     Flag.optional,
   ),
